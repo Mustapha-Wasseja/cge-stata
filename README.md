@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Development release 0.0.1. The package currently provides:
+Development release 0.0.1. The Stata package currently provides:
 
 - `cge`: version and command list;
 - `cge_synthetic`: loads a synthetic, balanced 15-account SAM used in tests and
@@ -19,6 +19,14 @@ Version 0.1 will implement the standard static model described in
 Armington imports, households, government, savings-investment and the rest of
 the world, with selectable closures. The package should not be used for policy
 analysis until version 0.1 has passed its validation suite.
+
+Progress towards version 0.1:
+
+| Milestone | Status |
+|---|---|
+| Model specification | complete |
+| Python reference implementation and validation suite | complete |
+| Stata/Mata implementation | not started |
 
 ## Requirements
 

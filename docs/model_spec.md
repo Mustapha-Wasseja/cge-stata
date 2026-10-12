@@ -132,7 +132,10 @@ Elasticities supplied by the user: $\sigma^{va}_a$ (substitution between
 factors), $\sigma^{t}_c$ (transformation between exports and domestic sales) and
 $\sigma^{q}_c$ (substitution between imports and domestic goods). The exponents
 are $\rho^{va}_a = 1/\sigma^{va}_a - 1$, $\rho^{t}_c = 1/\sigma^{t}_c + 1$ and
-$\rho^{q}_c = 1/\sigma^{q}_c - 1$.
+$\rho^{q}_c = 1/\sigma^{q}_c - 1$. All elasticities must be positive and finite.
+$\sigma^{va}_a = 1$ selects the Cobb-Douglas form of value added (Q3', Q4').
+Version 0.1 has no Cobb-Douglas form of the Armington function, so
+$\sigma^{q}_c \neq 1$ is required for imported commodities.
 
 ## 5. Equations
 
@@ -242,6 +245,9 @@ $$\sum_h MPS_h\,(1-TINS_h)\,YH_h + GSAV + EXR\cdot FSAV = \sum_c PQ_c\,QINV_c + 
 
 $$\text{numeraire: } CPI = \overline{CPI} \quad\text{or}\quad DPI = \overline{DPI} \tag{S6}$$
 
+S6 is imposed by fixing the numeraire variable in the closure (Section 6). It
+is not counted as a separate equation.
+
 By Walras's law one equation is redundant. The variable $WALRAS$ makes the
 system square and must be zero, to solver tolerance, at every solution.
 
@@ -272,11 +278,38 @@ free variables must equal the number of equations.
 Calibration reads the SAM, with cell $SAM(r, c)$ the payment from column account
 $c$ to row account $r$. Base values carry a superscript 0.
 
-Normalisation: $PA^0_a = PX^0_c = PD^0_c = PE^0_c = PQ^0_c = PVA^0_a = 1$,
-$EXR^0 = 1$, $pwm_c = 1$, $W^0_f = 1$ and $WFDIST^0_{fa} = 1$ unless factor
-quantities are supplied (Section 7.6).
+### 7.0 SAM checks and supported flows
 
-### 7.1 Taxes and trade
+Before calibration the SAM must be square, with identical row and column labels,
+balanced (each row total equals the column total within $10^{-8}$ times the
+largest absolute cell), and every account with a non-zero flow must be mapped to
+a role. Every non-zero cell must be one of the flows below; any other flow stops
+calibration with an error that names the paying and receiving accounts.
+
+| Paid by (column) | Received by (row) |
+|---|---|
+| commodity $c$ | the activity paired with $c$; rest of world (imports); import, sales and export tax accounts |
+| activity | commodities (intermediate inputs); factors; activity tax account |
+| factor | households; government; rest of world |
+| household | commodities; direct tax account; savings-investment |
+| government | commodities; households (transfers); savings-investment |
+| tax account | government |
+| savings-investment | commodities (investment) |
+| rest of world | commodities (exports); households and government (transfers); savings-investment |
+
+Negative cells are allowed only in tax rows, the savings-investment row, transfer
+cells (government or rest of world to households, rest of world to government)
+and tax-account payments to the government. In version 0.1 every activity needs
+positive output and value added, and every commodity needs positive domestic
+sales ($QD^0_c > 0$).
+
+### 7.1 Normalisation
+
+All base prices are normalised: $PA^0_a = PX^0_c = PD^0_c = PE^0_c = PQ^0_c = PVA^0_a = 1$,
+$EXR^0 = 1$, $pwm_c = 1$, $W^0_f = 1$ and $WFDIST^0_{fa} = 1$ unless factor
+quantities are supplied (Section 7.7).
+
+### 7.2 Taxes and trade
 
 - $QM^0_c = SAM(row, c)$; $tm_c = SAM(tax_{imp}, c) / QM^0_c$; $PM^0_c = 1 + tm_c$.
 - $te_c = SAM(tax_{exp}, c) / SAM(c, row)$; $QE^0_c = SAM(c, row) - SAM(tax_{exp}, c)$;
@@ -290,7 +323,7 @@ SAM balance implies that $QQ^0_c$ equals total domestic demand for $c$ at
 purchaser prices (the commodity row total minus exports). Calibration must
 verify this identity, not assume it.
 
-### 7.2 Production
+### 7.3 Production
 
 - $QINTA^0_a = \sum_c SAM(c, a)$; $ica_{ca} = SAM(c, a) / QINTA^0_a$.
 - $QF^0_{fa} = SAM(f, a) / (W^0_f\,WFDIST^0_{fa})$; $QVA^0_a = \sum_f SAM(f, a)$.
@@ -301,14 +334,14 @@ verify this identity, not assume it.
 - Cobb-Douglas value added: $\delta^{va}_{fa} = SAM(f, a) / QVA^0_a$ and
   $ad_a = QVA^0_a / \prod_f (QF^0_{fa})^{\delta^{va}_{fa}}$.
 
-### 7.3 CET and Armington functions
+### 7.4 CET and Armington functions
 
 - $\delta^{t}_c = 1 / \left[1 + (PD^0_c/PE^0_c)\,(QE^0_c/QD^0_c)^{\rho^{t}_c-1}\right]$;
   $at_c = QX^0_c / \left[\delta^{t}_c\,(QE^0_c)^{\rho^{t}_c} + (1-\delta^{t}_c)\,(QD^0_c)^{\rho^{t}_c}\right]^{1/\rho^{t}_c}$.
 - $\delta^{q}_c = \dfrac{(PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}{1 + (PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}$;
   $aq_c = QQ^0_c / \left[\delta^{q}_c\,(QM^0_c)^{-\rho^{q}_c} + (1-\delta^{q}_c)\,(QD^0_c)^{-\rho^{q}_c}\right]^{-1/\rho^{q}_c}$.
 
-### 7.4 Institutions
+### 7.5 Institutions
 
 - $shif_{if} = SAM(i, f) / \sum_{i'} SAM(i', f)$.
 - $YH^0_h$ = row total of household $h$; $\overline{tins}_h = SAM(tax_{dir}, h) / YH^0_h$.
@@ -326,13 +359,13 @@ In version 0.1 a household column may pay only commodities, the direct tax
 account and savings. Calibration stops with an error if the SAM contains any
 other household payment.
 
-### 7.5 Tax accounts
+### 7.6 Tax accounts
 
 Taxes may be recorded in separate tax accounts (as in the synthetic SAM) or as
 direct payments to the government account. The account mapping declares which
 row holds each tax. A tax account's column must pay only the government.
 
-### 7.6 Factor quantities
+### 7.7 Factor quantities
 
 If the user supplies base factor quantities $QF^0_{fa}$ (for example
 employment), then $W^0_f = \sum_a SAM(f, a) / \sum_a QF^0_{fa}$ and

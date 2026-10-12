@@ -1,0 +1,175 @@
+"""Social accounting matrix (SAM) input and account mapping.
+
+Cell (r, c) of a SAM is a payment from column account c to row account r.
+"""
+
+from __future__ import annotations
+
+import csv
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+
+class SAMError(ValueError):
+    """Raised when a SAM or its mapping cannot be used by the model."""
+
+
+@dataclass
+class SAM:
+    labels: list[str]
+    values: np.ndarray
+
+    def __post_init__(self) -> None:
+        self.values = np.asarray(self.values, dtype=float)
+        n = len(self.labels)
+        if self.values.shape != (n, n):
+            raise SAMError(f"SAM has {n} labels but values of shape {self.values.shape}")
+        if len(set(self.labels)) != n:
+            raise SAMError("SAM account labels are not unique")
+        self._index = {label: i for i, label in enumerate(self.labels)}
+
+    @classmethod
+    def from_csv(cls, path: str | Path) -> "SAM":
+        """Read a SAM with an ``account`` label column and one column per account."""
+        with Path(path).open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+        header = rows[0][1:]
+        labels = [r[0] for r in rows[1:]]
+        if header != labels:
+            raise SAMError("row labels and column labels differ or are in a different order")
+        values = [[float(v) for v in r[1:]] for r in rows[1:]]
+        return cls(labels, np.array(values))
+
+    def index(self, account: str) -> int:
+        try:
+            return self._index[account]
+        except KeyError:
+            raise SAMError(f"account '{account}' is not in the SAM") from None
+
+    def cell(self, row: str, col: str) -> float:
+        return float(self.values[self.index(row), self.index(col)])
+
+    def row_total(self, account: str) -> float:
+        return float(self.values[self.index(account), :].sum())
+
+    def col_total(self, account: str) -> float:
+        return float(self.values[:, self.index(account)].sum())
+
+    def imbalances(self) -> np.ndarray:
+        """Row total minus column total for each account."""
+        return self.values.sum(axis=1) - self.values.sum(axis=0)
+
+
+# Flows the version 0.1 model represents, as (row role, column role) pairs.
+_ALLOWED = {
+    ("act", "com"),
+    ("com", "act"), ("fac", "act"), ("acttax", "act"),
+    ("row", "com"), ("imptax", "com"), ("saltax", "com"), ("exptax", "com"),
+    ("com", "hh"), ("com", "gov"), ("com", "sav"), ("com", "row"),
+    ("hh", "fac"), ("gov", "fac"), ("row", "fac"),
+    ("hh", "gov"), ("hh", "row"), ("gov", "row"),
+    ("dirtax", "hh"), ("sav", "hh"),
+    ("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"), ("gov", "exptax"), ("gov", "acttax"),
+    ("sav", "gov"), ("sav", "row"),
+}
+
+# Row roles whose cells may be negative (taxes, subsidies, savings, transfers).
+_MAY_BE_NEGATIVE = {"dirtax", "saltax", "imptax", "exptax", "acttax", "sav"}
+_NEGATIVE_CELLS = {("hh", "gov"), ("hh", "row"), ("gov", "row"), ("gov", "dirtax"),
+                   ("gov", "saltax"), ("gov", "imptax"), ("gov", "exptax"), ("gov", "acttax")}
+
+TAX_ROLES = ("dirtax", "saltax", "imptax", "exptax", "acttax")
+
+
+@dataclass
+class Mapping:
+    """Assignment of SAM accounts to model roles.
+
+    Activities and commodities are paired by position: ``activities[k]``
+    produces ``commodities[k]``. Tax accounts are optional; a missing tax
+    account means that tax is zero.
+    """
+
+    activities: list[str]
+    commodities: list[str]
+    factors: list[str]
+    households: list[str]
+    government: str
+    savinv: str
+    row: str
+    dirtax: str | None = None
+    saltax: str | None = None
+    imptax: str | None = None
+    exptax: str | None = None
+    acttax: str | None = None
+
+    def roles(self) -> dict[str, str]:
+        """Role of every mapped account."""
+        assigned: dict[str, str] = {}
+
+        def assign(account: str, role: str) -> None:
+            if account in assigned:
+                raise SAMError(f"account '{account}' is mapped to both {assigned[account]} and {role}")
+            assigned[account] = role
+
+        for a in self.activities:
+            assign(a, "act")
+        for c in self.commodities:
+            assign(c, "com")
+        for f in self.factors:
+            assign(f, "fac")
+        for h in self.households:
+            assign(h, "hh")
+        assign(self.government, "gov")
+        assign(self.savinv, "sav")
+        assign(self.row, "row")
+        for role in TAX_ROLES:
+            account = getattr(self, role)
+            if account is not None:
+                assign(account, role)
+        return assigned
+
+    def validate(self, sam: SAM, tol: float = 1e-8) -> dict[str, str]:
+        """Check the SAM against the mapping and return the role of each account."""
+        if len(self.activities) != len(self.commodities):
+            raise SAMError("version 0.1 needs one commodity for each activity")
+        if not self.factors or not self.households or not self.activities:
+            raise SAMError("at least one activity, factor and household is required")
+
+        roles = self.roles()
+        for account in roles:
+            sam.index(account)
+        scale = max(1.0, float(np.abs(sam.values).max()))
+
+        unmapped = [a for a in sam.labels if a not in roles]
+        for account in unmapped:
+            i = sam.index(account)
+            if np.abs(sam.values[i, :]).max() > tol * scale or np.abs(sam.values[:, i]).max() > tol * scale:
+                raise SAMError(f"account '{account}' has flows but is not mapped to a role")
+
+        worst = np.abs(sam.imbalances()).max()
+        if worst > tol * scale:
+            raise SAMError(f"SAM is not balanced (largest row-column difference {worst:.3g})")
+
+        pair = dict(zip(self.activities, self.commodities))
+        for r_label in roles:
+            for c_label in roles:
+                value = sam.cell(r_label, c_label)
+                if abs(value) <= tol * scale:
+                    continue
+                r_role, c_role = roles[r_label], roles[c_label]
+                if (r_role, c_role) not in _ALLOWED:
+                    raise SAMError(
+                        f"flow from '{c_label}' ({c_role}) to '{r_label}' ({r_role}) "
+                        "is not represented in the version 0.1 model"
+                    )
+                if r_role == "act" and pair[r_label] != c_label:
+                    raise SAMError(
+                        f"activity '{r_label}' receives payment from '{c_label}', "
+                        f"but it is paired with '{pair[r_label]}'"
+                    )
+                if value < 0 and r_role not in _MAY_BE_NEGATIVE and (r_role, c_role) not in _NEGATIVE_CELLS:
+                    raise SAMError(f"negative flow from '{c_label}' to '{r_label}'")
+        return roles
