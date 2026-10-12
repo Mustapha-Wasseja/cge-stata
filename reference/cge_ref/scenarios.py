@@ -22,6 +22,14 @@ EXPECTED_DIR = REPO / "tests" / "expected"
 # Elasticities used for the reference simulations (test values, not estimates).
 TEST_ELASTICITIES = {"sigma_va": 0.8, "sigma_q": 2.0, "sigma_t": 2.0}
 
+# Sector-specific elasticities, including a Cobb-Douglas value-added case
+# (act_man), for an additional cross-implementation comparison.
+MIXED_ELASTICITIES = {
+    "sigma_va": {"act_agr": 0.5, "act_man": 1.0, "act_ser": 1.5},
+    "sigma_q": {"com_agr": 0.6, "com_man": 3.0, "com_ser": 1.2},
+    "sigma_t": {"com_agr": 0.7, "com_man": 4.0, "com_ser": 1.0},
+}
+
 
 def synthetic_mapping() -> Mapping:
     return Mapping(
@@ -80,8 +88,12 @@ def write_results(solution: Solution, path: Path) -> None:
 def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     """Solve the standard simulations and write one CSV file per simulation."""
     directory.mkdir(parents=True, exist_ok=True)
+    solutions = run_simulations(synthetic_model())
+    mixed = synthetic_model(**MIXED_ELASTICITIES)
+    solutions["mixed_tariff_removal"] = mixed.solve(
+        Closure(), tol=1e-12, **simulation_inputs(mixed)["tariff_removal"])
     written = []
-    for name, solution in run_simulations(synthetic_model()).items():
+    for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")
         path = directory / f"{name}.csv"

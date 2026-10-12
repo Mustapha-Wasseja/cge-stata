@@ -1,0 +1,71 @@
+{smcl}
+{* *! version 0.1.0  12oct2026}{...}
+{title:Title}
+
+{p2colset 5 22 24 2}{...}
+{p2col:{bf:cge_calibrate} {hline 2}}Calibrate the model to the SAM{p_end}
+{p2colreset}{...}
+
+
+{title:Syntax}
+
+{p 8 12 2}
+{cmd:cge_calibrate}{cmd:,} {opt sigmava(numlist)} {opt sigmaq(numlist)} {opt sigmat(numlist)}
+[{opt fq:uantities(matname)}]
+
+
+{title:Description}
+
+{pstd}
+{cmd:cge_calibrate} computes the base values of all variables and the model
+parameters from the mapped SAM (docs/model_spec.md, Section 7), sets the
+default closure and checks that the base solves every equation (benchmark
+replication). It stops with an error if replication fails.
+
+{pstd}
+Elasticities have no defaults; they are part of the model specification and
+must be stated.
+
+
+{title:Options}
+
+{phang}
+{opt sigmava(numlist)} gives the elasticity of substitution between factors in
+each activity: one value for all activities, or one value per activity in the
+order of {cmd:activities()} in {helpb cge_map}. A value of 1 selects the
+Cobb-Douglas form.
+
+{phang}
+{opt sigmaq(numlist)} gives the elasticity of substitution between imports and
+domestic goods (Armington), one value or one per commodity. Version 0.1 requires
+values different from 1 for imported commodities.
+
+{phang}
+{opt sigmat(numlist)} gives the elasticity of transformation between exports
+and domestic sales (CET), one value or one per commodity.
+
+{phang}
+{opt fquantities(matname)} supplies base factor quantities, for example
+employment, as a matrix with one row per factor and one column per activity.
+Without it, factor prices are 1 in the base and quantities equal payments.
+
+
+{title:Example}
+
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)}{p_end}
+
+
+{title:Stored results}
+
+{synoptset 18 tabbed}{...}
+{p2col 5 18 22 2: Scalars}{p_end}
+{synopt:{cmd:r(N_equations)}}number of equations{p_end}
+{synopt:{cmd:r(max_residual)}}largest scaled residual at the base{p_end}
+
+
+{title:Also see}
+
+{psee}
+{helpb cge}, {helpb cge_map}, {helpb cge_closure}, {helpb cge_solve}
+{p_end}

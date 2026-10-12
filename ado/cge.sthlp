@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.0.1  12oct2026}{...}
+{* *! version 0.1.0  12oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -16,15 +16,43 @@
 {title:Description}
 
 {pstd}
-{cmd:cge} displays the version of the {bf:cge-stata} package and lists its
-commands. The package builds, calibrates and solves static, single-country
-computable general equilibrium (CGE) models from a social accounting matrix
-(SAM), using Stata and Mata.
+{bf:cge-stata} builds, calibrates and solves static, single-country computable
+general equilibrium (CGE) models from a social accounting matrix (SAM), entirely
+in Stata and Mata. {cmd:cge} displays the package version and its commands.
 
 {pstd}
-This is a development release. It provides the package information command and
-{helpb cge_synthetic}, which loads the synthetic SAM used in tests and examples.
-Calibration and solution commands are planned for version 0.1.
+The model is documented equation by equation in docs/model_spec.md in the
+package repository: CES or Cobb-Douglas value added, Leontief intermediate
+inputs, CET exports, Armington imports, households with Cobb-Douglas demand,
+government, savings-investment and the rest of the world, with selectable
+closures.
+
+
+{title:Workflow}
+
+{p2colset 5 22 24 2}{...}
+{p2col:{helpb cge_sam}}read a SAM{p_end}
+{p2col:{helpb cge_map}}assign SAM accounts to model roles{p_end}
+{p2col:{helpb cge_calibrate}}calibrate the model and check benchmark replication{p_end}
+{p2col:{helpb cge_closure}}choose the closure{p_end}
+{p2col:{helpb cge_shock}}change parameters or fixed variables{p_end}
+{p2col:{helpb cge_solve}}solve and store a simulation{p_end}
+{p2col:{helpb cge_results}}report or save results{p_end}
+{p2col:{helpb cge_check}}run validation checks{p_end}
+{p2col:{helpb cge_synthetic}}load the synthetic SAM used in tests and examples{p_end}
+{p2colreset}{...}
+
+
+{title:Example}
+
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+{phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+{phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+{phang2}{cmd:. cge_results}{p_end}
+{phang2}{cmd:. cge_check, homogeneity}{p_end}
 
 
 {title:Stored results}
@@ -41,10 +69,3 @@ Calibration and solution commands are planned for version 0.1.
 
 {pstd}
 Mustapha Wasseja{p_end}
-
-
-{title:Also see}
-
-{psee}
-Help: {helpb cge_synthetic}
-{p_end}

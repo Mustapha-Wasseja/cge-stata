@@ -15,7 +15,12 @@ These conventions apply to every change, whoever or whatever prepares it.
 - Stata 13 compatibility: every ado-file starts with `version 13.0`; use only
   Mata functions available in Stata 13; keep model arrays in Mata.
 - Command names start with `cge_`. Each command has an `.sthlp` help file and is
-  listed in `cge.pkg`.
+  listed in `cge.pkg`. Files other than `.ado` and `.sthlp` (for example
+  `cge_mata.mata` and data files) need an `F` line in `cge.pkg`, or
+  `net install` will not install them.
+- Model code is in `ado/cge_mata.mata`; ado-files are thin wrappers that call it.
+  After editing the Mata file, run `clear all` so that the new version is
+  loaded.
 - File header, as in the existing files:
 
   ```stata

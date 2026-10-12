@@ -1,0 +1,56 @@
+* test_reference_agreement.do -- Stata results agree with the Python reference
+* (docs/model_spec.md, validation check 7; expected files in tests/expected)
+
+version 13.0
+
+* Simulation results of the current model are compared with expected/<name>.csv
+capture program drop _compare_reference
+program define _compare_reference
+    args sim
+    tempfile stata
+    quietly cge_results, sim(`sim') clear nodisplay
+    quietly save `stata'
+    quietly import delimited using "expected/`sim'.csv", varnames(1) case(preserve) ///
+        stringcols(1 2 3) asdouble clear
+    rename (base value) (ref_base ref_value)
+    quietly merge 1:1 variable element1 element2 using `stata'
+    assert _merge == 3
+    quietly generate double reldiff = abs(value - ref_value) / max(1, abs(ref_value))
+    quietly generate double basediff = abs(base - ref_base) / max(1, abs(ref_base))
+    quietly summarize basediff
+    assert r(max) < 1e-9
+    quietly summarize reldiff
+    display as text "`sim': " as result _N as text " values, largest relative difference " ///
+        as result %9.2e r(max)
+    assert r(max) < 1e-6
+end
+
+quietly do setup_synthetic.do
+
+cge_shock tm, value(0)
+cge_solve, name(tariff_removal) tolerance(1e-12)
+cge_shock, reset
+cge_shock pwm, scale(1.1)
+cge_solve, name(import_price_up10) tolerance(1e-12)
+cge_shock, reset
+cge_shock QFS, elements(lab) scale(1.05)
+cge_solve, name(labour_supply_up5) tolerance(1e-12)
+cge_shock, reset
+cge_shock FSAV, scale(0.8)
+cge_solve, name(foreign_savings_down20) tolerance(1e-12)
+cge_shock, reset
+cge_shock ad, elements(act_agr) scale(1.05)
+cge_solve, name(agri_productivity_up5) tolerance(1e-12)
+
+foreach sim in tariff_removal import_price_up10 labour_supply_up5 ///
+    foreign_savings_down20 agri_productivity_up5 {
+    _compare_reference `sim'
+}
+
+* Sector-specific elasticities, including Cobb-Douglas value added in act_man
+quietly do setup_synthetic.do "sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)"
+cge_shock tm, value(0)
+cge_solve, name(mixed_tariff_removal) tolerance(1e-12)
+_compare_reference mixed_tariff_removal
+
+program drop _compare_reference

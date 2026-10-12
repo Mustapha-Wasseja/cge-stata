@@ -8,25 +8,27 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Development release 0.0.1. The Stata package currently provides:
+Version 0.1.0 implements the standard static model described in
+[docs/model_spec.md](docs/model_spec.md):
 
-- `cge`: version and command list;
-- `cge_synthetic`: loads a synthetic, balanced 15-account SAM used in tests and
-  examples.
-
-Version 0.1 will implement the standard static model described in
-[docs/model_spec.md](docs/model_spec.md): CES/Leontief production, CET exports,
-Armington imports, households, government, savings-investment and the rest of
-the world, with selectable closures. The package should not be used for policy
-analysis until version 0.1 has passed its validation suite.
-
-Progress towards version 0.1:
+- CES or Cobb-Douglas value added, Leontief intermediate inputs;
+- CET transformation between exports and domestic sales, Armington aggregation
+  of imports and domestic goods;
+- households with Cobb-Douglas demand, government with direct, sales, import,
+  export and activity taxes, savings-investment and the rest of the world;
+- selectable closures for the external account, government, savings-investment,
+  the numeraire and each factor (mobile, activity-specific or unemployed).
 
 | Milestone | Status |
 |---|---|
 | Model specification | complete |
 | Python reference implementation and validation suite | complete |
-| Stata/Mata implementation | not started |
+| Stata/Mata implementation | complete; agrees with the reference to about 1e-13 |
+| Application to country SAMs | not started |
+
+The model has been validated on the synthetic SAM only. When applying it to a
+country SAM, run `cge_check, homogeneity perturb(0.1)` and review the elasticity
+choices; the package has not yet been used for published policy analysis.
 
 ## Requirements
 
@@ -50,10 +52,20 @@ net install cge, from("https://raw.githubusercontent.com/Mustapha-Wasseja/cge-st
 ## Quick start
 
 ```stata
-cge
 cge_synthetic, clear
-list account act_agr act_man act_ser com_agr, noobs
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+cge_solve, name(notariff)
+cge_results, sim(notariff)
+cge_check, homogeneity perturb(0.1)
 ```
+
+See [examples/tariff_removal.do](examples/tariff_removal.do) for a worked
+example, and `help cge` for the command list.
 
 ## Documentation
 
@@ -65,10 +77,11 @@ list account act_agr act_man act_ser com_agr, noobs
 
 ## Validation
 
-Every model is checked for benchmark replication, homogeneity, Walras's law and
-closure consistency. A Python reference implementation of the same equations
-(`reference/`) runs in continuous integration, and the Stata results are
-compared against it.
+Every calibration is checked for benchmark replication. `cge_check` tests SAM
+balance, closure consistency, Walras's law, the GDP identity, homogeneity and
+convergence from perturbed starting values. A Python reference implementation
+of the same equations (`reference/`) runs in continuous integration; the Stata
+test suite compares its results with the reference for six simulations.
 
 ## Author
 

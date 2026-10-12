@@ -2,10 +2,10 @@ v 3
 d cge -- Computable general equilibrium (CGE) modelling in Stata
 d
 d Builds, calibrates and solves static, single-country CGE models
-d from a social accounting matrix, using Stata and Mata.
-d
-d Development release 0.0.1: package information command and the
-d synthetic social accounting matrix used in tests and examples.
+d from a social accounting matrix, using Stata and Mata: CES or
+d Cobb-Douglas value added, CET exports, Armington imports,
+d households, government, savings-investment and the rest of the
+d world, with selectable closures and built-in validation checks.
 d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja
@@ -14,6 +14,24 @@ d Distribution-Date: 20261012
 d
 f ado/cge.ado
 f ado/cge.sthlp
+f ado/_cge_load.ado
+F ado/cge_mata.mata
+f ado/cge_sam.ado
+f ado/cge_sam.sthlp
+f ado/cge_map.ado
+f ado/cge_map.sthlp
+f ado/cge_calibrate.ado
+f ado/cge_calibrate.sthlp
+f ado/cge_closure.ado
+f ado/cge_closure.sthlp
+f ado/cge_shock.ado
+f ado/cge_shock.sthlp
+f ado/cge_solve.ado
+f ado/cge_solve.sthlp
+f ado/cge_results.ado
+f ado/cge_results.sthlp
+f ado/cge_check.ado
+f ado/cge_check.sthlp
 f ado/cge_synthetic.ado
 f ado/cge_synthetic.sthlp
 F data/cge_synthetic_sam.csv
