@@ -25,27 +25,33 @@ program define _compare_reference
     assert r(max) < 1e-6
 end
 
+* The five standard simulations on the calibrated model in memory
+capture program drop _standard_simulations
+program define _standard_simulations
+    cge_shock, reset
+    cge_shock tm, value(0)
+    cge_solve, name(tariff_removal) tolerance(1e-12)
+    cge_shock, reset
+    cge_shock pwm, scale(1.1)
+    cge_solve, name(import_price_up10) tolerance(1e-12)
+    cge_shock, reset
+    cge_shock QFS, elements(lab) scale(1.05)
+    cge_solve, name(labour_supply_up5) tolerance(1e-12)
+    cge_shock, reset
+    cge_shock FSAV, scale(0.8)
+    cge_solve, name(foreign_savings_down20) tolerance(1e-12)
+    cge_shock, reset
+    cge_shock ad, elements(act_agr) scale(1.05)
+    cge_solve, name(agri_productivity_up5) tolerance(1e-12)
+    foreach sim in tariff_removal import_price_up10 labour_supply_up5 ///
+        foreign_savings_down20 agri_productivity_up5 {
+        _compare_reference `sim'
+    }
+end
+
+* Standard layout
 quietly do setup_synthetic.do
-
-cge_shock tm, value(0)
-cge_solve, name(tariff_removal) tolerance(1e-12)
-cge_shock, reset
-cge_shock pwm, scale(1.1)
-cge_solve, name(import_price_up10) tolerance(1e-12)
-cge_shock, reset
-cge_shock QFS, elements(lab) scale(1.05)
-cge_solve, name(labour_supply_up5) tolerance(1e-12)
-cge_shock, reset
-cge_shock FSAV, scale(0.8)
-cge_solve, name(foreign_savings_down20) tolerance(1e-12)
-cge_shock, reset
-cge_shock ad, elements(act_agr) scale(1.05)
-cge_solve, name(agri_productivity_up5) tolerance(1e-12)
-
-foreach sim in tariff_removal import_price_up10 labour_supply_up5 ///
-    foreign_savings_down20 agri_productivity_up5 {
-    _compare_reference `sim'
-}
+_standard_simulations
 
 * Sector-specific elasticities, including Cobb-Douglas value added in act_man
 quietly do setup_synthetic.do "sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)"
@@ -53,4 +59,14 @@ cge_shock tm, value(0)
 cge_solve, name(mixed_tariff_removal) tolerance(1e-12)
 _compare_reference mixed_tariff_removal
 
-program drop _compare_reference
+* National-accounts layout: exports in activity rows and taxes paid directly to
+* government give the same model, so the same expected results apply
+cge_synthetic, clear national
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(gov) saltax(gov) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+_standard_simulations
+
+program drop _compare_reference _standard_simulations

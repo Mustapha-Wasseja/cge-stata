@@ -137,7 +137,23 @@ quietly cge_map, `mapopts'
 capture cge_calibrate, sigmava(0.8) sigmaq(1) sigmat(2)
 assert _rc == 198
 
+* National-accounts layout: amounts rewritten, and ambiguous or missing tax options
+local naopts activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)
+cge_synthetic, clear national
+quietly cge_sam, labels(account)
+cge_map, `naopts' dirtax(gov) saltax(gov) imptax(tax_imp)
+assert r(exports_moved) == 75
+assert r(taxes_rerouted) == 55
+capture cge_map, `naopts' dirtax(gov) saltax(gov) imptax(gov)
+assert _rc == 198
+capture cge_map, `naopts' dirtax(gov) imptax(tax_imp)
+assert _rc == 459
+
 * Commands in the wrong order
+cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, `mapopts'
 capture cge_solve
 assert _rc == 459
 

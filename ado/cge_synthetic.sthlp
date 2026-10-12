@@ -10,13 +10,21 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional}]
 
 
 {title:Options}
 
 {phang}
 {opt clear} replaces the data in memory.
+
+{phang}
+{opt national} loads the same economy in the layout of many national SAMs:
+exports are recorded as sales by activities to the rest of the world, and sales
+and direct taxes are paid directly to the government account (13 accounts; the
+{cmd:tax_sal} and {cmd:tax_dir} accounts are absent). Map it with
+{cmd:saltax(gov)} and {cmd:dirtax(gov)}; it gives the same model as the
+standard layout.
 
 
 {title:Description}

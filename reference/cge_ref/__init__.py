@@ -9,6 +9,6 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
 from .model import VARIABLES, Closure, Model, Solution  # noqa: E402
-from .sam import SAM, Mapping, SAMError
+from .sam import SAM, Mapping, SAMError, prepare  # noqa: E402
 
-__all__ = ["VARIABLES", "Closure", "Mapping", "Model", "SAM", "SAMError", "Solution"]
+__all__ = ["VARIABLES", "Closure", "Mapping", "Model", "SAM", "SAMError", "Solution", "prepare"]

@@ -6,6 +6,7 @@ Cell (r, c) of a SAM is a payment from column account c to row account r.
 from __future__ import annotations
 
 import csv
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,6 +82,57 @@ _NEGATIVE_CELLS = {("hh", "gov"), ("hh", "row"), ("gov", "row"), ("gov", "dirtax
                    ("gov", "saltax"), ("gov", "imptax"), ("gov", "exptax"), ("gov", "acttax")}
 
 TAX_ROLES = ("dirtax", "saltax", "imptax", "exptax", "acttax")
+COMMODITY_TAXES = ("saltax", "imptax", "exptax")
+
+
+def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str, float]]:
+    """Rewrite national-accounts layouts into the standard layout (model_spec.md, 7.0).
+
+    Exports recorded as sales by activities are moved to the paired commodity
+    rows, and taxes paid directly to the government account are routed through
+    internal tax accounts. Returns the rewritten SAM, a mapping that names the
+    internal tax accounts, and the amounts rewritten.
+    """
+    m = dataclasses.replace(mapping)
+    labels = list(sam.labels)
+    values = sam.values.copy()
+    for name in (*m.activities, *m.commodities, *m.households, m.government, m.row):
+        sam.index(name)
+    if len(m.activities) != len(m.commodities):
+        raise SAMError("version 0.1 needs one commodity for each activity")
+    direct = [t for t in TAX_ROLES if getattr(m, t) is not None and getattr(m, t) == m.government]
+    if sum(t in COMMODITY_TAXES for t in direct) > 1:
+        raise SAMError("only one of saltax, imptax and exptax may name the government account")
+
+    notes: dict[str, float] = {}
+    r = sam.index(m.row)
+    moved = 0.0
+    for a, c in zip(m.activities, m.commodities):
+        ia, ic = sam.index(a), sam.index(c)
+        x = values[ia, r]
+        if x != 0:
+            values[ic, r] += x
+            values[ia, ic] += x
+            values[ia, r] = 0.0
+            moved += x
+    notes["exports"] = moved
+
+    g = sam.index(m.government)
+    for tax in direct:
+        payers = {"dirtax": m.households, "acttax": m.activities}.get(tax, m.commodities)
+        cols = [sam.index(p) for p in payers]
+        name = "_" + tax
+        if name in labels:
+            raise SAMError(f"the SAM already has an account named {name}")
+        n = len(labels)
+        values = np.pad(values, ((0, 1), (0, 1)))
+        labels.append(name)
+        values[n, cols] = values[g, cols]
+        values[g, cols] = 0.0
+        values[g, n] = values[n].sum()
+        setattr(m, tax, name)
+        notes[tax] = float(values[n].sum())
+    return SAM(labels, values), m, notes
 
 
 @dataclass

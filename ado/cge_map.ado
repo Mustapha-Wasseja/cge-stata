@@ -16,4 +16,5 @@ program define cge_map, rclass
     mata: _cge_map("`activities'", "`commodities'", "`factors'", "`households'", ///
         "`government'", "`savinv'", "`row'", "`dirtax'", "`saltax'", "`imptax'",   ///
         "`exptax'", "`acttax'", `"`report'"', ("`replace'" != ""))
+    return add
 end

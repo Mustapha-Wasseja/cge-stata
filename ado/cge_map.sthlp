@@ -39,6 +39,14 @@ group's share of the SAM. If there is any problem, {cmd:cge_map} then exits with
 error 459. Unknown account names and accounts given two roles stop the command
 at once.
 
+{pstd}
+Before the checks, two layouts common in national SAMs are rewritten into the
+model's layout, and the amounts moved are displayed (docs/model_spec.md,
+Section 7.0). Exports recorded as sales by an activity to the rest of the world
+are moved to the commodity paired with the activity. Taxes paid directly to the
+government account are routed through internal tax accounts; see the tax
+options below. The SAM in memory is not changed.
+
 
 {title:Options}
 
@@ -58,6 +66,13 @@ savings-investment and rest-of-world accounts.
 {opt dirtax()}, {opt saltax()}, {opt imptax()}, {opt exptax()} and
 {opt acttax()} name the accounts that collect direct taxes, sales taxes, import
 tariffs, export taxes and activity taxes. A tax that is not mapped is zero.
+If a SAM records a tax as a direct payment to the government, name the
+government account in the tax option, for example {cmd:saltax(gov)}: the
+government row's cells in the paying columns (households for {opt dirtax()},
+commodities for {opt saltax()}, {opt imptax()} and {opt exptax()}, activities
+for {opt acttax()}) are routed through an internal tax account. At most one of
+{opt saltax()}, {opt imptax()} and {opt exptax()} may name the government
+account.
 
 {phang}
 {opt report(filename)} saves every problem cell to a CSV file with the

@@ -24,9 +24,10 @@ struct cge_par {
 }
 
 struct cge_model {
-    // SAM and account mapping
-    string colvector labels
-    real matrix      S
+    // SAM as read (labels0, S0) and after rewriting layouts (labels, S)
+    string colvector labels0, labels
+    real matrix      S0, S
+    real rowvector   rewritten
     real scalar      mapped, calibrated
     real colvector   iA, iC, iF, iH
     real scalar      igov, isav, irow, idirtax, isaltax, iimptax, iexptax, iacttax
@@ -273,6 +274,8 @@ void _cge_sam(string scalar labelvar, string scalar accounts)
     if (nmiss) S = editmissing(S, 0)
     maxdiff = max(abs(rowsum(S) - colsum(S)'))
 
+    M.labels0 = labels
+    M.S0 = S
     M.labels = labels
     M.S = S
     M.mapped = 0
@@ -310,12 +313,14 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     struct cge_model scalar M
     real colvector role, iA, iC
     real matrix allowed, negok, S, issues
-    string rowvector rolename
-    real scalar i, j, k, tol, nacc, rr, rc
-    string colvector taxacc
-    real colvector taxidx
+    string rowvector rolename, taxname
+    real scalar i, j, k, tol, nacc, rr, rc, x
+    string colvector taxacc, labels
+    real colvector taxidx, direct, payers
 
     M = _cge_load()
+    M.labels = M.labels0
+    M.S = M.S0
     S = M.S
     nacc = rows(M.labels)
     rolename = ("activity", "commodity", "factor", "household", "government",
@@ -334,13 +339,52 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     for (k = 1; k <= 5; k++) {
         if (taxacc[k] != "") taxidx[k] = _cge_lookup(M, taxacc[k], rolename[7 + k])
     }
+
+    if (rows(M.iA) != rows(M.iC)) _cge_fail("version 0.1 needs one commodity for each activity", 198)
+
+    // Layouts rewritten before the checks (model_spec.md, Section 7.0):
+    // exports recorded as sales by activities, and taxes paid directly to the
+    // government account, which are routed through internal tax accounts.
+    direct = (taxidx :== M.igov)
+    if (sum(direct[(2, 3, 4)]) > 1) {
+        _cge_fail("only one of saltax(), imptax() and exptax() may name the government account", 198)
+    }
+    labels = M.labels0
+    M.rewritten = J(1, 6, 0)
+    for (k = 1; k <= rows(M.iA); k++) {
+        x = S[M.iA[k], M.irow]
+        if (x != 0) {
+            S[M.iC[k], M.irow] = S[M.iC[k], M.irow] + x
+            S[M.iA[k], M.iC[k]] = S[M.iA[k], M.iC[k]] + x
+            S[M.iA[k], M.irow] = 0
+            M.rewritten[1] = M.rewritten[1] + x
+        }
+    }
+    taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax")
+    for (k = 1; k <= 5; k++) {
+        if (!direct[k]) continue
+        payers = (k == 1 ? M.iH : (k == 5 ? M.iA : M.iC))
+        if (_cge_find(labels, "_" + taxname[k])) {
+            _cge_fail("the SAM already has an account named _" + taxname[k], 198)
+        }
+        nacc = rows(labels)
+        S = (S, J(nacc, 1, 0)) \ J(1, nacc + 1, 0)
+        labels = labels \ ("_" + taxname[k])
+        S[nacc + 1, payers'] = S[M.igov, payers']
+        S[M.igov, payers'] = J(1, rows(payers), 0)
+        S[M.igov, nacc + 1] = sum(S[nacc + 1, .])
+        taxidx[k] = nacc + 1
+        M.rewritten[1 + k] = sum(S[nacc + 1, .])
+    }
+    M.labels = labels
+    M.S = S
+    nacc = rows(labels)
     M.idirtax = taxidx[1]
     M.isaltax = taxidx[2]
     M.iimptax = taxidx[3]
     M.iexptax = taxidx[4]
     M.iacttax = taxidx[5]
-
-    if (rows(M.iA) != rows(M.iC)) _cge_fail("version 0.1 needs one commodity for each activity", 198)
+    _cge_map_rewrites(M)
 
     // Role of every account; an account may have only one role
     role = J(nacc, 1, 0)
@@ -425,6 +469,26 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     _cge_store(M)
     printf("{txt}Accounts mapped: {res}%f{txt} activities, {res}%f{txt} factors, {res}%f{txt} households\n",
            M.n, M.nF, M.nH)
+}
+
+// Amounts moved when rewriting national-accounts layouts
+void _cge_map_rewrites(struct cge_model scalar M)
+{
+    string rowvector what, account
+    real scalar k
+    what = ("Exports recorded as sales by activities, moved to the paired commodities",
+            "Direct taxes paid to government, routed through account _dirtax",
+            "Sales taxes paid to government, routed through account _saltax",
+            "Import taxes paid to government, routed through account _imptax",
+            "Export taxes paid to government, routed through account _exptax",
+            "Activity taxes paid to government, routed through account _acttax")
+    account = ("", "_dirtax", "_saltax", "_imptax", "_exptax", "_acttax")
+    if (M.rewritten[1] != 0) printf("{txt}%s: {res}%g\n", what[1], M.rewritten[1])
+    for (k = 2; k <= 6; k++) {
+        if (_cge_find(M.labels, account[k])) printf("{txt}%s: {res}%g\n", what[k], M.rewritten[k])
+    }
+    st_numscalar("r(exports_moved)", M.rewritten[1])
+    st_numscalar("r(taxes_rerouted)", sum(M.rewritten[(2, 3, 4, 5, 6)]))
 }
 
 // Summary of mapping problems, grouped by problem and by the roles of the

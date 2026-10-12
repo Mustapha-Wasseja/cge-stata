@@ -18,7 +18,11 @@ Accounts
 Convention: each cell (r, c) is a payment from column account c to row
 account r.
 
-Run as a script to (re)write ``data/cge_synthetic_sam.csv``:
+``build_national_accounts_layout`` gives the same economy in the layout of many
+national SAMs (exports in activity rows, taxes paid directly to government).
+
+Run as a script to (re)write ``data/cge_synthetic_sam.csv`` and
+``data/cge_synthetic_sam_na.csv``:
 
     python reference/synthetic_sam.py
 """
@@ -85,15 +89,38 @@ def build() -> tuple[list[str], list[list[float]]]:
     return list(ACCOUNTS), sam
 
 
+def build_national_accounts_layout() -> tuple[list[str], list[list[float]]]:
+    """The same economy in the layout of many national SAMs.
+
+    Exports are recorded as sales by activities to the rest of the world, and
+    sales taxes and direct taxes are paid directly to the government account
+    (the tax_sal and tax_dir accounts are removed). Import tariffs keep their
+    own account. Rewriting this layout (model_spec.md, Section 7.0) must give
+    back the standard SAM.
+    """
+    labels, sam = build()
+    i = {name: k for k, name in enumerate(labels)}
+    for act, com in (("act_agr", "com_agr"), ("act_man", "com_man"), ("act_ser", "com_ser")):
+        exports = sam[i[com]][i["row"]]
+        sam[i[act]][i["row"]] += exports
+        sam[i[act]][i[com]] -= exports
+        sam[i[com]][i["row"]] = 0.0
+    for com in ("com_agr", "com_man", "com_ser"):
+        sam[i["gov"]][i[com]] += sam[i["tax_sal"]][i[com]]
+    sam[i["gov"]][i["hhd"]] += sam[i["tax_dir"]][i["hhd"]]
+    keep = [k for k, name in enumerate(labels) if name not in ("tax_sal", "tax_dir")]
+    return [labels[k] for k in keep], [[sam[r][c] for c in keep] for r in keep]
+
+
 def imbalances(sam: list[list[float]]) -> list[float]:
     """Row total minus column total for each account."""
     n = len(sam)
     return [sum(sam[i]) - sum(sam[r][i] for r in range(n)) for i in range(n)]
 
 
-def write_csv(path: Path) -> None:
+def write_csv(path: Path, layout=build) -> None:
     """Write the SAM with an ``account`` label column and one column per account."""
-    labels, sam = build()
+    labels, sam = layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle, lineterminator="\n")
@@ -103,10 +130,12 @@ def write_csv(path: Path) -> None:
 
 
 if __name__ == "__main__":
-    _, matrix = build()
-    worst = max(abs(d) for d in imbalances(matrix))
-    if worst > 1e-12:
-        raise SystemExit(f"Synthetic SAM is not balanced (max imbalance {worst})")
-    target = Path(__file__).resolve().parents[1] / "data" / "cge_synthetic_sam.csv"
-    write_csv(target)
-    print(f"Wrote {target} ({len(ACCOUNTS)} accounts, balanced)")
+    data = Path(__file__).resolve().parents[1] / "data"
+    for layout, filename in ((build, "cge_synthetic_sam.csv"),
+                             (build_national_accounts_layout, "cge_synthetic_sam_na.csv")):
+        names, matrix = layout()
+        worst = max(abs(d) for d in imbalances(matrix))
+        if worst > 1e-12:
+            raise SystemExit(f"{filename} is not balanced (max imbalance {worst})")
+        write_csv(data / filename, layout)
+        print(f"Wrote {data / filename} ({len(names)} accounts, balanced)")

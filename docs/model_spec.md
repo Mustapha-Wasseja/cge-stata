@@ -304,6 +304,30 @@ and tax-account payments to the government. In version 0.1 every activity needs
 positive output and value added, and every commodity needs positive domestic
 sales ($QD^0_c > 0$).
 
+#### Layouts rewritten before the checks (from version 0.1.1)
+
+National SAMs often record two kinds of flow differently. Both are rewritten into
+the standard layout before the checks above, without changing any total that
+enters the model:
+
+1. **Exports recorded as sales by activities.** A cell $SAM(a, row)$ is treated
+   as exports of the commodity paired with $a$: it is added to $SAM(c(a), row)$
+   and to $SAM(a, c(a))$, and set to zero. Activity $a$'s output and the rest of
+   the world's spending are unchanged; the commodity's supply and demand both
+   rise by the exports.
+2. **Taxes paid directly to the government account.** A tax option of the
+   mapping (direct, sales, import, export or activity tax) may name the
+   government account itself. The government row's cells in the paying columns
+   of that tax (households for the direct tax, commodities for the sales,
+   import and export taxes, activities for the activity tax) are then moved to
+   a new internal tax account, whose column pays their total to the
+   government. Government revenue is unchanged. At most one of the sales,
+   import and export tax options may name the government account, because the
+   cells would otherwise be ambiguous; when product taxes are recorded as one
+   flow per product, they can only be treated as one tax.
+
+The mapping report lists the amounts rewritten.
+
 ### 7.1 Normalisation
 
 All base prices are normalised: $PA^0_a = PX^0_c = PD^0_c = PE^0_c = PQ^0_c = PVA^0_a = 1$,
@@ -362,11 +386,10 @@ other household payment.
 
 ### 7.6 Tax accounts
 
-In version 0.1 each tax must be recorded in its own tax account (as in the
-synthetic SAM): the account's row collects the tax and its column pays only the
-government. SAMs that record taxes as direct payments to the government account,
-as many national SAMs do, are not yet supported; this is planned for version
-0.2.
+Each tax is recorded in a tax account whose row collects the tax and whose
+column pays only the government, either in the SAM itself (as in the synthetic
+SAM) or as an internal account created when taxes are paid directly to the
+government account (Section 7.0).
 
 ### 7.7 Factor quantities
 

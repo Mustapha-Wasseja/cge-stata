@@ -12,7 +12,7 @@ from typing import Iterator
 
 import numpy as np
 
-from .sam import SAM, Mapping, SAMError
+from .sam import SAM, Mapping, SAMError, prepare
 from .solver import solve_system
 
 # Index sets of each variable. A activities, C commodities, F factors,
@@ -229,6 +229,7 @@ class Model:
 
     def __init__(self, sam: SAM, mapping: Mapping, sigma_va, sigma_q, sigma_t,
                  factor_quantities: dict[tuple[str, str], float] | None = None):
+        sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
         mapping.validate(sam)
