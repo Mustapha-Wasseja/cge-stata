@@ -1,0 +1,17 @@
+# Stata logs and output (batch logs print licence details)
+*.log
+*.smcl
+*.gph
+tests/output/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/

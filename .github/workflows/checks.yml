@@ -1,0 +1,41 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  reference-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r reference/requirements.txt
+      - run: python -m pytest -q reference/tests
+
+  commit-metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Commits are authored by the maintainer, with no co-author trailers
+        run: |
+          allowed="51772479+Mustapha-Wasseja@users.noreply.github.com"
+          status=0
+          for sha in $(git rev-list HEAD); do
+            author=$(git log -1 --format='%ae' "$sha")
+            committer=$(git log -1 --format='%ce' "$sha")
+            if [ "$author" != "$allowed" ]; then
+              echo "::error::Commit $sha has author email $author"; status=1
+            fi
+            if [ "$committer" != "$allowed" ] && [ "$committer" != "noreply@github.com" ]; then
+              echo "::error::Commit $sha has committer email $committer"; status=1
+            fi
+            if git log -1 --format='%B' "$sha" | grep -qi '^co-authored-by:'; then
+              echo "::error::Commit $sha has a co-author trailer"; status=1
+            fi
+          done
+          exit $status

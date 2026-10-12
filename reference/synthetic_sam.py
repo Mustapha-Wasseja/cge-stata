@@ -1,0 +1,112 @@
+"""Synthetic social accounting matrix (SAM) for cge-stata tests and examples.
+
+The SAM is constructed by hand from a consistent set of flows, so that every
+account balances exactly (row total = column total). It is not data for any
+country. All values are in arbitrary currency units, with all prices equal to
+one in the base year.
+
+Accounts
+    act_agr, act_man, act_ser   activities (one activity per commodity)
+    com_agr, com_man, com_ser   commodities
+    lab, cap                    factors
+    hhd                         households (one representative household)
+    gov                         government
+    tax_dir, tax_sal, tax_imp   direct, sales and import-tariff tax accounts
+    sav                         savings-investment
+    row                         rest of the world
+
+Convention: each cell (r, c) is a payment from column account c to row
+account r.
+
+Run as a script to (re)write ``data/cge_synthetic_sam.csv``:
+
+    python reference/synthetic_sam.py
+"""
+
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+
+ACCOUNTS = [
+    "act_agr", "act_man", "act_ser",
+    "com_agr", "com_man", "com_ser",
+    "lab", "cap",
+    "hhd", "gov",
+    "tax_dir", "tax_sal", "tax_imp",
+    "sav", "row",
+]
+
+# (receiving row account, paying column account): value
+FLOWS = {
+    # Activities sell their output to the matching commodity account.
+    ("act_agr", "com_agr"): 100, ("act_man", "com_man"): 140, ("act_ser", "com_ser"): 150,
+    # Intermediate inputs (commodity rows, activity columns).
+    ("com_agr", "act_agr"): 10, ("com_man", "act_agr"): 8, ("com_ser", "act_agr"): 5,
+    ("com_agr", "act_man"): 20, ("com_man", "act_man"): 30, ("com_ser", "act_man"): 15,
+    ("com_agr", "act_ser"): 5, ("com_man", "act_ser"): 15, ("com_ser", "act_ser"): 20,
+    # Value added (factor rows, activity columns).
+    ("lab", "act_agr"): 40, ("cap", "act_agr"): 37,
+    ("lab", "act_man"): 35, ("cap", "act_man"): 40,
+    ("lab", "act_ser"): 60, ("cap", "act_ser"): 50,
+    # Household consumption at purchaser prices.
+    ("com_agr", "hhd"): 70, ("com_man", "hhd"): 80, ("com_ser", "hhd"): 80,
+    # Government consumption.
+    ("com_man", "gov"): 5, ("com_ser", "gov"): 40,
+    # Investment demand.
+    ("com_agr", "sav"): 5, ("com_man", "sav"): 40, ("com_ser", "sav"): 5,
+    # Exports (commodity rows, rest-of-world column).
+    ("com_agr", "row"): 20, ("com_man", "row"): 40, ("com_ser", "row"): 15,
+    # Imports at c.i.f. prices (rest-of-world row, commodity columns).
+    ("row", "com_agr"): 20, ("row", "com_man"): 60, ("row", "com_ser"): 20,
+    # Import tariffs and sales taxes paid by commodity accounts.
+    ("tax_imp", "com_agr"): 2, ("tax_imp", "com_man"): 6,
+    ("tax_sal", "com_agr"): 8, ("tax_sal", "com_man"): 12, ("tax_sal", "com_ser"): 10,
+    # Factor income to households.
+    ("hhd", "lab"): 135, ("hhd", "cap"): 127,
+    # Transfers to households from government and the rest of the world.
+    ("hhd", "gov"): 15, ("hhd", "row"): 10,
+    # Household direct tax and savings.
+    ("tax_dir", "hhd"): 25, ("sav", "hhd"): 32,
+    # Tax accounts pass revenue to government.
+    ("gov", "tax_dir"): 25, ("gov", "tax_sal"): 30, ("gov", "tax_imp"): 8,
+    # Government and foreign savings.
+    ("sav", "gov"): 3, ("sav", "row"): 15,
+}
+
+
+def build() -> tuple[list[str], list[list[float]]]:
+    """Return the account labels and the SAM as a list of rows."""
+    index = {name: i for i, name in enumerate(ACCOUNTS)}
+    n = len(ACCOUNTS)
+    sam = [[0.0] * n for _ in range(n)]
+    for (row, col), value in FLOWS.items():
+        sam[index[row]][index[col]] = float(value)
+    return list(ACCOUNTS), sam
+
+
+def imbalances(sam: list[list[float]]) -> list[float]:
+    """Row total minus column total for each account."""
+    n = len(sam)
+    return [sum(sam[i]) - sum(sam[r][i] for r in range(n)) for i in range(n)]
+
+
+def write_csv(path: Path) -> None:
+    """Write the SAM with an ``account`` label column and one column per account."""
+    labels, sam = build()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["account", *labels])
+        for label, row in zip(labels, sam):
+            writer.writerow([label, *(f"{value:.10g}" for value in row)])
+
+
+if __name__ == "__main__":
+    _, matrix = build()
+    worst = max(abs(d) for d in imbalances(matrix))
+    if worst > 1e-12:
+        raise SystemExit(f"Synthetic SAM is not balanced (max imbalance {worst})")
+    target = Path(__file__).resolve().parents[1] / "data" / "cge_synthetic_sam.csv"
+    write_csv(target)
+    print(f"Wrote {target} ({len(ACCOUNTS)} accounts, balanced)")

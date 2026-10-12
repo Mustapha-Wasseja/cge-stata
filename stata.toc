@@ -1,0 +1,4 @@
+v 3
+d cge-stata: computable general equilibrium modelling in Stata
+d Author: Mustapha Wasseja
+p cge Computable general equilibrium (CGE) modelling in Stata
