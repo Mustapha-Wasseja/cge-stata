@@ -101,14 +101,22 @@ quietly cge_sam, labels(account)
 capture cge_map, `mapopts'
 assert _rc == 459
 
-* Flow the model does not represent: household pays the government directly
+* Flow the model does not represent: household pays the government directly.
+* The report lists the problem cell.
 cge_synthetic, clear
 quietly replace hhd = hhd + 5 in 10
 quietly replace hhd = hhd - 5 in 14
 quietly replace gov = gov + 5 in 14
 quietly cge_sam, labels(account)
-capture cge_map, `mapopts'
+tempfile report
+capture cge_map, `mapopts' report("`report'") replace
 assert _rc == 459
+preserve
+quietly import delimited using "`report'", varnames(1) stringcols(_all) clear
+assert _N == 1
+assert problem == "flow not represented" & paid_by == "hhd" & received_by == "gov"
+assert real(value) == 5
+restore
 
 * Account with flows but no role
 cge_synthetic, clear

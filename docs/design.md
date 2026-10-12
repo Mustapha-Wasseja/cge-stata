@@ -107,7 +107,20 @@ two implementations together without requiring Stata in continuous integration.
 | Version | Content |
 |---|---|
 | 0.1 | Standard static model of model_spec.md; validation suite; documentation and worked example on the synthetic SAM |
-| 0.2 | LES household demand; import-only and export-only commodities; multi-product activities; inter-household transfers and enterprises |
+| 0.2 | Features needed by national SAMs (from the first trial on a national-accounts SAM, Section 8): enterprises and non-profit institutions with transfers among institutions and with the rest of the world; taxes paid directly to the government account; exports recorded in activity rows; trade and transport margins; multi-product activities; the territorial correction and negative inventory changes; import-only and export-only commodities; LES household demand |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |
 | 0.5 | Top-down link to household microsimulation |
+
+## 8. First trial on a national SAM
+
+In October 2026 version 0.1 was tried on an 85-account national SAM built from
+the national accounts (38 activities, 38 products, 2 factors, 5 institutions,
+capital, rest of the world). The SAM balanced, but `cge_map` found 238 cells
+representing flows outside version 0.1, 15.8 per cent of the sum of absolute
+cell values. Grouped by the feature they need, the largest are: corporations and
+non-profit institutions (about 7 per cent); exports recorded as sales by
+activities (3.5 per cent); taxes paid directly to the government account
+(2 per cent); trade and transport margins recorded as negative own use by the
+trade and transport activities (2 per cent); and secondary production
+(0.4 per cent). Country data are not stored in this repository.

@@ -304,11 +304,12 @@ real colvector _cge_lookup(struct cge_model scalar M, string scalar list, string
 
 void _cge_map(string scalar acts, string scalar coms, string scalar facs, string scalar hhs,
               string scalar gov, string scalar sav, string scalar row, string scalar dirtax,
-              string scalar saltax, string scalar imptax, string scalar exptax, string scalar acttax)
+              string scalar saltax, string scalar imptax, string scalar exptax, string scalar acttax,
+              string scalar reportfile, real scalar replace)
 {
     struct cge_model scalar M
     real colvector role, iA, iC
-    real matrix allowed, negok, S
+    real matrix allowed, negok, S, issues
     string rowvector rolename
     real scalar i, j, k, tol, nacc, rr, rc
     string colvector taxacc
@@ -319,7 +320,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     nacc = rows(M.labels)
     rolename = ("activity", "commodity", "factor", "household", "government",
                 "savings-investment", "rest of world", "direct tax", "sales tax",
-                "import tax", "export tax", "activity tax")
+                "import tax", "export tax", "activity tax", "unmapped")
 
     M.iA = _cge_lookup(M, acts, "activity")
     M.iC = _cge_lookup(M, coms, "commodity")
@@ -352,19 +353,24 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     _cge_assign(M, role, M.irow, 7, rolename)
     for (k = 1; k <= 5; k++) if (taxidx[k] > 0) _cge_assign(M, role, taxidx[k], 7 + k, rolename)
 
+    // Accounts without a role get code 13 ("unmapped"); every problem found
+    // is collected as (problem code, row, column, value) and reported at the end:
+    // 1 unmapped account with flows, 2 unsupported flow, 3 activity paid by a
+    // commodity it is not paired with, 4 negative flow, 5 unbalanced account.
+    role = role + 13 :* (role :== 0)
+    issues = J(0, 4, .)
     tol = 1e-8 * max((1, max(abs(S))))
     for (i = 1; i <= nacc; i++) {
-        if (role[i] == 0 & (max(abs(S[i, .])) > tol | max(abs(S[., i])) > tol)) {
-            _cge_fail("account " + M.labels[i] + " has flows but is not mapped to a role", 459)
+        if (role[i] == 13 & (max(abs(S[i, .])) > tol | max(abs(S[., i])) > tol)) {
+            issues = issues \ (1, i, i, sum(S[i, .]))
         }
-    }
-    if (max(abs(rowsum(S) - colsum(S)')) > tol) {
-        errprintf("SAM is not balanced (largest row-column difference %9.3e)\n", max(abs(rowsum(S) - colsum(S)')))
-        exit(459)
+        if (abs(sum(S[i, .]) - sum(S[., i])) > tol) {
+            issues = issues \ (5, i, i, sum(S[i, .]) - sum(S[., i]))
+        }
     }
 
     // Supported flows (row role, column role)
-    allowed = J(12, 12, 0)
+    allowed = J(13, 13, 0)
     allowed[1, 2] = 1
     allowed[2, 1] = 1; allowed[3, 1] = 1; allowed[12, 1] = 1
     allowed[7, 2] = 1; allowed[10, 2] = 1; allowed[9, 2] = 1; allowed[11, 2] = 1
@@ -375,8 +381,8 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     allowed[5, 8] = 1; allowed[5, 9] = 1; allowed[5, 10] = 1; allowed[5, 11] = 1; allowed[5, 12] = 1
     allowed[6, 5] = 1; allowed[6, 7] = 1
     // Cells that may be negative
-    negok = J(12, 12, 0)
-    negok[(6, 8, 9, 10, 11, 12), .] = J(6, 12, 1)
+    negok = J(13, 13, 0)
+    negok[(6, 8, 9, 10, 11, 12), .] = J(6, 13, 1)
     negok[4, 5] = 1; negok[4, 7] = 1; negok[5, 7] = 1
     negok[5, (8, 9, 10, 11, 12)] = J(1, 5, 1)
 
@@ -386,20 +392,23 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
             rr = role[i]
             rc = role[j]
             if (!allowed[rr, rc]) {
-                _cge_fail("flow from " + M.labels[j] + " (" + rolename[rc] + ") to " + M.labels[i] +
-                          " (" + rolename[rr] + ") is not represented in the version 0.1 model", 459)
+                issues = issues \ (2, i, j, S[i, j])
+                continue
             }
             if (rr == 1) {
                 k = _cge_find(M.labels[M.iA], M.labels[i])
                 if (M.iC[k] != j) {
-                    _cge_fail("activity " + M.labels[i] + " receives payment from " + M.labels[j] +
-                              ", but it is paired with " + M.labels[M.iC[k]], 459)
+                    issues = issues \ (3, i, j, S[i, j])
+                    continue
                 }
             }
-            if (S[i, j] < 0 & !negok[rr, rc]) {
-                _cge_fail("negative flow from " + M.labels[j] + " to " + M.labels[i], 459)
-            }
+            if (S[i, j] < 0 & !negok[rr, rc]) issues = issues \ (4, i, j, S[i, j])
         }
+    }
+    if (reportfile != "") _cge_map_save(M, issues, role, rolename, reportfile, replace)
+    if (rows(issues)) {
+        _cge_map_report(M, issues, role, rolename)
+        exit(459)
     }
 
     M.A = M.labels[M.iA]
@@ -416,6 +425,88 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     _cge_store(M)
     printf("{txt}Accounts mapped: {res}%f{txt} activities, {res}%f{txt} factors, {res}%f{txt} households\n",
            M.n, M.nF, M.nH)
+}
+
+// Summary of mapping problems, grouped by problem and by the roles of the
+// paying and receiving accounts, largest first
+void _cge_map_report(struct cge_model scalar M, real matrix issues, real colvector role,
+                     string rowvector rolename)
+{
+    string rowvector problem
+    real colvector key, ukey, ord, sel
+    real matrix grp
+    real scalar g, k, total, cat, rr, rc, i
+
+    problem = ("account has flows but no role", "flow not represented", "secondary production",
+               "negative flow", "account not balanced")
+    total = sum(abs(M.S))
+    key = issues[., 1] :* 10000 + role[issues[., 2]] :* 100 + role[issues[., 3]]
+    ukey = uniqrows(key)
+    grp = J(rows(ukey), 4, .)
+    for (g = 1; g <= rows(ukey); g++) {
+        sel = select((1::rows(issues)), key :== ukey[g])
+        grp[g, .] = (ukey[g], rows(sel), sum(issues[sel, 4]), sum(abs(issues[sel, 4])))
+    }
+    ord = order(-grp[., 4], 1)
+    grp = grp[ord, .]
+
+    printf("{err}The SAM contains flows that version 0.1 of the model does not represent.\n")
+    printf("{txt}%f problem(s) in %f group(s); values are SAM units, shares are of the sum of absolute cells.\n",
+           rows(issues), rows(grp))
+    printf("{txt}For an account with no role the value is its total; its flows are also listed by role.\n")
+    printf("{txt}{hline 104}\n")
+    printf("{txt}%-30s %-20s %-20s %6s %16s %7s\n", "Problem", "Paid by (column)", "Received by (row)", "Cells", "Value", "Share")
+    printf("{txt}{hline 104}\n")
+    for (g = 1; g <= rows(grp); g++) {
+        cat = floor(grp[g, 1] / 10000)
+        rr = floor(mod(grp[g, 1], 10000) / 100)
+        rc = mod(grp[g, 1], 100)
+        printf("{txt}%-30s %-20s %-20s {res}%6.0f %16.0fc %6.2f%%\n", problem[cat],
+               (cat == 1 | cat == 5 ? "" : rolename[rc]), rolename[rr], grp[g, 2], grp[g, 3],
+               100 * grp[g, 4] / total)
+    }
+    printf("{txt}{hline 104}\n")
+    // Accounts named in account-level problems
+    for (k = 1; k <= rows(issues); k++) {
+        if (issues[k, 1] == 1) printf("{txt}  no role: {res}%s\n", M.labels[issues[k, 2]])
+    }
+    for (k = 1; k <= rows(issues); k++) {
+        if (issues[k, 1] == 5) {
+            i = issues[k, 2]
+            printf("{txt}  not balanced: {res}%s{txt} (row minus column total {res}%g{txt})\n", M.labels[i], issues[k, 4])
+        }
+    }
+    printf("{txt}Use the report() option to save every cell to a file.\n")
+}
+
+// Every problem cell, written as a CSV file
+void _cge_map_save(struct cge_model scalar M, real matrix issues, real colvector role,
+                   string rowvector rolename, string scalar fn, real scalar replace)
+{
+    string rowvector problem
+    real scalar fh, k, i, j
+    problem = ("account has flows but no role", "flow not represented", "secondary production",
+               "negative flow", "account not balanced")
+    if (fileexists(fn)) {
+        if (!replace) _cge_fail("file " + fn + " already exists; specify replace", 602)
+        unlink(fn)
+    }
+    fh = fopen(fn, "w")
+    fput(fh, "problem,paid_by,paid_by_role,received_by,received_by_role,value")
+    for (k = 1; k <= rows(issues); k++) {
+        i = issues[k, 2]
+        j = issues[k, 3]
+        if (issues[k, 1] == 1 | issues[k, 1] == 5) {
+            fput(fh, problem[issues[k, 1]] + ",," + "," + M.labels[i] + "," + rolename[role[i]] + "," +
+                 strofreal(issues[k, 4], "%21.0g"))
+        }
+        else {
+            fput(fh, problem[issues[k, 1]] + "," + M.labels[j] + "," + rolename[role[j]] + "," +
+                 M.labels[i] + "," + rolename[role[i]] + "," + strofreal(issues[k, 4], "%21.0g"))
+        }
+    }
+    fclose(fh)
+    printf("{txt}Mapping report saved to {res}%s{txt} (%f row(s))\n", fn, rows(issues))
 }
 
 void _cge_assign(struct cge_model scalar M, real colvector role, real colvector idx, real scalar code,

@@ -12,7 +12,8 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}]
+[{opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
+{opt report(filename)} {opt replace}]
 
 {pstd}
 Options must be typed in full.
@@ -23,13 +24,20 @@ Options must be typed in full.
 {pstd}
 {cmd:cge_map} assigns the accounts of the SAM read by {helpb cge_sam} to the roles
 of the model and checks the SAM against the flows the model represents
-(docs/model_spec.md, Section 7.0). It stops with an error if:
+(docs/model_spec.md, Section 7.0). It looks for:
 
-{p 8 12 2}- the SAM is not balanced;{p_end}
-{p 8 12 2}- an account with flows has no role, or an account has two roles;{p_end}
-{p 8 12 2}- a non-zero cell is a flow the model does not represent; the message names the paying and receiving accounts;{p_end}
-{p 8 12 2}- an activity is paid by a commodity other than the one it is paired with;{p_end}
-{p 8 12 2}- a cell that must be non-negative is negative.{p_end}
+{p 8 12 2}- accounts that are not balanced;{p_end}
+{p 8 12 2}- accounts with flows but no role;{p_end}
+{p 8 12 2}- non-zero cells that are flows the model does not represent;{p_end}
+{p 8 12 2}- activities paid by a commodity other than the one they are paired with (secondary production);{p_end}
+{p 8 12 2}- negative cells where the model needs non-negative values.{p_end}
+
+{pstd}
+All problems are collected and summarised in one table, grouped by problem and
+by the roles of the paying and receiving accounts, largest first, with each
+group's share of the SAM. If there is any problem, {cmd:cge_map} then exits with
+error 459. Unknown account names and accounts given two roles stop the command
+at once.
 
 
 {title:Options}
@@ -50,6 +58,15 @@ savings-investment and rest-of-world accounts.
 {opt dirtax()}, {opt saltax()}, {opt imptax()}, {opt exptax()} and
 {opt acttax()} name the accounts that collect direct taxes, sales taxes, import
 tariffs, export taxes and activity taxes. A tax that is not mapped is zero.
+
+{phang}
+{opt report(filename)} saves every problem cell to a CSV file with the
+columns {cmd:problem}, {cmd:paid_by}, {cmd:paid_by_role}, {cmd:received_by},
+{cmd:received_by_role} and {cmd:value}. The file is written whether or not
+problems are found.
+
+{phang}
+{opt replace} allows {opt report()} to overwrite an existing file.
 
 
 {title:Example}

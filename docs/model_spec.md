@@ -283,8 +283,9 @@ $c$ to row account $r$. Base values carry a superscript 0.
 Before calibration the SAM must be square, with identical row and column labels,
 balanced (each row total equals the column total within $10^{-8}$ times the
 largest absolute cell), and every account with a non-zero flow must be mapped to
-a role. Every non-zero cell must be one of the flows below; any other flow stops
-calibration with an error that names the paying and receiving accounts.
+a role. Every non-zero cell must be one of the flows below. Any other flow stops
+calibration with an error that names the paying and receiving accounts; the
+Stata implementation lists every such flow, grouped by role, before stopping.
 
 | Paid by (column) | Received by (row) |
 |---|---|
@@ -361,9 +362,11 @@ other household payment.
 
 ### 7.6 Tax accounts
 
-Taxes may be recorded in separate tax accounts (as in the synthetic SAM) or as
-direct payments to the government account. The account mapping declares which
-row holds each tax. A tax account's column must pay only the government.
+In version 0.1 each tax must be recorded in its own tax account (as in the
+synthetic SAM): the account's row collects the tax and its column pays only the
+government. SAMs that record taxes as direct payments to the government account,
+as many national SAMs do, are not yet supported; this is planned for version
+0.2.
 
 ### 7.7 Factor quantities
 
