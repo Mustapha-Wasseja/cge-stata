@@ -33,7 +33,7 @@ struct cge_model {
     real colvector   iA, iC, iF, iH
     real scalar      igov, isav, irow, idirtax, isaltax, iimptax, iexptax, iacttax
     string colvector A, C, F, H, I
-    real colvector   iE
+    real colvector   iE, imargins
     string colvector E, D
     real scalar      n, nF, nH, nE, nD, nI
     // model structure
@@ -314,10 +314,10 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
               string scalar ents,
               string scalar gov, string scalar sav, string scalar row, string scalar dirtax,
               string scalar saltax, string scalar imptax, string scalar exptax, string scalar acttax,
-              string scalar reportfile, real scalar replace)
+              string scalar margins, string scalar reportfile, real scalar replace)
 {
     struct cge_model scalar M
-    real colvector role, iA, iC
+    real colvector role, iA, iC, imarg
     real matrix allowed, negok, transfers, S, issues
     string rowvector rolename, taxname
     real scalar i, j, k, tol, nacc, rr, rc, x
@@ -357,7 +357,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         _cge_fail("only one of saltax(), imptax() and exptax() may name the government account", 198)
     }
     labels = M.labels0
-    M.rewritten = J(1, 6, 0)
+    M.rewritten = J(1, 7, 0)
     for (k = 1; k <= rows(M.iA); k++) {
         x = S[M.iA[k], M.irow]
         if (x != 0) {
@@ -367,6 +367,22 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
             M.rewritten[1] = M.rewritten[1] + x
         }
     }
+    // Margins netted out of margin activities as a negative use of their own product
+    imarg = _cge_lookup(M, margins, "margin activity")
+    for (k = 1; k <= rows(imarg); k++) {
+        j = 0
+        for (i = 1; i <= rows(M.iA); i++) if (M.iA[i] == imarg[k]) j = i
+        if (j == 0) _cge_fail("margins(): " + M.labels0[imarg[k]] + " is not one of the mapped activities", 198)
+        x = S[M.iC[j], M.iA[j]]
+        if (x >= 0) {
+            _cge_fail("margins(): activity " + M.labels0[M.iA[j]] + " has no negative use of its own product " +
+                      M.labels0[M.iC[j]], 459)
+        }
+        S[M.iA[j], M.iC[j]] = S[M.iA[j], M.iC[j]] - x
+        S[M.iC[j], M.iA[j]] = 0
+        M.rewritten[7] = M.rewritten[7] - x
+    }
+    M.imargins = imarg
     taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax")
     for (k = 1; k <= 5; k++) {
         if (!direct[k]) continue
@@ -503,10 +519,15 @@ void _cge_map_rewrites(struct cge_model scalar M)
             "Activity taxes paid to government, routed through account _acttax")
     account = ("", "_dirtax", "_saltax", "_imptax", "_exptax", "_acttax")
     if (M.rewritten[1] != 0) printf("{txt}%s: {res}%g\n", what[1], M.rewritten[1])
+    if (rows(M.imargins)) {
+        printf("{txt}Margins netted out of %s, moved to their output: {res}%g\n",
+               invtokens(M.labels0[M.imargins]'), M.rewritten[7])
+    }
     for (k = 2; k <= 6; k++) {
         if (_cge_find(M.labels, account[k])) printf("{txt}%s: {res}%g\n", what[k], M.rewritten[k])
     }
     st_numscalar("r(exports_moved)", M.rewritten[1])
+    st_numscalar("r(margins_moved)", M.rewritten[7])
     st_numscalar("r(taxes_rerouted)", sum(M.rewritten[(2, 3, 4, 5, 6)]))
 }
 

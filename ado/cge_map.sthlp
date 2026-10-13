@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt enterprises(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
+[{opt enterprises(names)} {opt margins(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
 {opt report(filename)} {opt replace}]
 
 {pstd}
@@ -40,12 +40,13 @@ error 459. Unknown account names and accounts given two roles stop the command
 at once.
 
 {pstd}
-Before the checks, two layouts common in national SAMs are rewritten into the
+Before the checks, layouts common in national SAMs are rewritten into the
 model's layout, and the amounts moved are displayed (docs/model_spec.md,
 Section 7.0). Exports recorded as sales by an activity to the rest of the world
-are moved to the commodity paired with the activity. Taxes paid directly to the
-government account are routed through internal tax accounts; see the tax
-options below. The SAM in memory is not changed.
+are moved to the commodity paired with the activity. Margins netted out of the
+activities listed in {opt margins()} are moved to their output. Taxes paid
+directly to the government account are routed through internal tax accounts;
+see the tax options below. The SAM in memory is not changed.
 
 
 {title:Options}
@@ -69,6 +70,16 @@ flow.
 {phang}
 {opt government()}, {opt savinv()} and {opt row()} name the government,
 savings-investment and rest-of-world accounts.
+
+{phang}
+{opt margins()} lists activities, typically trade and transport, whose margin
+revenue the SAM nets out of their output by recording a negative use of their
+own product. That negative cell is moved to the activity's output, so the
+margins enter the model as the producing activities' purchases of trade and
+transport services, as the SAM records them (docs/model_spec.md, Section 7.0).
+The activity's own use of its product cannot be separated from the netted
+margins and becomes zero. Naming an activity without a negative use of its own
+product is an error.
 
 {phang}
 {opt dirtax()}, {opt saltax()}, {opt imptax()}, {opt exptax()} and

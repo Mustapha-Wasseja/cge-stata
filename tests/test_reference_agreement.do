@@ -80,4 +80,13 @@ cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 _standard_simulations inst_
 
+* Margins layout: margins netted out of act_ser are moved to its output
+cge_synthetic, clear margins
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) margins(act_ser)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+_standard_simulations margins_
+
 program drop _compare_reference _standard_simulations

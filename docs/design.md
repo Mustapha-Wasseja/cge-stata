@@ -109,7 +109,8 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1 | Standard static model of model_spec.md; validation suite; documentation and worked example on the synthetic SAM |
 | 0.1.1 | Taxes paid directly to the government account and exports recorded in activity rows, rewritten when the SAM is mapped (done) |
 | 0.1.2 | Enterprises; non-profit institutions mapped as households; transfers among institutions, within government and with the rest of the world; factor income from abroad (done) |
-| 0.2 | Further features needed by national SAMs (Section 8): trade and transport margins; multi-product activities; the territorial correction and negative inventory changes; import-only and export-only commodities; LES household demand |
+| 0.1.3 | Margins netted out of margin activities, moved to their output when the SAM is mapped, so that margins enter as the producers' purchases of trade and transport services (done) |
+| 0.2 | Further features needed by national SAMs (Section 8): multi-product activities; the territorial correction and negative inventory changes; import-only and export-only commodities; LES household demand; later, a margin mechanism by product and market once margin data from supply-use tables are available |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |
 | 0.5 | Top-down link to household microsimulation |
@@ -127,6 +128,7 @@ activities (3.5 per cent); taxes paid directly to the government account
 trade and transport activities (2 per cent); and secondary production
 (0.4 per cent). Version 0.1.1 handles the export and tax layouts, which reduced
 the unsupported share to 10.2 per cent, and version 0.1.2 (institutions and
-transfers) to 2.6 per cent. The remaining flows are trade and transport margins,
-secondary production, the territorial correction and negative inventory changes.
+transfers) to 2.6 per cent, and version 0.1.3 (margins netted out of the trade
+and transport activities) to 0.67 per cent. The remaining flows are secondary
+production, the territorial correction and negative inventory changes.
 Country data are not stored in this repository.

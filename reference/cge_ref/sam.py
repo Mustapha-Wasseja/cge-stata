@@ -97,9 +97,11 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
     """Rewrite national-accounts layouts into the standard layout (model_spec.md, 7.0).
 
     Exports recorded as sales by activities are moved to the paired commodity
-    rows, and taxes paid directly to the government account are routed through
-    internal tax accounts. Returns the rewritten SAM, a mapping that names the
-    internal tax accounts, and the amounts rewritten.
+    rows; margins netted out of the activities listed in ``mapping.margins``
+    (as a negative use of their own product) are moved to their output; and
+    taxes paid directly to the government account are routed through internal
+    tax accounts. Returns the rewritten SAM, a mapping that names the internal
+    tax accounts, and the amounts rewritten.
     """
     m = dataclasses.replace(mapping)
     labels = list(sam.labels)
@@ -124,6 +126,21 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
             values[ia, r] = 0.0
             moved += x
     notes["exports"] = moved
+
+    pair = dict(zip(m.activities, m.commodities))
+    netted = 0.0
+    for a in m.margins:
+        if a not in pair:
+            raise SAMError(f"margins: {a} is not one of the mapped activities")
+        ia, ic = sam.index(a), sam.index(pair[a])
+        x = values[ic, ia]
+        if x >= 0:
+            raise SAMError(f"margins: activity {a} has no negative use of its own product {pair[a]}")
+        values[ia, ic] -= x
+        values[ic, ia] = 0.0
+        netted -= x
+    if m.margins:
+        notes["margins"] = netted
 
     g = sam.index(m.government)
     for tax in direct:
@@ -166,6 +183,7 @@ class Mapping:
     exptax: str | None = None
     acttax: str | None = None
     enterprises: list[str] = dataclasses.field(default_factory=list)
+    margins: list[str] = dataclasses.field(default_factory=list)
 
     def roles(self) -> dict[str, str]:
         """Role of every mapped account."""

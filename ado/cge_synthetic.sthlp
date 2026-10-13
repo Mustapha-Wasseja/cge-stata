@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins}]
 
 
 {title:Options}
@@ -32,6 +32,11 @@ and a non-profit institution ({cmd:npi}). It includes transfers among
 institutions, transfers to and from the rest of the world, factor income from
 and to abroad, transfers within government, and negative savings. Map it with
 {cmd:households(hhd npi)} and {cmd:enterprises(ent)}.
+
+{phang}
+{opt margins} loads the standard SAM with 30 of margins netted out of the
+service activity: its output is recorded as 120 and its use of its own product
+as -10. Map it with {cmd:margins(act_ser)}.
 
 
 {title:Description}

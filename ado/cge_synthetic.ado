@@ -1,4 +1,4 @@
-*! cge_synthetic.ado  v0.1.2  2026-10-13
+*! cge_synthetic.ado  v0.1.3  2026-10-14
 *! cge-stata: load the synthetic social accounting matrix (SAM)
 *! Loads the bundled synthetic SAM and checks that every account balances
 *!
@@ -7,10 +7,10 @@
 
 program define cge_synthetic, rclass
     version 13.0
-    syntax [, CLEAR NATional INStitutions]
+    syntax [, CLEAR NATional INStitutions MARgins]
 
-    if "`national'" != "" & "`institutions'" != "" {
-        display as error "national and institutions may not be combined"
+    if ("`national'" != "") + ("`institutions'" != "") + ("`margins'" != "") > 1 {
+        display as error "choose only one of national, institutions and margins"
         exit 198
     }
     local file cge_synthetic_sam.csv
@@ -22,6 +22,10 @@ program define cge_synthetic, rclass
     if "`institutions'" != "" {
         local file cge_synthetic_sam_inst.csv
         local layout "institutions layout"
+    }
+    if "`margins'" != "" {
+        local file cge_synthetic_sam_margins.csv
+        local layout "margins layout"
     }
     quietly findfile `file'
     local samfile `"`r(fn)'"'

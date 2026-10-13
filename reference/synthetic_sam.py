@@ -112,6 +112,25 @@ def build_national_accounts_layout() -> tuple[list[str], list[list[float]]]:
     return [labels[k] for k in keep], [[sam[r][c] for c in keep] for r in keep]
 
 
+SERVICE_MARGINS = 30.0
+
+
+def build_margins_layout() -> tuple[list[str], list[list[float]]]:
+    """The standard SAM with margins netted out of the service activity.
+
+    act_ser earns 30 of margins. As in some national SAMs, its recorded output
+    is reduced by 30 and its use of its own product (20) becomes -10. Rewriting
+    this layout (model_spec.md, Section 7.0, rewrite 3) moves the -10 to output,
+    giving output 130 and own use 0: the rewrite cannot separate the activity's
+    own use from the netted margins.
+    """
+    labels, sam = build()
+    i = {name: k for k, name in enumerate(labels)}
+    sam[i["act_ser"]][i["com_ser"]] -= SERVICE_MARGINS
+    sam[i["com_ser"]][i["act_ser"]] -= SERVICE_MARGINS
+    return labels, sam
+
+
 INSTITUTION_ACCOUNTS = [
     "act_agr", "act_man", "act_ser",
     "com_agr", "com_man", "com_ser",
@@ -171,7 +190,8 @@ if __name__ == "__main__":
     data = Path(__file__).resolve().parents[1] / "data"
     for layout, filename in ((build, "cge_synthetic_sam.csv"),
                              (build_national_accounts_layout, "cge_synthetic_sam_na.csv"),
-                             (build_institutions_layout, "cge_synthetic_sam_inst.csv")):
+                             (build_institutions_layout, "cge_synthetic_sam_inst.csv"),
+                             (build_margins_layout, "cge_synthetic_sam_margins.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))
         if worst > 1e-12:

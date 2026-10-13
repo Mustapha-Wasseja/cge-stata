@@ -198,6 +198,18 @@ quietly cge_map, `instopts'
 capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 assert _rc == 459
 
+* Margins layout: amount moved, and margins() errors
+cge_synthetic, clear margins
+quietly cge_sam, labels(account)
+cge_map, `mapopts' margins(act_ser)
+assert r(margins_moved) == 10
+capture cge_map, `mapopts'
+assert _rc == 459
+capture cge_map, `mapopts' margins(act_agr)
+assert _rc == 459
+capture cge_map, `mapopts' margins(com_ser)
+assert _rc == 198
+
 * Commands in the wrong order
 cge_synthetic, clear
 quietly cge_sam, labels(account)

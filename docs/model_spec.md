@@ -326,9 +326,8 @@ sales ($QD^0_c > 0$).
 
 #### Layouts rewritten before the checks (from version 0.1.1)
 
-National SAMs often record two kinds of flow differently. Both are rewritten into
-the standard layout before the checks above, without changing any total that
-enters the model:
+National SAMs often record three kinds of flow differently. They are rewritten
+into the standard layout before the checks above:
 
 1. **Exports recorded as sales by activities.** A cell $SAM(a, row)$ is treated
    as exports of the commodity paired with $a$: it is added to $SAM(c(a), row)$
@@ -345,8 +344,28 @@ enters the model:
    import and export tax options may name the government account, because the
    cells would otherwise be ambiguous; when product taxes are recorded as one
    flow per product, they can only be treated as one tax.
+3. **Margins netted out of margin activities (from version 0.1.3).** Some SAMs
+   attribute trade and transport margins to the producing activities, as their
+   purchases of trade and transport services, and net the margin revenue out of
+   the trade and transport activities' output by recording a negative use of
+   their own product, $SAM(c(a), a) < 0$. For each activity named in the
+   mapping's margins option, the negative cell is moved to output: $-SAM(c(a), a)$
+   is added to $SAM(a, c(a))$, and $SAM(c(a), a)$ is set to zero. The activity's
+   output then equals its costs (intermediate inputs and value added), and the
+   margins enter the model as the producing activities' fixed-coefficient
+   purchases of trade and transport services, exactly as the SAM records them.
+   Naming an activity without a negative use of its own product is an error.
+   Only the net negative amount is recorded, so the activity's genuine use of
+   its own product cannot be separated from the netted margins; after the
+   rewrite that use is zero.
+   Margins therefore scale with each producer's output rather than separately
+   with domestic sales, imports and exports, and imports carry no margins unless
+   the SAM attributes them; a margin mechanism by product and market requires
+   margin data from supply-use tables.
 
-The mapping report lists the amounts rewritten.
+Rewrites 1 and 2 leave every total that enters the model unchanged; rewrite 3
+raises the margin activities' output and the supply and demand of their
+products by the margins. The mapping report lists the amounts rewritten.
 
 ### 7.1 Normalisation
 

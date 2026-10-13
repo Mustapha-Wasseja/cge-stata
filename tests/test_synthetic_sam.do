@@ -36,3 +36,10 @@ assert abs(r(total) - 1866) < 1e-9
 assert ent[9] == 60         // dividends from ent to hhd
 assert npi[16] == -1        // negative savings of npi
 assert row[7] == 6          // labour income from abroad
+
+* Margins layout: 30 of margins netted out of act_ser
+cge_synthetic, clear margins
+assert r(N_accounts) == 15
+assert abs(r(total) - 1683) < 1e-9
+assert com_ser[3] == 120    // recorded output of act_ser
+assert act_ser[6] == -10    // negative use of its own product

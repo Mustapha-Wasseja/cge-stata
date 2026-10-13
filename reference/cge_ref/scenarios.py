@@ -68,6 +68,21 @@ def institutions_model(**elasticities) -> Model:
     return Model(SAM.from_csv(INSTITUTIONS_SAM), institutions_mapping(), **settings)
 
 
+MARGINS_SAM = REPO / "data" / "cge_synthetic_sam_margins.csv"
+
+
+def margins_mapping() -> Mapping:
+    """Mapping of the margins layout: act_ser's margins are netted out of its output."""
+    m = synthetic_mapping()
+    m.margins = ["act_ser"]
+    return m
+
+
+def margins_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(MARGINS_SAM), margins_mapping(), **settings)
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -111,6 +126,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         Closure(), tol=1e-12, **simulation_inputs(mixed)["tariff_removal"])
     for name, solution in run_simulations(institutions_model()).items():
         solutions["inst_" + name] = solution
+    for name, solution in run_simulations(margins_model()).items():
+        solutions["margins_" + name] = solution
     written = []
     for name, solution in solutions.items():
         if not solution.converged:
