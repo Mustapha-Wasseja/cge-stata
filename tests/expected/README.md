@@ -13,6 +13,7 @@ relative tolerance of 1e-6.
 | `foreign_savings_down20.csv` | foreign savings reduced by 20 per cent |
 | `agri_productivity_up5.csv` | value-added efficiency of `act_agr` raised by 5 per cent |
 | `mixed_tariff_removal.csv` | all import tariff rates set to zero, with sector-specific elasticities (below) |
+| `inst_*.csv` | the five shocks above on the institutions layout (`data/cge_synthetic_sam_inst.csv`: an enterprise and a non-profit institution) |
 
 Settings: the synthetic SAM (`data/cge_synthetic_sam.csv`); elasticities
 `sigma_va = 0.8`, `sigma_q = 2.0` and `sigma_t = 2.0` for every sector, except in

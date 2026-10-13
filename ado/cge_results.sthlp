@@ -18,7 +18,9 @@
 {pstd}
 {cmd:cge_results} displays a summary of a simulation: real value added, the
 exchange rate, the CPI, investment, imports, exports, government savings, factor
-prices and activity output, as changes from the base; household equivalent
+prices and activity output, as percentage changes from the base (relative to
+the absolute value of the base, so a fall is shown as negative even when the
+base is negative, as for a government deficit); household equivalent
 variation at base prices; and the Walras and GDP identity checks.
 
 {pstd}

@@ -27,3 +27,12 @@ assert abs(r(total) - 1613) < 1e-9
 assert row[1] == 20         // exports recorded as sales by act_agr
 assert hhd[10] == 25        // direct tax paid by households to gov
 assert com_agr[10] == 8     // sales tax on com_agr paid to gov
+
+* Institutions layout: enterprise (ent) and non-profit institution (npi)
+cge_synthetic, clear institutions
+assert r(N_accounts) == 17
+assert r(maxdiff) < 1e-9
+assert abs(r(total) - 1866) < 1e-9
+assert ent[9] == 60         // dividends from ent to hhd
+assert npi[16] == -1        // negative savings of npi
+assert row[7] == 6          // labour income from abroad

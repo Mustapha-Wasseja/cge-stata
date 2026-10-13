@@ -26,26 +26,28 @@ program define _compare_reference
 end
 
 * The five standard simulations on the calibrated model in memory
+* (an optional prefix selects the expected files, e.g. inst_ for inst_<name>.csv)
 capture program drop _standard_simulations
 program define _standard_simulations
+    args prefix
     cge_shock, reset
     cge_shock tm, value(0)
-    cge_solve, name(tariff_removal) tolerance(1e-12)
+    cge_solve, name(`prefix'tariff_removal) tolerance(1e-12)
     cge_shock, reset
     cge_shock pwm, scale(1.1)
-    cge_solve, name(import_price_up10) tolerance(1e-12)
+    cge_solve, name(`prefix'import_price_up10) tolerance(1e-12)
     cge_shock, reset
     cge_shock QFS, elements(lab) scale(1.05)
-    cge_solve, name(labour_supply_up5) tolerance(1e-12)
+    cge_solve, name(`prefix'labour_supply_up5) tolerance(1e-12)
     cge_shock, reset
     cge_shock FSAV, scale(0.8)
-    cge_solve, name(foreign_savings_down20) tolerance(1e-12)
+    cge_solve, name(`prefix'foreign_savings_down20) tolerance(1e-12)
     cge_shock, reset
     cge_shock ad, elements(act_agr) scale(1.05)
-    cge_solve, name(agri_productivity_up5) tolerance(1e-12)
+    cge_solve, name(`prefix'agri_productivity_up5) tolerance(1e-12)
     foreach sim in tariff_removal import_price_up10 labour_supply_up5 ///
         foreign_savings_down20 agri_productivity_up5 {
-        _compare_reference `sim'
+        _compare_reference `prefix'`sim'
     }
 end
 
@@ -68,5 +70,14 @@ cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser
     dirtax(gov) saltax(gov) imptax(tax_imp)
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 _standard_simulations
+
+* Institutions layout: an enterprise and a non-profit institution
+cge_synthetic, clear institutions
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd npi) enterprises(ent) government(gov)        ///
+    savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+_standard_simulations inst_
 
 program drop _compare_reference _standard_simulations

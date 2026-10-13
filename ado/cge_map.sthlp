@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
+[{opt enterprises(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
 {opt report(filename)} {opt replace}]
 
 {pstd}
@@ -57,6 +57,14 @@ commodity, and so on. Version 0.1 requires one commodity for each activity.
 
 {phang}
 {opt factors()} and {opt households()} list the factor and household accounts.
+Non-profit institutions serving households can be listed as households.
+
+{phang}
+{opt enterprises()} lists enterprise accounts (corporations). Enterprises
+receive factor income and transfers, pay direct taxes and save; the rest of
+their income is transferred to other institutions or abroad. They do not
+consume, so an enterprise that buys commodities is reported as an unsupported
+flow.
 
 {phang}
 {opt government()}, {opt savinv()} and {opt row()} name the government,

@@ -8,14 +8,17 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.1 implements the standard static model described in
+Version 0.1.2 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs;
 - CET transformation between exports and domestic sales, Armington aggregation
   of imports and domestic goods;
-- households with Cobb-Douglas demand, government with direct, sales, import,
-  export and activity taxes, savings-investment and the rest of the world;
+- households with Cobb-Douglas demand (non-profit institutions can be mapped as
+  households), enterprises, and transfers among institutions and with the rest
+  of the world (version 0.1.2);
+- government with direct, sales, import, export and activity taxes,
+  savings-investment and the rest of the world;
 - selectable closures for the external account, government, savings-investment,
   the numeraire and each factor (mobile, activity-specific or unemployed);
 - SAMs in national-accounts layout: exports recorded as sales by activities, and
@@ -26,7 +29,7 @@ Version 0.1.1 implements the standard static model described in
 | Model specification | complete |
 | Python reference implementation and validation suite | complete |
 | Stata/Mata implementation | complete; agrees with the reference to about 1e-13 |
-| Application to country SAMs | first trial: corporations, margins and multi-product activities still needed (version 0.2) |
+| Application to country SAMs | first trial: margins, multi-product activities, the territorial correction and inventory changes still needed (version 0.2) |
 
 The model has been validated on the synthetic SAM only. When applying it to a
 country SAM, run `cge_check, homogeneity perturb(0.1)` and review the elasticity

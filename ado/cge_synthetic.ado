@@ -1,4 +1,4 @@
-*! cge_synthetic.ado  v0.1.1  2026-10-12
+*! cge_synthetic.ado  v0.1.2  2026-10-13
 *! cge-stata: load the synthetic social accounting matrix (SAM)
 *! Loads the bundled synthetic SAM and checks that every account balances
 *!
@@ -7,10 +7,22 @@
 
 program define cge_synthetic, rclass
     version 13.0
-    syntax [, CLEAR NATional]
+    syntax [, CLEAR NATional INStitutions]
 
+    if "`national'" != "" & "`institutions'" != "" {
+        display as error "national and institutions may not be combined"
+        exit 198
+    }
     local file cge_synthetic_sam.csv
-    if "`national'" != "" local file cge_synthetic_sam_na.csv
+    local layout "standard layout"
+    if "`national'" != "" {
+        local file cge_synthetic_sam_na.csv
+        local layout "national-accounts layout"
+    }
+    if "`institutions'" != "" {
+        local file cge_synthetic_sam_inst.csv
+        local layout "institutions layout"
+    }
     quietly findfile `file'
     local samfile `"`r(fn)'"'
 
@@ -53,7 +65,6 @@ program define cge_synthetic, rclass
         local grand = `grand' + r(sum)
     }
 
-    local layout = cond("`national'" != "", "national-accounts layout", "standard layout")
     display as text _n "Synthetic SAM loaded (`layout'): " as result `n' as text ///
         " accounts, total " as result %9.2f `grand'
     display as text "Largest row-column imbalance: " as result %9.2e `maxdiff'

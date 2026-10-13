@@ -150,6 +150,54 @@ assert _rc == 198
 capture cge_map, `naopts' dirtax(gov) imptax(tax_imp)
 assert _rc == 459
 
+* Institutions layout: checks, every macro closure, and an enterprise that consumes
+local instopts activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd npi) enterprises(ent) government(gov)              ///
+    savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, `instopts'
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert r(N_equations) == 107
+cge_shock tm, value(0)
+quietly cge_solve, name(inst_notariff)
+cge_check, homogeneity perturb(0.1)
+assert r(failures) == 0
+cge_shock, reset
+foreach ext in flexexr fixexr {
+    foreach gov in flexgsav fixgsav {
+        foreach si in savings investment {
+            foreach num in cpi dpi {
+                quietly cge_closure, external(`ext') government(`gov') savinv(`si') ///
+                    numeraire(`num') factors(lab:unemployed cap:specific)
+                quietly cge_solve, name(inst_closure)
+                assert r(converged) == 1 & r(iterations) == 0
+            }
+        }
+    }
+}
+cge_synthetic, clear institutions
+quietly replace ent = ent + 2 in 6     // com_ser sold to the enterprise
+quietly replace ent = ent - 2 in 16    // instead of enterprise savings
+quietly replace sav = sav - 2 in 6     // investment demand for com_ser falls
+quietly cge_sam, labels(account)
+capture cge_map, `instopts'
+assert _rc == 459
+
+* npi saves all its income but still makes offsetting transfers (+2 to hhd,
+* -2 abroad): its transfer shares are undefined, so calibration stops
+cge_synthetic, clear institutions
+quietly replace npi = 9 in 16          // savings of npi: all of its income
+quietly replace npi = 0 in 6           // no consumption
+quietly replace sav = sav + 10 in 6    // investment demand for com_ser instead
+quietly replace npi = 2 in 9           // transfer to hhd
+quietly replace npi = -2 in 17         // negative transfer abroad
+quietly replace hhd = hhd + 2 in 17    // hhd pays the 2 abroad
+quietly cge_sam, labels(account)
+quietly cge_map, `instopts'
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert _rc == 459
+
 * Commands in the wrong order
 cge_synthetic, clear
 quietly cge_sam, labels(account)

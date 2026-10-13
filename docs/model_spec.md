@@ -23,20 +23,27 @@ Included:
   inputs.
 - CET transformation of output between exports and domestic sales; Armington
   CES aggregation of imports and domestic goods.
-- One or more households with Cobb-Douglas consumption demand.
+- One or more households with Cobb-Douglas consumption demand. Non-profit
+  institutions serving households can be mapped as households.
+- Enterprises (from version 0.1.2), which receive factor income and transfers,
+  pay direct taxes, save, and transfer the rest of their income to other
+  institutions and the rest of the world; they do not consume.
+- Transfers among households and enterprises, and from them to the rest of the
+  world, as fixed shares of the payer's income after direct taxes and savings.
 - Government with direct, sales, import, export and activity taxes, transfers
-  to households and fixed real consumption.
+  to households and enterprises, transfers within government and to the rest of
+  the world, and fixed real consumption.
 - Savings-investment and a rest-of-world account with foreign savings and
-  transfers.
-- Factor income distributed to households, government and the rest of the
-  world by fixed shares.
+  transfers, including factor income received from abroad.
+- Factor income distributed to households, enterprises, government and the rest
+  of the world by fixed shares.
 - Selectable closures for the external account, government, savings-investment,
   factor markets and the numeraire.
 
 Deferred to later versions: multi-product activities and commodities with
 several producers; commodities that are not produced domestically, or that are
-produced but not sold domestically; linear expenditure system (LES) demand;
-inter-household transfers and enterprises; recursive dynamics.
+produced but not sold domestically; trade and transport margins; linear
+expenditure system (LES) demand; recursive dynamics.
 
 ## 2. Sets
 
@@ -49,8 +56,10 @@ inter-household transfers and enterprises; recursive dynamics.
 | $CM \subseteq C$ | imported commodities (base imports > 0) |
 | $CNM = C \setminus CM$ | non-imported commodities |
 | $F$ | factors |
-| $H$ | households |
-| $I = H \cup \{gov, row\}$ | institutions receiving factor income |
+| $H$ | households (including non-profit institutions mapped as households) |
+| $E$ | enterprises (may be empty) |
+| $D = H \cup E$ | domestic non-government institutions |
+| $I = D \cup \{gov, row\}$ | institutions receiving factor income |
 
 ## 3. Variables
 
@@ -96,13 +105,13 @@ Incomes, rates and adjustment variables
 |---|---|
 | $YF_f$ | income of factor $f$ |
 | $YIF_{if}$ | income of institution $i$ from factor $f$ |
-| $YH_h$ | household income |
+| $YI_d$ | income of domestic non-government institution $d$ |
 | $EH_h$ | household consumption spending |
 | $YG$, $EG$ | government revenue and spending |
 | $GSAV$ | government savings |
 | $FSAV$ | foreign savings (foreign currency) |
-| $TINS_h$ | direct tax rate of household $h$ |
-| $MPS_h$ | marginal propensity to save of household $h$ |
+| $TINS_d$ | direct tax rate of institution $d$ |
+| $MPS_d$ | marginal propensity to save of institution $d$ |
 | $TINSADJ$ | direct tax scaling factor |
 | $MPSADJ$ | savings rate scaling factor |
 | $IADJ$ | investment scaling factor |
@@ -123,8 +132,13 @@ Incomes, rates and adjustment variables
 | $aq_c$, $\delta^{q}_c$, $\rho^{q}_c$ | Armington efficiency, share and exponent parameters |
 | $shif_{if}$ | share of factor $f$ income going to institution $i$ |
 | $\beta_{ch}$ | Cobb-Douglas budget share of $c$ for household $h$ |
-| $\overline{tins}_h$, $\overline{mps}_h$ | base direct tax rate and savings rate |
-| $trnsfr_{h,gov}$, $trnsfr_{h,row}$, $trnsfr_{gov,row}$ | transfers (government transfers in real terms, foreign transfers in foreign currency) |
+| $\overline{tins}_d$, $\overline{mps}_d$ | base direct tax rate and savings rate of institution $d$ |
+| $shii_{dd'}$ | share of institution $d'$'s income after direct taxes and savings transferred to institution $d$ |
+| $shir_d$ | share of institution $d$'s income after direct taxes and savings transferred to the rest of the world |
+| $hc_h$ | share of household $h$'s income after direct taxes and savings spent on consumption |
+| $trnsfr_{d,gov}$, $trnsfr_{gov,gov}$ | government transfers to institution $d$ and within government (real terms) |
+| $trnsfr_{d,row}$, $trnsfr_{f,row}$, $trnsfr_{gov,row}$ | transfers from the rest of the world to institution $d$, factor $f$ and the government (foreign currency) |
+| $trnsfr_{row,gov}$ | government transfers to the rest of the world (foreign currency) |
 | $\overline{qg}_c$, $\overline{qinv}_c$ | base government consumption and investment quantities |
 | $cwts_c$, $dwts_c$ | CPI and DPI weights |
 
@@ -209,13 +223,18 @@ $$QQ_c = QD_c \tag{T6}$$
 
 ### 5.4 Institution block
 
-$$YF_f = \sum_a W_f\,WFDIST_{fa}\,QF_{fa} \tag{I1}$$
+$$YF_f = \sum_a W_f\,WFDIST_{fa}\,QF_{fa} + trnsfr_{f,row}\,EXR \tag{I1}$$
 
 $$YIF_{if} = shif_{if}\,YF_f, \qquad i \in I \tag{I2}$$
 
-$$YH_h = \sum_f YIF_{hf} + trnsfr_{h,gov}\,CPI + trnsfr_{h,row}\,EXR \tag{I3}$$
+$$YI_d = \sum_f YIF_{df} + \sum_{d' \in D} shii_{dd'}\,(1-MPS_{d'})(1-TINS_{d'})\,YI_{d'} + trnsfr_{d,gov}\,CPI + trnsfr_{d,row}\,EXR \tag{I3}$$
 
-$$EH_h = (1-MPS_h)(1-TINS_h)\,YH_h \tag{I4}$$
+$$EH_h = hc_h\,(1-MPS_h)(1-TINS_h)\,YI_h \tag{I4}$$
+
+Enterprises do not consume: for $e \in E$, $\sum_d shii_{de} + shir_e = 1$, so all
+income after direct taxes and savings is transferred. For households,
+$hc_h = 1 - \sum_d shii_{dh} - shir_h$. A transfer from an institution to itself
+(a diagonal SAM cell) is allowed; it appears on both sides of its accounts.
 
 $$PQ_c\,QH_{ch} = \beta_{ch}\,EH_h \tag{I5}$$
 
@@ -223,13 +242,13 @@ $$QINV_c = \overline{qinv}_c\,IADJ \tag{I6}$$
 
 $$QG_c = \overline{qg}_c\,GADJ \tag{I7}$$
 
-$$YG = \sum_h TINS_h\,YH_h + \sum_c tq_c\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,pwe_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR \tag{I8}$$
+$$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,pwe_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI \tag{I8}$$
 
-$$EG = \sum_c PQ_c\,QG_c + \sum_h trnsfr_{h,gov}\,CPI \tag{I9}$$
+$$EG = \sum_c PQ_c\,QG_c + \sum_d trnsfr_{d,gov}\,CPI + trnsfr_{gov,gov}\,CPI + trnsfr_{row,gov}\,EXR \tag{I9}$$
 
-$$TINS_h = \overline{tins}_h\,TINSADJ \tag{I10}$$
+$$TINS_d = \overline{tins}_d\,TINSADJ \tag{I10}$$
 
-$$MPS_h = \overline{mps}_h\,MPSADJ \tag{I11}$$
+$$MPS_d = \overline{mps}_d\,MPSADJ \tag{I11}$$
 
 ### 5.5 System constraints
 
@@ -237,11 +256,11 @@ $$\sum_a QF_{fa} = QFS_f \tag{S1}$$
 
 $$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c \tag{S2}$$
 
-$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} = \sum_{c \in CE} pwe_c\,QE_c + \sum_h trnsfr_{h,row} + trnsfr_{gov,row} + FSAV \tag{S3}$$
+$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} = \sum_{c \in CE} pwe_c\,QE_c + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + FSAV \tag{S3}$$
 
 $$YG = EG + GSAV \tag{S4}$$
 
-$$\sum_h MPS_h\,(1-TINS_h)\,YH_h + GSAV + EXR\cdot FSAV = \sum_c PQ_c\,QINV_c + WALRAS \tag{S5}$$
+$$\sum_d MPS_d\,(1-TINS_d)\,YI_d + GSAV + EXR\cdot FSAV = \sum_c PQ_c\,QINV_c + WALRAS \tag{S5}$$
 
 $$\text{numeraire: } CPI = \overline{CPI} \quad\text{or}\quad DPI = \overline{DPI} \tag{S6}$$
 
@@ -291,16 +310,17 @@ Stata implementation lists every such flow, grouped by role, before stopping.
 |---|---|
 | commodity $c$ | the activity paired with $c$; rest of world (imports); import, sales and export tax accounts |
 | activity | commodities (intermediate inputs); factors; activity tax account |
-| factor | households; government; rest of world |
-| household | commodities; direct tax account; savings-investment |
-| government | commodities; households (transfers); savings-investment |
+| factor | households; enterprises; government; rest of world |
+| household | commodities; direct tax account; savings-investment; households and enterprises (transfers); rest of world (transfers) |
+| enterprise | direct tax account; savings-investment; households and enterprises (transfers); rest of world (transfers) |
+| government | commodities; households and enterprises (transfers); government (internal transfers); rest of world (transfers); savings-investment |
 | tax account | government |
 | savings-investment | commodities (investment) |
-| rest of world | commodities (exports); households and government (transfers); savings-investment |
+| rest of world | commodities (exports); households, enterprises and government (transfers); factors (factor income from abroad); savings-investment |
 
-Negative cells are allowed only in tax rows, the savings-investment row, transfer
-cells (government or rest of world to households, rest of world to government)
-and tax-account payments to the government. In version 0.1 every activity needs
+Negative cells are allowed only in tax rows, the savings-investment row,
+transfer cells (the flows labelled "transfers" above, and factor income from
+abroad) and tax-account payments to the government. In version 0.1 every activity needs
 positive output and value added, and every commodity needs positive domestic
 sales ($QD^0_c > 0$).
 
@@ -318,7 +338,7 @@ enters the model:
 2. **Taxes paid directly to the government account.** A tax option of the
    mapping (direct, sales, import, export or activity tax) may name the
    government account itself. The government row's cells in the paying columns
-   of that tax (households for the direct tax, commodities for the sales,
+   of that tax (households and enterprises for the direct tax, commodities for the sales,
    import and export taxes, activities for the activity tax) are then moved to
    a new internal tax account, whose column pays their total to the
    government. Government revenue is unchanged. At most one of the sales,
@@ -368,21 +388,27 @@ verify this identity, not assume it.
 
 ### 7.5 Institutions
 
-- $shif_{if} = SAM(i, f) / \sum_{i'} SAM(i', f)$.
-- $YH^0_h$ = row total of household $h$; $\overline{tins}_h = SAM(tax_{dir}, h) / YH^0_h$.
-- $\overline{mps}_h = SAM(sav, h) / \left[(1 - \overline{tins}_h)\,YH^0_h\right]$.
-- $EH^0_h = \sum_c SAM(c, h)$; $\beta_{ch} = SAM(c, h) / EH^0_h$.
-- $trnsfr_{h,gov} = SAM(h, gov)$, $trnsfr_{h,row} = SAM(h, row)$,
-  $trnsfr_{gov,row} = SAM(gov, row)$.
+- $YF^0_f$ = row total of factor $f$; $shif_{if} = SAM(i, f) / YF^0_f$.
+- $YI^0_d$ = row total of institution $d \in D$;
+  $\overline{tins}_d = SAM(tax_{dir}, d) / YI^0_d$.
+- $\overline{mps}_d = SAM(sav, d) / \left[(1 - \overline{tins}_d)\,YI^0_d\right]$.
+- Income after direct taxes and savings:
+  $DY^0_d = YI^0_d - SAM(tax_{dir}, d) - SAM(sav, d)$. Calibration stops with an
+  error if $DY^0_d = 0$ while $d$ makes transfers or consumes.
+- $shii_{dd'} = SAM(d, d') / DY^0_{d'}$; $shir_d = SAM(row, d) / DY^0_d$.
+- $EH^0_h = \sum_c SAM(c, h)$; $hc_h = EH^0_h / DY^0_h$;
+  $\beta_{ch} = SAM(c, h) / EH^0_h$.
+- $trnsfr_{d,gov} = SAM(d, gov)$, $trnsfr_{gov,gov} = SAM(gov, gov)$,
+  $trnsfr_{d,row} = SAM(d, row)$, $trnsfr_{f,row} = SAM(f, row)$,
+  $trnsfr_{gov,row} = SAM(gov, row)$, $trnsfr_{row,gov} = SAM(row, gov)$.
 - $\overline{qg}_c = SAM(c, gov)$, $\overline{qinv}_c = SAM(c, sav)$,
   $GSAV^0 = SAM(sav, gov)$, $FSAV^0 = SAM(sav, row)$.
 - $TINSADJ^0 = MPSADJ^0 = IADJ^0 = GADJ^0 = 1$.
 - $cwts_c = \sum_h SAM(c, h) / \sum_{c'} \sum_h SAM(c', h)$;
   $dwts_c = QD^0_c / \sum_{c'} QD^0_{c'}$.
 
-In version 0.1 a household column may pay only commodities, the direct tax
-account and savings. Calibration stops with an error if the SAM contains any
-other household payment.
+SAM balance implies $hc_h = 1 - \sum_d shii_{dh} - shir_h$ for households and
+$\sum_d shii_{de} + shir_e = 1$ for enterprises; calibration verifies both.
 
 ### 7.6 Tax accounts
 

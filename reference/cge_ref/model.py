@@ -23,14 +23,14 @@ VARIABLES: dict[str, str] = {
     "PQ": "C", "W": "F", "EXR": "", "CPI": "", "DPI": "",
     "QA": "A", "QVA": "A", "QINTA": "A", "QF": "FA", "QINT": "CA", "QX": "C", "QD": "C",
     "QE": "C", "QM": "C", "QQ": "C", "QH": "CH", "QG": "C", "QINV": "C", "QFS": "F",
-    "YF": "F", "YIF": "IF", "YH": "H", "EH": "H", "YG": "", "EG": "", "GSAV": "",
-    "FSAV": "", "TINS": "H", "MPS": "H", "TINSADJ": "", "MPSADJ": "", "IADJ": "",
+    "YF": "F", "YIF": "IF", "YI": "D", "EH": "H", "YG": "", "EG": "", "GSAV": "",
+    "FSAV": "", "TINS": "D", "MPS": "D", "TINSADJ": "", "MPSADJ": "", "IADJ": "",
     "GADJ": "", "WFDIST": "FA", "WALRAS": "",
 }
 
 # Variables measured in local currency: they scale with the numeraire.
 NOMINAL = ("PA", "PVA", "PINTA", "PX", "PD", "PE", "PM", "PQ", "W", "EXR", "CPI", "DPI",
-           "YF", "YIF", "YH", "EH", "YG", "EG", "GSAV", "WALRAS")
+           "YF", "YIF", "YI", "EH", "YG", "EG", "GSAV", "WALRAS")
 
 CLOSURE_OPTIONS = {
     "external": ("flexexr", "fixexr"),
@@ -108,7 +108,8 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     ce, cm, fa, cd = s["ce"], s["cm"], s["fa"], s["cd"]
     every_c = np.ones_like(ce)
     every_a = np.ones_like(cd)
-    nH = v["YH"].size
+    nH = v["EH"].size
+    nD = v["YI"].size
     one = np.ones(1, dtype=bool)
 
     eq: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
@@ -151,32 +152,36 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["T5"] = (v["QM"], v["QD"] * ((v["PD"] / v["PM"]) * dq / (1 - dq)) ** (1 / (1 + rq)), cm)
     eq["T6"] = (v["QQ"], v["QD"], ~cm)
 
-    # 5.4 Institution block
-    eq["I1"] = (v["YF"], (wage * v["QF"]).sum(axis=1), np.ones(v["YF"].shape, dtype=bool))
+    # 5.4 Institution block. DY is income after direct taxes and savings.
+    DY = (1 - v["MPS"]) * (1 - v["TINS"]) * v["YI"]
+    eq["I1"] = (v["YF"], (wage * v["QF"]).sum(axis=1) + p["trfr"] * v["EXR"],
+                np.ones(v["YF"].shape, dtype=bool))
     eq["I2"] = (v["YIF"], p["shif"] * v["YF"][None, :], np.ones(v["YIF"].shape, dtype=bool))
-    eq["I3"] = (v["YH"], v["YIF"][:nH].sum(axis=1) + p["trnsfr_hg"] * v["CPI"] + p["trnsfr_hr"] * v["EXR"],
-                np.ones(nH, dtype=bool))
-    eq["I4"] = (v["EH"], (1 - v["MPS"]) * (1 - v["TINS"]) * v["YH"], np.ones(nH, dtype=bool))
+    eq["I3"] = (v["YI"], v["YIF"][:nD].sum(axis=1) + p["shii"] @ DY + p["trdg"] * v["CPI"]
+                + p["trdr"] * v["EXR"], np.ones(nD, dtype=bool))
+    eq["I4"] = (v["EH"], p["hc"] * DY[:nH], np.ones(nH, dtype=bool))
     eq["I5"] = (v["PQ"][:, None] * v["QH"], p["beta"] * v["EH"][None, :], np.ones(v["QH"].shape, dtype=bool))
     eq["I6"] = (v["QINV"], p["qinv"] * v["IADJ"], every_c)
     eq["I7"] = (v["QG"], p["qg"] * v["GADJ"], every_c)
-    revenue = (v["TINS"] @ v["YH"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
+    revenue = (v["TINS"] @ v["YI"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
                + (p["tm"] * p["pwm"] * v["QM"]).sum() * v["EXR"]
                + (p["te"] * p["pwe"] * v["QE"]).sum() * v["EXR"]
                + (p["ta"] * v["PA"] * v["QA"]).sum()
-               + v["YIF"][nH].sum() + p["trnsfr_gr"] * v["EXR"])
+               + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"])
     eq["I8"] = (v["YG"], revenue, one)
-    eq["I9"] = (v["EG"], np.atleast_1d(v["PQ"] @ v["QG"] + p["trnsfr_hg"].sum() * v["CPI"]), one)
-    eq["I10"] = (v["TINS"], p["tins0"] * v["TINSADJ"], np.ones(nH, dtype=bool))
-    eq["I11"] = (v["MPS"], p["mps0"] * v["MPSADJ"], np.ones(nH, dtype=bool))
+    eq["I9"] = (v["EG"], np.atleast_1d(v["PQ"] @ v["QG"]) + (p["trdg"].sum() + p["trgg"]) * v["CPI"]
+                + p["trrg"] * v["EXR"], one)
+    eq["I10"] = (v["TINS"], p["tins0"] * v["TINSADJ"], np.ones(nD, dtype=bool))
+    eq["I11"] = (v["MPS"], p["mps0"] * v["MPSADJ"], np.ones(nD, dtype=bool))
 
     # 5.5 System constraints (S6 is imposed through the closure)
     eq["S1"] = (np.where(fa, v["QF"], 0.0).sum(axis=1), v["QFS"], np.ones(v["QFS"].shape, dtype=bool))
     eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"], every_c)
-    eq["S3"] = ((p["pwm"] * v["QM"]).sum() + v["YIF"][nH + 1].sum() / v["EXR"],
-                (p["pwe"] * v["QE"]).sum() + p["trnsfr_hr"].sum() + p["trnsfr_gr"] + v["FSAV"], one)
+    eq["S3"] = ((p["pwm"] * v["QM"]).sum() + (v["YIF"][nD + 1].sum() + p["shir"] @ DY) / v["EXR"]
+                + p["trrg"],
+                (p["pwe"] * v["QE"]).sum() + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + v["FSAV"], one)
     eq["S4"] = (v["YG"], v["EG"] + v["GSAV"], one)
-    eq["S5"] = ((v["MPS"] * (1 - v["TINS"])) @ v["YH"] + v["GSAV"] + v["EXR"] * v["FSAV"],
+    eq["S5"] = ((v["MPS"] * (1 - v["TINS"])) @ v["YI"] + v["GSAV"] + v["EXR"] * v["FSAV"],
                 np.atleast_1d(v["PQ"] @ v["QINV"]) + v["WALRAS"], one)
     return eq
 
@@ -234,8 +239,10 @@ class Model:
         self.mapping = mapping
         mapping.validate(sam)
         A, C, F, H = mapping.activities, mapping.commodities, mapping.factors, mapping.households
-        self.sets = {"A": list(A), "C": list(C), "F": list(F), "H": list(H),
-                     "I": list(H) + [mapping.government, mapping.row]}
+        E = mapping.enterprises
+        self.sets = {"A": list(A), "C": list(C), "F": list(F), "H": list(H), "E": list(E),
+                     "D": list(H) + list(E),
+                     "I": list(H) + list(E) + [mapping.government, mapping.row]}
         self._calibrate(sam, mapping,
                         _per_element(sigma_va, A, "sigma_va"),
                         _per_element(sigma_q, C, "sigma_q"),
@@ -359,23 +366,42 @@ class Model:
             delta_q[k] = ratio / (1 + ratio)
             aq[k] = QQ0[k] / (delta_q[k] * QM0[k] ** (-r) + (1 - delta_q[k]) * QD0[k] ** (-r)) ** (-1 / r)
 
-        # 7.4 Institutions
+        # 7.5 Institutions
+        D = self.sets["D"]
+        YF0 = np.array([sam.row_total(f) for f in F])
         YIF0 = vec(I, F)
-        YF0 = VA.sum(axis=1)
         if np.abs(YIF0.sum(axis=0) - YF0).max() > tol:
             raise SAMError("factor income paid out does not equal factor income received")
         shif = YIF0 / YF0[None, :]
-        YH0 = np.array([sam.row_total(h) for h in H])
-        tins0 = vec([mapping.dirtax], H)[0] / YH0
-        mps0 = vec([sav], H)[0] / ((1 - tins0) * YH0)
+        trfr = vec(F, [row])[:, 0]
+        YI0 = np.array([sam.row_total(d) for d in D])
+        dtax = vec([mapping.dirtax], D)[0]
+        dsav = vec([sav], D)[0]
+        tins0 = dtax / YI0
+        mps0 = dsav / ((1 - tins0) * YI0)
+        DY0 = YI0 - dtax - dsav
+        TR = vec(D, D)                       # TR[d, d'] = transfer from d' to d
+        TROW = vec([row], D)[0]
         QH0 = vec(C, H)
         EH0 = QH0.sum(axis=0)
-        if np.abs(EH0 - (1 - mps0) * (1 - tins0) * YH0).max() > tol:
-            raise SAMError("household spending does not equal income less direct tax and savings")
-        beta = QH0 / EH0[None, :]
-        trnsfr_hg = vec(H, [gov])[:, 0]
-        trnsfr_hr = vec(H, [row])[:, 0]
-        trnsfr_gr = cell(gov, row)
+        uses = TR.sum(axis=0) + TROW + np.concatenate([EH0, np.zeros(len(D) - nH)])
+        gross = (np.abs(TR).sum(axis=0) + np.abs(TROW)
+                 + np.concatenate([np.abs(EH0), np.zeros(len(D) - nH)]))
+        if np.any((np.abs(DY0) <= tol) & (gross > tol)):
+            raise SAMError("an institution makes transfers or consumes but has no income "
+                           "after direct taxes and savings")
+        if np.abs(uses - DY0).max() > tol:
+            raise SAMError("institution payments do not equal income")
+        safe = np.where(np.abs(DY0) > tol, DY0, 1.0)
+        shii = TR / safe[None, :]
+        shir = TROW / safe
+        hc = EH0 / safe[:nH]
+        if EH0.sum() <= tol:
+            raise SAMError("households have no consumption")
+        beta = QH0 / np.where(EH0 > 0, EH0, 1.0)[None, :]
+        trdg = vec(D, [gov])[:, 0]
+        trdr = vec(D, [row])[:, 0]
+        trgr, trrg, trgg = cell(gov, row), cell(row, gov), cell(gov, gov)
         qg = vec(C, [gov])[:, 0]
         qinv = vec(C, [sav])[:, 0]
         cwts = QH0.sum(axis=1) / QH0.sum()
@@ -387,7 +413,8 @@ class Model:
             "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
             "at": at, "delta_t": delta_t, "rho_t": rho_t, "aq": aq, "delta_q": delta_q, "rho_q": rho_q,
             "shif": shif, "beta": beta, "tins0": tins0, "mps0": mps0,
-            "trnsfr_hg": trnsfr_hg, "trnsfr_hr": trnsfr_hr, "trnsfr_gr": np.array(trnsfr_gr),
+            "shii": shii, "shir": shir, "hc": hc, "trdg": trdg, "trdr": trdr, "trfr": trfr,
+            "trgr": np.array(trgr), "trrg": np.array(trrg), "trgg": np.array(trgg),
             "qg": qg, "qinv": qinv, "cwts": cwts, "dwts": dwts,
             "sigma_va": sigma_va, "sigma_q": sigma_q, "sigma_t": sigma_t,
         }
@@ -399,9 +426,9 @@ class Model:
             "QA": QA0, "QVA": QVA0, "QINTA": QINTA0, "QF": QF0, "QINT": QINT0, "QX": QX0,
             "QD": QD0, "QE": QE0, "QM": np.where(cm, QM0, 0.0), "QQ": QQ0, "QH": QH0,
             "QG": qg.copy(), "QINV": qinv.copy(), "QFS": QF0.sum(axis=1),
-            "YF": YF0, "YIF": YIF0, "YH": YH0, "EH": EH0,
+            "YF": YF0, "YIF": YIF0, "YI": YI0, "EH": EH0,
             "YG": np.atleast_1d(sam.row_total(gov)),
-            "EG": np.atleast_1d(qg.sum() + trnsfr_hg.sum()),
+            "EG": np.atleast_1d(qg.sum() + trdg.sum() + trgg + trrg),
             "GSAV": np.atleast_1d(cell(sav, gov)), "FSAV": np.atleast_1d(cell(sav, row)),
             "TINS": tins0.copy(), "MPS": mps0.copy(),
             "TINSADJ": s1.copy(), "MPSADJ": s1.copy(), "IADJ": s1.copy(), "GADJ": s1.copy(),

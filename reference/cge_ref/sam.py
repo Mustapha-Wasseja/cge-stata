@@ -69,17 +69,25 @@ _ALLOWED = {
     ("com", "act"), ("fac", "act"), ("acttax", "act"),
     ("row", "com"), ("imptax", "com"), ("saltax", "com"), ("exptax", "com"),
     ("com", "hh"), ("com", "gov"), ("com", "sav"), ("com", "row"),
-    ("hh", "fac"), ("gov", "fac"), ("row", "fac"),
-    ("hh", "gov"), ("hh", "row"), ("gov", "row"),
-    ("dirtax", "hh"), ("sav", "hh"),
+    ("hh", "fac"), ("ent", "fac"), ("gov", "fac"), ("row", "fac"),
+    ("dirtax", "hh"), ("sav", "hh"), ("dirtax", "ent"), ("sav", "ent"),
     ("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"), ("gov", "exptax"), ("gov", "acttax"),
     ("sav", "gov"), ("sav", "row"),
 }
+# Transfers (they may be negative)
+_TRANSFERS = {
+    ("hh", "hh"), ("hh", "ent"), ("ent", "hh"), ("ent", "ent"),
+    ("row", "hh"), ("row", "ent"),
+    ("hh", "gov"), ("ent", "gov"), ("gov", "gov"), ("row", "gov"),
+    ("hh", "row"), ("ent", "row"), ("gov", "row"), ("fac", "row"),
+}
+_ALLOWED |= _TRANSFERS
 
-# Row roles whose cells may be negative (taxes, subsidies, savings, transfers).
+# Row roles whose cells may be negative (taxes, subsidies, savings), and other
+# cells that may be negative (transfers and tax-account payments).
 _MAY_BE_NEGATIVE = {"dirtax", "saltax", "imptax", "exptax", "acttax", "sav"}
-_NEGATIVE_CELLS = {("hh", "gov"), ("hh", "row"), ("gov", "row"), ("gov", "dirtax"),
-                   ("gov", "saltax"), ("gov", "imptax"), ("gov", "exptax"), ("gov", "acttax")}
+_NEGATIVE_CELLS = _TRANSFERS | {("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"),
+                                ("gov", "exptax"), ("gov", "acttax")}
 
 TAX_ROLES = ("dirtax", "saltax", "imptax", "exptax", "acttax")
 COMMODITY_TAXES = ("saltax", "imptax", "exptax")
@@ -96,7 +104,7 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
     m = dataclasses.replace(mapping)
     labels = list(sam.labels)
     values = sam.values.copy()
-    for name in (*m.activities, *m.commodities, *m.households, m.government, m.row):
+    for name in (*m.activities, *m.commodities, *m.households, *m.enterprises, m.government, m.row):
         sam.index(name)
     if len(m.activities) != len(m.commodities):
         raise SAMError("version 0.1 needs one commodity for each activity")
@@ -119,7 +127,8 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
 
     g = sam.index(m.government)
     for tax in direct:
-        payers = {"dirtax": m.households, "acttax": m.activities}.get(tax, m.commodities)
+        payers = {"dirtax": [*m.households, *m.enterprises],
+                  "acttax": m.activities}.get(tax, m.commodities)
         cols = [sam.index(p) for p in payers]
         name = "_" + tax
         if name in labels:
@@ -156,6 +165,7 @@ class Mapping:
     imptax: str | None = None
     exptax: str | None = None
     acttax: str | None = None
+    enterprises: list[str] = dataclasses.field(default_factory=list)
 
     def roles(self) -> dict[str, str]:
         """Role of every mapped account."""
@@ -174,6 +184,8 @@ class Mapping:
             assign(f, "fac")
         for h in self.households:
             assign(h, "hh")
+        for e in self.enterprises:
+            assign(e, "ent")
         assign(self.government, "gov")
         assign(self.savinv, "sav")
         assign(self.row, "row")

@@ -51,6 +51,23 @@ def synthetic_model(**elasticities) -> Model:
     return Model(SAM.from_csv(SYNTHETIC_SAM), synthetic_mapping(), **settings)
 
 
+INSTITUTIONS_SAM = REPO / "data" / "cge_synthetic_sam_inst.csv"
+
+
+def institutions_mapping() -> Mapping:
+    """Mapping of the institutions layout: a non-profit institution (npi) as a
+    second household, and one enterprise (ent)."""
+    m = synthetic_mapping()
+    m.households = ["hhd", "npi"]
+    m.enterprises = ["ent"]
+    return m
+
+
+def institutions_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(INSTITUTIONS_SAM), institutions_mapping(), **settings)
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -92,6 +109,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     mixed = synthetic_model(**MIXED_ELASTICITIES)
     solutions["mixed_tariff_removal"] = mixed.solve(
         Closure(), tol=1e-12, **simulation_inputs(mixed)["tariff_removal"])
+    for name, solution in run_simulations(institutions_model()).items():
+        solutions["inst_" + name] = solution
     written = []
     for name, solution in solutions.items():
         if not solution.converged:

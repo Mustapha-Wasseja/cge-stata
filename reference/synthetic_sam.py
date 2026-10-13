@@ -112,6 +112,44 @@ def build_national_accounts_layout() -> tuple[list[str], list[list[float]]]:
     return [labels[k] for k in keep], [[sam[r][c] for c in keep] for r in keep]
 
 
+INSTITUTION_ACCOUNTS = [
+    "act_agr", "act_man", "act_ser",
+    "com_agr", "com_man", "com_ser",
+    "lab", "cap",
+    "hhd", "npi", "ent", "gov",
+    "tax_dir", "tax_sal", "tax_imp",
+    "sav", "row",
+]
+
+# Changes to FLOWS for the institutions layout: an enterprise (ent) and a
+# non-profit institution (npi, mapped as a household), transfers among them,
+# transfers to and from the rest of the world, factor income from and to abroad,
+# transfers within government, and negative savings.
+INSTITUTION_FLOWS = {
+    ("com_ser", "hhd"): 70, ("com_ser", "npi"): 10,
+    ("lab", "row"): 6,
+    ("hhd", "lab"): 141, ("hhd", "cap"): 27, ("ent", "cap"): 90, ("row", "cap"): 10,
+    ("hhd", "ent"): 60, ("hhd", "gov"): 15, ("hhd", "row"): 10, ("hhd", "hhd"): 1,
+    ("npi", "ent"): 4, ("npi", "hhd"): 2, ("npi", "gov"): 3,
+    ("ent", "gov"): 5, ("ent", "row"): 4, ("ent", "hhd"): 3, ("ent", "ent"): 2,
+    ("gov", "tax_dir"): 30, ("gov", "gov"): 3,
+    ("tax_dir", "hhd"): 18, ("tax_dir", "ent"): 12,
+    ("sav", "hhd"): 6, ("sav", "ent"): 18, ("sav", "npi"): -1, ("sav", "gov"): -2, ("sav", "row"): 29,
+    ("row", "ent"): 8, ("row", "hhd"): 4, ("row", "gov"): 2,
+}
+
+
+def build_institutions_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with an enterprise and a non-profit institution."""
+    flows = {**FLOWS, **INSTITUTION_FLOWS}
+    index = {name: i for i, name in enumerate(INSTITUTION_ACCOUNTS)}
+    n = len(INSTITUTION_ACCOUNTS)
+    sam = [[0.0] * n for _ in range(n)]
+    for (row, col), value in flows.items():
+        sam[index[row]][index[col]] = float(value)
+    return list(INSTITUTION_ACCOUNTS), sam
+
+
 def imbalances(sam: list[list[float]]) -> list[float]:
     """Row total minus column total for each account."""
     n = len(sam)
@@ -132,7 +170,8 @@ def write_csv(path: Path, layout=build) -> None:
 if __name__ == "__main__":
     data = Path(__file__).resolve().parents[1] / "data"
     for layout, filename in ((build, "cge_synthetic_sam.csv"),
-                             (build_national_accounts_layout, "cge_synthetic_sam_na.csv")):
+                             (build_national_accounts_layout, "cge_synthetic_sam_na.csv"),
+                             (build_institutions_layout, "cge_synthetic_sam_inst.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))
         if worst > 1e-12:

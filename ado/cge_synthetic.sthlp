@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions}]
 
 
 {title:Options}
@@ -25,6 +25,13 @@ and direct taxes are paid directly to the government account (13 accounts; the
 {cmd:tax_sal} and {cmd:tax_dir} accounts are absent). Map it with
 {cmd:saltax(gov)} and {cmd:dirtax(gov)}; it gives the same model as the
 standard layout.
+
+{phang}
+{opt institutions} loads a 17-account variant with an enterprise ({cmd:ent})
+and a non-profit institution ({cmd:npi}). It includes transfers among
+institutions, transfers to and from the rest of the world, factor income from
+and to abroad, transfers within government, and negative savings. Map it with
+{cmd:households(hhd npi)} and {cmd:enterprises(ent)}.
 
 
 {title:Description}
