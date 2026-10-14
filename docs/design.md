@@ -69,19 +69,29 @@ cge_check, homogeneity perturb(0.1)
 
 ## 4. Solver
 
-- Newton–Raphson with a central-difference Jacobian and a backtracking line
-  search on the residual norm, the same algorithm as the Python reference.
+- Newton–Raphson with a backtracking line search on the residual norm, the
+  same algorithm as the Python reference.
   Variables are scaled by their base values and equations by their base
   magnitudes, so the tolerance applies uniformly across blocks.
 - Points with non-positive prices or quantities are rejected explicitly, because
   Mata's sum functions treat missing values as zero.
 - If Newton–Raphson fails, Powell's hybrid method (`solvenl()`, technique
   `broydenpowell`) is tried, followed by Newton steps to polish the result.
-- Solve times on Stata 13/IC for a tariff shock: 93 equations (3 sectors), under
-  one second; 561 equations (15 sectors), about 3 seconds; 1,551 equations
-  (30 sectors), about 12 seconds. The Jacobian is dense and numerical; an
-  analytical or sparse Jacobian may be needed for much larger SAMs and must be
-  checked against numerical derivatives in the test suite.
+- Jacobian (from version 0.1.9). Rows of the aggregate equations, which each
+  involve many variables (P8, P9, I1, I8, I9, S1, S3 and S5), have exact
+  derivatives. The other rows are sparse: their pattern follows from the
+  equations and is built at calibration, and their derivatives are central
+  differences taken over groups of columns that share none of these rows
+  (Curtis, Powell and Reid, 1974; greedy colouring, most connected columns
+  first). One pair of residual evaluations per group replaces one pair per
+  column. The test suite compares this Jacobian with column-by-column central
+  differences on every synthetic layout, after shocks and under another
+  closure. Before version 0.1.9 the Jacobian was column by column: on a
+  240-account SAM (4,439 equations) it took about 250 seconds per Newton
+  iteration on Stata 13/IC, against a dense LU solve of under 3 seconds.
+- Solve times on Stata 13/IC for a tariff shock before version 0.1.9: 93
+  equations (3 sectors), under one second; 561 equations (15 sectors), about
+  3 seconds; 1,551 equations (30 sectors), about 12 seconds.
 
 ## 5. Mata code organisation
 
@@ -115,6 +125,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.6 | Homogeneity and perturbed-start checks independent of the SAM's units: WALRAS measured against the largest SAM entry (done) |
 | 0.1.7 | Supply-use layouts: margin accounts paid by commodities (margin services per unit of composite supply), commodities imported only, stock-change accounts merged into savings-investment, and account labels that are not valid Stata names (done) |
 | 0.1.8 | Exports drawn from composite supply, with a price-elastic export function, for commodities whose exports are at least their domestic output (re-exports, exports from inventories, exports at purchaser prices) (done) |
+| 0.1.9 | Faster Jacobian: exact derivatives for the aggregate equations and grouped central differences for the sparse rest; the fallback solver repaired (solvenl() takes at most three extra arguments in Stata 13) (done) |
 | 0.2 | Export-only commodities; LES household demand; elasticity tables; margins that differ between domestic sales, imports and exports, once margin data by market are available |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |

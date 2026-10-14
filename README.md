@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.8 implements the standard static model described in
+Version 0.1.9 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
@@ -32,6 +32,11 @@ Version 0.1.8 implements the standard static model described in
 - exports at least as large as domestic output, such as re-exports and exports
   from inventories, drawn from composite supply (version 0.1.8).
 
+Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
+derivatives for the aggregate equations with grouped central differences for
+the sparse rest (on a 4,439-equation model, about 3 seconds instead of about
+250). It also repairs the fallback solver, which failed in Stata 13.
+
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.
 Version 0.1.6 makes the homogeneity and perturbed-start checks independent of
@@ -42,7 +47,7 @@ the units of the SAM.
 | Model specification | complete |
 | Python reference implementation and validation suite | complete |
 | Stata/Mata implementation | complete; agrees with the reference to about 1e-13 |
-| Application to country SAMs | an 85-account national SAM calibrates and passes all checks; a 240-account SAM in supply-use layout, with re-exports and exports above domestic output, calibrates (4,439 equations); policy simulations not yet done |
+| Application to country SAMs | an 85-account national SAM and a 240-account SAM in supply-use layout (4,439 equations) calibrate, pass all checks and solve shocks; policy simulations not yet done |
 
 The model has been validated against the Python reference on synthetic SAMs,
 and calibrated on one national SAM with illustrative elasticities. When applying

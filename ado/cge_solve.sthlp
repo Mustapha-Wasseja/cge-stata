@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.1.9  14oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -22,8 +22,13 @@ from the base, and stores the solution as a named simulation for
 replaces that simulation.
 
 {pstd}
-The solver is Newton-Raphson with a numerical Jacobian and a backtracking line
-search, applied to variables and equations scaled by their base values. If it
+The solver is Newton-Raphson with a backtracking line search, applied to
+variables and equations scaled by their base values. The Jacobian combines exact
+derivatives for the aggregate equations (price indexes, factor incomes and
+supplies, government revenue and spending, the balance of payments and the
+savings-investment balance) with central differences for the others, taken over
+groups of variables that appear in no common equation; this keeps large models
+fast. If it
 fails, Powell's hybrid method ({cmd:solvenl()}) is tried, followed by Newton
 steps to polish the result. {cmd:cge_solve} exits with error 430 if the model
 does not converge.

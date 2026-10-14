@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.8  2026-10-14
+*! cge_mata.mata  v0.1.9  2026-10-14
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -46,6 +46,9 @@ struct cge_model {
     string colvector vname, vset
     real colvector   voff, vrows, vcols
     real colvector   x0, xcur, xscale, exists, fixed, nominal, positive
+    // sparsity pattern of the Jacobian for the rows found by grouped differences,
+    // as (equation, variable) pairs, and the rows with exact derivatives
+    real colvector   jr, jc, drow
     // equation blocks
     string colvector ename
     real colvector   elen, escale, emask
@@ -58,6 +61,15 @@ struct cge_model {
     real matrix      simx
     struct cge_par rowvector simp
     real colvector   simconv, simiter, simres
+}
+
+// Columns of the Jacobian for one solve (free variables), grouped so that the
+// columns of a group share no equation: CSC storage of the pattern (rows of
+// column j are crow[cstart[j]..cstart[j+1]-1]) and the members of each group
+// (gcol[gstart[g]..gstart[g+1]-1])
+struct cge_jpat {
+    real colvector cstart, crow, gstart, gcol
+    real scalar    ncolour
 }
 
 string scalar _cge_version()
@@ -1249,6 +1261,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.escale = mag :* (mag :> 1e-9) + (mag :<= 1e-9)
     M.neq = sum(K)
 
+    _cge_pattern(M, p)
     M.calibrated = 1
     M.simname = J(0, 1, "")
     M.simclosure = J(0, 1, "")
@@ -1516,8 +1529,374 @@ real colvector _cge_F(struct cge_model scalar M, struct cge_par scalar p, real c
     return(_cge_resid(M, p, x))
 }
 
+// Jacobian (Section 4 of docs/design.md). Rows of equations that involve
+// many variables -- the price indexes, factor incomes and supplies, government
+// revenue and spending, the balance of payments and the savings-investment
+// balance -- have exact derivatives (_cge_dense). The other rows are found by
+// central differences over groups of columns that share no such row; their
+// sparsity pattern follows from the equations (_cge_pattern).
+string rowvector _cge_denseblocks()
+{
+    return(("P8", "P9", "I1", "I8", "I9", "S1", "S3", "S5"))
+}
+
+real colvector _cge_vcols(struct cge_model scalar M, string scalar name)
+{
+    real scalar k
+    k = _cge_vidx(M, name)
+    return(M.voff[k] :+ (1::M.vrows[k] * M.vcols[k]))
+}
+
+// Row and column indices (row-major) of the non-zero entries of X
+void _cge_nz(real matrix X, real colvector i, real colvector j)
+{
+    real colvector k
+    k = select((1::rows(X) * cols(X)), colshape(X, 1) :!= 0)
+    if (rows(k) == 0) {
+        i = J(0, 1, .)
+        j = J(0, 1, .)
+        return
+    }
+    i = floor((k :- 1) :/ cols(X)) :+ 1
+    j = mod(k :- 1, cols(X)) :+ 1
+}
+
+// Pattern entries: element e of equation block blk depends on element j of variable var
+void _cge_sp(struct cge_model scalar M, real colvector rowid, real colvector boff, real colvector pr,
+             real colvector pc, string scalar blk, real colvector e, string scalar var, real colvector j)
+{
+    real scalar k
+    if (rows(e) == 0) return
+    k = _cge_find(M.ename, blk)
+    pr = pr \ rowid[boff[k] :+ e]
+    pc = pc \ (M.voff[_cge_vidx(M, var)] :+ (rows(j) == 1 ? J(rows(e), 1, j) : j))
+}
+
+// Each element of block blk depends on the same element of every variable in vars
+void _cge_sp_same(struct cge_model scalar M, real colvector rowid, real colvector boff, real colvector pr,
+                  real colvector pc, string scalar blk, string rowvector vars)
+{
+    real colvector e
+    real scalar v
+    e = (1::M.elen[_cge_find(M.ename, blk)])
+    for (v = 1; v <= cols(vars); v++) _cge_sp(M, rowid, boff, pr, pc, blk, e, vars[v], e)
+}
+
+void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
+{
+    real colvector rowid, boff, pr, pc, cA, cC, cD, e, i, j, keep
+    real matrix P
+    real scalar nA, nC, nF, nH, nD, nI, f, g, k
+    string rowvector dense
+
+    rowid = runningsum(M.emask) :* M.emask
+    boff = runningsum(M.elen) - M.elen
+    nA = M.n
+    nC = M.nC
+    nF = M.nF
+    nH = M.nH
+    nD = M.nD
+    nI = M.nI
+    cA = (1::nA)
+    cC = (1::nC)
+    cD = (1::nD)
+    pr = J(0, 1, .)
+    pc = J(0, 1, .)
+
+    // 5.1 Price block
+    _cge_sp_same(M, rowid, boff, pr, pc, "P1", "PM")
+    _cge_sp(M, rowid, boff, pr, pc, "P1", cC, "EXR", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "P2", "PE")
+    _cge_sp(M, rowid, boff, pr, pc, "P2", cC, "EXR", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "P3", ("PQ", "QQ", "PD", "QD", "PM", "QM"))
+    _cge_nz(p.icm, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "P3", j, "PQ", i)
+    _cge_sp_same(M, rowid, boff, pr, pc, "P4", ("PX", "QX", "PD", "QD", "PE", "QE"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "P5", "PA")
+    _cge_nz(p.theta, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "P5", i, "PX", j)
+    _cge_sp_same(M, rowid, boff, pr, pc, "P6", "PINTA")
+    _cge_nz(p.ica, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "P6", j, "PQ", i)
+    _cge_sp_same(M, rowid, boff, pr, pc, "P7", ("PA", "QA", "PVA", "QVA", "PINTA", "QINTA"))
+
+    // 5.2 Production block
+    _cge_sp_same(M, rowid, boff, pr, pc, "Q1", ("QVA", "QA"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "Q2", ("QINTA", "QA"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "Q3", "QVA")
+    _cge_nz(M.fa, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "Q3", j, "QF", (i :- 1) :* nA :+ j)
+    _cge_sp_same(M, rowid, boff, pr, pc, "Q4", ("WFDIST", "QF"))
+    for (f = 1; f <= nF; f++) {
+        e = (f - 1) * nA :+ cA
+        _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "W", f)
+        _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "PVA", cA)
+        _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "QVA", cA)
+        for (g = 1; g <= nF; g++) _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "QF", (g - 1) * nA :+ cA)
+    }
+    e = (1::nC * nA)
+    _cge_sp(M, rowid, boff, pr, pc, "Q5", e, "QINT", e)
+    _cge_sp(M, rowid, boff, pr, pc, "Q5", e, "QINTA", mod(e :- 1, nA) :+ 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "Q6", "QX")
+    _cge_nz(p.theta, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "Q6", j, "QA", i)
+
+    // 5.3 Trade block
+    _cge_sp_same(M, rowid, boff, pr, pc, "T1", ("QX", "QE", "QD"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "T2", ("QE", "QD", "PE", "PD"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "T3", ("QX", "QD"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "T4", ("QQ", "QM", "QD"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "T5", ("QM", "QD", "PD", "PM"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "T6", ("QQ", "QD"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "T7", ("QQ", "QM"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "T8", "QT")
+    _cge_nz(p.icm, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "T8", i, "QQ", j)
+    _cge_sp_same(M, rowid, boff, pr, pc, "T9", ("QER", "PQ"))
+    _cge_sp(M, rowid, boff, pr, pc, "T9", cC, "EXR", 1)
+
+    // 5.4 Institution block
+    e = (1::nI * nF)
+    _cge_sp(M, rowid, boff, pr, pc, "I2", e, "YIF", e)
+    _cge_sp(M, rowid, boff, pr, pc, "I2", e, "YF", mod(e :- 1, nF) :+ 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "I3", "YI")
+    for (f = 1; f <= nF; f++) _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "YIF", (cD :- 1) :* nF :+ f)
+    for (k = 1; k <= nD; k++) {
+        _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "YI", k)
+        _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "MPS", k)
+        _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "TINS", k)
+    }
+    _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "CPI", 1)
+    _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "EXR", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "I4", "EH")
+    _cge_sp(M, rowid, boff, pr, pc, "I4", (1::nH), "MPS", (1::nH))
+    _cge_sp(M, rowid, boff, pr, pc, "I4", (1::nH), "TINS", (1::nH))
+    _cge_sp(M, rowid, boff, pr, pc, "I4", (1::nH), "YI", (1::nH))
+    e = (1::nC * nH)
+    _cge_sp(M, rowid, boff, pr, pc, "I5", e, "QH", e)
+    _cge_sp(M, rowid, boff, pr, pc, "I5", e, "PQ", floor((e :- 1) :/ nH) :+ 1)
+    _cge_sp(M, rowid, boff, pr, pc, "I5", e, "EH", mod(e :- 1, nH) :+ 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "I6", "QINV")
+    _cge_sp(M, rowid, boff, pr, pc, "I6", cC, "IADJ", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "I7", "QG")
+    _cge_sp(M, rowid, boff, pr, pc, "I7", cC, "GADJ", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "I10", "TINS")
+    _cge_sp(M, rowid, boff, pr, pc, "I10", cD, "TINSADJ", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "I11", "MPS")
+    _cge_sp(M, rowid, boff, pr, pc, "I11", cD, "MPSADJ", 1)
+
+    // 5.5 System constraints
+    _cge_sp_same(M, rowid, boff, pr, pc, "S2", ("QQ", "QG", "QINV", "QT", "QER"))
+    for (k = 1; k <= nA; k++) _cge_sp(M, rowid, boff, pr, pc, "S2", cC, "QINT", (cC :- 1) :* nA :+ k)
+    for (k = 1; k <= nH; k++) _cge_sp(M, rowid, boff, pr, pc, "S2", cC, "QH", (cC :- 1) :* nH :+ k)
+    _cge_sp(M, rowid, boff, pr, pc, "S4", 1, "YG", 1)
+    _cge_sp(M, rowid, boff, pr, pc, "S4", 1, "EG", 1)
+    _cge_sp(M, rowid, boff, pr, pc, "S4", 1, "GSAV", 1)
+
+    // Keep existing equations and variables
+    keep = (pr :> 0) :& M.exists[pc]
+    P = uniqrows((select(pr, keep), select(pc, keep)))
+    M.jr = P[., 1]
+    M.jc = P[., 2]
+
+    // Rows with exact derivatives, in the order of _cge_dense
+    dense = _cge_denseblocks()
+    M.drow = J(0, 1, .)
+    for (k = 1; k <= cols(dense); k++) {
+        g = _cge_find(M.ename, dense[k])
+        M.drow = M.drow \ rowid[boff[g] :+ (1::M.elen[g])]
+    }
+    if (min(M.drow) <= 0) _cge_fail("cge internal error: an equation with exact derivatives is masked", 3498)
+}
+
+// Exact derivatives of the rows of _cge_denseblocks() with respect to every
+// stacked variable (unscaled): rows P8, P9, I1 (one per factor), I8, I9, S1 (one
+// per factor), S3, S5
+real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    real matrix G, WFD, QF, YIF
+    real colvector PQ, QQ, QM, QE, PA, QA, QG, QINV, QER, YI, TINS, MPS, W, cQF, cWFD, cYIF
+    real scalar EXR, FSAV, nA, nF, nD, f, r, A, B
+
+    nA = M.n
+    nF = M.nF
+    nD = M.nD
+    G = J(6 + 2 * nF, rows(x), 0)
+    PQ = _cge_v(M, x, 8);    QQ = _cge_v(M, x, 22);   QM = _cge_v(M, x, 21)
+    QE = _cge_v(M, x, 20);   PA = _cge_v(M, x, 1);    QA = _cge_v(M, x, 13)
+    QG = _cge_v(M, x, 24);   QINV = _cge_v(M, x, 25); QER = _cge_v(M, x, 44)
+    YI = _cge_v(M, x, 29);   TINS = _cge_v(M, x, 35); MPS = _cge_v(M, x, 36)
+    W = _cge_v(M, x, 9);     WFD = _cge_v(M, x, 41);  QF = _cge_v(M, x, 16)
+    YIF = _cge_v(M, x, 28)
+    EXR = _cge_v(M, x, 10);  FSAV = _cge_v(M, x, 34)
+    cQF = _cge_vcols(M, "QF")
+    cWFD = _cge_vcols(M, "WFDIST")
+    cYIF = _cge_vcols(M, "YIF")
+
+    // P8, P9: price indexes
+    G[1, _cge_vcols(M, "CPI")] = 1
+    G[1, _cge_vcols(M, "PQ")'] = -p.cwts'
+    G[2, _cge_vcols(M, "DPI")] = 1
+    G[2, _cge_vcols(M, "PD")'] = -p.dwts'
+    // I1: factor incomes
+    for (f = 1; f <= nF; f++) {
+        r = 2 + f
+        G[r, _cge_vcols(M, "YF")[f]] = 1
+        G[r, _cge_vcols(M, "W")[f]] = -(WFD[f, .] * QF[f, .]')
+        G[r, cWFD[|(f - 1) * nA + 1 \ f * nA|]'] = -W[f] :* QF[f, .]
+        G[r, cQF[|(f - 1) * nA + 1 \ f * nA|]'] = -W[f] :* WFD[f, .]
+        G[r, _cge_vcols(M, "EXR")] = -p.trfr[f]
+    }
+    // I8: government revenue
+    r = 3 + nF
+    G[r, _cge_vcols(M, "YG")] = 1
+    G[r, _cge_vcols(M, "TINS")'] = -YI'
+    G[r, _cge_vcols(M, "YI")'] = -TINS'
+    G[r, _cge_vcols(M, "PQ")'] = -(p.tq :* QQ)'
+    G[r, _cge_vcols(M, "QQ")'] = -(p.tq :* PQ)'
+    G[r, _cge_vcols(M, "QM")'] = -EXR :* (p.tm :* p.pwm)'
+    G[r, _cge_vcols(M, "QE")'] = -EXR :* (p.te :* p.pwe)'
+    G[r, _cge_vcols(M, "EXR")] = -(sum(p.tm :* p.pwm :* QM) + sum(p.te :* p.pwe :* QE) + p.trgr)
+    G[r, _cge_vcols(M, "PA")'] = -(p.ta :* QA)'
+    G[r, _cge_vcols(M, "QA")'] = -(p.ta :* PA)'
+    G[r, cYIF[|nD * nF + 1 \ (nD + 1) * nF|]'] = J(1, nF, -1)
+    G[r, _cge_vcols(M, "CPI")] = -p.trgg
+    // I9: government spending
+    r = 4 + nF
+    G[r, _cge_vcols(M, "EG")] = 1
+    G[r, _cge_vcols(M, "PQ")'] = -QG'
+    G[r, _cge_vcols(M, "QG")'] = -PQ'
+    G[r, _cge_vcols(M, "CPI")] = -(sum(p.trdg) + p.trgg)
+    G[r, _cge_vcols(M, "EXR")] = -p.trrg
+    // S1: factor markets
+    for (f = 1; f <= nF; f++) {
+        r = 4 + nF + f
+        G[r, cQF[|(f - 1) * nA + 1 \ f * nA|]'] = M.fa[f, .]
+        G[r, _cge_vcols(M, "QFS")[f]] = -1
+    }
+    // S3: balance of payments
+    r = 5 + 2 * nF
+    A = sum(YIF[nD + 2, .]) + p.shir' * ((1 :- MPS) :* (1 :- TINS) :* YI)
+    B = sum(M.cr :* PQ :* QER)
+    G[r, _cge_vcols(M, "QM")'] = p.pwm'
+    G[r, cYIF[|(nD + 1) * nF + 1 \ (nD + 2) * nF|]'] = J(1, nF, 1 / EXR)
+    G[r, _cge_vcols(M, "MPS")'] = -(p.shir :* (1 :- TINS) :* YI)' :/ EXR
+    G[r, _cge_vcols(M, "TINS")'] = -(p.shir :* (1 :- MPS) :* YI)' :/ EXR
+    G[r, _cge_vcols(M, "YI")'] = (p.shir :* (1 :- MPS) :* (1 :- TINS))' :/ EXR
+    G[r, _cge_vcols(M, "EXR")] = (B - A) / EXR^2
+    G[r, _cge_vcols(M, "QE")'] = -p.pwe'
+    G[r, _cge_vcols(M, "PQ")'] = -(M.cr :* QER)' :/ EXR
+    G[r, _cge_vcols(M, "QER")'] = -(M.cr :* PQ)' :/ EXR
+    G[r, _cge_vcols(M, "FSAV")] = -1
+    // S5: savings-investment balance
+    r = 6 + 2 * nF
+    G[r, _cge_vcols(M, "MPS")'] = ((1 :- TINS) :* YI)'
+    G[r, _cge_vcols(M, "TINS")'] = -(MPS :* YI)'
+    G[r, _cge_vcols(M, "YI")'] = (MPS :* (1 :- TINS))'
+    G[r, _cge_vcols(M, "GSAV")] = 1
+    G[r, _cge_vcols(M, "EXR")] = FSAV
+    G[r, _cge_vcols(M, "FSAV")] = EXR
+    G[r, _cge_vcols(M, "PQ")'] = -QINV'
+    G[r, _cge_vcols(M, "QINV")'] = -PQ'
+    G[r, _cge_vcols(M, "WALRAS")] = -1
+    return(G)
+}
+
+// Groups of free variables for the Jacobian: a greedy colouring, most
+// connected columns first, in which the columns of a group share no equation
+// (Curtis, Powell and Reid, 1974)
+struct cge_jpat scalar _cge_jpat_make(struct cge_model scalar M, real colvector free)
+{
+    struct cge_jpat scalar G
+    real colvector map, keep, r0, c0, o, cs, rs, rcol, ccnt, rcnt, gcnt, rstart, colour, forbid
+    real scalar n, nnz, k, s, j, a, b, i, col, nc
+
+    n = rows(free)
+    map = J(rows(M.x0), 1, 0)
+    map[free] = (1::n)
+    keep = map[M.jc] :> 0
+    r0 = select(M.jr, keep)
+    c0 = map[select(M.jc, keep)]
+    nnz = rows(r0)
+    o = order((c0, r0), (1, 2))
+    G.crow = r0[o]
+    cs = c0[o]
+    o = order((r0, c0), (1, 2))
+    rcol = c0[o]
+    rs = r0[o]
+    ccnt = J(n, 1, 0)
+    rcnt = J(M.neq, 1, 0)
+    for (k = 1; k <= nnz; k++) {
+        ccnt[cs[k]] = ccnt[cs[k]] + 1
+        rcnt[rs[k]] = rcnt[rs[k]] + 1
+    }
+    G.cstart = 1 \ (runningsum(ccnt) :+ 1)
+    rstart = 1 \ (runningsum(rcnt) :+ 1)
+
+    colour = J(n, 1, 0)
+    forbid = J(n, 1, 0)
+    nc = 0
+    o = order(-ccnt, 1)
+    for (s = 1; s <= n; s++) {
+        j = o[s]
+        for (a = G.cstart[j]; a < G.cstart[j + 1]; a++) {
+            i = G.crow[a]
+            for (b = rstart[i]; b < rstart[i + 1]; b++) {
+                k = rcol[b]
+                if (colour[k]) forbid[colour[k]] = j
+            }
+        }
+        col = 1
+        while (forbid[col] == j) col++
+        colour[j] = col
+        if (col > nc) nc = col
+    }
+    G.gcol = order((colour, (1::n)), (1, 2))
+    gcnt = J(nc, 1, 0)
+    for (j = 1; j <= n; j++) gcnt[colour[j]] = gcnt[colour[j]] + 1
+    G.gstart = 1 \ (runningsum(gcnt) :+ 1)
+    G.ncolour = nc
+    return(G)
+}
+
+// Central-difference Jacobian by groups of columns: one pair of residual
+// evaluations per group gives the derivatives of all its columns
 real matrix _cge_jacobian(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
-                          real colvector free, real colvector z)
+                          real colvector free, real colvector z, struct cge_jpat scalar G)
+{
+    real matrix Jac
+    real colvector h, zp, zm, d, cols, rr, x, esc
+    real matrix D
+    real scalar g, k, j
+
+    Jac = J(M.neq, rows(z), 0)
+    h = 1e-6 :* rowmax((J(rows(z), 1, 1), abs(z)))
+    for (g = 1; g <= G.ncolour; g++) {
+        cols = G.gcol[|G.gstart[g] \ G.gstart[g + 1] - 1|]
+        zp = z
+        zm = z
+        zp[cols] = z[cols] + h[cols]
+        zm[cols] = z[cols] - h[cols]
+        d = _cge_F(M, p, xfix, free, zp) - _cge_F(M, p, xfix, free, zm)
+        if (hasmissing(d)) return(J(M.neq, rows(z), .))
+        for (k = 1; k <= rows(cols); k++) {
+            j = cols[k]
+            if (G.cstart[j + 1] == G.cstart[j]) continue
+            rr = G.crow[|G.cstart[j] \ G.cstart[j + 1] - 1|]
+            Jac[rr, j] = d[rr] :/ (2 * h[j])
+        }
+    }
+    x = xfix
+    x[free] = z :* M.xscale[free]
+    esc = select(M.escale, M.emask)
+    D = _cge_dense(M, p, x)
+    Jac[M.drow, .] = (D[., free] :* M.xscale[free]') :/ esc[M.drow]
+    return(Jac)
+}
+
+// Column-by-column central-difference Jacobian, kept to check the grouped one
+real matrix _cge_jacobian_full(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                               real colvector free, real colvector z)
 {
     real matrix Jac
     real colvector zp, zm
@@ -1534,11 +1913,35 @@ real matrix _cge_jacobian(struct cge_model scalar M, struct cge_par scalar p, re
     return(Jac)
 }
 
+// Test hook: the grouped and column-by-column Jacobians at the current point,
+// with the current shocks and closure
+void _cge_jaccheck()
+{
+    struct cge_model scalar M
+    struct cge_jpat scalar G
+    real colvector free, z
+    real matrix A, B
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    free = select((1::rows(M.x0)), M.exists :* (1 :- M.fixed))
+    z = M.xcur[free] :/ M.xscale[free]
+    G = _cge_jpat_make(M, free)
+    A = _cge_jacobian(M, M.p, M.xcur, free, z, G)
+    B = _cge_jacobian_full(M, M.p, M.xcur, free, z)
+    st_numscalar("r(maxdiff)", max(abs(A - B)))
+    st_numscalar("r(groups)", G.ncolour)
+    st_numscalar("r(columns)", rows(z))
+    printf("{txt}Jacobian: {res}%f{txt} columns in {res}%f{txt} groups; largest difference from column-by-column {res}%9.3e\n",
+           rows(z), G.ncolour, max(abs(A - B)))
+}
+
 // Newton-Raphson with a backtracking line search; returns 1 on convergence.
 real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                         real colvector free, real colvector z, real scalar tol, real scalar maxit,
                         real scalar trace, real scalar iter, real scalar err)
 {
+    struct cge_jpat scalar G
     real colvector f, fn, dz, zn
     real matrix Jac
     real scalar norm0, step, it
@@ -1547,13 +1950,14 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
     iter = 0
     err = .
     if (hasmissing(f)) return(0)
+    G = _cge_jpat_make(M, free)
     for (it = 0; it <= maxit; it++) {
         err = max(abs(f))
         iter = it
         if (trace) printf("{txt}Iteration %f: largest scaled residual = {res}%9.3e\n", it, err)
         if (err < tol) return(1)
         if (it == maxit) return(0)
-        Jac = _cge_jacobian(M, p, xfix, free, z)
+        Jac = _cge_jacobian(M, p, xfix, free, z, G)
         if (hasmissing(Jac)) return(0)
         dz = lusolve(Jac, -f)
         if (hasmissing(dz)) return(0)
@@ -1574,10 +1978,12 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
     return(0)
 }
 
+// Evaluator for solvenl(), which takes at most three extra arguments in Stata 13:
+// xf holds the fixed values (column 1) and marks the free variables (column 2)
 void _cge_solvenl_eval(real colvector z, real colvector y, struct cge_model scalar M,
-                       struct cge_par scalar p, real colvector xfix, real colvector free)
+                       struct cge_par scalar p, real matrix xf)
 {
-    y = _cge_F(M, p, xfix, free, z)
+    y = _cge_F(M, p, xf[., 1], select((1::rows(xf)), xf[., 2]), z)
 }
 
 // Solve from `start` with parameters p and fixed values in xfix.
@@ -1587,7 +1993,7 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
                                 real scalar trace, real scalar conv, real scalar iter,
                                 real scalar err, string scalar method)
 {
-    real colvector free, z, z2, x
+    real colvector free, z, z2, x, isfree
     transmorphic S
     real scalar rc, iter2
 
@@ -1602,11 +2008,12 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
         solvenl_init_evaluator(S, &_cge_solvenl_eval())
         solvenl_init_type(S, "zero")
         solvenl_init_technique(S, "broydenpowell")
-        solvenl_init_narguments(S, 4)
+        isfree = J(rows(xfix), 1, 0)
+        isfree[free] = J(rows(free), 1, 1)
+        solvenl_init_narguments(S, 3)
         solvenl_init_argument(S, 1, M)
         solvenl_init_argument(S, 2, p)
-        solvenl_init_argument(S, 3, xfix)
-        solvenl_init_argument(S, 4, free)
+        solvenl_init_argument(S, 3, (xfix, isfree))
         solvenl_init_iter_log(S, (trace ? "on" : "off"))
         solvenl_init_conv_maxiter(S, 1000)
         solvenl_init_startingvals(S, start[free] :/ M.xscale[free])

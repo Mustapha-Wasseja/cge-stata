@@ -10,6 +10,39 @@ quietly cge_solve, name(notariff)
 cge_check, homogeneity perturb(0.1)
 assert r(failures) == 0
 
+* The grouped Jacobian (version 0.1.9) equals the column-by-column one, also
+* with a tariff on com_ser, which pays none in the base, and another closure
+quietly do setup_synthetic.do
+cge_shock tm, elements(com_ser) value(0.1)
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6 & r(groups) < r(columns)
+quietly cge_closure, external(fixexr) savinv(investment) factors(cap:specific)
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
+quietly do setup_synthetic.do
+cge_shock tm, value(0)
+quietly cge_solve, name(notariff)
+
+* The fallback solver: with no Newton iterations allowed, Powell's hybrid method
+* (solvenl, at most three extra arguments in Stata 13) must find the solution
+quietly do setup_synthetic.do
+cge_shock tm, value(0)
+cge_solve, name(fallback) iterate(0) tolerance(1e-6)
+assert r(converged) == 1 & "`r(method)'" == "broydenpowell"
+quietly cge_results, sim(fallback) clear nodisplay
+tempfile fallback
+quietly save `fallback'
+quietly do setup_synthetic.do
+cge_shock tm, value(0)
+quietly cge_solve, name(newton)
+quietly cge_results, sim(newton) clear nodisplay
+rename value newton
+quietly merge 1:1 variable element1 element2 using `fallback', assert(match) nogenerate
+quietly generate double reldiff = abs(value - newton) / max(1, abs(newton))
+quietly summarize reldiff
+display "fallback against Newton: largest relative difference " %9.2e r(max)
+assert r(max) < 1e-4
+
 * Every closure is square and reproduces the base without iterating
 cge_shock, reset
 local n = 0
@@ -133,6 +166,8 @@ assert _rc == 459
 quietly cge_map, `sutopts' stocks(dstk)
 quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 assert r(max_residual) < 1e-12
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
 cge_check, homogeneity perturb(0.1)
 assert r(failures) == 0
 cge_shock pwm, elements(com_fuel) scale(1.25)
@@ -170,6 +205,27 @@ quietly replace row = row - 1 in 17
 quietly cge_sam, labels(account)
 capture cge_map, `sutopts' stocks(dstk)
 assert _rc == 459
+
+* The grouped Jacobian on the other layouts, after a shock: enterprises and
+* transfers abroad (institutions), margins netted out of an activity, the
+* territorial correction, secondary production and a non-imported commodity
+local base activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) government(gov) savinv(sav) row(row)                          ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+foreach layout in institutions margins territorial multiproduct nonimported {
+    local extra households(hhd)
+    if "`layout'" == "institutions" local extra households(hhd npi) enterprises(ent)
+    if "`layout'" == "margins" local extra households(hhd) margins(act_ser)
+    if "`layout'" == "territorial" local extra households(hhd) territorial(com_tc act_tc)
+    cge_synthetic, clear `layout'
+    quietly cge_sam, labels(account)
+    quietly cge_map, `base' `extra'
+    quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+    quietly cge_shock FSAV, scale(0.8)
+    quietly cge_shock tm, value(0.05)
+    mata: _cge_jaccheck()
+    assert r(maxdiff) < 1e-6
+}
 
 * ---------------------------------------------------------------------
 * Errors
