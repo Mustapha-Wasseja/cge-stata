@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.4 implements the standard static model described in
+Version 0.1.5 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
@@ -26,6 +26,9 @@ Version 0.1.4 implements the standard static model described in
   taxes paid directly to the government account (version 0.1.1), trade and
   transport margins netted out of the margin activities (version 0.1.3), the
   territorial correction and inventory run-downs (version 0.1.4).
+
+Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
+is close to one, as with a low elasticity and a very small trade share.
 
 | Milestone | Status |
 |---|---|

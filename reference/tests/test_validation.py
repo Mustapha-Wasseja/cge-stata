@@ -59,10 +59,10 @@ def _unit_costs(solution):
         else:
             sg = sva[k]
             va_cost[k] = (d ** sg * w[m, k] ** (1 - sg)).sum() ** (1 / (1 - sg)) / p["ad"][k]
-    sq, dq = p["sigma_q"], p["delta_q"]
-    arm_cost = (dq ** sq * s["PM"] ** (1 - sq) + (1 - dq) ** sq * s["PD"] ** (1 - sq)) ** (1 / (1 - sq)) / p["aq"]
-    stt, dt = p["sigma_t"], p["delta_t"]
-    cet_revenue = ((dt ** -stt * s["PE"] ** (1 + stt) + (1 - dt) ** -stt * s["PD"] ** (1 + stt))
+    sq, dq, dqc = p["sigma_q"], p["delta_q"], p["deltac_q"]
+    arm_cost = (dq ** sq * s["PM"] ** (1 - sq) + dqc ** sq * s["PD"] ** (1 - sq)) ** (1 / (1 - sq)) / p["aq"]
+    stt, dt, dtc = p["sigma_t"], p["delta_t"], p["deltac_t"]
+    cet_revenue = ((dt ** -stt * s["PE"] ** (1 + stt) + dtc ** -stt * s["PD"] ** (1 + stt))
                    ** (1 / (1 + stt)) / p["at"])
     return va_cost, arm_cost, cet_revenue
 

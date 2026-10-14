@@ -143,13 +143,15 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["Q6"] = (v["QX"], p["theta"].T @ v["QA"], every_c)
 
     # 5.3 Trade block
-    rt, dt = p["rho_t"], p["delta_t"]
-    eq["T1"] = (v["QX"], p["at"] * (dt * v["QE"] ** rt + (1 - dt) * v["QD"] ** rt) ** (1 / rt), ce)
-    eq["T2"] = (v["QE"], v["QD"] * ((v["PE"] / v["PD"]) * (1 - dt) / dt) ** (1 / (rt - 1)), ce)
+    # 1 - delta is stored (deltac_*) rather than computed: when one share is close to
+    # one, the subtraction would lose most significant digits
+    rt, dt, dtc = p["rho_t"], p["delta_t"], p["deltac_t"]
+    eq["T1"] = (v["QX"], p["at"] * (dt * v["QE"] ** rt + dtc * v["QD"] ** rt) ** (1 / rt), ce)
+    eq["T2"] = (v["QE"], v["QD"] * ((v["PE"] / v["PD"]) * dtc / dt) ** (1 / (rt - 1)), ce)
     eq["T3"] = (v["QX"], v["QD"], ~ce)
-    rq, dq = p["rho_q"], p["delta_q"]
-    eq["T4"] = (v["QQ"], p["aq"] * (dq * v["QM"] ** (-rq) + (1 - dq) * v["QD"] ** (-rq)) ** (-1 / rq), cm)
-    eq["T5"] = (v["QM"], v["QD"] * ((v["PD"] / v["PM"]) * dq / (1 - dq)) ** (1 / (1 + rq)), cm)
+    rq, dq, dqc = p["rho_q"], p["delta_q"], p["deltac_q"]
+    eq["T4"] = (v["QQ"], p["aq"] * (dq * v["QM"] ** (-rq) + dqc * v["QD"] ** (-rq)) ** (-1 / rq), cm)
+    eq["T5"] = (v["QM"], v["QD"] * ((v["PD"] / v["PM"]) * dq / dqc) ** (1 / (1 + rq)), cm)
     eq["T6"] = (v["QQ"], p["aq"] * v["QD"], ~cm)
 
     # 5.4 Institution block. DY is income after direct taxes and savings.
@@ -355,21 +357,26 @@ class Model:
         # 7.3 CET and Armington functions (base prices PD = PE = 1)
         rho_t = 1.0 / sigma_t + 1.0
         delta_t = np.full(n, 0.5)
+        deltac_t = np.full(n, 0.5)
         at = np.ones(n)
         for k in np.flatnonzero(ce):
             r = rho_t[k]
-            delta_t[k] = 1.0 / (1.0 + (QE0[k] / QD0[k]) ** (r - 1))
-            at[k] = QX0[k] / (delta_t[k] * QE0[k] ** r + (1 - delta_t[k]) * QD0[k] ** r) ** (1 / r)
+            ratio = (QE0[k] / QD0[k]) ** (r - 1)
+            delta_t[k] = 1.0 / (1.0 + ratio)
+            deltac_t[k] = ratio / (1.0 + ratio)
+            at[k] = QX0[k] / (delta_t[k] * QE0[k] ** r + deltac_t[k] * QD0[k] ** r) ** (1 / r)
         if np.any(np.abs(sigma_q[cm] - 1.0) < 1e-12):
             raise ValueError("version 0.1 needs sigma_q different from 1 for imported commodities")
         rho_q = 1.0 / sigma_q - 1.0
         delta_q = np.full(n, 0.5)
+        deltac_q = np.full(n, 0.5)
         aq = QQ0 / QD0                     # non-imported commodities (T6)
         for k in np.flatnonzero(cm):
             r = rho_q[k]
             ratio = PM0[k] * (QM0[k] / QD0[k]) ** (1 + r)
             delta_q[k] = ratio / (1 + ratio)
-            aq[k] = QQ0[k] / (delta_q[k] * QM0[k] ** (-r) + (1 - delta_q[k]) * QD0[k] ** (-r)) ** (-1 / r)
+            deltac_q[k] = 1.0 / (1 + ratio)
+            aq[k] = QQ0[k] / (delta_q[k] * QM0[k] ** (-r) + deltac_q[k] * QD0[k] ** (-r)) ** (-1 / r)
 
         # 7.5 Institutions
         D = self.sets["D"]
@@ -416,7 +423,8 @@ class Model:
         self.params = {
             "pwm": np.ones(n), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
             "theta": theta, "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
-            "at": at, "delta_t": delta_t, "rho_t": rho_t, "aq": aq, "delta_q": delta_q, "rho_q": rho_q,
+            "at": at, "delta_t": delta_t, "deltac_t": deltac_t, "rho_t": rho_t,
+            "aq": aq, "delta_q": delta_q, "deltac_q": deltac_q, "rho_q": rho_q,
             "shif": shif, "beta": beta, "tins0": tins0, "mps0": mps0,
             "shii": shii, "shir": shir, "hc": hc, "trdg": trdg, "trdr": trdr, "trfr": trfr,
             "trgr": np.array(trgr), "trrg": np.array(trrg), "trgg": np.array(trgg),

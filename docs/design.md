@@ -111,6 +111,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.2 | Enterprises; non-profit institutions mapped as households; transfers among institutions, within government and with the rest of the world; factor income from abroad (done) |
 | 0.1.3 | Margins netted out of margin activities, moved to their output when the SAM is mapped, so that margins enter as the producers' purchases of trade and transport services (done) |
 | 0.1.4 | Multi-product activities with fixed yields (including negative secondary sales, reported as notes); the territorial correction rewritten as household transfers to and from the rest of the world; inventory run-downs; equation T6 corrected for non-imported commodities with sales tax (done) |
+| 0.1.5 | CET and Armington share complements stored at calibration, so that benchmark replication holds when one share is close to one (low elasticity, very small trade share) (done) |
 | 0.2 | Import-only and export-only commodities; LES household demand; elasticity tables; a margin mechanism by product and market once margin data from supply-use tables are available |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |

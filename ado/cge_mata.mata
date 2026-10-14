@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.0  2026-10-12
+*! cge_mata.mata  v0.1.5  2026-10-14
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -17,7 +17,7 @@ struct cge_par {
     real colvector pwm, pwe, tm, te, tq, ta
     real colvector iva, inta, ad, rva, sva
     real matrix    ica, dva, theta
-    real colvector at, dt, rt, aq, dq, rq, sq, st
+    real colvector at, dt, dtc, rt, aq, dq, dqc, rq, sq, st
     real matrix    shif, beta
     real colvector tins0, mps0, shir, hc, trdg, trdr, trfr, qg, qinv, cwts, dwts
     real matrix    shii
@@ -787,14 +787,14 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
 
     // 5.3 Trade block
     _cge_put(M, L, R, K, record, "T1", QX,
-             p.at :* (p.dt :* (QE :^ p.rt) + (1 :- p.dt) :* (QD :^ p.rt)) :^ (1 :/ p.rt), M.ce)
+             p.at :* (p.dt :* (QE :^ p.rt) + p.dtc :* (QD :^ p.rt)) :^ (1 :/ p.rt), M.ce)
     _cge_put(M, L, R, K, record, "T2", QE,
-             QD :* (((PE :/ PD) :* (1 :- p.dt) :/ p.dt) :^ (1 :/ (p.rt :- 1))), M.ce)
+             QD :* (((PE :/ PD) :* p.dtc :/ p.dt) :^ (1 :/ (p.rt :- 1))), M.ce)
     _cge_put(M, L, R, K, record, "T3", QX, QD, 1 :- M.ce)
     _cge_put(M, L, R, K, record, "T4", QQ,
-             p.aq :* (p.dq :* (QM :^ (-p.rq)) + (1 :- p.dq) :* (QD :^ (-p.rq))) :^ (-1 :/ p.rq), M.cm)
+             p.aq :* (p.dq :* (QM :^ (-p.rq)) + p.dqc :* (QD :^ (-p.rq))) :^ (-1 :/ p.rq), M.cm)
     _cge_put(M, L, R, K, record, "T5", QM,
-             QD :* (((PD :/ PM) :* p.dq :/ (1 :- p.dq)) :^ (1 :/ (1 :+ p.rq))), M.cm)
+             QD :* (((PD :/ PM) :* p.dq :/ p.dqc) :^ (1 :/ (1 :+ p.rq))), M.cm)
     _cge_put(M, L, R, K, record, "T6", QQ, p.aq :* QD, 1 :- M.cm)
 
     // 5.4 Institution block. DY is income after direct taxes and savings.
@@ -857,7 +857,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     real matrix S, VA, QINT0, QF0, QFq, WFD0, dva, YIF0, QH0, w, TR, MAKE0
     real colvector sva, sq, st, QM0, cm, tariffs, tm, exports, ce, etax, te, QE0, pwe
     real colvector QA0, ta, QX0, QD0, PM0, stax, QQ0, tq, demand, QINTA0, W0, QVA0
-    real colvector cd, rva, ad, rt, dt, at, rq, dq, aq, YF0, YI0, tins0, mps0, EH0
+    real colvector cd, rva, ad, rt, dt, dtc, at, rq, dq, dqc, aq, YF0, YI0, tins0, mps0, EH0
     real colvector iD, dtax, dsav, DY0, TROW, cons, gross, safe
     real colvector m, d, num, x0, L, R, K, mag
     real scalar n, nF, nH, tol, k, r, ratio, total, maxres
@@ -955,24 +955,31 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
 
     // 7.4 CET and Armington functions (base prices PD = PE = 1)
     rt = 1 :/ st :+ 1
+    // 1 - delta is stored (dtc, dqc) rather than computed by subtraction, which
+    // loses most significant digits when a share is close to one
     dt = J(n, 1, 0.5)
+    dtc = J(n, 1, 0.5)
     at = J(n, 1, 1)
     for (k = 1; k <= n; k++) {
         if (!ce[k]) continue
         r = rt[k]
-        dt[k] = 1 / (1 + (QE0[k] / QD0[k])^(r - 1))
-        at[k] = QX0[k] / (dt[k] * QE0[k]^r + (1 - dt[k]) * QD0[k]^r)^(1 / r)
+        ratio = (QE0[k] / QD0[k])^(r - 1)
+        dt[k] = 1 / (1 + ratio)
+        dtc[k] = ratio / (1 + ratio)
+        at[k] = QX0[k] / (dt[k] * QE0[k]^r + dtc[k] * QD0[k]^r)^(1 / r)
     }
     if (max(cm :* (abs(sq :- 1) :< 1e-12))) _cge_fail("version 0.1 needs sigmaq different from 1 for imported commodities", 198)
     rq = 1 :/ sq :- 1
     dq = J(n, 1, 0.5)
+    dqc = J(n, 1, 0.5)
     aq = QQ0 :/ QD0                         // non-imported commodities (T6)
     for (k = 1; k <= n; k++) {
         if (!cm[k]) continue
         r = rq[k]
         ratio = PM0[k] * (QM0[k] / QD0[k])^(1 + r)
         dq[k] = ratio / (1 + ratio)
-        aq[k] = QQ0[k] / (dq[k] * QM0[k]^(-r) + (1 - dq[k]) * QD0[k]^(-r))^(-1 / r)
+        dqc[k] = 1 / (1 + ratio)
+        aq[k] = QQ0[k] / (dq[k] * QM0[k]^(-r) + dqc[k] * QD0[k]^(-r))^(-1 / r)
     }
 
     // 7.5 Institutions (D = households, then enterprises)
@@ -1026,9 +1033,11 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.sva = sva
     p.at = at
     p.dt = dt
+    p.dtc = dtc
     p.rt = rt
     p.aq = aq
     p.dq = dq
+    p.dqc = dqc
     p.rq = rq
     p.sq = sq
     p.st = st

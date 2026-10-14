@@ -87,6 +87,24 @@ assert r(iterations) == 0
 quietly cge_results, sim(fqbase) clear nodisplay
 assert abs(base - 135 / 130) < 1e-12 if variable == "W" & element1 == "lab"
 
+* Tiny export share with a low CET elasticity: exports of com_agr cut to 1e-4
+* (the rest goes to households, financed by foreign savings), so the CET share
+* of exports is 1 - 1e-12 and 1 - delta must not be computed by subtraction
+cge_synthetic, clear
+quietly recast double hhd row
+quietly replace hhd = hhd + (20 - 1e-4) in 4
+quietly replace row = row - (20 - 1e-4) in 4
+quietly replace hhd = hhd - (20 - 1e-4) in 14
+quietly replace row = row + (20 - 1e-4) in 14
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)                ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(0.5)
+assert r(max_residual) < 1e-12
+quietly cge_solve, name(tinyexport)
+assert r(iterations) == 0
+
 * ---------------------------------------------------------------------
 * Errors
 * ---------------------------------------------------------------------

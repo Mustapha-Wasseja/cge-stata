@@ -67,6 +67,19 @@ def test_benchmark_replication_with_factor_quantities():
     assert m.solve().iterations == 0
 
 
+def test_benchmark_replication_with_tiny_export_share():
+    # Exports of com_agr cut to 1e-4 (the rest goes to households, financed by
+    # foreign savings). With sigma_t = 0.5 the CET share of exports is 1 - 1e-12,
+    # so 1 - delta must come from calibration, not from subtraction.
+    cut = 20 - 1e-4
+    sam = _modified_sam({("com_agr", "hhd"): cut, ("com_agr", "row"): -cut,
+                         ("sav", "hhd"): -cut, ("sav", "row"): cut})
+    m = Model(sam, synthetic_mapping(), 0.8, 2.0, 0.5)
+    assert m.params["deltac_t"][0] < 1e-11
+    assert m.max_residual(m.base) < 1e-12
+    assert m.solve().iterations == 0
+
+
 def test_sigma_q_of_one_is_rejected():
     with pytest.raises(ValueError, match="sigma_q"):
         synthetic_model(sigma_q=1.0)

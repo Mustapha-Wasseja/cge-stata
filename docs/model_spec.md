@@ -442,6 +442,13 @@ verify this identity, not assume it.
 - $\delta^{q}_c = \dfrac{(PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}{1 + (PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}$;
   $aq_c = QQ^0_c / \left[\delta^{q}_c\,(QM^0_c)^{-\rho^{q}_c} + (1-\delta^{q}_c)\,(QD^0_c)^{-\rho^{q}_c}\right]^{-1/\rho^{q}_c}$
   for imported commodities, and $aq_c = QQ^0_c / QD^0_c$ for non-imported ones.
+- Implementation note: both implementations store the complements
+  $1-\delta^{t}_c$ and $1-\delta^{q}_c$ as separate parameters, computed from the
+  same ratio as the shares (for example $1-\delta^{t}_c = r/(1+r)$ with
+  $\delta^{t}_c = 1/(1+r)$), and use them in T1, T2, T4 and T5. Computing
+  $1-\delta$ by subtraction loses most significant digits when one share is
+  close to one, as happens with a low CET elasticity and a small export share,
+  and can leave a benchmark residual near $10^{-7}$.
 
 ### 7.5 Institutions
 
