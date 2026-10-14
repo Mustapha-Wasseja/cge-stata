@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.7 implements the standard static model described in
+Version 0.1.8 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
@@ -28,7 +28,9 @@ Version 0.1.7 implements the standard static model described in
   territorial correction and inventory run-downs (version 0.1.4);
 - SAMs in supply-use layout (version 0.1.7): margin accounts paid by
   commodities, commodities that are imported only, separate stock-change
-  accounts, and account labels that are not valid Stata names (such as `s-i`).
+  accounts, and account labels that are not valid Stata names (such as `s-i`);
+- exports at least as large as domestic output, such as re-exports and exports
+  from inventories, drawn from composite supply (version 0.1.8).
 
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.
@@ -40,7 +42,7 @@ the units of the SAM.
 | Model specification | complete |
 | Python reference implementation and validation suite | complete |
 | Stata/Mata implementation | complete; agrees with the reference to about 1e-13 |
-| Application to country SAMs | an 85-account national SAM calibrates and passes all checks; a 240-account SAM in supply-use layout maps fully but records exports that exceed domestic output, which the model does not yet represent; policy simulations not yet done |
+| Application to country SAMs | an 85-account national SAM calibrates and passes all checks; a 240-account SAM in supply-use layout, with re-exports and exports above domestic output, calibrates (4,439 equations); policy simulations not yet done |
 
 The model has been validated against the Python reference on synthetic SAMs,
 and calibrated on one national SAM with illustrative elasticities. When applying
@@ -54,18 +56,22 @@ Stata 13 or later (Stata/IC is sufficient). No other Stata packages are needed.
 
 ## Installation
 
-The repository is private during development. Clone it, then install from the
-local copy:
+Install directly from GitHub:
+
+```stata
+net install cge, from("https://raw.githubusercontent.com/Mustapha-Wasseja/cge-stata/main/") replace
+```
+
+or from a local copy of the repository (cloned, or downloaded as a ZIP file
+from GitHub):
 
 ```stata
 net install cge, from("C:/path/to/cge-stata") replace
 ```
 
-Once the repository is public it will also install directly from GitHub:
-
-```stata
-net install cge, from("https://raw.githubusercontent.com/Mustapha-Wasseja/cge-stata/main/") replace
-```
+To run the test suite, use a local copy of the repository and, in Stata, run
+`do run_all.do` from its `tests` folder. Each test prints `PASS` or `FAIL`, and
+the last line is a summary.
 
 ## Quick start
 

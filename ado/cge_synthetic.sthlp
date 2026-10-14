@@ -57,8 +57,10 @@ tax, not imported: its imports move to {cmd:com_man}.
 {opt sut} loads a 19-account supply-use layout: margin accounts {cmd:trd} and
 {cmd:trp} that collect margins from commodities and buy margin services, a
 commodity imported only ({cmd:com_fuel}), a stock-change account
-({cmd:dstk}), and savings-investment labelled {cmd:s-i}, which
-{helpb cge_sam} renames {cmd:si}. Map it with
+({cmd:dstk}), savings-investment labelled {cmd:s-i}, which
+{helpb cge_sam} renames {cmd:si}, and exports at least as large as domestic
+output: {cmd:com_fuel} re-exports 2 of its imports, and {cmd:com_agr} exports
+105 against output of 100, with a fall in its stocks. Map it with
 {cmd:commodities(com_agr com_man com_ser com_fuel)}, {cmd:savinv(si)},
 {cmd:marginaccounts(trd trp)} and {cmd:stocks(dstk)}.
 

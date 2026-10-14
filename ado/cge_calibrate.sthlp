@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.1.8  14oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -42,7 +42,11 @@ values different from 1 for imported commodities.
 
 {phang}
 {opt sigmat(numlist)} gives the elasticity of transformation between exports
-and domestic sales (CET), one value or one per commodity.
+and domestic sales (CET), one value or one per commodity. For a commodity whose
+exports are at least its domestic output (re-exports, or exports supplied from
+inventories), exports are drawn from composite supply instead, and its
+{opt sigmat()} value is the price elasticity of those exports
+(docs/model_spec.md, equation T9); calibration lists such commodities.
 
 {phang}
 {opt fquantities(matname)} supplies base factor quantities, for example

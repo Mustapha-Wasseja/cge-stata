@@ -145,6 +145,24 @@ assert r(N) == 0
 quietly count if variable == "QT"
 assert r(N) == 2
 
+* Exports drawn from composite supply (version 0.1.8): com_agr exports more than
+* its output and com_fuel re-exports; a higher world price raises their exports
+quietly count if variable == "QER"
+assert r(N) == 2
+quietly count if inlist(variable, "QE", "PE") & inlist(element1, "com_agr", "com_fuel")
+assert r(N) == 0
+cge_synthetic, clear sut
+quietly cge_sam, labels(account)
+quietly cge_map, `sutopts' stocks(dstk)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock pwe, elements(com_agr) scale(1.1)
+quietly cge_solve, name(agr_pwe10)
+cge_check
+assert r(failures) == 0
+quietly cge_results, sim(agr_pwe10) clear nodisplay
+assert value > base if variable == "QER" & element1 == "com_agr"
+assert value > base if variable == "QA" & element1 == "act_agr"
+
 * A stock-change account may receive payments only from savings-investment
 cge_synthetic, clear sut
 quietly replace row = row + 1 in 18

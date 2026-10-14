@@ -1,5 +1,6 @@
-"""Supply-use layouts (version 0.1.7): margin accounts, commodities imported only
-and stock-change accounts."""
+"""Supply-use layouts: margin accounts, commodities imported only and
+stock-change accounts (version 0.1.7); exports drawn from composite supply
+(version 0.1.8)."""
 
 import itertools
 import sys
@@ -51,10 +52,10 @@ def test_stock_account_is_merged_into_savings_investment(model):
     assert notes["stocks"] == 3
     k = prepared.index("dstk")
     assert not prepared.values[k, :].any() and not prepared.values[:, k].any()
-    assert prepared.cell("com_agr", "s-i") == 5 - 1 and prepared.cell("com_man", "s-i") == 37 + 4
+    assert prepared.cell("com_agr", "s-i") == -80 - 1 and prepared.cell("com_man", "s-i") == 122 + 4
     assert np.abs(prepared.imbalances()).max() < 1e-12
     C = model.sets["C"]
-    assert model.params["qinv"][C.index("com_agr")] == 4
+    assert model.params["qinv"][C.index("com_agr")] == -81
     assert model.base["QINV"].sum() == 50
 
 
@@ -77,8 +78,8 @@ def test_import_only_commodity(model):
     assert not model.struct["cx"][k] and model.struct["cm"][k]
     for name in ("PX", "PD", "QX", "QD"):
         assert not model.exists[name][k]
-    assert np.isclose(model.params["aq"][k], 16 / 12)
-    assert np.isclose(model.base["QQ"][k], 16)
+    assert np.isclose(model.params["aq"][k], 18 / 14)
+    assert np.isclose(model.base["QQ"][k], 18)
 
 
 def test_fuel_import_price_rise(model):
@@ -108,10 +109,45 @@ def test_commodity_without_output_or_imports():
         Model(SAM(labels, values), m, **TEST_ELASTICITIES)
 
 
-def test_exports_of_import_only_commodity():
-    sam = _sam_with({("com_fuel", "row"): 1, ("row", "com_fuel"): 1})
-    with pytest.raises(SAMError, match="exports recorded for a commodity without domestic output: com_fuel$"):
-        Model(sam, sut_mapping(), **TEST_ELASTICITIES)
+# Exports drawn from composite supply (version 0.1.8)
+def test_exports_from_composite_supply(model):
+    C = model.sets["C"]
+    agr, fuel = C.index("com_agr"), C.index("com_fuel")
+    assert list(model.struct["cr"]) == [True, False, False, True]   # re-exports; exports above output
+    assert list(model.struct["ce"]) == [False, True, True, False]
+    assert np.allclose(model.base["QER"], [105, 0, 0, 2])
+    assert not model.exists["QE"][agr] and not model.exists["PE"][agr]
+    assert model.exists["QER"][agr] and model.exists["QER"][fuel]
+    assert model.base["QD"][agr] == 100                              # all output sold domestically
+    assert np.isclose(model.base["QQ"][agr], 134)                    # demand of 29 plus exports of 105
+
+
+def test_exports_from_composite_supply_respond_to_world_prices(model):
+    agr = model.sets["C"].index("com_agr")
+    pwe = model.params["pwe"].copy()
+    pwe[agr] *= 1.1
+    s = model.solve(params={"pwe": pwe})
+    assert s.converged
+    assert s["QER"][agr] > model.base["QER"][agr] and s["QA"][agr] > model.base["QA"][agr]
+    ratio = s["PQ"][agr] / (s["EXR"][0] * pwe[agr])                 # T9
+    assert np.isclose(s["QER"][agr], 105 * ratio ** -model.params["sigma_t"][agr])
+
+
+def test_export_tax_on_exports_from_composite_supply():
+    sam = SAM.from_csv(SUT_SAM)
+    labels = sam.labels + ["tax_exp"]
+    values = np.pad(sam.values, ((0, 1), (0, 1)))
+    i = {name: k for k, name in enumerate(labels)}
+    # 1 of com_agr's sales tax recorded as an export tax
+    values[i["tax_exp"], i["com_agr"]] += 1
+    values[i["tax_sal"], i["com_agr"]] -= 1
+    values[i["gov"], i["tax_exp"]] += 1
+    values[i["gov"], i["tax_sal"]] -= 1
+    m = sut_mapping()
+    m.exptax = "tax_exp"
+    with pytest.raises(SAMError, match="export tax recorded on a commodity whose exports are at least its "
+                                       "domestic output: com_agr$"):
+        Model(SAM(labels, values), m, **TEST_ELASTICITIES)
 
 
 def test_import_tariff_without_imports_names_the_commodity():
@@ -136,7 +172,7 @@ def test_margin_coefficients(model):
     assert list(model.struct["ct"]) == [False, True, True, False]
     agr, ser = C.index("com_agr"), C.index("com_ser")
     # trd's 3 all buys com_ser; 4/5 of trp's 2 buys com_ser
-    assert np.isclose(p["icm"][ser, agr], (3 + 2 * 4 / 5) / 114)
+    assert np.isclose(p["icm"][ser, agr], (3 + 2 * 4 / 5) / 134)
 
 
 def test_margin_account_with_other_flows():

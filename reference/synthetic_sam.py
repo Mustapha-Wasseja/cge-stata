@@ -251,25 +251,31 @@ SUT_ACCOUNTS = [
 #   purchases of com_ser fall by the 14 now sold as margins;
 # - a stock-change account dstk, financed by savings-investment (3), buys
 #   com_man (4) and runs down com_agr (-1);
-# - savings-investment is labelled "s-i", which is not a valid Stata name.
+# - savings-investment is labelled "s-i", which is not a valid Stata name;
+# - exports at least as large as domestic output (version 0.1.8): com_fuel
+#   re-exports 2 of its imports (14), and com_agr exports 105 against output of
+#   100, with a fall in its stocks held under savings-investment (-80);
+#   savings-investment buys 85 more com_man, which is imported.
 # Imports, tax revenue, government savings and foreign savings adjust so that
 # every account balances.
 SUT_FLOWS = {
-    ("row", "com_fuel"): 12, ("tax_imp", "com_fuel"): 1, ("tax_sal", "com_fuel"): 1,
+    ("row", "com_fuel"): 14, ("com_fuel", "row"): 2, ("tax_imp", "com_fuel"): 1, ("tax_sal", "com_fuel"): 1,
     ("trd", "com_fuel"): 2, ("com_fuel", "act_man"): 6, ("com_fuel", "hhd"): 10,
     ("trd", "com_agr"): 3, ("trd", "com_man"): 5, ("trp", "com_agr"): 2, ("trp", "com_man"): 3,
     ("com_ser", "trd"): 10, ("com_ser", "trp"): 4, ("com_man", "trp"): 1,
     ("com_man", "act_man"): 24,
     ("com_agr", "hhd"): 75, ("com_man", "hhd"): 79, ("com_ser", "hhd"): 66,
-    ("com_man", "sav"): 37, ("dstk", "sav"): 3, ("com_man", "dstk"): 4, ("com_agr", "dstk"): -1,
-    ("row", "com_agr"): 19, ("row", "com_man"): 47,
+    ("com_man", "sav"): 122, ("dstk", "sav"): 3, ("com_man", "dstk"): 4, ("com_agr", "dstk"): -1,
+    ("com_agr", "sav"): -80, ("com_agr", "row"): 105,
+    ("row", "com_agr"): 19, ("row", "com_man"): 132,
     ("gov", "tax_imp"): 9, ("gov", "tax_sal"): 31, ("sav", "gov"): 5, ("sav", "row"): 13,
 }
 
 
 def build_sut_layout() -> tuple[list[str], list[list[float]]]:
     """The synthetic economy in a supply-use layout: margin accounts, a commodity
-    imported only, a stock-change account and the label s-i."""
+    imported only, a stock-change account, the label s-i, and exports at least as
+    large as domestic output."""
     flows = {}
     for (row, col), value in {**FLOWS, **SUT_FLOWS}.items():
         flows[("s-i" if row == "sav" else row, "s-i" if col == "sav" else col)] = value

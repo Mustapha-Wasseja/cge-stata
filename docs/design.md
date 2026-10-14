@@ -114,6 +114,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.5 | CET and Armington share complements stored at calibration, so that benchmark replication holds when one share is close to one (low elasticity, very small trade share) (done) |
 | 0.1.6 | Homogeneity and perturbed-start checks independent of the SAM's units: WALRAS measured against the largest SAM entry (done) |
 | 0.1.7 | Supply-use layouts: margin accounts paid by commodities (margin services per unit of composite supply), commodities imported only, stock-change accounts merged into savings-investment, and account labels that are not valid Stata names (done) |
+| 0.1.8 | Exports drawn from composite supply, with a price-elastic export function, for commodities whose exports are at least their domestic output (re-exports, exports from inventories, exports at purchaser prices) (done) |
 | 0.2 | Export-only commodities; LES household demand; elasticity tables; margins that differ between domestic sales, imports and exports, once margin data by market are available |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |

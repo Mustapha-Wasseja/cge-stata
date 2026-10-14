@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.7  2026-10-14
+*! cge_mata.mata  v0.1.8  2026-10-14
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -19,7 +19,7 @@ struct cge_par {
     real matrix    ica, dva, theta, icm
     real colvector at, dt, dtc, rt, aq, dq, dqc, rq, sq, st
     real matrix    shif, beta
-    real colvector tins0, mps0, shir, hc, trdg, trdr, trfr, qg, qinv, cwts, dwts
+    real colvector tins0, mps0, shir, hc, trdg, trdr, trfr, qg, qinv, cwts, dwts, qer
     real matrix    shii
     real scalar    trgr, trrg, trgg
 }
@@ -38,7 +38,7 @@ struct cge_model {
     // n activities, nC commodities (nC >= n from version 0.1.7)
     real scalar      n, nC, nF, nH, nE, nD, nI
     // model structure
-    real colvector   ce, cm, cd, cx, ct
+    real colvector   ce, cm, cd, cx, ct, cr
     real matrix      fa
     // parameters: base (p0) and current, including shocks (p)
     struct cge_par scalar p0, p
@@ -192,11 +192,11 @@ void _cge_layout(struct cge_model scalar M)
     M.vname = ("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
-               "IADJ","GADJ","WFDIST","WALRAS","QT")'
+               "IADJ","GADJ","WFDIST","WALRAS","QT","QER")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
-               "","","FA","","C")'
+               "","","FA","","C","C")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -778,7 +778,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix PA, PVA, PINTA, PX, PD, PE, PM, PQ, W, EXR, CPI, DPI
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
-    real matrix IADJ, GADJ, WFDIST, WALRAS, QT
+    real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER
     real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs
     real colvector oneA, oneC, oneF, oneH, oneD, DY
     real scalar k, nH, nD
@@ -797,7 +797,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     FSAV = _cge_v(M, x, 34);  TINS = _cge_v(M, x, 35);  MPS = _cge_v(M, x, 36)
     TINSADJ = _cge_v(M, x, 37); MPSADJ = _cge_v(M, x, 38); IADJ = _cge_v(M, x, 39)
     GADJ = _cge_v(M, x, 40);  WFDIST = _cge_v(M, x, 41); WALRAS = _cge_v(M, x, 42)
-    QT = _cge_v(M, x, 43)
+    QT = _cge_v(M, x, 43);    QER = _cge_v(M, x, 44)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -866,6 +866,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "T6", QQ, p.aq :* QD, M.cx :* (1 :- M.cm))
     _cge_put(M, L, R, K, record, "T7", QQ, p.aq :* QM, M.cm :* (1 :- M.cx))
     _cge_put(M, L, R, K, record, "T8", QT, p.icm * QQ, M.ct)
+    _cge_put(M, L, R, K, record, "T9", QER, p.qer :* ((PQ :/ (EXR :* p.pwe)) :^ (-p.st)), M.cr)
 
     // 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 :- MPS) :* (1 :- TINS) :* YI
@@ -888,10 +889,11 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
 
     // 5.5 System constraints (S6 is imposed through the closure)
     _cge_put(M, L, R, K, record, "S1", rowsum(M.fa :* QF), QFS, oneF)
-    _cge_put(M, L, R, K, record, "S2", QQ, rowsum(QINT) + rowsum(QH) + QG + QINV + M.ct :* QT, oneC)
+    _cge_put(M, L, R, K, record, "S2", QQ,
+             rowsum(QINT) + rowsum(QH) + QG + QINV + M.ct :* QT + M.cr :* QER, oneC)
     _cge_put(M, L, R, K, record, "S3",
              sum(p.pwm :* QM) + (sum(YIF[nD + 2, .]) + p.shir' * DY) / EXR + p.trrg,
-             sum(p.pwe :* QE) + sum(p.trdr) + sum(p.trfr) + p.trgr + FSAV, 1)
+             sum(p.pwe :* QE) + sum(M.cr :* PQ :* QER) / EXR + sum(p.trdr) + sum(p.trfr) + p.trgr + FSAV, 1)
     _cge_put(M, L, R, K, record, "S4", YG, EG + GSAV, 1)
     _cge_put(M, L, R, K, record, "S5", (MPS :* (1 :- TINS))' * YI + GSAV + EXR * FSAV,
              PQ' * QINV + WALRAS, 1)
@@ -926,7 +928,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     struct cge_par scalar p
     real matrix S, VA, QINT0, QF0, QFq, WFD0, dva, YIF0, QH0, w, TR, MAKE0, MG, SV
     real colvector sva, sq, st, QM0, cm, tariffs, tm, exports, ce, etax, te, QE0, pwe
-    real colvector cx, ct, MGc, QT0
+    real colvector cx, ct, MGc, QT0, exported, cr, QER0
     real rowvector spend
     real colvector QA0, ta, QX0, QD0, PM0, stax, QQ0, tq, demand, QINTA0, W0, QVA0
     real colvector cd, rva, ad, rt, dt, dtc, at, rq, dq, dqc, aq, YF0, YI0, tins0, mps0, EH0
@@ -954,12 +956,9 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_fail_if((1 :- cm) :* (abs(tariffs) :> tol), M.labels[M.iC], "import tariff recorded on a commodity without imports", 459)
     tm = cm :* tariffs :/ (cm :* QM0 + (1 :- cm))
     exports = _cge_sub(S, M.iC, M.irow)
-    ce = exports :> tol
+    exported = exports :> tol
     etax = _cge_sub(S, M.iexptax, M.iC)'
-    _cge_fail_if((1 :- ce) :* (abs(etax) :> tol), M.labels[M.iC], "export tax recorded on a commodity without exports", 459)
-    te = ce :* etax :/ (ce :* exports + (1 :- ce))
-    QE0 = ce :* (exports - etax)
-    pwe = 1 :/ (1 :- te)
+    _cge_fail_if((1 :- exported) :* (abs(etax) :> tol), M.labels[M.iC], "export tax recorded on a commodity without exports", 459)
 
     QA0 = colsum(S[., M.iA])'
     _cge_fail_if(QA0 :<= tol, M.labels[M.iA], "every activity needs positive output", 459)
@@ -969,8 +968,17 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.theta = MAKE0 :/ QA0
     QX0 = colsum(MAKE0)'
     cx = QX0 :> tol
-    _cge_fail_if(ce :* (1 :- cx), M.labels[M.iC], "exports recorded for a commodity without domestic output", 459)
     _cge_fail_if((1 :- cx) :* (1 :- cm), M.labels[M.iC], "a commodity has neither domestic output nor imports", 459)
+    // Exports at least as large as domestic output are drawn from composite
+    // supply (CR, T9); other exports come from domestic output (CE, T1-T2)
+    cr = exported :* ((QX0 - (exports - etax)) :<= tol)
+    _cge_fail_if(cr :* (abs(etax) :> tol), M.labels[M.iC],
+                 "export tax recorded on a commodity whose exports are at least its domestic output", 459)
+    ce = exported :* (1 :- cr)
+    te = ce :* etax :/ (ce :* exports + (1 :- ce))
+    QE0 = ce :* (exports - etax)
+    QER0 = cr :* exports
+    pwe = 1 :/ (1 :- te)
     QD0 = cx :* (QX0 - QE0)
     _cge_fail_if(cx :* (QD0 :<= tol), M.labels[M.iC], "a commodity with domestic output needs positive domestic sales", 459)
     PM0 = cm :* (1 :+ tm)
@@ -997,7 +1005,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     if (rows(M.iT)) p.icm = ((SV :/ (spend :* (spend :> tol) + (spend :<= tol))) * MG) :/ QQ0'
     else p.icm = J(nC, nC, 0)
     demand = rowsum(_cge_sub(S, M.iC, M.iA)) + rowsum(_cge_sub(S, M.iC, M.iH)) +
-             _cge_sub(S, M.iC, M.igov) + _cge_sub(S, M.iC, M.isav) + QT0
+             _cge_sub(S, M.iC, M.igov) + _cge_sub(S, M.iC, M.isav) + QT0 + QER0
     if (max(abs(QQ0 - demand)) > tol) _cge_fail("composite supply does not equal domestic demand for some commodity", 459)
 
     // 7.3 Production
@@ -1118,6 +1126,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.dwts = QD0 :/ sum(QD0)
 
     p.pwm = J(nC, 1, 1)
+    p.qer = QER0
     p.pwe = pwe
     p.tm = tm
     p.te = te
@@ -1144,6 +1153,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.cd = cd
     M.cx = cx
     M.ct = ct
+    M.cr = cr
     M.p0 = p
     M.p = p
 
@@ -1195,6 +1205,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "WFDIST", WFD0)
     _cge_setv(M, x0, "WALRAS", 0)
     _cge_setv(M, x0, "QT", QT0)
+    _cge_setv(M, x0, "QER", QER0)
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -1211,6 +1222,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, M.exists, "QX", cx)
     _cge_setv(M, M.exists, "QD", cx)
     _cge_setv(M, M.exists, "QT", ct)
+    _cge_setv(M, M.exists, "QER", cr)
     _cge_setv(M, M.exists, "QINT", QINT0 :!= 0)
     _cge_setv(M, M.exists, "QH", QH0 :!= 0)
 
@@ -1224,7 +1236,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.positive = J(0, 1, .)
     for (k = 1; k <= rows(M.vname); k++) {
         if (anyof(("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
-                   "QA","QVA","QINTA","QF","QX","QD","QE","QM","QQ","QT"), M.vname[k])) {
+                   "QA","QVA","QINTA","QF","QX","QD","QE","QM","QQ","QT","QER"), M.vname[k])) {
             m = _cge_vpos(M, k)
             M.positive = M.positive \ select(m, M.exists[m] :* (x0[m] :> 0))
         }
@@ -1259,6 +1271,10 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
 
     printf("{txt}Calibrated: {res}%f{txt} equations, {res}%f{txt} free variables\n", M.neq, M.neq)
     printf("{txt}Benchmark replication: largest scaled residual {res}%9.3e\n", maxres)
+    if (sum(cr)) {
+        printf("{txt}Exports drawn from composite supply (equation T9): {res}%s\n",
+               invtokens(select(M.C, cr)'))
+    }
     st_numscalar("r(N_equations)", M.neq)
     st_numscalar("r(max_residual)", maxres)
 }
@@ -1683,13 +1699,14 @@ real colvector _cge_ev(struct cge_model scalar M, struct cge_par scalar p, real 
 // Expenditure-side GDP minus income-side GDP; zero at any solution
 real scalar _cge_gdpgap(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
 {
-    real matrix PQ, QH, QG, QINV, QE, QM, EXR, PVA, QVA, QQ, PA, QA
+    real matrix PQ, QH, QG, QINV, QE, QM, EXR, PVA, QVA, QQ, PA, QA, QER
     real scalar expend, income
     PQ = _cge_v(M, x, 8);    QH = _cge_v(M, x, 23);   QG = _cge_v(M, x, 24)
     QINV = _cge_v(M, x, 25); QE = _cge_v(M, x, 20);   QM = _cge_v(M, x, 21)
     EXR = _cge_v(M, x, 10);  PVA = _cge_v(M, x, 2);   QVA = _cge_v(M, x, 14)
     QQ = _cge_v(M, x, 22);   PA = _cge_v(M, x, 1);    QA = _cge_v(M, x, 13)
-    expend = PQ' * (rowsum(QH) + QG + QINV) + EXR * (p.pwe' * QE) - EXR * (p.pwm' * QM)
+    QER = _cge_v(M, x, 44)
+    expend = PQ' * (rowsum(QH) + QG + QINV + QER) + EXR * (p.pwe' * QE) - EXR * (p.pwm' * QM)
     income = PVA' * QVA + sum(p.tq :* PQ :* QQ) + EXR * sum(p.tm :* p.pwm :* QM) +
              EXR * sum(p.te :* p.pwe :* QE) + sum(p.ta :* PA :* QA)
     return(expend - income)
@@ -1758,7 +1775,8 @@ void _cge_results_show(string scalar sim)
     _cge_row(M, x, "Consumer price index", _cge_v(M, M.x0, 11), _cge_v(M, x, 11))
     _cge_row(M, x, "Investment volume (IADJ)", _cge_v(M, M.x0, 39), _cge_v(M, x, 39))
     _cge_row(M, x, "Imports (world prices)", p.pwm' * _cge_v(M, M.x0, 21), p.pwm' * _cge_v(M, x, 21))
-    _cge_row(M, x, "Exports (world prices)", p.pwe' * _cge_v(M, M.x0, 20), p.pwe' * _cge_v(M, x, 20))
+    _cge_row(M, x, "Exports (world prices)", p.pwe' * (_cge_v(M, M.x0, 20) + _cge_v(M, M.x0, 44)),
+             p.pwe' * (_cge_v(M, x, 20) + _cge_v(M, x, 44)))
     _cge_row(M, x, "Government savings", _cge_v(M, M.x0, 33), _cge_v(M, x, 33))
     b = _cge_v(M, M.x0, 9)
     s = _cge_v(M, x, 9)

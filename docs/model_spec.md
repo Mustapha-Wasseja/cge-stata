@@ -44,10 +44,12 @@ Included:
   country; trade and transport margins recorded in margin accounts that the
   commodities pay, entering the model as margin services per unit of composite
   supply; and a separate stock-change account, merged into savings-investment.
+- From version 0.1.8: exports drawn from composite supply, for commodities whose
+  exports are at least their domestic output (re-exports, and exports supplied
+  from inventories or valued at purchaser prices).
 
-Deferred to later versions: commodities that are produced but not sold
-domestically; margins that differ between domestic sales, imports and exports;
-linear expenditure system (LES) demand; recursive dynamics.
+Deferred to later versions: margins that differ between domestic sales, imports
+and exports; linear expenditure system (LES) demand; recursive dynamics.
 
 ## 2. Sets
 
@@ -56,8 +58,9 @@ linear expenditure system (LES) demand; recursive dynamics.
 | $A$ | activities |
 | $C$ | commodities; $c(a)$ is the primary commodity of activity $a$ (activities and commodities are paired by position in the mapping; from version 0.1.7 commodities may outnumber activities, and the commodities after the last paired one have no paired activity) |
 | $CX \subseteq C$ | commodities with domestic output (base output > 0); from version 0.1.7 the others, $C \setminus CX$, are imported only |
-| $CE \subseteq CX$ | exported commodities (base exports > 0) |
-| $CNE = CX \setminus CE$ | produced, non-exported commodities |
+| $CR \subseteq C$ | commodities whose exports are drawn from composite supply: base exports are positive and at least domestic output (from version 0.1.8) |
+| $CE \subseteq CX \setminus CR$ | commodities exported from domestic output (base exports > 0) |
+| $CNE = CX \setminus CE$ | produced commodities not exported from domestic output |
 | $CM \subseteq C$ | imported commodities (base imports > 0) |
 | $CNM = C \setminus CM$ | non-imported commodities |
 | $T$ | margin accounts (may be empty; from version 0.1.7) |
@@ -105,6 +108,7 @@ Quantities
 | $QG_c$ | government consumption |
 | $QINV_c$ | investment demand |
 | $QT_c$ | demand for margin services, $c \in CT$ |
+| $QER_c$ | exports drawn from composite supply, $c \in CR$ |
 | $QFS_f$ | supply of factor $f$ |
 
 Incomes, rates and adjustment variables
@@ -150,10 +154,12 @@ Incomes, rates and adjustment variables
 | $trnsfr_{d,row}$, $trnsfr_{f,row}$, $trnsfr_{gov,row}$ | transfers from the rest of the world to institution $d$, factor $f$ and the government (foreign currency) |
 | $trnsfr_{row,gov}$ | government transfers to the rest of the world (foreign currency) |
 | $\overline{qg}_c$, $\overline{qinv}_c$ | base government consumption and investment quantities |
+| $\overline{qer}_c$ | base exports from composite supply, $c \in CR$ |
 | $cwts_c$, $dwts_c$ | CPI and DPI weights |
 
 Elasticities supplied by the user: $\sigma^{va}_a$ (substitution between
-factors), $\sigma^{t}_c$ (transformation between exports and domestic sales) and
+factors), $\sigma^{t}_c$ (transformation between exports and domestic sales; for
+$c \in CR$, the price elasticity of exports from composite supply, T9) and
 $\sigma^{q}_c$ (substitution between imports and domestic goods). The exponents
 are $\rho^{va}_a = 1/\sigma^{va}_a - 1$, $\rho^{t}_c = 1/\sigma^{t}_c + 1$ and
 $\rho^{q}_c = 1/\sigma^{q}_c - 1$. All elasticities must be positive and finite.
@@ -260,6 +266,22 @@ margin payment per commodity, without a split between domestic sales, imports
 and exports; margins are therefore attributed to composite supply, as sales
 taxes are.
 
+Exports drawn from composite supply (from version 0.1.8), $c \in CR$:
+
+$$QER_c = \overline{qer}_c\left(\frac{PQ_c}{EXR\cdot pwe_c}\right)^{-\sigma^{t}_c} \tag{T9}$$
+
+Some SAMs record exports that domestic output cannot supply: re-exports of
+imported goods, exports from inventories (with a matching fall in stocks), or
+exports valued at purchaser prices, including the sales taxes and margins on the
+exported goods. For such a commodity the CET of T1 and T2 is not defined (its
+domestic sales would be zero or negative). Its exports are instead drawn from
+composite supply, like any other demand, and sold at the composite price
+$PQ_c$, which includes taxes and margins as the SAM records them. The volume
+exported falls as the composite price rises relative to the world price
+$EXR\cdot pwe_c$, with elasticity $\sigma^{t}_c$, so these exports respond to
+the exchange rate and to world prices. The commodity's domestic output, if
+any, is sold domestically ($QX_c = QD_c$, T3).
+
 ### 5.4 Institution block
 
 $$YF_f = \sum_a W_f\,WFDIST_{fa}\,QF_{fa} + trnsfr_{f,row}\,EXR \tag{I1}$$
@@ -293,11 +315,11 @@ $$MPS_d = \overline{mps}_d\,MPSADJ \tag{I11}$$
 
 $$\sum_a QF_{fa} = QFS_f \tag{S1}$$
 
-$$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c \tag{S2}$$
+$$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c + QER_c \tag{S2}$$
 
-where $QT_c$ applies only for $c \in CT$.
+where $QT_c$ applies only for $c \in CT$ and $QER_c$ only for $c \in CR$.
 
-$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} = \sum_{c \in CE} pwe_c\,QE_c + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + FSAV \tag{S3}$$
+$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} = \sum_{c \in CE} pwe_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + FSAV \tag{S3}$$
 
 $$YG = EG + GSAV \tag{S4}$$
 
@@ -369,9 +391,9 @@ inventory changes, is scaled by $IADJ$) and sales of commodities by activities
 the mapping report lists such cells as a note, and each activity's output and
 each commodity's domestic output must still be positive). In version 0.1 every activity needs
 positive output and value added. Every commodity needs domestic output or
-imports, and a commodity with domestic output needs positive domestic sales
-($QD^0_c > 0$). Before version 0.1.7 every commodity needed domestic sales. An
-activity with no flows at all is left out of the mapping.
+imports. Before version 0.1.7 every commodity needed domestic sales, and before
+version 0.1.8 exports could not exceed domestic output. An activity with no
+flows at all is left out of the mapping.
 
 #### Layouts rewritten before the checks (from version 0.1.1)
 
@@ -458,12 +480,17 @@ quantities are supplied (Section 7.7).
 ### 7.2 Taxes and trade
 
 - $QM^0_c = SAM(row, c)$; $tm_c = SAM(tax_{imp}, c) / QM^0_c$; $PM^0_c = 1 + tm_c$.
-- $te_c = SAM(tax_{exp}, c) / SAM(c, row)$; $QE^0_c = SAM(c, row) - SAM(tax_{exp}, c)$;
-  $pwe_c = 1/(1 - te_c)$.
 - $QA^0_a$ = column total of activity $a$; $ta_a = SAM(tax_{act}, a) / QA^0_a$.
-- Yields $\theta_{ac} = SAM(a, c) / QA^0_a$; $QX^0_c = \sum_a SAM(a, c)$ and
-  $QD^0_c = QX^0_c - QE^0_c$. $CX$ is the set of commodities with $QX^0_c > 0$;
-  exports of a commodity without domestic output are an error.
+- Yields $\theta_{ac} = SAM(a, c) / QA^0_a$; $QX^0_c = \sum_a SAM(a, c)$. $CX$ is
+  the set of commodities with $QX^0_c > 0$.
+- Exports: a commodity with $SAM(c, row) > 0$ belongs to $CR$ if
+  $SAM(c, row) - SAM(tax_{exp}, c) \geq QX^0_c$, and to $CE$ otherwise.
+- For $c \in CE$: $te_c = SAM(tax_{exp}, c) / SAM(c, row)$;
+  $QE^0_c = SAM(c, row) - SAM(tax_{exp}, c)$; $pwe_c = 1/(1 - te_c)$; and
+  $QD^0_c = QX^0_c - QE^0_c$.
+- For $c \in CR$: $\overline{qer}_c = QER^0_c = SAM(c, row)$, $pwe_c = 1$ and
+  $QD^0_c = QX^0_c$. An export tax on such a commodity is an error.
+- For other commodities, $QD^0_c = QX^0_c$.
 - Margins paid by commodity $c$: $MG^0_c = \sum_{t \in T} SAM(t, c)$.
 - $QQ^0_c = QD^0_c + PM^0_c\,QM^0_c + SAM(tax_{sal}, c) + MG^0_c$ and
   $tq_c = SAM(tax_{sal}, c) / QQ^0_c$.
@@ -472,10 +499,10 @@ quantities are supplied (Section 7.7).
   so that margins collected by account $t$ are spent on services in the
   proportions that $t$ buys them.
 
-SAM balance implies that $QQ^0_c$ equals total domestic demand for $c$ at
-purchaser prices (the commodity row total minus exports, including purchases of
-margin services by margin accounts). Calibration must verify this identity, not
-assume it.
+SAM balance implies that $QQ^0_c$ equals total demand for $c$ at purchaser
+prices, other than exports from domestic output: the commodity row total minus
+$QE^0_c$, including purchases of margin services by margin accounts and exports
+from composite supply. Calibration must verify this identity, not assume it.
 
 ### 7.3 Production
 

@@ -25,7 +25,7 @@ VARIABLES: dict[str, str] = {
     "QE": "C", "QM": "C", "QQ": "C", "QH": "CH", "QG": "C", "QINV": "C", "QFS": "F",
     "YF": "F", "YIF": "IF", "YI": "D", "EH": "H", "YG": "", "EG": "", "GSAV": "",
     "FSAV": "", "TINS": "D", "MPS": "D", "TINSADJ": "", "MPSADJ": "", "IADJ": "",
-    "GADJ": "", "WFDIST": "FA", "WALRAS": "", "QT": "C",
+    "GADJ": "", "WFDIST": "FA", "WALRAS": "", "QT": "C", "QER": "C",
 }
 
 # Variables measured in local currency: they scale with the numeraire.
@@ -105,7 +105,7 @@ def _per_element(value, labels: list[str], name: str) -> np.ndarray:
 
 def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Left side, right side and existence mask of every equation block."""
-    ce, cm, fa, cd, cx, ct = s["ce"], s["cm"], s["fa"], s["cd"], s["cx"], s["ct"]
+    ce, cm, fa, cd, cx, ct, cr = s["ce"], s["cm"], s["fa"], s["cd"], s["cx"], s["ct"], s["cr"]
     every_c = np.ones_like(ce)
     every_a = np.ones_like(cd)
     nH = v["EH"].size
@@ -158,6 +158,7 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["T6"] = (v["QQ"], p["aq"] * v["QD"], cx & ~cm)
     eq["T7"] = (v["QQ"], p["aq"] * v["QM"], cm & ~cx)
     eq["T8"] = (v["QT"], p["icm"] @ v["QQ"], ct)
+    eq["T9"] = (v["QER"], p["qer"] * (v["PQ"] / (v["EXR"] * p["pwe"])) ** (-p["sigma_t"]), cr)
 
     # 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 - v["MPS"]) * (1 - v["TINS"]) * v["YI"]
@@ -184,10 +185,11 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     # 5.5 System constraints (S6 is imposed through the closure)
     eq["S1"] = (np.where(fa, v["QF"], 0.0).sum(axis=1), v["QFS"], np.ones(v["QFS"].shape, dtype=bool))
     eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"]
-                + np.where(ct, v["QT"], 0.0), every_c)
+                + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0), every_c)
     eq["S3"] = ((p["pwm"] * v["QM"]).sum() + (v["YIF"][nD + 1].sum() + p["shir"] @ DY) / v["EXR"]
                 + p["trrg"],
-                (p["pwe"] * v["QE"]).sum() + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + v["FSAV"], one)
+                (p["pwe"] * v["QE"]).sum() + np.where(cr, v["PQ"] * v["QER"], 0.0).sum() / v["EXR"]
+                + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + v["FSAV"], one)
     eq["S4"] = (v["YG"], v["EG"] + v["GSAV"], one)
     eq["S5"] = ((v["MPS"] * (1 - v["TINS"])) @ v["YI"] + v["GSAV"] + v["EXR"] * v["FSAV"],
                 np.atleast_1d(v["PQ"] @ v["QINV"]) + v["WALRAS"], one)
@@ -223,7 +225,7 @@ class Solution:
         """Expenditure-side GDP minus income-side GDP; zero at any solution."""
         v, p = self.values, self.params
         exr = v["EXR"][0]
-        expenditure = (v["PQ"] @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"])
+        expenditure = (v["PQ"] @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QER"])
                        + exr * (p["pwe"] @ v["QE"]) - exr * (p["pwm"] @ v["QM"]))
         income = (v["PVA"] @ v["QVA"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
                   + exr * (p["tm"] * p["pwm"] * v["QM"]).sum()
@@ -294,12 +296,9 @@ class Model:
         fail_if(~cm & (np.abs(tariffs) > tol), C, "import tariff recorded on a commodity without imports")
         tm = np.where(cm, tariffs / np.where(cm, QM0, 1.0), 0.0)
         exports = vec(C, [row])[:, 0]
-        ce = exports > tol
+        exported = exports > tol
         export_taxes = vec([mapping.exptax], C)[0]
-        fail_if(~ce & (np.abs(export_taxes) > tol), C, "export tax recorded on a commodity without exports")
-        te = np.where(ce, export_taxes / np.where(ce, exports, 1.0), 0.0)
-        QE0 = np.where(ce, exports - export_taxes, 0.0)
-        pwe = 1.0 / (1.0 - te)
+        fail_if(~exported & (np.abs(export_taxes) > tol), C, "export tax recorded on a commodity without exports")
 
         QA0 = np.array([sam.col_total(a) for a in A])
         fail_if(QA0 <= tol, A, "every activity needs positive output")
@@ -310,8 +309,17 @@ class Model:
         theta = MAKE0 / QA0[:, None]
         QX0 = MAKE0.sum(axis=0)
         cx = QX0 > tol
-        fail_if(ce & ~cx, C, "exports recorded for a commodity without domestic output")
         fail_if(~cx & ~cm, C, "a commodity has neither domestic output nor imports")
+        # Exports at least as large as domestic output are drawn from composite
+        # supply (CR, T9); other exports come from domestic output (CE, T1-T2)
+        cr = exported & (QX0 - (exports - export_taxes) <= tol)
+        fail_if(cr & (np.abs(export_taxes) > tol), C,
+                "export tax recorded on a commodity whose exports are at least its domestic output")
+        ce = exported & ~cr
+        te = np.where(ce, export_taxes / np.where(ce, exports, 1.0), 0.0)
+        QE0 = np.where(ce, exports - export_taxes, 0.0)
+        QER0 = np.where(cr, exports, 0.0)
+        pwe = 1.0 / (1.0 - te)
         QD0 = np.where(cx, QX0 - QE0, 0.0)
         fail_if(cx & (QD0 <= tol), C, "a commodity with domestic output needs positive domestic sales")
         PM0 = np.where(cm, 1.0 + tm, 0.0)
@@ -325,7 +333,7 @@ class Model:
         spend = SV.sum(axis=0)
         icm = (SV / np.where(spend > tol, spend, 1.0)[None, :]) @ MG / QQ0[None, :]
         demand = (vec(C, A).sum(axis=1) + vec(C, H).sum(axis=1)
-                  + vec(C, [gov])[:, 0] + vec(C, [sav])[:, 0] + QT0)
+                  + vec(C, [gov])[:, 0] + vec(C, [sav])[:, 0] + QT0 + QER0)
         if np.abs(QQ0 - demand).max() > tol:
             raise SAMError("composite supply does not equal domestic demand for some commodity")
 
@@ -435,7 +443,7 @@ class Model:
         cwts = QH0.sum(axis=1) / QH0.sum()
         dwts = QD0 / QD0.sum()
 
-        self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct,
+        self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct, "cr": cr,
                        "qint": QINT0 != 0, "qh": QH0 != 0}
         self.params = {
             "pwm": np.ones(nC), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
@@ -445,7 +453,7 @@ class Model:
             "shif": shif, "beta": beta, "tins0": tins0, "mps0": mps0,
             "shii": shii, "shir": shir, "hc": hc, "trdg": trdg, "trdr": trdr, "trfr": trfr,
             "trgr": np.array(trgr), "trrg": np.array(trrg), "trgg": np.array(trgg),
-            "qg": qg, "qinv": qinv, "cwts": cwts, "dwts": dwts, "icm": icm,
+            "qg": qg, "qinv": qinv, "cwts": cwts, "dwts": dwts, "icm": icm, "qer": QER0,
             "sigma_va": sigma_va, "sigma_q": sigma_q, "sigma_t": sigma_t,
         }
         s1 = np.ones(1)
@@ -462,7 +470,7 @@ class Model:
             "GSAV": np.atleast_1d(cell(sav, gov)), "FSAV": np.atleast_1d(cell(sav, row)),
             "TINS": tins0.copy(), "MPS": mps0.copy(),
             "TINSADJ": s1.copy(), "MPSADJ": s1.copy(), "IADJ": s1.copy(), "GADJ": s1.copy(),
-            "WFDIST": WFDIST0, "WALRAS": np.zeros(1), "QT": QT0,
+            "WFDIST": WFDIST0, "WALRAS": np.zeros(1), "QT": QT0, "QER": QER0.copy(),
         }
         self.exists = {name: np.ones(value.shape, dtype=bool) for name, value in self.base.items()}
         self.exists["PE"] = ce.copy()
@@ -474,6 +482,7 @@ class Model:
         for name in ("PX", "PD", "QX", "QD"):
             self.exists[name] = cx.copy()
         self.exists["QT"] = ct.copy()
+        self.exists["QER"] = cr.copy()
         self.exists["QINT"] = QINT0 != 0
         self.exists["QH"] = QH0 != 0
 
