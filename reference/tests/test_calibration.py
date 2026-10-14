@@ -107,8 +107,17 @@ def test_unmapped_account_is_rejected():
         mapping.validate(SAM.from_csv(SYNTHETIC_SAM))
 
 
-def test_activity_paired_with_wrong_commodity_is_rejected():
+def test_pairing_only_matters_for_rewrites():
+    # From version 0.1.4 activities may produce any commodity; the pairing names
+    # primary commodities for the layout rewrites only, so a different pairing
+    # gives the same model
+    standard = synthetic_model()
     mapping = synthetic_mapping()
     mapping.commodities = ["com_man", "com_agr", "com_ser"]
-    with pytest.raises(SAMError, match="paired"):
-        mapping.validate(SAM.from_csv(SYNTHETIC_SAM))
+    swapped = Model(SAM.from_csv(SYNTHETIC_SAM), mapping, 0.8, 2.0, 2.0)
+    assert swapped.max_residual(swapped.base) < 1e-12
+    order = [swapped.sets["C"].index(c) for c in standard.sets["C"]]
+    s1 = standard.solve(params={"tm": np.zeros(3)})
+    s2 = swapped.solve(params={"tm": np.zeros(3)})
+    assert np.allclose(s2["PQ"][order], s1["PQ"], rtol=1e-10)
+    assert np.allclose(s2.equivalent_variation(), s1.equivalent_variation(), rtol=1e-10)

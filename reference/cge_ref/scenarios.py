@@ -83,6 +83,35 @@ def margins_model(**elasticities) -> Model:
     return Model(SAM.from_csv(MARGINS_SAM), margins_mapping(), **settings)
 
 
+TERRITORIAL_SAM = REPO / "data" / "cge_synthetic_sam_tc.csv"
+MULTIPRODUCT_SAM = REPO / "data" / "cge_synthetic_sam_mp.csv"
+
+
+def territorial_mapping() -> Mapping:
+    """Mapping of the territorial layout: com_tc and act_tc are the correction."""
+    m = synthetic_mapping()
+    m.territorial = ["com_tc", "act_tc"]
+    return m
+
+
+def territorial_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(TERRITORIAL_SAM), territorial_mapping(), **settings)
+
+
+def multiproduct_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(MULTIPRODUCT_SAM), synthetic_mapping(), **settings)
+
+
+NONIMPORTED_SAM = REPO / "data" / "cge_synthetic_sam_cnm.csv"
+
+
+def nonimported_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(NONIMPORTED_SAM), synthetic_mapping(), **settings)
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -128,6 +157,12 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         solutions["inst_" + name] = solution
     for name, solution in run_simulations(margins_model()).items():
         solutions["margins_" + name] = solution
+    for name, solution in run_simulations(territorial_model()).items():
+        solutions["tc_" + name] = solution
+    for name, solution in run_simulations(multiproduct_model()).items():
+        solutions["mp_" + name] = solution
+    for name, solution in run_simulations(nonimported_model()).items():
+        solutions["cnm_" + name] = solution
     written = []
     for name, solution in solutions.items():
         if not solution.converged:

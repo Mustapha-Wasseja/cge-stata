@@ -43,3 +43,17 @@ assert r(N_accounts) == 15
 assert abs(r(total) - 1683) < 1e-9
 assert com_ser[3] == 120    // recorded output of act_ser
 assert act_ser[6] == -10    // negative use of its own product
+
+* Territorial-correction layout, with an inventory run-down
+cge_synthetic, clear territorial
+assert r(N_accounts) == 17
+assert abs(r(total) - 1742) < 1e-9
+assert row[4] == 9          // non-residents' purchases, in the row of act_tc
+assert hhd[8] == -5         // household consumption of the correction
+assert sav[5] == -2         // inventory run-down of com_agr
+
+* Multi-product layout: act_agr also produces com_man
+cge_synthetic, clear multiproduct
+assert r(N_accounts) == 15
+assert abs(r(total) - 1743) < 1e-9
+assert com_man[1] == 10

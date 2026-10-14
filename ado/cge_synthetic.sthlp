@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported}]
 
 
 {title:Options}
@@ -37,6 +37,21 @@ and to abroad, transfers within government, and negative savings. Map it with
 {opt margins} loads the standard SAM with 30 of margins netted out of the
 service activity: its output is recorded as 120 and its use of its own product
 as -10. Map it with {cmd:margins(act_ser)}.
+
+{phang}
+{opt territorial} loads a 17-account variant with a territorial correction
+({cmd:act_tc}, {cmd:com_tc}): residents' purchases abroad of 4, non-residents'
+purchases of 9, and household consumption of the correction of -5. It also has
+an inventory run-down of {cmd:com_agr} (-2). Map it with
+{cmd:territorial(com_tc act_tc)}.
+
+{phang}
+{opt multiproduct} loads the standard SAM with secondary production:
+{cmd:act_agr} also produces 10 of {cmd:com_man}.
+
+{phang}
+{opt nonimported} loads the standard SAM with {cmd:com_ser}, which pays sales
+tax, not imported: its imports move to {cmd:com_man}.
 
 
 {title:Description}

@@ -131,6 +131,70 @@ def build_margins_layout() -> tuple[list[str], list[list[float]]]:
     return labels, sam
 
 
+TERRITORIAL_ACCOUNTS = [
+    "act_agr", "act_man", "act_ser", "act_tc",
+    "com_agr", "com_man", "com_ser", "com_tc",
+    "lab", "cap",
+    "hhd", "gov",
+    "tax_dir", "tax_sal", "tax_imp",
+    "sav", "row",
+]
+
+# Changes to FLOWS for the territorial-correction layout: residents spend 4
+# abroad (imports of com_tc), non-residents spend 9 in the country (exports,
+# recorded in the row of act_tc), and household consumption of com_tc is the
+# net, -5; household savings rise and foreign savings fall to match. An
+# inventory run-down of com_agr (-2) is also included.
+TERRITORIAL_FLOWS = {
+    ("act_tc", "com_tc"): -9, ("act_tc", "row"): 9,
+    ("com_tc", "hhd"): -5, ("row", "com_tc"): 4,
+    ("sav", "hhd"): 37, ("sav", "row"): 10,
+    ("com_agr", "sav"): -2, ("com_man", "sav"): 47,
+    ("row", "com_agr"): 13, ("row", "com_man"): 67,
+}
+
+# Changes to FLOWS for the multi-product layout: act_agr also produces 10 of
+# com_man, and households buy 10 less com_agr and 10 more com_man.
+MULTIPRODUCT_FLOWS = {
+    ("act_agr", "com_agr"): 90, ("act_agr", "com_man"): 10,
+    ("com_agr", "hhd"): 60, ("com_man", "hhd"): 90,
+}
+
+
+# Changes to FLOWS for the non-imported layout: com_ser (which pays sales tax)
+# has no imports; its imports of 20 move to com_man, and households buy 20 less
+# com_ser and 20 more com_man.
+NONIMPORTED_FLOWS = {
+    ("row", "com_ser"): 0, ("row", "com_man"): 80,
+    ("com_ser", "hhd"): 60, ("com_man", "hhd"): 100,
+}
+
+
+def _layout(accounts, changes):
+    flows = {**FLOWS, **changes}
+    index = {name: i for i, name in enumerate(accounts)}
+    n = len(accounts)
+    sam = [[0.0] * n for _ in range(n)]
+    for (row, col), value in flows.items():
+        sam[index[row]][index[col]] = float(value)
+    return list(accounts), sam
+
+
+def build_territorial_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with a territorial correction and an inventory run-down."""
+    return _layout(TERRITORIAL_ACCOUNTS, TERRITORIAL_FLOWS)
+
+
+def build_multiproduct_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with secondary production of com_man by act_agr."""
+    return _layout(ACCOUNTS, MULTIPRODUCT_FLOWS)
+
+
+def build_nonimported_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with a non-imported commodity that pays sales tax."""
+    return _layout(ACCOUNTS, NONIMPORTED_FLOWS)
+
+
 INSTITUTION_ACCOUNTS = [
     "act_agr", "act_man", "act_ser",
     "com_agr", "com_man", "com_ser",
@@ -191,7 +255,10 @@ if __name__ == "__main__":
     for layout, filename in ((build, "cge_synthetic_sam.csv"),
                              (build_national_accounts_layout, "cge_synthetic_sam_na.csv"),
                              (build_institutions_layout, "cge_synthetic_sam_inst.csv"),
-                             (build_margins_layout, "cge_synthetic_sam_margins.csv")):
+                             (build_margins_layout, "cge_synthetic_sam_margins.csv"),
+                             (build_territorial_layout, "cge_synthetic_sam_tc.csv"),
+                             (build_multiproduct_layout, "cge_synthetic_sam_mp.csv"),
+                             (build_nonimported_layout, "cge_synthetic_sam_cnm.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))
         if worst > 1e-12:

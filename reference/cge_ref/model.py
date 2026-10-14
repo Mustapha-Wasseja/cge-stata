@@ -119,7 +119,7 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["P3"] = (v["PQ"] * (1 - p["tq"]) * v["QQ"],
                 v["PD"] * v["QD"] + np.where(cm, v["PM"] * v["QM"], 0.0), every_c)
     eq["P4"] = (v["PX"] * v["QX"], v["PD"] * v["QD"] + np.where(ce, v["PE"] * v["QE"], 0.0), every_c)
-    eq["P5"] = (v["PA"], v["PX"], every_a)
+    eq["P5"] = (v["PA"], p["theta"] @ v["PX"], every_a)
     eq["P6"] = (v["PINTA"], p["ica"].T @ v["PQ"], every_a)
     eq["P7"] = (v["PA"] * (1 - p["ta"]) * v["QA"], v["PVA"] * v["QVA"] + v["PINTA"] * v["QINTA"], every_a)
     eq["P8"] = (v["CPI"], np.atleast_1d(p["cwts"] @ v["PQ"]), one)
@@ -140,7 +140,7 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["Q4"] = (np.where(cd, wage * v["QF"], wage),
                 np.where(cd, p["delta_va"] * pvaqva, q4_ces), fa)
     eq["Q5"] = (v["QINT"], p["ica"] * v["QINTA"][None, :], np.ones(p["ica"].shape, dtype=bool))
-    eq["Q6"] = (v["QX"], v["QA"], every_c)
+    eq["Q6"] = (v["QX"], p["theta"].T @ v["QA"], every_c)
 
     # 5.3 Trade block
     rt, dt = p["rho_t"], p["delta_t"]
@@ -150,7 +150,7 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     rq, dq = p["rho_q"], p["delta_q"]
     eq["T4"] = (v["QQ"], p["aq"] * (dq * v["QM"] ** (-rq) + (1 - dq) * v["QD"] ** (-rq)) ** (-1 / rq), cm)
     eq["T5"] = (v["QM"], v["QD"] * ((v["PD"] / v["PM"]) * dq / (1 - dq)) ** (1 / (1 + rq)), cm)
-    eq["T6"] = (v["QQ"], v["QD"], ~cm)
+    eq["T6"] = (v["QQ"], p["aq"] * v["QD"], ~cm)
 
     # 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 - v["MPS"]) * (1 - v["TINS"]) * v["YI"]
@@ -249,7 +249,8 @@ class Model:
                         _per_element(sigma_t, C, "sigma_t"),
                         factor_quantities)
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
-        eqs = _equations(self.base, self.params, self.struct)
+        with np.errstate(all="ignore"):      # masked elements may divide by zero
+            eqs = _equations(self.base, self.params, self.struct)
         self.eq_masks = {k: np.broadcast_to(mask, np.shape(lhs)).copy() for k, (lhs, _, mask) in eqs.items()}
         self.eq_scale = {}
         for k, (lhs, rhs, _) in eqs.items():
@@ -293,7 +294,11 @@ class Model:
         if np.any(QA0 <= tol):
             raise SAMError("every activity needs positive output")
         ta = vec([mapping.acttax], A)[0] / QA0
-        QX0 = QA0.copy()
+        MAKE0 = vec(A, C)                      # MAKE0[a, c]: output of c by activity a
+        if np.abs(MAKE0.sum(axis=1) - QA0).max() > tol:
+            raise SAMError("activity output does not equal its sales to commodities")
+        theta = MAKE0 / QA0[:, None]
+        QX0 = MAKE0.sum(axis=0)
         QD0 = QX0 - QE0
         if np.any(QD0 <= tol):
             raise SAMError("version 0.1 needs positive domestic sales of every commodity")
@@ -359,7 +364,7 @@ class Model:
             raise ValueError("version 0.1 needs sigma_q different from 1 for imported commodities")
         rho_q = 1.0 / sigma_q - 1.0
         delta_q = np.full(n, 0.5)
-        aq = np.ones(n)
+        aq = QQ0 / QD0                     # non-imported commodities (T6)
         for k in np.flatnonzero(cm):
             r = rho_q[k]
             ratio = PM0[k] * (QM0[k] / QD0[k]) ** (1 + r)
@@ -410,7 +415,7 @@ class Model:
         self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd}
         self.params = {
             "pwm": np.ones(n), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
-            "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
+            "theta": theta, "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
             "at": at, "delta_t": delta_t, "rho_t": rho_t, "aq": aq, "delta_q": delta_q, "rho_q": rho_q,
             "shif": shif, "beta": beta, "tins0": tins0, "mps0": mps0,
             "shii": shii, "shir": shir, "hc": hc, "trdg": trdg, "trdr": trdr, "trfr": trfr,
@@ -447,11 +452,11 @@ class Model:
     # ------------------------------------------------------------------
     def residuals(self, values: dict, params: dict | None = None) -> dict[str, np.ndarray]:
         """Scaled residuals of every equation block, existing elements only."""
-        eqs = _equations(values, self.params if params is None else params, self.struct)
         out = {}
-        for k, (lhs, rhs, _) in eqs.items():
-            mask = self.eq_masks[k]
-            out[k] = ((lhs - rhs) / self.eq_scale[k])[mask]
+        with np.errstate(all="ignore"):      # masked elements may divide by zero
+            eqs = _equations(values, self.params if params is None else params, self.struct)
+            for k, (lhs, rhs, _) in eqs.items():
+                out[k] = ((lhs - rhs) / self.eq_scale[k])[self.eq_masks[k]]
         return out
 
     def max_residual(self, values: dict, params: dict | None = None) -> float:

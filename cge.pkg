@@ -38,3 +38,6 @@ F data/cge_synthetic_sam.csv
 F data/cge_synthetic_sam_na.csv
 F data/cge_synthetic_sam_inst.csv
 F data/cge_synthetic_sam_margins.csv
+F data/cge_synthetic_sam_tc.csv
+F data/cge_synthetic_sam_mp.csv
+F data/cge_synthetic_sam_cnm.csv

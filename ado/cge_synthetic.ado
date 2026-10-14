@@ -1,4 +1,4 @@
-*! cge_synthetic.ado  v0.1.3  2026-10-14
+*! cge_synthetic.ado  v0.1.4  2026-10-14
 *! cge-stata: load the synthetic social accounting matrix (SAM)
 *! Loads the bundled synthetic SAM and checks that every account balances
 *!
@@ -7,10 +7,11 @@
 
 program define cge_synthetic, rclass
     version 13.0
-    syntax [, CLEAR NATional INStitutions MARgins]
+    syntax [, CLEAR NATional INStitutions MARgins TERritorial MULTiproduct NONimported]
 
-    if ("`national'" != "") + ("`institutions'" != "") + ("`margins'" != "") > 1 {
-        display as error "choose only one of national, institutions and margins"
+    if ("`national'" != "") + ("`institutions'" != "") + ("`margins'" != "") ///
+        + ("`territorial'" != "") + ("`multiproduct'" != "") + ("`nonimported'" != "") > 1 {
+        display as error "choose only one layout"
         exit 198
     }
     local file cge_synthetic_sam.csv
@@ -26,6 +27,18 @@ program define cge_synthetic, rclass
     if "`margins'" != "" {
         local file cge_synthetic_sam_margins.csv
         local layout "margins layout"
+    }
+    if "`territorial'" != "" {
+        local file cge_synthetic_sam_tc.csv
+        local layout "territorial-correction layout"
+    }
+    if "`multiproduct'" != "" {
+        local file cge_synthetic_sam_mp.csv
+        local layout "multi-product layout"
+    }
+    if "`nonimported'" != "" {
+        local file cge_synthetic_sam_cnm.csv
+        local layout "non-imported layout"
     }
     quietly findfile `file'
     local samfile `"`r(fn)'"'

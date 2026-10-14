@@ -87,10 +87,55 @@ _ALLOWED |= _TRANSFERS
 # cells that may be negative (transfers and tax-account payments).
 _MAY_BE_NEGATIVE = {"dirtax", "saltax", "imptax", "exptax", "acttax", "sav"}
 _NEGATIVE_CELLS = _TRANSFERS | {("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"),
-                                ("gov", "exptax"), ("gov", "acttax")}
+                                ("gov", "exptax"), ("gov", "acttax"), ("com", "sav"),
+                                ("act", "com")}
 
 TAX_ROLES = ("dirtax", "saltax", "imptax", "exptax", "acttax")
 COMMODITY_TAXES = ("saltax", "imptax", "exptax")
+
+
+def _territorial(values: np.ndarray, sam: "SAM", m: "Mapping") -> dict[str, float]:
+    """Rewrite 4 of model_spec.md, 7.0: the territorial correction (in place)."""
+    if len(m.territorial) not in (1, 2):
+        raise SAMError("territorial needs the correction commodity and, optionally, its activity")
+    mapped = {*m.activities, *m.commodities, *m.factors, *m.households, *m.enterprises,
+              m.government, m.savinv, m.row}
+    mapped |= {getattr(m, t) for t in TAX_ROLES if getattr(m, t) is not None}
+    for name in m.territorial:
+        sam.index(name)
+        if name in mapped:
+            raise SAMError(f"territorial: {name} is also mapped to a role")
+    tol = 1e-9 * max(1.0, float(np.abs(values).max()))
+    c, r = sam.index(m.territorial[0]), sam.index(m.row)
+    if len(m.territorial) == 2:
+        a = sam.index(m.territorial[1])
+        x = values[a, r]
+        values[c, r] += x
+        values[a, c] += x
+        values[a, r] = 0.0
+        if np.abs(values[a, :]).max() > tol or np.abs(values[:, a]).max() > tol:
+            raise SAMError(f"territorial: {m.territorial[1]} still has flows after its exports are moved")
+    H = [sam.index(h) for h in m.households]
+    imports, exports = values[r, c], values[c, r]
+    consumption = values[c, H].copy()
+    other_row = values[c, :].copy()
+    other_row[H] = 0.0
+    other_row[r] = 0.0
+    other_col = values[:, c].copy()
+    other_col[r] = 0.0
+    if np.abs(other_row).max() > tol or np.abs(other_col).max() > tol:
+        raise SAMError(f"territorial: {m.territorial[0]} may have only household consumption, "
+                       "imports and exports")
+    total = consumption.sum()
+    if abs(total) <= tol:
+        raise SAMError(f"territorial: households have no consumption of {m.territorial[0]}")
+    share = consumption / total
+    values[r, H] += share * imports
+    values[H, r] += share * exports
+    values[c, H] = 0.0
+    values[c, r] = 0.0
+    values[r, c] = 0.0
+    return {"territorial_imports": float(imports), "territorial_exports": float(exports)}
 
 
 def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str, float]]:
@@ -142,6 +187,9 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
     if m.margins:
         notes["margins"] = netted
 
+    if m.territorial:
+        notes.update(_territorial(values, sam, m))
+
     g = sam.index(m.government)
     for tax in direct:
         payers = {"dirtax": [*m.households, *m.enterprises],
@@ -184,6 +232,7 @@ class Mapping:
     acttax: str | None = None
     enterprises: list[str] = dataclasses.field(default_factory=list)
     margins: list[str] = dataclasses.field(default_factory=list)
+    territorial: list[str] = dataclasses.field(default_factory=list)
 
     def roles(self) -> dict[str, str]:
         """Role of every mapped account."""
@@ -246,11 +295,6 @@ class Mapping:
                     raise SAMError(
                         f"flow from '{c_label}' ({c_role}) to '{r_label}' ({r_role}) "
                         "is not represented in the version 0.1 model"
-                    )
-                if r_role == "act" and pair[r_label] != c_label:
-                    raise SAMError(
-                        f"activity '{r_label}' receives payment from '{c_label}', "
-                        f"but it is paired with '{pair[r_label]}'"
                     )
                 if value < 0 and r_role not in _MAY_BE_NEGATIVE and (r_role, c_role) not in _NEGATIVE_CELLS:
                     raise SAMError(f"negative flow from '{c_label}' to '{r_label}'")

@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt enterprises(names)} {opt margins(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
+[{opt enterprises(names)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
 {opt report(filename)} {opt replace}]
 
 {pstd}
@@ -29,7 +29,6 @@ of the model and checks the SAM against the flows the model represents
 {p 8 12 2}- accounts that are not balanced;{p_end}
 {p 8 12 2}- accounts with flows but no role;{p_end}
 {p 8 12 2}- non-zero cells that are flows the model does not represent;{p_end}
-{p 8 12 2}- activities paid by a commodity other than the one they are paired with (secondary production);{p_end}
 {p 8 12 2}- negative cells where the model needs non-negative values.{p_end}
 
 {pstd}
@@ -53,8 +52,10 @@ see the tax options below. The SAM in memory is not changed.
 
 {phang}
 {opt activities()} and {opt commodities()} list the activity and commodity
-accounts. They are paired by position: the first activity produces the first
-commodity, and so on. Version 0.1 requires one commodity for each activity.
+accounts, paired by position: each activity's primary commodity, used when
+rewriting national-accounts layouts. An activity may also produce other
+commodities, in fixed proportions taken from the SAM. One commodity is needed for
+each activity.
 
 {phang}
 {opt factors()} and {opt households()} list the factor and household accounts.
@@ -80,6 +81,15 @@ transport services, as the SAM records them (docs/model_spec.md, Section 7.0).
 The activity's own use of its product cannot be separated from the netted
 margins and becomes zero. Naming an activity without a negative use of its own
 product is an error.
+
+{phang}
+{opt territorial(commodity [activity])} names the territorial-correction
+commodity and, optionally, its activity. The correction's imports (residents'
+purchases abroad) become household payments to the rest of the world, and its
+exports (non-residents' purchases in the country) become transfers from the rest
+of the world to households, divided among households in proportion to their
+consumption of the correction. The correction accounts then have no flows and
+must not be mapped to other roles.
 
 {phang}
 {opt dirtax()}, {opt saltax()}, {opt imptax()}, {opt exptax()} and

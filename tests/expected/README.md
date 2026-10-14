@@ -13,6 +13,9 @@ relative tolerance of 1e-6.
 | `foreign_savings_down20.csv` | foreign savings reduced by 20 per cent |
 | `agri_productivity_up5.csv` | value-added efficiency of `act_agr` raised by 5 per cent |
 | `mixed_tariff_removal.csv` | all import tariff rates set to zero, with sector-specific elasticities (below) |
+| `tc_*.csv` | the five shocks on the territorial-correction layout (`data/cge_synthetic_sam_tc.csv`, with an inventory run-down) |
+| `mp_*.csv` | the five shocks on the multi-product layout (`data/cge_synthetic_sam_mp.csv`) |
+| `cnm_*.csv` | the five shocks on the non-imported layout (`data/cge_synthetic_sam_cnm.csv`: a non-imported commodity with sales tax) |
 | `margins_*.csv` | the five shocks on the margins layout (`data/cge_synthetic_sam_margins.csv`: margins netted out of `act_ser`) |
 | `inst_*.csv` | the five shocks above on the institutions layout (`data/cge_synthetic_sam_inst.csv`: an enterprise and a non-profit institution) |
 

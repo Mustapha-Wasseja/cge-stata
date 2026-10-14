@@ -126,11 +126,13 @@ capture cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man
     dirtax(tax_dir) saltax(tax_sal)
 assert _rc == 459
 
-* Activity paired with the wrong commodity
-capture cge_map, activities(act_agr act_man act_ser) commodities(com_man com_agr com_ser) ///
+* A different pairing is allowed from version 0.1.4: it only names primary
+* commodities, and activities may produce any commodity
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_man com_agr com_ser) ///
     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)                 ///
     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
-assert _rc == 459
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert r(max_residual) < 1e-12
 
 * Cobb-Douglas Armington function is not available in version 0.1
 quietly cge_map, `mapopts'
@@ -209,6 +211,30 @@ capture cge_map, `mapopts' margins(act_agr)
 assert _rc == 459
 capture cge_map, `mapopts' margins(com_ser)
 assert _rc == 198
+
+* Territorial correction: amounts rewritten, and errors
+cge_synthetic, clear territorial
+quietly cge_sam, labels(account)
+cge_map, `mapopts' territorial(com_tc act_tc)
+assert r(territorial_imports) == 4 & r(territorial_exports) == 9
+capture cge_map, `mapopts'
+assert _rc == 459
+capture cge_map, `mapopts' territorial(com_ser)
+assert _rc == 198
+capture cge_map, `mapopts' territorial(com_tc act_tc lab)
+assert _rc == 198
+
+* Negative secondary sale: kept as a negative yield, with a note
+cge_synthetic, clear multiproduct
+quietly replace com_agr = -1 in 3      // act_ser sells -1 of com_agr
+quietly replace com_ser = 151 in 3     // and 1 more com_ser
+quietly replace hhd = hhd - 1 in 4     // households buy 1 less com_agr
+quietly replace hhd = hhd + 1 in 6     // and 1 more com_ser
+quietly cge_sam, labels(account)
+cge_map, `mapopts'
+assert r(N_negative_sales) == 1
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert r(max_residual) < 1e-12
 
 * Commands in the wrong order
 cge_synthetic, clear

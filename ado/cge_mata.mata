@@ -16,7 +16,7 @@ mata:
 struct cge_par {
     real colvector pwm, pwe, tm, te, tq, ta
     real colvector iva, inta, ad, rva, sva
-    real matrix    ica, dva
+    real matrix    ica, dva, theta
     real colvector at, dt, rt, aq, dq, rq, sq, st
     real matrix    shif, beta
     real colvector tins0, mps0, shir, hc, trdg, trdr, trfr, qg, qinv, cwts, dwts
@@ -33,7 +33,7 @@ struct cge_model {
     real colvector   iA, iC, iF, iH
     real scalar      igov, isav, irow, idirtax, isaltax, iimptax, iexptax, iacttax
     string colvector A, C, F, H, I
-    real colvector   iE, imargins
+    real colvector   iE, imargins, iterritorial
     string colvector E, D
     real scalar      n, nF, nH, nE, nD, nI
     // model structure
@@ -314,10 +314,13 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
               string scalar ents,
               string scalar gov, string scalar sav, string scalar row, string scalar dirtax,
               string scalar saltax, string scalar imptax, string scalar exptax, string scalar acttax,
-              string scalar margins, string scalar reportfile, real scalar replace)
+              string scalar margins, string scalar territorial, string scalar reportfile,
+              real scalar replace)
 {
     struct cge_model scalar M
-    real colvector role, iA, iC, imarg
+    real colvector role, iA, iC, imarg, iterr, mapped, restc
+    real rowvector hcons, rest, share
+    real scalar ct, at, timp, texp, negsales, negtotal
     real matrix allowed, negok, transfers, S, issues
     string rowvector rolename, taxname
     real scalar i, j, k, tol, nacc, rr, rc, x
@@ -357,7 +360,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         _cge_fail("only one of saltax(), imptax() and exptax() may name the government account", 198)
     }
     labels = M.labels0
-    M.rewritten = J(1, 7, 0)
+    M.rewritten = J(1, 9, 0)
     for (k = 1; k <= rows(M.iA); k++) {
         x = S[M.iA[k], M.irow]
         if (x != 0) {
@@ -383,6 +386,49 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         M.rewritten[7] = M.rewritten[7] - x
     }
     M.imargins = imarg
+
+    // Territorial correction: commodity, then optionally its activity
+    iterr = _cge_lookup(M, territorial, "territorial correction")
+    if (rows(iterr) > 2) _cge_fail("territorial() takes the correction commodity and, optionally, its activity", 198)
+    if (rows(iterr)) {
+        mapped = M.iA \ M.iC \ M.iF \ M.iH \ M.iE \ M.igov \ M.isav \ M.irow \ select(taxidx, taxidx :> 0)
+        for (k = 1; k <= rows(iterr); k++) {
+            if (anyof(mapped, iterr[k])) _cge_fail("territorial(): " + M.labels0[iterr[k]] + " is also mapped to a role", 198)
+        }
+        tol = 1e-9 * max((1, max(abs(S))))
+        ct = iterr[1]
+        if (rows(iterr) == 2) {
+            at = iterr[2]
+            x = S[at, M.irow]
+            S[ct, M.irow] = S[ct, M.irow] + x
+            S[at, ct] = S[at, ct] + x
+            S[at, M.irow] = 0
+            if (max(abs(S[at, .])) > tol | max(abs(S[., at])) > tol) {
+                _cge_fail("territorial(): " + M.labels0[at] + " still has flows after its exports are moved", 459)
+            }
+        }
+        timp = S[M.irow, ct]
+        texp = S[ct, M.irow]
+        hcons = S[ct, M.iH']
+        rest = S[ct, .]
+        rest[M.iH'] = J(1, rows(M.iH), 0)
+        rest[M.irow] = 0
+        restc = S[., ct]
+        restc[M.irow] = 0
+        if (max(abs(rest)) > tol | max(abs(restc)) > tol) {
+            _cge_fail("territorial(): " + M.labels0[ct] + " may have only household consumption, imports and exports", 459)
+        }
+        if (abs(sum(hcons)) <= tol) _cge_fail("territorial(): households have no consumption of " + M.labels0[ct], 459)
+        share = hcons :/ sum(hcons)
+        S[M.irow, M.iH'] = S[M.irow, M.iH'] + share :* timp
+        S[M.iH, M.irow] = S[M.iH, M.irow] + share' :* texp
+        S[ct, M.iH'] = J(1, rows(M.iH), 0)
+        S[ct, M.irow] = 0
+        S[M.irow, ct] = 0
+        M.rewritten[8] = timp
+        M.rewritten[9] = texp
+    }
+    M.iterritorial = iterr
     taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax")
     for (k = 1; k <= 5; k++) {
         if (!direct[k]) continue
@@ -460,6 +506,8 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     negok = transfers
     negok[(6, 8, 9, 10, 11, 12), .] = J(6, 14, 1)
     negok[5, (8, 9, 10, 11, 12)] = J(1, 5, 1)
+    negok[2, 6] = 1         // investment demand: a fall in inventories
+    negok[1, 2] = 1         // sales of commodities by activities: negative yields
 
     for (i = 1; i <= nacc; i++) {
         for (j = 1; j <= nacc; j++) {
@@ -470,16 +518,23 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
                 issues = issues \ (2, i, j, S[i, j])
                 continue
             }
-            if (rr == 1) {
-                k = _cge_find(M.labels[M.iA], M.labels[i])
-                if (M.iC[k] != j) {
-                    issues = issues \ (3, i, j, S[i, j])
-                    continue
-                }
-            }
             if (S[i, j] < 0 & !negok[rr, rc]) issues = issues \ (4, i, j, S[i, j])
         }
     }
+    // Note on negative sales of commodities by activities (negative yields)
+    negsales = 0
+    negtotal = 0
+    for (i = 1; i <= rows(M.iA); i++) {
+        for (j = 1; j <= rows(M.iC); j++) {
+            if (S[M.iA[i], M.iC[j]] < -tol) {
+                negsales = negsales + 1
+                negtotal = negtotal + S[M.iA[i], M.iC[j]]
+                printf("{txt}Note: negative sale of %s by %s ({res}%g{txt}), kept as a negative yield\n",
+                       M.labels[M.iC[j]], M.labels[M.iA[i]], S[M.iA[i], M.iC[j]])
+            }
+        }
+    }
+    st_numscalar("r(N_negative_sales)", negsales)
     if (reportfile != "") _cge_map_save(M, issues, role, rolename, reportfile, replace)
     if (rows(issues)) {
         _cge_map_report(M, issues, role, rolename)
@@ -526,7 +581,15 @@ void _cge_map_rewrites(struct cge_model scalar M)
     for (k = 2; k <= 6; k++) {
         if (_cge_find(M.labels, account[k])) printf("{txt}%s: {res}%g\n", what[k], M.rewritten[k])
     }
+    if (rows(M.iterritorial)) {
+        printf("{txt}Territorial correction %s: purchases abroad by residents, now household payments abroad: {res}%g\n",
+               M.labels0[M.iterritorial[1]], M.rewritten[8])
+        printf("{txt}Territorial correction %s: purchases by non-residents, now transfers from abroad to households: {res}%g\n",
+               M.labels0[M.iterritorial[1]], M.rewritten[9])
+    }
     st_numscalar("r(exports_moved)", M.rewritten[1])
+    st_numscalar("r(territorial_imports)", M.rewritten[8])
+    st_numscalar("r(territorial_exports)", M.rewritten[9])
     st_numscalar("r(margins_moved)", M.rewritten[7])
     st_numscalar("r(taxes_rerouted)", sum(M.rewritten[(2, 3, 4, 5, 6)]))
 }
@@ -691,7 +754,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "P2", PE, p.pwe :* (1 :- p.te) :* EXR, M.ce)
     _cge_put(M, L, R, K, record, "P3", PQ :* (1 :- p.tq) :* QQ, PD :* QD + M.cm :* PM :* QM, oneC)
     _cge_put(M, L, R, K, record, "P4", PX :* QX, PD :* QD + M.ce :* PE :* QE, oneC)
-    _cge_put(M, L, R, K, record, "P5", PA, PX, oneA)
+    _cge_put(M, L, R, K, record, "P5", PA, p.theta * PX, oneA)
     _cge_put(M, L, R, K, record, "P6", PINTA, p.ica' * PQ, oneA)
     _cge_put(M, L, R, K, record, "P7", PA :* (1 :- p.ta) :* QA, PVA :* QVA + PINTA :* QINTA, oneA)
     _cge_put(M, L, R, K, record, "P8", CPI, p.cwts' * PQ, 1)
@@ -720,7 +783,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     }
     _cge_put(M, L, R, K, record, "Q4", lhs, rhs, M.fa)
     _cge_put(M, L, R, K, record, "Q5", QINT, p.ica :* QINTA', J(M.n, M.n, 1))
-    _cge_put(M, L, R, K, record, "Q6", QX, QA, oneC)
+    _cge_put(M, L, R, K, record, "Q6", QX, p.theta' * QA, oneC)
 
     // 5.3 Trade block
     _cge_put(M, L, R, K, record, "T1", QX,
@@ -732,7 +795,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
              p.aq :* (p.dq :* (QM :^ (-p.rq)) + (1 :- p.dq) :* (QD :^ (-p.rq))) :^ (-1 :/ p.rq), M.cm)
     _cge_put(M, L, R, K, record, "T5", QM,
              QD :* (((PD :/ PM) :* p.dq :/ (1 :- p.dq)) :^ (1 :/ (1 :+ p.rq))), M.cm)
-    _cge_put(M, L, R, K, record, "T6", QQ, QD, 1 :- M.cm)
+    _cge_put(M, L, R, K, record, "T6", QQ, p.aq :* QD, 1 :- M.cm)
 
     // 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 :- MPS) :* (1 :- TINS) :* YI
@@ -791,7 +854,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
 {
     struct cge_model scalar M
     struct cge_par scalar p
-    real matrix S, VA, QINT0, QF0, QFq, WFD0, dva, YIF0, QH0, w, TR
+    real matrix S, VA, QINT0, QF0, QFq, WFD0, dva, YIF0, QH0, w, TR, MAKE0
     real colvector sva, sq, st, QM0, cm, tariffs, tm, exports, ce, etax, te, QE0, pwe
     real colvector QA0, ta, QX0, QD0, PM0, stax, QQ0, tq, demand, QINTA0, W0, QVA0
     real colvector cd, rva, ad, rt, dt, at, rq, dq, aq, YF0, YI0, tins0, mps0, EH0
@@ -828,7 +891,10 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     QA0 = colsum(S[., M.iA])'
     if (min(QA0) <= tol) _cge_fail("every activity needs positive output", 459)
     ta = _cge_sub(S, M.iacttax, M.iA)' :/ QA0
-    QX0 = QA0
+    MAKE0 = _cge_sub(S, M.iA, M.iC)                 // MAKE0[a, c]: output of c by a
+    if (max(abs(rowsum(MAKE0) - QA0)) > tol) _cge_fail("activity output does not equal its sales to commodities", 459)
+    p.theta = MAKE0 :/ QA0
+    QX0 = colsum(MAKE0)'
     QD0 = QX0 - QE0
     if (min(QD0) <= tol) _cge_fail("version 0.1 needs positive domestic sales of every commodity", 459)
     PM0 = cm :* (1 :+ tm)
@@ -900,7 +966,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     if (max(cm :* (abs(sq :- 1) :< 1e-12))) _cge_fail("version 0.1 needs sigmaq different from 1 for imported commodities", 198)
     rq = 1 :/ sq :- 1
     dq = J(n, 1, 0.5)
-    aq = J(n, 1, 1)
+    aq = QQ0 :/ QD0                         // non-imported commodities (T6)
     for (k = 1; k <= n; k++) {
         if (!cm[k]) continue
         r = rq[k]

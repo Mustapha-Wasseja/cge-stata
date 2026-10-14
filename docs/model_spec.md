@@ -15,9 +15,10 @@ structure is taken from that literature; no data from either source are used.
 
 Included:
 
-- Activities and commodities as separate SAM accounts, with each activity
-  producing exactly one commodity and each commodity produced by exactly one
-  activity.
+- Activities and commodities as separate SAM accounts. From version 0.1.4 an
+  activity may produce several commodities in fixed proportions (its yields),
+  and a commodity may have several producers; each activity is paired with a
+  primary commodity, used when rewriting national-accounts layouts.
 - Two-level production: Leontief between value added and aggregate intermediate
   input; CES (or Cobb-Douglas) value added over factors; Leontief intermediate
   inputs.
@@ -40,17 +41,16 @@ Included:
 - Selectable closures for the external account, government, savings-investment,
   factor markets and the numeraire.
 
-Deferred to later versions: multi-product activities and commodities with
-several producers; commodities that are not produced domestically, or that are
-produced but not sold domestically; trade and transport margins; linear
-expenditure system (LES) demand; recursive dynamics.
+Deferred to later versions: commodities that are not produced domestically,
+or that are produced but not sold domestically; a margin mechanism by product
+and market; linear expenditure system (LES) demand; recursive dynamics.
 
 ## 2. Sets
 
 | Set | Description |
 |---|---|
 | $A$ | activities |
-| $C$ | commodities; $c(a)$ is the commodity produced by activity $a$, and $a(c)$ the activity producing $c$ |
+| $C$ | commodities; $c(a)$ is the primary commodity of activity $a$ (activities and commodities are paired by position in the mapping) |
 | $CE \subseteq C$ | exported commodities (base exports > 0) |
 | $CNE = C \setminus CE$ | non-exported commodities |
 | $CM \subseteq C$ | imported commodities (base imports > 0) |
@@ -125,6 +125,7 @@ Incomes, rates and adjustment variables
 |---|---|
 | $pwm_c$, $pwe_c$ | world import and export prices (foreign currency) |
 | $tm_c$, $te_c$, $tq_c$, $ta_a$ | import, export, sales and activity tax rates |
+| $\theta_{ac}$ | yield: output of commodity $c$ per unit of activity $a$ |
 | $iva_a$, $inta_a$ | value added and aggregate intermediate input per unit of activity |
 | $ica_{ca}$ | intermediate input $c$ per unit of aggregate intermediate input of $a$ |
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
@@ -167,7 +168,7 @@ $$PX_c\,QX_c = PD_c\,QD_c + PE_c\,QE_c \tag{P4}$$
 
 where the export term applies only for $c \in CE$.
 
-$$PA_a = PX_{c(a)} \tag{P5}$$
+$$PA_a = \sum_c \theta_{ac}\,PX_c \tag{P5}$$
 
 $$PINTA_a = \sum_{c} PQ_c\,ica_{ca} \tag{P6}$$
 
@@ -197,7 +198,10 @@ $$W_f\,WFDIST_{fa}\,QF_{fa} = \delta^{va}_{fa}\,PVA_a\,QVA_a \tag{Q4'}$$
 
 $$QINT_{ca} = ica_{ca}\,QINTA_a \tag{Q5}$$
 
-$$QX_{c(a)} = QA_a \tag{Q6}$$
+$$QX_c = \sum_a \theta_{ac}\,QA_a \tag{Q6}$$
+
+Output of a commodity from different activities is a perfect substitute and
+sells at one producer price $PX_c$.
 
 ### 5.3 Trade block
 
@@ -219,7 +223,14 @@ $$\frac{QM_c}{QD_c} = \left[\frac{PD_c}{PM_c}\cdot\frac{\delta^{q}_c}{1-\delta^{
 
 For non-imported commodities, $c \in CNM$:
 
-$$QQ_c = QD_c \tag{T6}$$
+$$QQ_c = aq_c\,QD_c \tag{T6}$$
+
+Here $aq_c = QQ^0_c / QD^0_c$ (Section 7.4). With all base prices normalised to
+one, a sales tax on a non-imported commodity makes composite supply exceed
+domestic sales in value units, $QQ^0_c = QD^0_c + SAM(tax_{sal}, c)$, so the
+coefficient is not one. (Before version 0.1.4 this equation read
+$QQ_c = QD_c$, which fails benchmark replication for non-imported commodities
+with a sales tax.)
 
 ### 5.4 Institution block
 
@@ -308,25 +319,30 @@ Stata implementation lists every such flow, grouped by role, before stopping.
 
 | Paid by (column) | Received by (row) |
 |---|---|
-| commodity $c$ | the activity paired with $c$; rest of world (imports); import, sales and export tax accounts |
+| commodity $c$ | activities (domestic output); rest of world (imports); import, sales and export tax accounts |
 | activity | commodities (intermediate inputs); factors; activity tax account |
 | factor | households; enterprises; government; rest of world |
 | household | commodities; direct tax account; savings-investment; households and enterprises (transfers); rest of world (transfers) |
 | enterprise | direct tax account; savings-investment; households and enterprises (transfers); rest of world (transfers) |
 | government | commodities; households and enterprises (transfers); government (internal transfers); rest of world (transfers); savings-investment |
 | tax account | government |
-| savings-investment | commodities (investment) |
+| savings-investment | commodities (investment, including changes in inventories) |
 | rest of world | commodities (exports); households, enterprises and government (transfers); factors (factor income from abroad); savings-investment |
 
 Negative cells are allowed only in tax rows, the savings-investment row,
 transfer cells (the flows labelled "transfers" above, and factor income from
-abroad) and tax-account payments to the government. In version 0.1 every activity needs
+abroad), tax-account payments to the government, investment demand (from
+version 0.1.4, for a fall in inventories; investment demand, including
+inventory changes, is scaled by $IADJ$) and sales of commodities by activities
+(from version 0.1.4: a negative entry in the make matrix gives a negative yield;
+the mapping report lists such cells as a note, and each activity's output and
+each commodity's domestic output must still be positive). In version 0.1 every activity needs
 positive output and value added, and every commodity needs positive domestic
 sales ($QD^0_c > 0$).
 
 #### Layouts rewritten before the checks (from version 0.1.1)
 
-National SAMs often record three kinds of flow differently. They are rewritten
+National SAMs often record four kinds of flow differently. They are rewritten
 into the standard layout before the checks above:
 
 1. **Exports recorded as sales by activities.** A cell $SAM(a, row)$ is treated
@@ -363,9 +379,29 @@ into the standard layout before the checks above:
    the SAM attributes them; a margin mechanism by product and market requires
    margin data from supply-use tables.
 
-Rewrites 1 and 2 leave every total that enters the model unchanged; rewrite 3
-raises the margin activities' output and the supply and demand of their
-products by the margins. The mapping report lists the amounts rewritten.
+4. **Territorial correction (from version 0.1.4).** National accounts move
+   household consumption from the territory to the residents' concept with a
+   correction account: residents' purchases abroad are recorded as its imports,
+   non-residents' purchases in the country as its exports (sometimes in the row
+   of a matching activity), and the net as a negative household consumption of
+   the correction. For the commodity (and, optionally, activity) named in the
+   mapping's territorial option, the activity's exports are first moved to the
+   commodity (rewrite 1), and the activity must then have no flows. Let $IM$ be
+   the commodity's imports, $EX$ its exports and $HC_h$ household $h$'s
+   consumption of it, with $\sum_h HC_h = IM - EX$; the commodity may have no
+   other flows. Each household's share is $s_h = HC_h / \sum_h HC_h$.
+   Residents' purchases abroad become household payments to the rest of the
+   world, $SAM(row, h) \mathrel{+}= s_h\,IM$, and non-residents' purchases become
+   transfers from the rest of the world to households,
+   $SAM(h, row) \mathrel{+}= s_h\,EX$; the correction's cells are then set to
+   zero. Household consumption of other commodities, which includes
+   non-residents' purchases, is unchanged.
+
+Rewrites 1, 2 and 4 leave every total that enters the model unchanged, except
+that rewrite 4 replaces the correction's imports, exports and negative
+consumption by transfers; rewrite 3 raises the margin activities' output and the
+supply and demand of their products by the margins. The mapping report lists
+the amounts rewritten.
 
 ### 7.1 Normalisation
 
@@ -379,7 +415,8 @@ quantities are supplied (Section 7.7).
 - $te_c = SAM(tax_{exp}, c) / SAM(c, row)$; $QE^0_c = SAM(c, row) - SAM(tax_{exp}, c)$;
   $pwe_c = 1/(1 - te_c)$.
 - $QA^0_a$ = column total of activity $a$; $ta_a = SAM(tax_{act}, a) / QA^0_a$.
-- $QX^0_{c(a)} = QA^0_a$ and $QD^0_c = QX^0_c - QE^0_c$.
+- Yields $\theta_{ac} = SAM(a, c) / QA^0_a$; $QX^0_c = \sum_a SAM(a, c)$ and
+  $QD^0_c = QX^0_c - QE^0_c$.
 - $QQ^0_c = QD^0_c + PM^0_c\,QM^0_c + SAM(tax_{sal}, c)$ and
   $tq_c = SAM(tax_{sal}, c) / QQ^0_c$.
 
@@ -403,7 +440,8 @@ verify this identity, not assume it.
 - $\delta^{t}_c = 1 / \left[1 + (PD^0_c/PE^0_c)\,(QE^0_c/QD^0_c)^{\rho^{t}_c-1}\right]$;
   $at_c = QX^0_c / \left[\delta^{t}_c\,(QE^0_c)^{\rho^{t}_c} + (1-\delta^{t}_c)\,(QD^0_c)^{\rho^{t}_c}\right]^{1/\rho^{t}_c}$.
 - $\delta^{q}_c = \dfrac{(PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}{1 + (PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}$;
-  $aq_c = QQ^0_c / \left[\delta^{q}_c\,(QM^0_c)^{-\rho^{q}_c} + (1-\delta^{q}_c)\,(QD^0_c)^{-\rho^{q}_c}\right]^{-1/\rho^{q}_c}$.
+  $aq_c = QQ^0_c / \left[\delta^{q}_c\,(QM^0_c)^{-\rho^{q}_c} + (1-\delta^{q}_c)\,(QD^0_c)^{-\rho^{q}_c}\right]^{-1/\rho^{q}_c}$
+  for imported commodities, and $aq_c = QQ^0_c / QD^0_c$ for non-imported ones.
 
 ### 7.5 Institutions
 

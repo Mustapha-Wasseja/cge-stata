@@ -8,10 +8,11 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.3 implements the standard static model described in
+Version 0.1.4 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
-- CES or Cobb-Douglas value added, Leontief intermediate inputs;
+- CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
+  produce several commodities in fixed proportions (version 0.1.4);
 - CET transformation between exports and domestic sales, Armington aggregation
   of imports and domestic goods;
 - households with Cobb-Douglas demand (non-profit institutions can be mapped as
@@ -22,19 +23,22 @@ Version 0.1.3 implements the standard static model described in
 - selectable closures for the external account, government, savings-investment,
   the numeraire and each factor (mobile, activity-specific or unemployed);
 - SAMs in national-accounts layout: exports recorded as sales by activities,
-  taxes paid directly to the government account (version 0.1.1), and trade and
-  transport margins netted out of the margin activities (version 0.1.3).
+  taxes paid directly to the government account (version 0.1.1), trade and
+  transport margins netted out of the margin activities (version 0.1.3), the
+  territorial correction and inventory run-downs (version 0.1.4).
 
 | Milestone | Status |
 |---|---|
 | Model specification | complete |
 | Python reference implementation and validation suite | complete |
 | Stata/Mata implementation | complete; agrees with the reference to about 1e-13 |
-| Application to country SAMs | first trial: multi-product activities, the territorial correction and inventory changes still needed (version 0.2) |
+| Application to country SAMs | a first 85-account national SAM calibrates (2,005 equations) and passes all checks; country elasticities and policy simulations not yet done |
 
-The model has been validated on the synthetic SAM only. When applying it to a
-country SAM, run `cge_check, homogeneity perturb(0.1)` and review the elasticity
-choices; the package has not yet been used for published policy analysis.
+The model has been validated against the Python reference on synthetic SAMs,
+and calibrated on one national SAM with illustrative elasticities. When applying
+it to a country SAM, run `cge_check, homogeneity perturb(0.1)` and review the
+elasticity choices; the package has not yet been used for published policy
+analysis.
 
 ## Requirements
 

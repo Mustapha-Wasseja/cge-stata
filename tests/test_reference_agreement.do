@@ -89,4 +89,31 @@ cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 _standard_simulations margins_
 
+* Territorial-correction layout, with an inventory run-down
+cge_synthetic, clear territorial
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) territorial(com_tc act_tc)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+_standard_simulations tc_
+
+* Multi-product layout
+cge_synthetic, clear multiproduct
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+_standard_simulations mp_
+
+* Non-imported layout: a non-imported commodity with sales tax (equation T6)
+cge_synthetic, clear nonimported
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+_standard_simulations cnm_
+
 program drop _compare_reference _standard_simulations
