@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.1.6  14oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -25,6 +25,12 @@ reports each as {cmd:[ok]} or {cmd:[fail]} with the value tested:
 {p 8 12 2}- for the selected simulation: the solution residual, Walras's law and the GDP identity;{p_end}
 {p 8 12 2}- with {opt homogeneity}: doubling every fixed nominal value doubles all prices and nominal values and leaves quantities unchanged;{p_end}
 {p 8 12 2}- with {opt perturb()}: the solver returns to the base from perturbed starting values.{p_end}
+
+{pstd}
+The homogeneity and perturbed-start checks measure deviations relative to each
+value (with a floor of one). {cmd:WALRAS}, which is zero in the base, is measured
+relative to the largest SAM entry, as in the Walras's-law check, so the results
+do not depend on the units of the SAM.
 
 {pstd}
 {cmd:cge_check} exits with error 9 if any check fails.

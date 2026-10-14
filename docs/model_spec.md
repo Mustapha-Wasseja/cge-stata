@@ -504,6 +504,11 @@ it calibrates:
    ±10 per cent returns the base.
 6. **Closure square.** Each closure gives as many free variables as
    equations, and each reproduces the base.
+
+In checks 3 and 5 a deviation is measured relative to the value concerned, with
+a floor of one; for a variable whose base value is zero ($WALRAS$) it is
+measured relative to the largest SAM entry, as in check 4. The checks then give
+the same result whatever the units of the SAM.
 7. **Cross-implementation agreement.** The Stata and Python implementations
    agree to a relative tolerance of 1e-6 on a fixed set of simulations: removal
    of import tariffs; a 10 per cent rise in world import prices; a 5 per cent

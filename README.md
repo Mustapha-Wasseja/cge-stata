@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.5 implements the standard static model described in
+Version 0.1.6 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
@@ -29,6 +29,8 @@ Version 0.1.5 implements the standard static model described in
 
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.
+Version 0.1.6 makes the homogeneity and perturbed-start checks independent of
+the units of the SAM.
 
 | Milestone | Status |
 |---|---|

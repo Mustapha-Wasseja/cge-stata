@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.5  2026-10-14
+*! cge_mata.mata  v0.1.6  2026-10-14
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -1687,7 +1687,7 @@ void _cge_check(string scalar sim, real scalar homog, real scalar perturb, real 
 {
     struct cge_model scalar M
     struct cge_par scalar p
-    real colvector x, xfix, start, free, target, rel
+    real colvector x, xfix, start, free, target, rel, unit
     real scalar fails, v, conv, iter, err, si, scale, tol
     string scalar method
 
@@ -1713,12 +1713,17 @@ void _cge_check(string scalar sim, real scalar homog, real scalar perturb, real 
         fails = fails + _cge_report("  GDP identity (expenditure minus income)", abs(_cge_gdpgap(M, p, x)), 1e-8 * scale)
     }
 
+    // Deviations are relative to each value, with a floor of one; a variable whose
+    // base value is zero (WALRAS) is measured against the largest SAM entry, as in
+    // the Walras's-law check, so that the checks do not depend on the SAM's units
+    unit = (M.x0 :!= 0) + (M.x0 :== 0) :* scale
+
     if (homog) {
         // Double every fixed nominal value: nominal variables should double and real ones stay put
         xfix = M.x0 :* (1 :+ M.fixed :* M.nominal)
         x = _cge_solve_point(M, M.p0, xfix, M.x0, 1e-12, 100, 0, conv, iter, err, method)
         target = M.x0 :* (1 :+ M.nominal)
-        rel = select(abs(x - target) :/ rowmax((J(rows(x), 1, 1), abs(target))), M.exists)
+        rel = select(abs(x - target) :/ rowmax((unit, abs(target))), M.exists)
         v = (conv ? max(rel) : .)
         fails = fails + _cge_report("homogeneity (largest relative deviation)", v, 1e-8)
     }
@@ -1727,7 +1732,7 @@ void _cge_check(string scalar sim, real scalar homog, real scalar perturb, real 
         rseed(seed)
         start = M.x0 :* (1 :+ perturb * (2 * runiform(rows(M.x0), 1) :- 1))
         x = _cge_solve_point(M, M.p0, M.x0, start, 1e-12, 100, 0, conv, iter, err, method)
-        rel = select(abs(x - M.x0) :/ rowmax((J(rows(x), 1, 1), abs(M.x0))), M.exists)
+        rel = select(abs(x - M.x0) :/ rowmax((unit, abs(M.x0))), M.exists)
         v = (conv ? max(rel) : .)
         fails = fails + _cge_report("perturbed start returns the base (largest deviation)", v, 1e-7)
     }
