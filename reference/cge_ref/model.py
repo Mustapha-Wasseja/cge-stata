@@ -25,7 +25,7 @@ VARIABLES: dict[str, str] = {
     "QE": "C", "QM": "C", "QQ": "C", "QH": "CH", "QG": "C", "QINV": "C", "QFS": "F",
     "YF": "F", "YIF": "IF", "YI": "D", "EH": "H", "YG": "", "EG": "", "GSAV": "",
     "FSAV": "", "TINS": "D", "MPS": "D", "TINSADJ": "", "MPSADJ": "", "IADJ": "",
-    "GADJ": "", "WFDIST": "FA", "WALRAS": "",
+    "GADJ": "", "WFDIST": "FA", "WALRAS": "", "QT": "C",
 }
 
 # Variables measured in local currency: they scale with the numeraire.
@@ -105,7 +105,7 @@ def _per_element(value, labels: list[str], name: str) -> np.ndarray:
 
 def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Left side, right side and existence mask of every equation block."""
-    ce, cm, fa, cd = s["ce"], s["cm"], s["fa"], s["cd"]
+    ce, cm, fa, cd, cx, ct = s["ce"], s["cm"], s["fa"], s["cd"], s["cx"], s["ct"]
     every_c = np.ones_like(ce)
     every_a = np.ones_like(cd)
     nH = v["EH"].size
@@ -116,9 +116,11 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     # 5.1 Price block
     eq["P1"] = (v["PM"], p["pwm"] * (1 + p["tm"]) * v["EXR"], cm)
     eq["P2"] = (v["PE"], p["pwe"] * (1 - p["te"]) * v["EXR"], ce)
+    margin_cost = (v["PQ"] @ p["icm"]) * v["QQ"]   # sum over c' of PQ[c'] icm[c', c] QQ[c]
     eq["P3"] = (v["PQ"] * (1 - p["tq"]) * v["QQ"],
-                v["PD"] * v["QD"] + np.where(cm, v["PM"] * v["QM"], 0.0), every_c)
-    eq["P4"] = (v["PX"] * v["QX"], v["PD"] * v["QD"] + np.where(ce, v["PE"] * v["QE"], 0.0), every_c)
+                np.where(cx, v["PD"] * v["QD"], 0.0) + np.where(cm, v["PM"] * v["QM"], 0.0) + margin_cost,
+                every_c)
+    eq["P4"] = (v["PX"] * v["QX"], v["PD"] * v["QD"] + np.where(ce, v["PE"] * v["QE"], 0.0), cx)
     eq["P5"] = (v["PA"], p["theta"] @ v["PX"], every_a)
     eq["P6"] = (v["PINTA"], p["ica"].T @ v["PQ"], every_a)
     eq["P7"] = (v["PA"] * (1 - p["ta"]) * v["QA"], v["PVA"] * v["QVA"] + v["PINTA"] * v["QINTA"], every_a)
@@ -139,8 +141,9 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     q4_ces = pvaqva / ces_sum * p["delta_va"] * qf ** (-rho - 1)
     eq["Q4"] = (np.where(cd, wage * v["QF"], wage),
                 np.where(cd, p["delta_va"] * pvaqva, q4_ces), fa)
-    eq["Q5"] = (v["QINT"], p["ica"] * v["QINTA"][None, :], np.ones(p["ica"].shape, dtype=bool))
-    eq["Q6"] = (v["QX"], p["theta"].T @ v["QA"], every_c)
+    # Intermediate inputs and household purchases exist only where the SAM has a flow
+    eq["Q5"] = (v["QINT"], p["ica"] * v["QINTA"][None, :], s["qint"])
+    eq["Q6"] = (v["QX"], p["theta"].T @ v["QA"], cx)
 
     # 5.3 Trade block
     # 1 - delta is stored (deltac_*) rather than computed: when one share is close to
@@ -148,11 +151,13 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     rt, dt, dtc = p["rho_t"], p["delta_t"], p["deltac_t"]
     eq["T1"] = (v["QX"], p["at"] * (dt * v["QE"] ** rt + dtc * v["QD"] ** rt) ** (1 / rt), ce)
     eq["T2"] = (v["QE"], v["QD"] * ((v["PE"] / v["PD"]) * dtc / dt) ** (1 / (rt - 1)), ce)
-    eq["T3"] = (v["QX"], v["QD"], ~ce)
+    eq["T3"] = (v["QX"], v["QD"], cx & ~ce)
     rq, dq, dqc = p["rho_q"], p["delta_q"], p["deltac_q"]
-    eq["T4"] = (v["QQ"], p["aq"] * (dq * v["QM"] ** (-rq) + dqc * v["QD"] ** (-rq)) ** (-1 / rq), cm)
-    eq["T5"] = (v["QM"], v["QD"] * ((v["PD"] / v["PM"]) * dq / dqc) ** (1 / (1 + rq)), cm)
-    eq["T6"] = (v["QQ"], p["aq"] * v["QD"], ~cm)
+    eq["T4"] = (v["QQ"], p["aq"] * (dq * v["QM"] ** (-rq) + dqc * v["QD"] ** (-rq)) ** (-1 / rq), cm & cx)
+    eq["T5"] = (v["QM"], v["QD"] * ((v["PD"] / v["PM"]) * dq / dqc) ** (1 / (1 + rq)), cm & cx)
+    eq["T6"] = (v["QQ"], p["aq"] * v["QD"], cx & ~cm)
+    eq["T7"] = (v["QQ"], p["aq"] * v["QM"], cm & ~cx)
+    eq["T8"] = (v["QT"], p["icm"] @ v["QQ"], ct)
 
     # 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 - v["MPS"]) * (1 - v["TINS"]) * v["YI"]
@@ -162,7 +167,7 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["I3"] = (v["YI"], v["YIF"][:nD].sum(axis=1) + p["shii"] @ DY + p["trdg"] * v["CPI"]
                 + p["trdr"] * v["EXR"], np.ones(nD, dtype=bool))
     eq["I4"] = (v["EH"], p["hc"] * DY[:nH], np.ones(nH, dtype=bool))
-    eq["I5"] = (v["PQ"][:, None] * v["QH"], p["beta"] * v["EH"][None, :], np.ones(v["QH"].shape, dtype=bool))
+    eq["I5"] = (v["PQ"][:, None] * v["QH"], p["beta"] * v["EH"][None, :], s["qh"])
     eq["I6"] = (v["QINV"], p["qinv"] * v["IADJ"], every_c)
     eq["I7"] = (v["QG"], p["qg"] * v["GADJ"], every_c)
     revenue = (v["TINS"] @ v["YI"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
@@ -178,7 +183,8 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
 
     # 5.5 System constraints (S6 is imposed through the closure)
     eq["S1"] = (np.where(fa, v["QF"], 0.0).sum(axis=1), v["QFS"], np.ones(v["QFS"].shape, dtype=bool))
-    eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"], every_c)
+    eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"]
+                + np.where(ct, v["QT"], 0.0), every_c)
     eq["S3"] = ((p["pwm"] * v["QM"]).sum() + (v["YIF"][nD + 1].sum() + p["shir"] @ DY) / v["EXR"]
                 + p["trrg"],
                 (p["pwe"] * v["QE"]).sum() + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + v["FSAV"], one)
@@ -267,7 +273,8 @@ class Model:
         A, C, F, H = self.sets["A"], self.sets["C"], self.sets["F"], self.sets["H"]
         I = self.sets["I"]
         gov, sav, row = mapping.government, mapping.savinv, mapping.row
-        n, nF, nH = len(A), len(F), len(H)
+        nA, nC, nF, nH = len(A), len(C), len(F), len(H)
+        T = list(mapping.margin_accounts)
         tol = 1e-9 * max(1.0, float(np.abs(sam.values).max()))
 
         def cell(r, c):
@@ -276,40 +283,49 @@ class Model:
         def vec(rows, cols):
             return np.array([[cell(r, c) for c in cols] for r in rows])
 
+        def fail_if(mask, names, message):
+            if np.any(mask):
+                raise SAMError(f"{message}: {' '.join(n for n, m in zip(names, mask) if m)}")
+
         # 7.1 Taxes and trade
         QM0 = vec([row], C)[0]
         cm = QM0 > tol
         tariffs = vec([mapping.imptax], C)[0]
-        if np.any(~cm & (np.abs(tariffs) > tol)):
-            raise SAMError("import tariff recorded on a commodity without imports")
+        fail_if(~cm & (np.abs(tariffs) > tol), C, "import tariff recorded on a commodity without imports")
         tm = np.where(cm, tariffs / np.where(cm, QM0, 1.0), 0.0)
         exports = vec(C, [row])[:, 0]
         ce = exports > tol
         export_taxes = vec([mapping.exptax], C)[0]
-        if np.any(~ce & (np.abs(export_taxes) > tol)):
-            raise SAMError("export tax recorded on a commodity without exports")
+        fail_if(~ce & (np.abs(export_taxes) > tol), C, "export tax recorded on a commodity without exports")
         te = np.where(ce, export_taxes / np.where(ce, exports, 1.0), 0.0)
         QE0 = np.where(ce, exports - export_taxes, 0.0)
         pwe = 1.0 / (1.0 - te)
 
         QA0 = np.array([sam.col_total(a) for a in A])
-        if np.any(QA0 <= tol):
-            raise SAMError("every activity needs positive output")
+        fail_if(QA0 <= tol, A, "every activity needs positive output")
         ta = vec([mapping.acttax], A)[0] / QA0
         MAKE0 = vec(A, C)                      # MAKE0[a, c]: output of c by activity a
         if np.abs(MAKE0.sum(axis=1) - QA0).max() > tol:
             raise SAMError("activity output does not equal its sales to commodities")
         theta = MAKE0 / QA0[:, None]
         QX0 = MAKE0.sum(axis=0)
-        QD0 = QX0 - QE0
-        if np.any(QD0 <= tol):
-            raise SAMError("version 0.1 needs positive domestic sales of every commodity")
+        cx = QX0 > tol
+        fail_if(ce & ~cx, C, "exports recorded for a commodity without domestic output")
+        fail_if(~cx & ~cm, C, "a commodity has neither domestic output nor imports")
+        QD0 = np.where(cx, QX0 - QE0, 0.0)
+        fail_if(cx & (QD0 <= tol), C, "a commodity with domestic output needs positive domestic sales")
         PM0 = np.where(cm, 1.0 + tm, 0.0)
         sales_taxes = vec([mapping.saltax], C)[0]
-        QQ0 = QD0 + PM0 * QM0 + sales_taxes
+        MG = vec(T, C).reshape(len(T), nC)     # MG[t, c]: margins paid by c to margin account t
+        SV = vec(C, T).reshape(nC, len(T))     # SV[c, t]: margin services c bought by account t
+        QQ0 = QD0 + PM0 * QM0 + sales_taxes + MG.sum(axis=0)
         tq = sales_taxes / QQ0
+        QT0 = SV.sum(axis=1)
+        ct = QT0 > tol
+        spend = SV.sum(axis=0)
+        icm = (SV / np.where(spend > tol, spend, 1.0)[None, :]) @ MG / QQ0[None, :]
         demand = (vec(C, A).sum(axis=1) + vec(C, H).sum(axis=1)
-                  + vec(C, [gov])[:, 0] + vec(C, [sav])[:, 0])
+                  + vec(C, [gov])[:, 0] + vec(C, [sav])[:, 0] + QT0)
         if np.abs(QQ0 - demand).max() > tol:
             raise SAMError("composite supply does not equal domestic demand for some commodity")
 
@@ -321,7 +337,7 @@ class Model:
         fa = VA > tol
         if factor_quantities is None:
             W0 = np.ones(nF)
-            WFDIST0 = np.ones((nF, n))
+            WFDIST0 = np.ones((nF, nA))
             QF0 = np.where(fa, VA, 0.0)
         else:
             QFq = np.array([[float(factor_quantities.get((f, a), 0.0)) for a in A] for f in F])
@@ -331,17 +347,16 @@ class Model:
             WFDIST0 = np.where(fa, VA / (W0[:, None] * np.where(fa, QFq, 1.0)), 1.0)
             QF0 = QFq
         QVA0 = VA.sum(axis=0)
-        if np.any(QVA0 <= tol):
-            raise SAMError("every activity needs positive value added")
+        fail_if(QVA0 <= tol, A, "every activity needs positive value added")
         iva = QVA0 / QA0
         inta = QINTA0 / QA0
 
         cd = np.abs(sigma_va - 1.0) < 1e-12
         rho_va = np.where(cd, 0.0, 1.0 / sigma_va - 1.0)
-        delta_va = np.zeros((nF, n))
-        ad = np.zeros(n)
+        delta_va = np.zeros((nF, nA))
+        ad = np.zeros(nA)
         w = W0[:, None] * WFDIST0
-        for k in range(n):
+        for k in range(nA):
             m = fa[:, k]
             if cd[k]:
                 d = VA[m, k] / QVA0[k]
@@ -356,22 +371,23 @@ class Model:
 
         # 7.3 CET and Armington functions (base prices PD = PE = 1)
         rho_t = 1.0 / sigma_t + 1.0
-        delta_t = np.full(n, 0.5)
-        deltac_t = np.full(n, 0.5)
-        at = np.ones(n)
+        delta_t = np.full(nC, 0.5)
+        deltac_t = np.full(nC, 0.5)
+        at = np.ones(nC)
         for k in np.flatnonzero(ce):
             r = rho_t[k]
             ratio = (QE0[k] / QD0[k]) ** (r - 1)
             delta_t[k] = 1.0 / (1.0 + ratio)
             deltac_t[k] = ratio / (1.0 + ratio)
             at[k] = QX0[k] / (delta_t[k] * QE0[k] ** r + deltac_t[k] * QD0[k] ** r) ** (1 / r)
-        if np.any(np.abs(sigma_q[cm] - 1.0) < 1e-12):
+        if np.any(np.abs(sigma_q[cm & cx] - 1.0) < 1e-12):
             raise ValueError("version 0.1 needs sigma_q different from 1 for imported commodities")
         rho_q = 1.0 / sigma_q - 1.0
-        delta_q = np.full(n, 0.5)
-        deltac_q = np.full(n, 0.5)
-        aq = QQ0 / QD0                     # non-imported commodities (T6)
-        for k in np.flatnonzero(cm):
+        delta_q = np.full(nC, 0.5)
+        deltac_q = np.full(nC, 0.5)
+        # non-imported commodities (T6) and commodities imported only (T7)
+        aq = np.where(cx, QQ0 / np.where(cx, QD0, 1.0), QQ0 / np.where(cm, QM0, 1.0))
+        for k in np.flatnonzero(cm & cx):
             r = rho_q[k]
             ratio = PM0[k] * (QM0[k] / QD0[k]) ** (1 + r)
             delta_q[k] = ratio / (1 + ratio)
@@ -419,22 +435,23 @@ class Model:
         cwts = QH0.sum(axis=1) / QH0.sum()
         dwts = QD0 / QD0.sum()
 
-        self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd}
+        self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct,
+                       "qint": QINT0 != 0, "qh": QH0 != 0}
         self.params = {
-            "pwm": np.ones(n), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
+            "pwm": np.ones(nC), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
             "theta": theta, "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
             "at": at, "delta_t": delta_t, "deltac_t": deltac_t, "rho_t": rho_t,
             "aq": aq, "delta_q": delta_q, "deltac_q": deltac_q, "rho_q": rho_q,
             "shif": shif, "beta": beta, "tins0": tins0, "mps0": mps0,
             "shii": shii, "shir": shir, "hc": hc, "trdg": trdg, "trdr": trdr, "trfr": trfr,
             "trgr": np.array(trgr), "trrg": np.array(trrg), "trgg": np.array(trgg),
-            "qg": qg, "qinv": qinv, "cwts": cwts, "dwts": dwts,
+            "qg": qg, "qinv": qinv, "cwts": cwts, "dwts": dwts, "icm": icm,
             "sigma_va": sigma_va, "sigma_q": sigma_q, "sigma_t": sigma_t,
         }
         s1 = np.ones(1)
         self.base = {
-            "PA": np.ones(n), "PVA": np.ones(n), "PINTA": ica.sum(axis=0), "PX": np.ones(n),
-            "PD": np.ones(n), "PE": np.where(ce, 1.0, 0.0), "PM": PM0, "PQ": np.ones(n),
+            "PA": np.ones(nA), "PVA": np.ones(nA), "PINTA": ica.sum(axis=0), "PX": np.ones(nC),
+            "PD": np.ones(nC), "PE": np.where(ce, 1.0, 0.0), "PM": PM0, "PQ": np.ones(nC),
             "W": W0, "EXR": s1.copy(), "CPI": np.atleast_1d(cwts.sum()), "DPI": np.atleast_1d(dwts.sum()),
             "QA": QA0, "QVA": QVA0, "QINTA": QINTA0, "QF": QF0, "QINT": QINT0, "QX": QX0,
             "QD": QD0, "QE": QE0, "QM": np.where(cm, QM0, 0.0), "QQ": QQ0, "QH": QH0,
@@ -445,7 +462,7 @@ class Model:
             "GSAV": np.atleast_1d(cell(sav, gov)), "FSAV": np.atleast_1d(cell(sav, row)),
             "TINS": tins0.copy(), "MPS": mps0.copy(),
             "TINSADJ": s1.copy(), "MPSADJ": s1.copy(), "IADJ": s1.copy(), "GADJ": s1.copy(),
-            "WFDIST": WFDIST0, "WALRAS": np.zeros(1),
+            "WFDIST": WFDIST0, "WALRAS": np.zeros(1), "QT": QT0,
         }
         self.exists = {name: np.ones(value.shape, dtype=bool) for name, value in self.base.items()}
         self.exists["PE"] = ce.copy()
@@ -454,6 +471,11 @@ class Model:
         self.exists["QM"] = cm.copy()
         self.exists["QF"] = fa.copy()
         self.exists["WFDIST"] = fa.copy()
+        for name in ("PX", "PD", "QX", "QD"):
+            self.exists[name] = cx.copy()
+        self.exists["QT"] = ct.copy()
+        self.exists["QINT"] = QINT0 != 0
+        self.exists["QH"] = QH0 != 0
 
     # ------------------------------------------------------------------
     # Residuals and solution

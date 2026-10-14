@@ -40,21 +40,28 @@ Included:
   of the world by fixed shares.
 - Selectable closures for the external account, government, savings-investment,
   factor markets and the numeraire.
+- From version 0.1.7: commodities that are imported but not produced in the
+  country; trade and transport margins recorded in margin accounts that the
+  commodities pay, entering the model as margin services per unit of composite
+  supply; and a separate stock-change account, merged into savings-investment.
 
-Deferred to later versions: commodities that are not produced domestically,
-or that are produced but not sold domestically; a margin mechanism by product
-and market; linear expenditure system (LES) demand; recursive dynamics.
+Deferred to later versions: commodities that are produced but not sold
+domestically; margins that differ between domestic sales, imports and exports;
+linear expenditure system (LES) demand; recursive dynamics.
 
 ## 2. Sets
 
 | Set | Description |
 |---|---|
 | $A$ | activities |
-| $C$ | commodities; $c(a)$ is the primary commodity of activity $a$ (activities and commodities are paired by position in the mapping) |
-| $CE \subseteq C$ | exported commodities (base exports > 0) |
-| $CNE = C \setminus CE$ | non-exported commodities |
+| $C$ | commodities; $c(a)$ is the primary commodity of activity $a$ (activities and commodities are paired by position in the mapping; from version 0.1.7 commodities may outnumber activities, and the commodities after the last paired one have no paired activity) |
+| $CX \subseteq C$ | commodities with domestic output (base output > 0); from version 0.1.7 the others, $C \setminus CX$, are imported only |
+| $CE \subseteq CX$ | exported commodities (base exports > 0) |
+| $CNE = CX \setminus CE$ | produced, non-exported commodities |
 | $CM \subseteq C$ | imported commodities (base imports > 0) |
 | $CNM = C \setminus CM$ | non-imported commodities |
+| $T$ | margin accounts (may be empty; from version 0.1.7) |
+| $CT \subseteq C$ | margin commodities: the services that margin accounts buy |
 | $F$ | factors |
 | $H$ | households (including non-profit institutions mapped as households) |
 | $E$ | enterprises (may be empty) |
@@ -70,8 +77,8 @@ Prices
 | $PA_a$ | activity price (gross revenue per unit of activity) |
 | $PVA_a$ | price of value added |
 | $PINTA_a$ | price of aggregate intermediate input |
-| $PX_c$ | producer price of commodity output |
-| $PD_c$ | price of domestic output sold domestically |
+| $PX_c$ | producer price of commodity output, $c \in CX$ |
+| $PD_c$ | price of domestic output sold domestically, $c \in CX$ |
 | $PE_c$ | export price in local currency, $c \in CE$ |
 | $PM_c$ | import price in local currency, $c \in CM$ |
 | $PQ_c$ | composite commodity price, including sales tax |
@@ -89,14 +96,15 @@ Quantities
 | $QINTA_a$ | aggregate intermediate input |
 | $QF_{fa}$ | demand for factor $f$ by activity $a$ |
 | $QINT_{ca}$ | intermediate use of commodity $c$ by activity $a$ |
-| $QX_c$ | output of commodity $c$ |
-| $QD_c$ | domestic sales of domestic output |
+| $QX_c$ | output of commodity $c \in CX$ |
+| $QD_c$ | domestic sales of domestic output, $c \in CX$ |
 | $QE_c$ | exports, $c \in CE$ |
 | $QM_c$ | imports, $c \in CM$ |
 | $QQ_c$ | composite commodity supply |
 | $QH_{ch}$ | consumption of $c$ by household $h$ |
 | $QG_c$ | government consumption |
 | $QINV_c$ | investment demand |
+| $QT_c$ | demand for margin services, $c \in CT$ |
 | $QFS_f$ | supply of factor $f$ |
 
 Incomes, rates and adjustment variables
@@ -128,6 +136,7 @@ Incomes, rates and adjustment variables
 | $\theta_{ac}$ | yield: output of commodity $c$ per unit of activity $a$ |
 | $iva_a$, $inta_a$ | value added and aggregate intermediate input per unit of activity |
 | $ica_{ca}$ | intermediate input $c$ per unit of aggregate intermediate input of $a$ |
+| $icm_{c'c}$ | margin services of commodity $c' \in CT$ per unit of composite supply of $c$ |
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
 | $at_c$, $\delta^{t}_c$, $\rho^{t}_c$ | CET efficiency, share and exponent parameters |
 | $aq_c$, $\delta^{q}_c$, $\rho^{q}_c$ | Armington efficiency, share and exponent parameters |
@@ -160,11 +169,12 @@ $$PM_c = pwm_c\,(1+tm_c)\,EXR, \qquad c \in CM \tag{P1}$$
 
 $$PE_c = pwe_c\,(1-te_c)\,EXR, \qquad c \in CE \tag{P2}$$
 
-$$PQ_c\,(1-tq_c)\,QQ_c = PD_c\,QD_c + PM_c\,QM_c \tag{P3}$$
+$$PQ_c\,(1-tq_c)\,QQ_c = PD_c\,QD_c + PM_c\,QM_c + \sum_{c' \in CT} PQ_{c'}\,icm_{c'c}\,QQ_c \tag{P3}$$
 
-where the import term applies only for $c \in CM$.
+where the domestic term applies only for $c \in CX$, the import term only for
+$c \in CM$, and the margin term only when $c$ pays margins.
 
-$$PX_c\,QX_c = PD_c\,QD_c + PE_c\,QE_c \tag{P4}$$
+$$PX_c\,QX_c = PD_c\,QD_c + PE_c\,QE_c, \qquad c \in CX \tag{P4}$$
 
 where the export term applies only for $c \in CE$.
 
@@ -198,7 +208,7 @@ $$W_f\,WFDIST_{fa}\,QF_{fa} = \delta^{va}_{fa}\,PVA_a\,QVA_a \tag{Q4'}$$
 
 $$QINT_{ca} = ica_{ca}\,QINTA_a \tag{Q5}$$
 
-$$QX_c = \sum_a \theta_{ac}\,QA_a \tag{Q6}$$
+$$QX_c = \sum_a \theta_{ac}\,QA_a, \qquad c \in CX \tag{Q6}$$
 
 Output of a commodity from different activities is a perfect substitute and
 sells at one producer price $PX_c$.
@@ -211,17 +221,17 @@ $$QX_c = at_c\left[\delta^{t}_c\,QE_c^{\rho^{t}_c} + (1-\delta^{t}_c)\,QD_c^{\rh
 
 $$\frac{QE_c}{QD_c} = \left[\frac{PE_c}{PD_c}\cdot\frac{1-\delta^{t}_c}{\delta^{t}_c}\right]^{1/(\rho^{t}_c-1)} \tag{T2}$$
 
-For non-exported commodities, $c \in CNE$:
+For produced, non-exported commodities, $c \in CNE$:
 
 $$QX_c = QD_c \tag{T3}$$
 
-For imported commodities, $c \in CM$:
+For imported commodities with domestic output, $c \in CM \cap CX$:
 
 $$QQ_c = aq_c\left[\delta^{q}_c\,QM_c^{-\rho^{q}_c} + (1-\delta^{q}_c)\,QD_c^{-\rho^{q}_c}\right]^{-1/\rho^{q}_c} \tag{T4}$$
 
 $$\frac{QM_c}{QD_c} = \left[\frac{PD_c}{PM_c}\cdot\frac{\delta^{q}_c}{1-\delta^{q}_c}\right]^{1/(1+\rho^{q}_c)} \tag{T5}$$
 
-For non-imported commodities, $c \in CNM$:
+For non-imported commodities, $c \in CNM$ (all of which have domestic output):
 
 $$QQ_c = aq_c\,QD_c \tag{T6}$$
 
@@ -231,6 +241,24 @@ domestic sales in value units, $QQ^0_c = QD^0_c + SAM(tax_{sal}, c)$, so the
 coefficient is not one. (Before version 0.1.4 this equation read
 $QQ_c = QD_c$, which fails benchmark replication for non-imported commodities
 with a sales tax.)
+
+For commodities that are imported only, $c \in CM \setminus CX$ (from version
+0.1.7), composite supply is imports alone:
+
+$$QQ_c = aq_c\,QM_c \tag{T7}$$
+
+with $aq_c = QQ^0_c / QM^0_c$, which exceeds one when the commodity pays a tariff,
+sales tax or margins.
+
+Demand for margin services (from version 0.1.7), $c \in CT$:
+
+$$QT_c = \sum_{c'} icm_{cc'}\,QQ_{c'} \tag{T8}$$
+
+Margins are a fixed quantity of services per unit of composite supply, and their
+cost enters the composite price through P3. The SAMs this serves record one
+margin payment per commodity, without a split between domestic sales, imports
+and exports; margins are therefore attributed to composite supply, as sales
+taxes are.
 
 ### 5.4 Institution block
 
@@ -265,7 +293,9 @@ $$MPS_d = \overline{mps}_d\,MPSADJ \tag{I11}$$
 
 $$\sum_a QF_{fa} = QFS_f \tag{S1}$$
 
-$$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c \tag{S2}$$
+$$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c \tag{S2}$$
+
+where $QT_c$ applies only for $c \in CT$.
 
 $$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} = \sum_{c \in CE} pwe_c\,QE_c + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + FSAV \tag{S3}$$
 
@@ -319,7 +349,7 @@ Stata implementation lists every such flow, grouped by role, before stopping.
 
 | Paid by (column) | Received by (row) |
 |---|---|
-| commodity $c$ | activities (domestic output); rest of world (imports); import, sales and export tax accounts |
+| commodity $c$ | activities (domestic output); rest of world (imports); import, sales and export tax accounts; margin accounts (margins, from version 0.1.7) |
 | activity | commodities (intermediate inputs); factors; activity tax account |
 | factor | households; enterprises; government; rest of world |
 | household | commodities; direct tax account; savings-investment; households and enterprises (transfers); rest of world (transfers) |
@@ -327,6 +357,7 @@ Stata implementation lists every such flow, grouped by role, before stopping.
 | government | commodities; households and enterprises (transfers); government (internal transfers); rest of world (transfers); savings-investment |
 | tax account | government |
 | savings-investment | commodities (investment, including changes in inventories) |
+| margin account | commodities (margin services, from version 0.1.7) |
 | rest of world | commodities (exports); households, enterprises and government (transfers); factors (factor income from abroad); savings-investment |
 
 Negative cells are allowed only in tax rows, the savings-investment row,
@@ -337,12 +368,14 @@ inventory changes, is scaled by $IADJ$) and sales of commodities by activities
 (from version 0.1.4: a negative entry in the make matrix gives a negative yield;
 the mapping report lists such cells as a note, and each activity's output and
 each commodity's domestic output must still be positive). In version 0.1 every activity needs
-positive output and value added, and every commodity needs positive domestic
-sales ($QD^0_c > 0$).
+positive output and value added. Every commodity needs domestic output or
+imports, and a commodity with domestic output needs positive domestic sales
+($QD^0_c > 0$). Before version 0.1.7 every commodity needed domestic sales. An
+activity with no flows at all is left out of the mapping.
 
 #### Layouts rewritten before the checks (from version 0.1.1)
 
-National SAMs often record four kinds of flow differently. They are rewritten
+National SAMs often record five kinds of flow differently. They are rewritten
 into the standard layout before the checks above:
 
 1. **Exports recorded as sales by activities.** A cell $SAM(a, row)$ is treated
@@ -396,16 +429,29 @@ into the standard layout before the checks above:
    $SAM(h, row) \mathrel{+}= s_h\,EX$; the correction's cells are then set to
    zero. Household consumption of other commodities, which includes
    non-residents' purchases, is unchanged.
+5. **Stock-change account (from version 0.1.7).** Some SAMs record changes in
+   inventories in a separate account, financed by savings-investment,
+   $SAM(stk, sav)$, and buying commodities, $SAM(c, stk)$ (negative for a fall in
+   inventories). For an account named in the mapping's stocks option, its
+   payments are added to the savings-investment column and its row and column
+   are set to zero, which removes savings-investment's payment to it. The
+   account may receive payments only from savings-investment. Changes in
+   inventories then form part of investment demand, scaled by $IADJ$.
 
-Rewrites 1, 2 and 4 leave every total that enters the model unchanged, except
-that rewrite 4 replaces the correction's imports, exports and negative
+Rewrites 1, 2, 4 and 5 leave every total that enters the model unchanged,
+except that rewrite 4 replaces the correction's imports, exports and negative
 consumption by transfers; rewrite 3 raises the margin activities' output and the
 supply and demand of their products by the margins. The mapping report lists
 the amounts rewritten.
 
+Margin accounts (from version 0.1.7) are a role, not a rewrite. A margin account
+collects margins from commodities, $SAM(t, c)$, and buys margin services,
+$SAM(c', t)$; it may have no other flows.
+
 ### 7.1 Normalisation
 
-All base prices are normalised: $PA^0_a = PX^0_c = PD^0_c = PE^0_c = PQ^0_c = PVA^0_a = 1$,
+All base prices are normalised: $PA^0_a = PX^0_c = PD^0_c = PE^0_c = PQ^0_c = PVA^0_a = 1$
+($PX$ and $PD$ for $c \in CX$),
 $EXR^0 = 1$, $pwm_c = 1$, $W^0_f = 1$ and $WFDIST^0_{fa} = 1$ unless factor
 quantities are supplied (Section 7.7).
 
@@ -416,13 +462,20 @@ quantities are supplied (Section 7.7).
   $pwe_c = 1/(1 - te_c)$.
 - $QA^0_a$ = column total of activity $a$; $ta_a = SAM(tax_{act}, a) / QA^0_a$.
 - Yields $\theta_{ac} = SAM(a, c) / QA^0_a$; $QX^0_c = \sum_a SAM(a, c)$ and
-  $QD^0_c = QX^0_c - QE^0_c$.
-- $QQ^0_c = QD^0_c + PM^0_c\,QM^0_c + SAM(tax_{sal}, c)$ and
+  $QD^0_c = QX^0_c - QE^0_c$. $CX$ is the set of commodities with $QX^0_c > 0$;
+  exports of a commodity without domestic output are an error.
+- Margins paid by commodity $c$: $MG^0_c = \sum_{t \in T} SAM(t, c)$.
+- $QQ^0_c = QD^0_c + PM^0_c\,QM^0_c + SAM(tax_{sal}, c) + MG^0_c$ and
   $tq_c = SAM(tax_{sal}, c) / QQ^0_c$.
+- Margin services: $QT^0_{c'} = \sum_{t \in T} SAM(c', t)$, and
+  $icm_{c'c} = \sum_{t \in T} SAM(t, c)\,\dfrac{SAM(c', t)}{\sum_{c''} SAM(c'', t)} \Big/ QQ^0_c$,
+  so that margins collected by account $t$ are spent on services in the
+  proportions that $t$ buys them.
 
 SAM balance implies that $QQ^0_c$ equals total domestic demand for $c$ at
-purchaser prices (the commodity row total minus exports). Calibration must
-verify this identity, not assume it.
+purchaser prices (the commodity row total minus exports, including purchases of
+margin services by margin accounts). Calibration must verify this identity, not
+assume it.
 
 ### 7.3 Production
 
@@ -441,7 +494,8 @@ verify this identity, not assume it.
   $at_c = QX^0_c / \left[\delta^{t}_c\,(QE^0_c)^{\rho^{t}_c} + (1-\delta^{t}_c)\,(QD^0_c)^{\rho^{t}_c}\right]^{1/\rho^{t}_c}$.
 - $\delta^{q}_c = \dfrac{(PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}{1 + (PM^0_c/PD^0_c)\,(QM^0_c/QD^0_c)^{1+\rho^{q}_c}}$;
   $aq_c = QQ^0_c / \left[\delta^{q}_c\,(QM^0_c)^{-\rho^{q}_c} + (1-\delta^{q}_c)\,(QD^0_c)^{-\rho^{q}_c}\right]^{-1/\rho^{q}_c}$
-  for imported commodities, and $aq_c = QQ^0_c / QD^0_c$ for non-imported ones.
+  for imported commodities with domestic output, $aq_c = QQ^0_c / QD^0_c$ for
+  non-imported ones, and $aq_c = QQ^0_c / QM^0_c$ for those imported only.
 - Implementation note: both implementations store the complements
   $1-\delta^{t}_c$ and $1-\delta^{q}_c$ as separate parameters, computed from the
   same ratio as the shares (for example $1-\delta^{t}_c = r/(1+r)$ with
@@ -504,16 +558,16 @@ it calibrates:
    ±10 per cent returns the base.
 6. **Closure square.** Each closure gives as many free variables as
    equations, and each reproduces the base.
-
-In checks 3 and 5 a deviation is measured relative to the value concerned, with
-a floor of one; for a variable whose base value is zero ($WALRAS$) it is
-measured relative to the largest SAM entry, as in check 4. The checks then give
-the same result whatever the units of the SAM.
 7. **Cross-implementation agreement.** The Stata and Python implementations
    agree to a relative tolerance of 1e-6 on a fixed set of simulations: removal
    of import tariffs; a 10 per cent rise in world import prices; a 5 per cent
    rise in labour supply; a 20 per cent fall in foreign savings; and a 5 per cent
    productivity gain in agriculture.
+
+In checks 3 and 5 a deviation is measured relative to the value concerned, with
+a floor of one; for a variable whose base value is zero ($WALRAS$) it is
+measured relative to the largest SAM entry, as in check 4. The checks then give
+the same result whatever the units of the SAM.
 
 ## References
 

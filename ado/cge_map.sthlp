@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.1.7  14oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt enterprises(names)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
+[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
 {opt report(filename)} {opt replace}]
 
 {pstd}
@@ -43,7 +43,8 @@ Before the checks, layouts common in national SAMs are rewritten into the
 model's layout, and the amounts moved are displayed (docs/model_spec.md,
 Section 7.0). Exports recorded as sales by an activity to the rest of the world
 are moved to the commodity paired with the activity. Margins netted out of the
-activities listed in {opt margins()} are moved to their output. Taxes paid
+activities listed in {opt margins()} are moved to their output. Stock-change
+accounts listed in {opt stocks()} are merged into savings-investment. Taxes paid
 directly to the government account are routed through internal tax accounts;
 see the tax options below. The SAM in memory is not changed.
 
@@ -54,8 +55,10 @@ see the tax options below. The SAM in memory is not changed.
 {opt activities()} and {opt commodities()} list the activity and commodity
 accounts, paired by position: each activity's primary commodity, used when
 rewriting national-accounts layouts. An activity may also produce other
-commodities, in fixed proportions taken from the SAM. One commodity is needed for
-each activity.
+commodities, in fixed proportions taken from the SAM. Each activity needs a
+paired commodity. Commodities without a producing activity, such as commodities
+that are imported only, are listed after the paired ones. An activity account
+with no flows at all is left out.
 
 {phang}
 {opt factors()} and {opt households()} list the factor and household accounts.
@@ -71,6 +74,23 @@ flow.
 {phang}
 {opt government()}, {opt savinv()} and {opt row()} name the government,
 savings-investment and rest-of-world accounts.
+
+{phang}
+{opt marginaccounts()} lists margin accounts: accounts that collect trade or
+transport margins from commodities (the margin account's row, the commodities'
+columns) and spend them on margin services (commodity rows, the margin
+account's column). A margin account may have no other flows. Margins enter the
+model as a fixed quantity of services per unit of each commodity's composite
+supply, and their cost enters the commodity's price (docs/model_spec.md,
+equations P3 and T8). The SAM records one margin payment per commodity, so
+margins on domestic sales, imports and exports are not distinguished.
+
+{phang}
+{opt stocks()} lists stock-change accounts: accounts financed by
+savings-investment that buy commodities, with negative cells for a fall in
+inventories. Their purchases are moved to the savings-investment account, so
+changes in inventories become part of investment demand. A stock-change account
+may receive payments only from savings-investment.
 
 {phang}
 {opt margins()} lists activities, typically trade and transport, whose margin
@@ -113,9 +133,17 @@ problems are found.
 {opt replace} allows {opt report()} to overwrite an existing file.
 
 
-{title:Example}
+{title:Examples}
 
 {phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{pstd}
+A supply-use layout with margin accounts, a commodity imported only
+({cmd:com_fuel}, listed last) and a stock-change account:
+
+{phang2}{cmd:. cge_synthetic, clear sut}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser com_fuel) factors(lab cap) households(hhd) government(gov) savinv(si) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) marginaccounts(trd trp) stocks(dstk)}{p_end}
 
 
 {title:Also see}

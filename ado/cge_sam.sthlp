@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.1.7  14oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -26,6 +26,13 @@ the account labels, and one numeric variable per account, named exactly as the
 account labels and in the same order. Cell ({it:r}, {it:c}) is a payment from
 column account {it:c} to row account {it:r}. Blank cells are treated as zero and
 counted in {cmd:r(N_blank)}.
+
+{pstd}
+A label that is not a valid Stata name, such as {cmd:s-i}, cannot name a
+variable: Stata renames the column when the file is read ({cmd:si}). Such
+labels are replaced by the variable names, each change is displayed, and the
+new names are used in {helpb cge_map}. Any other difference between the labels
+and the variable names is an error.
 
 {pstd}
 {cmd:cge_sam} reports the largest difference between an account's row and column

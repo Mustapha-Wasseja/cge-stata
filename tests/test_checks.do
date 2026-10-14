@@ -120,9 +120,56 @@ quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 cge_check, homogeneity perturb(0.1)
 assert r(failures) == 0
 
+* Supply-use layout (version 0.1.7): the label s-i becomes si; margin accounts,
+* a commodity imported only and a stock-change account
+quietly findfile cge_synthetic_sam_sut.csv
+cge_sam using "`r(fn)'", labels(account) clear
+assert account[17] == "si"
+local sutopts activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser com_fuel) ///
+    factors(lab cap) households(hhd) government(gov) savinv(si) row(row)                       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) marginaccounts(trd trp)
+capture cge_map, `sutopts'
+assert _rc == 459
+quietly cge_map, `sutopts' stocks(dstk)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert r(max_residual) < 1e-12
+cge_check, homogeneity perturb(0.1)
+assert r(failures) == 0
+cge_shock pwm, elements(com_fuel) scale(1.25)
+quietly cge_solve, name(fuel25)
+quietly cge_results, sim(fuel25) clear nodisplay
+assert value > base if variable == "PQ" & element1 == "com_fuel"
+assert value < base if variable == "QM" & element1 == "com_fuel"
+quietly count if inlist(variable, "PX", "PD", "QX", "QD") & element1 == "com_fuel"
+assert r(N) == 0
+quietly count if variable == "QT"
+assert r(N) == 2
+
+* A stock-change account may receive payments only from savings-investment
+cge_synthetic, clear sut
+quietly replace row = row + 1 in 18
+quietly replace row = row - 1 in 17
+quietly cge_sam, labels(account)
+capture cge_map, `sutopts' stocks(dstk)
+assert _rc == 459
+
 * ---------------------------------------------------------------------
 * Errors
 * ---------------------------------------------------------------------
+
+* A valid label that does not match its variable
+cge_synthetic, clear
+quietly replace account = "savings" in 14
+capture cge_sam, labels(account)
+assert _rc == 459
+
+* Each activity needs a paired commodity
+cge_synthetic, clear
+quietly cge_sam, labels(account)
+capture cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+assert _rc == 198
 local mapopts activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
@@ -193,7 +240,7 @@ cge_synthetic, clear institutions
 quietly cge_sam, labels(account)
 quietly cge_map, `instopts'
 quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
-assert r(N_equations) == 107
+assert r(N_equations) == 105
 cge_shock tm, value(0)
 quietly cge_solve, name(inst_notariff)
 cge_check, homogeneity perturb(0.1)

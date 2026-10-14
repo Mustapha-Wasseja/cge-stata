@@ -55,7 +55,7 @@ def test_calibrated_shares(model):
 
 
 def test_benchmark_replication(model):
-    assert model.n_equations == 107
+    assert model.n_equations == 105          # npi buys only com_ser: two purchases are zero
     assert model.max_residual(model.base) < 1e-12
     assert model.solve().iterations == 0
 

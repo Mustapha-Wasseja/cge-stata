@@ -73,6 +73,7 @@ _ALLOWED = {
     ("dirtax", "hh"), ("sav", "hh"), ("dirtax", "ent"), ("sav", "ent"),
     ("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"), ("gov", "exptax"), ("gov", "acttax"),
     ("sav", "gov"), ("sav", "row"),
+    ("mar", "com"), ("com", "mar"),          # margin accounts (version 0.1.7)
 }
 # Transfers (they may be negative)
 _TRANSFERS = {
@@ -98,9 +99,7 @@ def _territorial(values: np.ndarray, sam: "SAM", m: "Mapping") -> dict[str, floa
     """Rewrite 4 of model_spec.md, 7.0: the territorial correction (in place)."""
     if len(m.territorial) not in (1, 2):
         raise SAMError("territorial needs the correction commodity and, optionally, its activity")
-    mapped = {*m.activities, *m.commodities, *m.factors, *m.households, *m.enterprises,
-              m.government, m.savinv, m.row}
-    mapped |= {getattr(m, t) for t in TAX_ROLES if getattr(m, t) is not None}
+    mapped = _mapped_accounts(m)
     for name in m.territorial:
         sam.index(name)
         if name in mapped:
@@ -138,6 +137,33 @@ def _territorial(values: np.ndarray, sam: "SAM", m: "Mapping") -> dict[str, floa
     return {"territorial_imports": float(imports), "territorial_exports": float(exports)}
 
 
+def _mapped_accounts(m: "Mapping") -> set[str]:
+    mapped = {*m.activities, *m.commodities, *m.factors, *m.households, *m.enterprises,
+              *m.margin_accounts, m.government, m.savinv, m.row}
+    return mapped | {getattr(m, t) for t in TAX_ROLES if getattr(m, t) is not None}
+
+
+def _stocks(values: np.ndarray, sam: "SAM", m: "Mapping") -> float:
+    """Rewrite 5 of model_spec.md, 7.0: merge stock-change accounts into savings-investment."""
+    mapped = _mapped_accounts(m) | set(m.territorial)
+    s = sam.index(m.savinv)
+    tol = 1e-9 * max(1.0, float(np.abs(values).max()))
+    merged = 0.0
+    for name in m.stocks:
+        k = sam.index(name)
+        if name in mapped:
+            raise SAMError(f"stocks: {name} is also mapped to a role")
+        receipts = values[k, :].copy()
+        receipts[s] = 0.0
+        if np.abs(receipts).max() > tol:
+            raise SAMError(f"stocks: {name} may receive payments only from {m.savinv}")
+        merged += values[k, s]
+        values[:, s] += values[:, k]
+        values[:, k] = 0.0
+        values[k, :] = 0.0
+    return float(merged)
+
+
 def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str, float]]:
     """Rewrite national-accounts layouts into the standard layout (model_spec.md, 7.0).
 
@@ -153,8 +179,8 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
     values = sam.values.copy()
     for name in (*m.activities, *m.commodities, *m.households, *m.enterprises, m.government, m.row):
         sam.index(name)
-    if len(m.activities) != len(m.commodities):
-        raise SAMError("version 0.1 needs one commodity for each activity")
+    if len(m.commodities) < len(m.activities):
+        raise SAMError(_PAIRING)
     direct = [t for t in TAX_ROLES if getattr(m, t) is not None and getattr(m, t) == m.government]
     if sum(t in COMMODITY_TAXES for t in direct) > 1:
         raise SAMError("only one of saltax, imptax and exptax may name the government account")
@@ -190,6 +216,9 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
     if m.territorial:
         notes.update(_territorial(values, sam, m))
 
+    if m.stocks:
+        notes["stocks"] = _stocks(values, sam, m)
+
     g = sam.index(m.government)
     for tax in direct:
         payers = {"dirtax": [*m.households, *m.enterprises],
@@ -209,13 +238,20 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
     return SAM(labels, values), m, notes
 
 
+_PAIRING = ("each activity needs a paired commodity: list the commodities paired with the "
+            "activities first, in the same order, then any commodities without a paired activity")
+
+
 @dataclass
 class Mapping:
     """Assignment of SAM accounts to model roles.
 
-    Activities and commodities are paired by position: ``activities[k]``
-    produces ``commodities[k]``. Tax accounts are optional; a missing tax
-    account means that tax is zero.
+    Activities and commodities are paired by position: ``activities[k]`` is
+    paired with ``commodities[k]``; commodities after the last paired one have
+    no paired activity (for example commodities that are imported only). Tax
+    accounts are optional; a missing tax account means that tax is zero.
+    ``margin_accounts`` collect margins from commodities and buy margin
+    services; ``stocks`` are stock-change accounts merged into savings-investment.
     """
 
     activities: list[str]
@@ -233,6 +269,8 @@ class Mapping:
     enterprises: list[str] = dataclasses.field(default_factory=list)
     margins: list[str] = dataclasses.field(default_factory=list)
     territorial: list[str] = dataclasses.field(default_factory=list)
+    margin_accounts: list[str] = dataclasses.field(default_factory=list)
+    stocks: list[str] = dataclasses.field(default_factory=list)
 
     def roles(self) -> dict[str, str]:
         """Role of every mapped account."""
@@ -253,6 +291,8 @@ class Mapping:
             assign(h, "hh")
         for e in self.enterprises:
             assign(e, "ent")
+        for t in self.margin_accounts:
+            assign(t, "mar")
         assign(self.government, "gov")
         assign(self.savinv, "sav")
         assign(self.row, "row")
@@ -264,8 +304,8 @@ class Mapping:
 
     def validate(self, sam: SAM, tol: float = 1e-8) -> dict[str, str]:
         """Check the SAM against the mapping and return the role of each account."""
-        if len(self.activities) != len(self.commodities):
-            raise SAMError("version 0.1 needs one commodity for each activity")
+        if len(self.commodities) < len(self.activities):
+            raise SAMError(_PAIRING)
         if not self.factors or not self.households or not self.activities:
             raise SAMError("at least one activity, factor and household is required")
 

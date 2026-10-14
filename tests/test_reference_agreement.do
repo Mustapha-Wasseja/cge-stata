@@ -116,4 +116,16 @@ cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 _standard_simulations cnm_
 
+* Supply-use layout: margin accounts, a commodity imported only (com_fuel, listed
+* after the paired commodities), a stock-change account and the label s-i
+cge_synthetic, clear sut
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser com_fuel) ///
+    factors(lab cap) households(hhd) government(gov) savinv(si) row(row)                 ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) marginaccounts(trd trp) stocks(dstk)
+assert r(stocks_merged) == 3
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert r(N_equations) == 103
+_standard_simulations sut_
+
 program drop _compare_reference _standard_simulations

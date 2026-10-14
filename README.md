@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.6 implements the standard static model described in
+Version 0.1.7 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
@@ -25,7 +25,10 @@ Version 0.1.6 implements the standard static model described in
 - SAMs in national-accounts layout: exports recorded as sales by activities,
   taxes paid directly to the government account (version 0.1.1), trade and
   transport margins netted out of the margin activities (version 0.1.3), the
-  territorial correction and inventory run-downs (version 0.1.4).
+  territorial correction and inventory run-downs (version 0.1.4);
+- SAMs in supply-use layout (version 0.1.7): margin accounts paid by
+  commodities, commodities that are imported only, separate stock-change
+  accounts, and account labels that are not valid Stata names (such as `s-i`).
 
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.
@@ -37,7 +40,7 @@ the units of the SAM.
 | Model specification | complete |
 | Python reference implementation and validation suite | complete |
 | Stata/Mata implementation | complete; agrees with the reference to about 1e-13 |
-| Application to country SAMs | a first 85-account national SAM calibrates (2,005 equations) and passes all checks; country elasticities and policy simulations not yet done |
+| Application to country SAMs | an 85-account national SAM calibrates and passes all checks; a 240-account SAM in supply-use layout maps fully but records exports that exceed domestic output, which the model does not yet represent; policy simulations not yet done |
 
 The model has been validated against the Python reference on synthetic SAMs,
 and calibrated on one national SAM with illustrative elasticities. When applying

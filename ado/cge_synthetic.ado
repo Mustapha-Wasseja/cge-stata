@@ -1,4 +1,4 @@
-*! cge_synthetic.ado  v0.1.4  2026-10-14
+*! cge_synthetic.ado  v0.1.7  2026-10-14
 *! cge-stata: load the synthetic social accounting matrix (SAM)
 *! Loads the bundled synthetic SAM and checks that every account balances
 *!
@@ -7,10 +7,11 @@
 
 program define cge_synthetic, rclass
     version 13.0
-    syntax [, CLEAR NATional INStitutions MARgins TERritorial MULTiproduct NONimported]
+    syntax [, CLEAR NATional INStitutions MARgins TERritorial MULTiproduct NONimported SUT]
 
     if ("`national'" != "") + ("`institutions'" != "") + ("`margins'" != "") ///
-        + ("`territorial'" != "") + ("`multiproduct'" != "") + ("`nonimported'" != "") > 1 {
+        + ("`territorial'" != "") + ("`multiproduct'" != "") + ("`nonimported'" != "") ///
+        + ("`sut'" != "") > 1 {
         display as error "choose only one layout"
         exit 198
     }
@@ -40,6 +41,10 @@ program define cge_synthetic, rclass
         local file cge_synthetic_sam_cnm.csv
         local layout "non-imported layout"
     }
+    if "`sut'" != "" {
+        local file cge_synthetic_sam_sut.csv
+        local layout "supply-use layout"
+    }
     quietly findfile `file'
     local samfile `"`r(fn)'"'
 
@@ -60,9 +65,14 @@ program define cge_synthetic, rclass
     forvalues i = 1/`n' {
         local acc : word `i' of `accounts'
         if account[`i'] != "`acc'" {
-            display as error "row `i' is labelled " account[`i'] ///
-                " but column `i' is labelled `acc'"
-            exit 459
+            * A label that is not a valid Stata name (s-i) was renamed as a
+            * variable (si); cge_sam then uses the variable name
+            capture confirm name `=account[`i']'
+            if _rc == 0 {
+                display as error "row `i' is labelled " account[`i'] ///
+                    " but column `i' is labelled `acc'"
+                exit 459
+            }
         }
     }
 

@@ -233,6 +233,58 @@ def build_institutions_layout() -> tuple[list[str], list[list[float]]]:
     return list(INSTITUTION_ACCOUNTS), sam
 
 
+SUT_ACCOUNTS = [
+    "act_agr", "act_man", "act_ser",
+    "com_agr", "com_man", "com_ser", "com_fuel",
+    "trd", "trp",
+    "lab", "cap",
+    "hhd", "gov",
+    "tax_dir", "tax_sal", "tax_imp",
+    "s-i", "dstk", "row",
+]
+
+# Changes to FLOWS for the supply-use layout (version 0.1.7):
+# - com_fuel is imported only (12, tariff 1, sales tax 1, margins 2) and used by
+#   act_man (6, in place of 6 of com_man) and households (10);
+# - margin accounts collect margins from commodities: trd (trade) 10, spent on
+#   com_ser; trp (transport) 5, spent on com_ser (4) and com_man (1); household
+#   purchases of com_ser fall by the 14 now sold as margins;
+# - a stock-change account dstk, financed by savings-investment (3), buys
+#   com_man (4) and runs down com_agr (-1);
+# - savings-investment is labelled "s-i", which is not a valid Stata name.
+# Imports, tax revenue, government savings and foreign savings adjust so that
+# every account balances.
+SUT_FLOWS = {
+    ("row", "com_fuel"): 12, ("tax_imp", "com_fuel"): 1, ("tax_sal", "com_fuel"): 1,
+    ("trd", "com_fuel"): 2, ("com_fuel", "act_man"): 6, ("com_fuel", "hhd"): 10,
+    ("trd", "com_agr"): 3, ("trd", "com_man"): 5, ("trp", "com_agr"): 2, ("trp", "com_man"): 3,
+    ("com_ser", "trd"): 10, ("com_ser", "trp"): 4, ("com_man", "trp"): 1,
+    ("com_man", "act_man"): 24,
+    ("com_agr", "hhd"): 75, ("com_man", "hhd"): 79, ("com_ser", "hhd"): 66,
+    ("com_man", "sav"): 37, ("dstk", "sav"): 3, ("com_man", "dstk"): 4, ("com_agr", "dstk"): -1,
+    ("row", "com_agr"): 19, ("row", "com_man"): 47,
+    ("gov", "tax_imp"): 9, ("gov", "tax_sal"): 31, ("sav", "gov"): 5, ("sav", "row"): 13,
+}
+
+
+def build_sut_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy in a supply-use layout: margin accounts, a commodity
+    imported only, a stock-change account and the label s-i."""
+    flows = {}
+    for (row, col), value in {**FLOWS, **SUT_FLOWS}.items():
+        flows[("s-i" if row == "sav" else row, "s-i" if col == "sav" else col)] = value
+    return _from_flows(SUT_ACCOUNTS, flows)
+
+
+def _from_flows(accounts, flows):
+    index = {name: i for i, name in enumerate(accounts)}
+    n = len(accounts)
+    sam = [[0.0] * n for _ in range(n)]
+    for (row, col), value in flows.items():
+        sam[index[row]][index[col]] = float(value)
+    return list(accounts), sam
+
+
 def imbalances(sam: list[list[float]]) -> list[float]:
     """Row total minus column total for each account."""
     n = len(sam)
@@ -258,7 +310,8 @@ if __name__ == "__main__":
                              (build_margins_layout, "cge_synthetic_sam_margins.csv"),
                              (build_territorial_layout, "cge_synthetic_sam_tc.csv"),
                              (build_multiproduct_layout, "cge_synthetic_sam_mp.csv"),
-                             (build_nonimported_layout, "cge_synthetic_sam_cnm.csv")):
+                             (build_nonimported_layout, "cge_synthetic_sam_cnm.csv"),
+                             (build_sut_layout, "cge_synthetic_sam_sut.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))
         if worst > 1e-12:

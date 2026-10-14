@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.0.1  12oct2026}{...}
+{* *! version 0.1.7  14oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut}]
 
 
 {title:Options}
@@ -52,6 +52,15 @@ an inventory run-down of {cmd:com_agr} (-2). Map it with
 {phang}
 {opt nonimported} loads the standard SAM with {cmd:com_ser}, which pays sales
 tax, not imported: its imports move to {cmd:com_man}.
+
+{phang}
+{opt sut} loads a 19-account supply-use layout: margin accounts {cmd:trd} and
+{cmd:trp} that collect margins from commodities and buy margin services, a
+commodity imported only ({cmd:com_fuel}), a stock-change account
+({cmd:dstk}), and savings-investment labelled {cmd:s-i}, which
+{helpb cge_sam} renames {cmd:si}. Map it with
+{cmd:commodities(com_agr com_man com_ser com_fuel)}, {cmd:savinv(si)},
+{cmd:marginaccounts(trd trp)} and {cmd:stocks(dstk)}.
 
 
 {title:Description}

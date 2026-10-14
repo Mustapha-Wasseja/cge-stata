@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.6  2026-10-14
+*! cge_mata.mata  v0.1.7  2026-10-14
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -16,7 +16,7 @@ mata:
 struct cge_par {
     real colvector pwm, pwe, tm, te, tq, ta
     real colvector iva, inta, ad, rva, sva
-    real matrix    ica, dva, theta
+    real matrix    ica, dva, theta, icm
     real colvector at, dt, dtc, rt, aq, dq, dqc, rq, sq, st
     real matrix    shif, beta
     real colvector tins0, mps0, shir, hc, trdg, trdr, trfr, qg, qinv, cwts, dwts
@@ -33,11 +33,12 @@ struct cge_model {
     real colvector   iA, iC, iF, iH
     real scalar      igov, isav, irow, idirtax, isaltax, iimptax, iexptax, iacttax
     string colvector A, C, F, H, I
-    real colvector   iE, imargins, iterritorial
+    real colvector   iE, imargins, iterritorial, iT, istocks
     string colvector E, D
-    real scalar      n, nF, nH, nE, nD, nI
+    // n activities, nC commodities (nC >= n from version 0.1.7)
+    real scalar      n, nC, nF, nH, nE, nD, nI
     // model structure
-    real colvector   ce, cm, cd
+    real colvector   ce, cm, cd, cx, ct
     real matrix      fa
     // parameters: base (p0) and current, including shocks (p)
     struct cge_par scalar p0, p
@@ -145,6 +146,17 @@ void _cge_fail(string scalar msg, real scalar rc)
     exit(rc)
 }
 
+// Fails if any element of mask is set, naming the accounts concerned
+void _cge_fail_if(real colvector mask, string colvector names, string scalar msg, real scalar rc)
+{
+    string colvector bad
+    if (!max(mask)) return
+    bad = select(names, mask)
+    errprintf("%s: %s%s\n", msg, invtokens(bad[|1 \ min((rows(bad), 10))|]'),
+              (rows(bad) > 10 ? sprintf(" and %f more", rows(bad) - 10) : ""))
+    exit(rc)
+}
+
 // =====================================================================
 // Variable layout
 // =====================================================================
@@ -165,7 +177,8 @@ void _cge_dims(struct cge_model scalar M, string scalar set, real scalar r, real
 
 real scalar _cge_setsize(struct cge_model scalar M, string scalar s)
 {
-    if (s == "A" | s == "C") return(M.n)
+    if (s == "A") return(M.n)
+    if (s == "C") return(M.nC)
     if (s == "F") return(M.nF)
     if (s == "H") return(M.nH)
     if (s == "D") return(M.nD)
@@ -179,11 +192,11 @@ void _cge_layout(struct cge_model scalar M)
     M.vname = ("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
-               "IADJ","GADJ","WFDIST","WALRAS")'
+               "IADJ","GADJ","WFDIST","WALRAS","QT")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
-               "","","FA","")'
+               "","","FA","","C")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -262,7 +275,7 @@ void _cge_sam(string scalar labelvar, string scalar accounts)
     struct cge_model scalar M
     string colvector labels, names
     real matrix S
-    real scalar nmiss, maxdiff
+    real scalar nmiss, maxdiff, k
 
     labels = st_sdata(., labelvar)
     names = tokens(accounts)'
@@ -272,8 +285,22 @@ void _cge_sam(string scalar labelvar, string scalar accounts)
         errprintf("SAM is not square: %f rows and %f account columns\n", rows(S), cols(S))
         exit(459)
     }
+    // A label that is not a valid Stata name (for example s-i) cannot be a
+    // variable name; when the data were read, the variable was renamed (si).
+    // The variable names are then used as labels, and the change is reported.
     if (labels != names) {
-        _cge_fail("row labels in " + labelvar + " must match the account variable names, in the same order", 459)
+        for (k = 1; k <= rows(labels); k++) {
+            if (labels[k] == names[k]) continue
+            if (st_isname(labels[k])) {
+                _cge_fail("row " + strofreal(k) + " of " + labelvar + " is labelled " + labels[k] +
+                          " but account variable " + strofreal(k) + " is " + names[k] +
+                          "; row labels must match the account variable names, in the same order", 459)
+            }
+            printf("{txt}Account label {res}%s{txt} is not a valid Stata name; using {res}%s{txt}\n",
+                   labels[k], names[k])
+        }
+        labels = names
+        st_sstore(., labelvar, labels)
     }
     nmiss = missing(S)
     if (nmiss) S = editmissing(S, 0)
@@ -314,11 +341,11 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
               string scalar ents,
               string scalar gov, string scalar sav, string scalar row, string scalar dirtax,
               string scalar saltax, string scalar imptax, string scalar exptax, string scalar acttax,
-              string scalar margins, string scalar territorial, string scalar reportfile,
-              real scalar replace)
+              string scalar margins, string scalar territorial, string scalar margacc,
+              string scalar stocks, string scalar reportfile, real scalar replace)
 {
     struct cge_model scalar M
-    real colvector role, iA, iC, imarg, iterr, mapped, restc
+    real colvector role, iA, iC, imarg, iterr, istk, mapped, restc
     real rowvector hcons, rest, share
     real scalar ct, at, timp, texp, negsales, negtotal
     real matrix allowed, negok, transfers, S, issues
@@ -334,13 +361,15 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     nacc = rows(M.labels)
     rolename = ("activity", "commodity", "factor", "household", "government",
                 "savings-investment", "rest of world", "direct tax", "sales tax",
-                "import tax", "export tax", "activity tax", "enterprise", "unmapped")
+                "import tax", "export tax", "activity tax", "enterprise", "margin account",
+                "unmapped")
 
     M.iA = _cge_lookup(M, acts, "activity")
     M.iC = _cge_lookup(M, coms, "commodity")
     M.iF = _cge_lookup(M, facs, "factor")
     M.iH = _cge_lookup(M, hhs, "household")
     M.iE = _cge_lookup(M, ents, "enterprise")
+    M.iT = _cge_lookup(M, margacc, "margin account")
     M.igov = _cge_lookup(M, gov, "government")
     M.isav = _cge_lookup(M, sav, "savings-investment")
     M.irow = _cge_lookup(M, row, "rest of world")
@@ -350,7 +379,10 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         if (taxacc[k] != "") taxidx[k] = _cge_lookup(M, taxacc[k], rolename[7 + k])
     }
 
-    if (rows(M.iA) != rows(M.iC)) _cge_fail("version 0.1 needs one commodity for each activity", 198)
+    if (rows(M.iC) < rows(M.iA)) {
+        _cge_fail("each activity needs a paired commodity: list the commodities paired with the " +
+                  "activities first, in the same order, then any commodities without a paired activity", 198)
+    }
 
     // Layouts rewritten before the checks (model_spec.md, Section 7.0):
     // exports recorded as sales by activities, and taxes paid directly to the
@@ -360,7 +392,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         _cge_fail("only one of saltax(), imptax() and exptax() may name the government account", 198)
     }
     labels = M.labels0
-    M.rewritten = J(1, 9, 0)
+    M.rewritten = J(1, 10, 0)
     for (k = 1; k <= rows(M.iA); k++) {
         x = S[M.iA[k], M.irow]
         if (x != 0) {
@@ -391,7 +423,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     iterr = _cge_lookup(M, territorial, "territorial correction")
     if (rows(iterr) > 2) _cge_fail("territorial() takes the correction commodity and, optionally, its activity", 198)
     if (rows(iterr)) {
-        mapped = M.iA \ M.iC \ M.iF \ M.iH \ M.iE \ M.igov \ M.isav \ M.irow \ select(taxidx, taxidx :> 0)
+        mapped = M.iA \ M.iC \ M.iF \ M.iH \ M.iE \ M.iT \ M.igov \ M.isav \ M.irow \ select(taxidx, taxidx :> 0)
         for (k = 1; k <= rows(iterr); k++) {
             if (anyof(mapped, iterr[k])) _cge_fail("territorial(): " + M.labels0[iterr[k]] + " is also mapped to a role", 198)
         }
@@ -429,6 +461,29 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         M.rewritten[9] = texp
     }
     M.iterritorial = iterr
+
+    // Stock-change accounts, merged into savings-investment (from version 0.1.7)
+    istk = _cge_lookup(M, stocks, "stock-change account")
+    if (rows(istk)) {
+        mapped = M.iA \ M.iC \ M.iF \ M.iH \ M.iE \ M.iT \ M.igov \ M.isav \ M.irow \
+                 select(taxidx, taxidx :> 0) \ iterr
+        tol = 1e-9 * max((1, max(abs(S))))
+        for (k = 1; k <= rows(istk); k++) {
+            i = istk[k]
+            if (anyof(mapped, i)) _cge_fail("stocks(): " + M.labels0[i] + " is also mapped to a role", 198)
+            rest = S[i, .]
+            rest[M.isav] = 0
+            if (max(abs(rest)) > tol) {
+                _cge_fail("stocks(): " + M.labels0[i] + " may receive payments only from " +
+                          M.labels0[M.isav], 459)
+            }
+            M.rewritten[10] = M.rewritten[10] + S[i, M.isav]
+            S[., M.isav] = S[., M.isav] + S[., i]
+            S[., i] = J(rows(S), 1, 0)
+            S[i, .] = J(1, cols(S), 0)
+        }
+    }
+    M.istocks = istk
     taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax")
     for (k = 1; k <= 5; k++) {
         if (!direct[k]) continue
@@ -462,20 +517,21 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     _cge_assign(M, role, M.iF, 3, rolename)
     _cge_assign(M, role, M.iH, 4, rolename)
     _cge_assign(M, role, M.iE, 13, rolename)
+    _cge_assign(M, role, M.iT, 14, rolename)
     _cge_assign(M, role, M.igov, 5, rolename)
     _cge_assign(M, role, M.isav, 6, rolename)
     _cge_assign(M, role, M.irow, 7, rolename)
     for (k = 1; k <= 5; k++) if (taxidx[k] > 0) _cge_assign(M, role, taxidx[k], 7 + k, rolename)
 
-    // Accounts without a role get code 14 ("unmapped"); every problem found
+    // Accounts without a role get code 15 ("unmapped"); every problem found
     // is collected as (problem code, row, column, value) and reported at the end:
     // 1 unmapped account with flows, 2 unsupported flow, 3 activity paid by a
     // commodity it is not paired with, 4 negative flow, 5 unbalanced account.
-    role = role + 14 :* (role :== 0)
+    role = role + 15 :* (role :== 0)
     issues = J(0, 4, .)
     tol = 1e-8 * max((1, max(abs(S))))
     for (i = 1; i <= nacc; i++) {
-        if (role[i] == 14 & (max(abs(S[i, .])) > tol | max(abs(S[., i])) > tol)) {
+        if (role[i] == 15 & (max(abs(S[i, .])) > tol | max(abs(S[., i])) > tol)) {
             issues = issues \ (1, i, i, sum(S[i, .]))
         }
         if (abs(sum(S[i, .]) - sum(S[., i])) > tol) {
@@ -483,8 +539,9 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         }
     }
 
-    // Supported flows (row role, column role); role 13 is an enterprise
-    allowed = J(14, 14, 0)
+    // Supported flows (row role, column role); role 13 is an enterprise and
+    // role 14 a margin account
+    allowed = J(15, 15, 0)
     allowed[1, 2] = 1
     allowed[2, 1] = 1; allowed[3, 1] = 1; allowed[12, 1] = 1
     allowed[7, 2] = 1; allowed[10, 2] = 1; allowed[9, 2] = 1; allowed[11, 2] = 1
@@ -493,10 +550,11 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     allowed[8, 4] = 1; allowed[6, 4] = 1; allowed[8, 13] = 1; allowed[6, 13] = 1
     allowed[5, 8] = 1; allowed[5, 9] = 1; allowed[5, 10] = 1; allowed[5, 11] = 1; allowed[5, 12] = 1
     allowed[6, 5] = 1; allowed[6, 7] = 1
+    allowed[14, 2] = 1; allowed[2, 14] = 1
     // Transfers: among households and enterprises, from them to the rest of
     // the world, from government (to them, itself and abroad) and from the
     // rest of the world (to them, government and factors)
-    transfers = J(14, 14, 0)
+    transfers = J(15, 15, 0)
     transfers[(4, 13), (4, 13)] = J(2, 2, 1)
     transfers[7, (4, 13)] = J(1, 2, 1)
     transfers[(4, 13, 5, 7), 5] = J(4, 1, 1)
@@ -504,7 +562,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     allowed = allowed :| transfers
     // Cells that may be negative
     negok = transfers
-    negok[(6, 8, 9, 10, 11, 12), .] = J(6, 14, 1)
+    negok[(6, 8, 9, 10, 11, 12), .] = J(6, 15, 1)
     negok[5, (8, 9, 10, 11, 12)] = J(1, 5, 1)
     negok[2, 6] = 1         // investment demand: a fall in inventories
     negok[1, 2] = 1         // sales of commodities by activities: negative yields
@@ -549,6 +607,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     M.D = M.H \ M.E
     M.I = M.D \ M.labels[M.igov] \ M.labels[M.irow]
     M.n = rows(M.iA)
+    M.nC = rows(M.iC)
     M.nF = rows(M.iF)
     M.nH = rows(M.iH)
     M.nE = rows(M.iE)
@@ -557,8 +616,8 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     M.mapped = 1
     M.calibrated = 0
     _cge_store(M)
-    printf("{txt}Accounts mapped: {res}%f{txt} activities, {res}%f{txt} factors, {res}%f{txt} households, {res}%f{txt} enterprises\n",
-           M.n, M.nF, M.nH, M.nE)
+    printf("{txt}Accounts mapped: {res}%f{txt} activities, {res}%f{txt} commodities, {res}%f{txt} factors, {res}%f{txt} households, {res}%f{txt} enterprises, {res}%f{txt} margin accounts\n",
+           M.n, M.nC, M.nF, M.nH, M.nE, rows(M.iT))
 }
 
 // Amounts moved when rewriting national-accounts layouts
@@ -581,6 +640,10 @@ void _cge_map_rewrites(struct cge_model scalar M)
     for (k = 2; k <= 6; k++) {
         if (_cge_find(M.labels, account[k])) printf("{txt}%s: {res}%g\n", what[k], M.rewritten[k])
     }
+    if (rows(M.istocks)) {
+        printf("{txt}Stock-change account(s) %s merged into savings-investment: {res}%g\n",
+               invtokens(M.labels0[M.istocks]'), M.rewritten[10])
+    }
     if (rows(M.iterritorial)) {
         printf("{txt}Territorial correction %s: purchases abroad by residents, now household payments abroad: {res}%g\n",
                M.labels0[M.iterritorial[1]], M.rewritten[8])
@@ -591,6 +654,7 @@ void _cge_map_rewrites(struct cge_model scalar M)
     st_numscalar("r(territorial_imports)", M.rewritten[8])
     st_numscalar("r(territorial_exports)", M.rewritten[9])
     st_numscalar("r(margins_moved)", M.rewritten[7])
+    st_numscalar("r(stocks_merged)", M.rewritten[10])
     st_numscalar("r(taxes_rerouted)", sum(M.rewritten[(2, 3, 4, 5, 6)]))
 }
 
@@ -714,7 +778,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix PA, PVA, PINTA, PX, PD, PE, PM, PQ, W, EXR, CPI, DPI
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
-    real matrix IADJ, GADJ, WFDIST, WALRAS
+    real matrix IADJ, GADJ, WFDIST, WALRAS, QT
     real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs
     real colvector oneA, oneC, oneF, oneH, oneD, DY
     real scalar k, nH, nD
@@ -733,6 +797,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     FSAV = _cge_v(M, x, 34);  TINS = _cge_v(M, x, 35);  MPS = _cge_v(M, x, 36)
     TINSADJ = _cge_v(M, x, 37); MPSADJ = _cge_v(M, x, 38); IADJ = _cge_v(M, x, 39)
     GADJ = _cge_v(M, x, 40);  WFDIST = _cge_v(M, x, 41); WALRAS = _cge_v(M, x, 42)
+    QT = _cge_v(M, x, 43)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -742,7 +807,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
         M.elen = J(0, 1, .)
     }
     oneA = J(M.n, 1, 1)
-    oneC = J(M.n, 1, 1)
+    oneC = J(M.nC, 1, 1)
     oneF = J(M.nF, 1, 1)
     oneH = J(M.nH, 1, 1)
     oneD = J(M.nD, 1, 1)
@@ -752,8 +817,10 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     // 5.1 Price block
     _cge_put(M, L, R, K, record, "P1", PM, p.pwm :* (1 :+ p.tm) :* EXR, M.cm)
     _cge_put(M, L, R, K, record, "P2", PE, p.pwe :* (1 :- p.te) :* EXR, M.ce)
-    _cge_put(M, L, R, K, record, "P3", PQ :* (1 :- p.tq) :* QQ, PD :* QD + M.cm :* PM :* QM, oneC)
-    _cge_put(M, L, R, K, record, "P4", PX :* QX, PD :* QD + M.ce :* PE :* QE, oneC)
+    // p.icm' * PQ: cost of margin services per unit of composite supply
+    _cge_put(M, L, R, K, record, "P3", PQ :* (1 :- p.tq) :* QQ,
+             M.cx :* PD :* QD + M.cm :* PM :* QM + (p.icm' * PQ) :* QQ, oneC)
+    _cge_put(M, L, R, K, record, "P4", PX :* QX, PD :* QD + M.ce :* PE :* QE, M.cx)
     _cge_put(M, L, R, K, record, "P5", PA, p.theta * PX, oneA)
     _cge_put(M, L, R, K, record, "P6", PINTA, p.ica' * PQ, oneA)
     _cge_put(M, L, R, K, record, "P7", PA :* (1 :- p.ta) :* QA, PVA :* QVA + PINTA :* QINTA, oneA)
@@ -782,20 +849,23 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
         }
     }
     _cge_put(M, L, R, K, record, "Q4", lhs, rhs, M.fa)
-    _cge_put(M, L, R, K, record, "Q5", QINT, p.ica :* QINTA', J(M.n, M.n, 1))
-    _cge_put(M, L, R, K, record, "Q6", QX, p.theta' * QA, oneC)
+    // Intermediate inputs and household purchases exist only where the SAM has a flow
+    _cge_put(M, L, R, K, record, "Q5", QINT, p.ica :* QINTA', p.ica :!= 0)
+    _cge_put(M, L, R, K, record, "Q6", QX, p.theta' * QA, M.cx)
 
     // 5.3 Trade block
     _cge_put(M, L, R, K, record, "T1", QX,
              p.at :* (p.dt :* (QE :^ p.rt) + p.dtc :* (QD :^ p.rt)) :^ (1 :/ p.rt), M.ce)
     _cge_put(M, L, R, K, record, "T2", QE,
              QD :* (((PE :/ PD) :* p.dtc :/ p.dt) :^ (1 :/ (p.rt :- 1))), M.ce)
-    _cge_put(M, L, R, K, record, "T3", QX, QD, 1 :- M.ce)
+    _cge_put(M, L, R, K, record, "T3", QX, QD, M.cx :* (1 :- M.ce))
     _cge_put(M, L, R, K, record, "T4", QQ,
-             p.aq :* (p.dq :* (QM :^ (-p.rq)) + p.dqc :* (QD :^ (-p.rq))) :^ (-1 :/ p.rq), M.cm)
+             p.aq :* (p.dq :* (QM :^ (-p.rq)) + p.dqc :* (QD :^ (-p.rq))) :^ (-1 :/ p.rq), M.cm :* M.cx)
     _cge_put(M, L, R, K, record, "T5", QM,
-             QD :* (((PD :/ PM) :* p.dq :/ p.dqc) :^ (1 :/ (1 :+ p.rq))), M.cm)
-    _cge_put(M, L, R, K, record, "T6", QQ, p.aq :* QD, 1 :- M.cm)
+             QD :* (((PD :/ PM) :* p.dq :/ p.dqc) :^ (1 :/ (1 :+ p.rq))), M.cm :* M.cx)
+    _cge_put(M, L, R, K, record, "T6", QQ, p.aq :* QD, M.cx :* (1 :- M.cm))
+    _cge_put(M, L, R, K, record, "T7", QQ, p.aq :* QM, M.cm :* (1 :- M.cx))
+    _cge_put(M, L, R, K, record, "T8", QT, p.icm * QQ, M.ct)
 
     // 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 :- MPS) :* (1 :- TINS) :* YI
@@ -804,7 +874,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "I3", YI,
              rowsum(YIF[|1, 1 \ nD, M.nF|]) + p.shii * DY + p.trdg :* CPI + p.trdr :* EXR, oneD)
     _cge_put(M, L, R, K, record, "I4", EH, p.hc :* DY[|1 \ nH|], oneH)
-    _cge_put(M, L, R, K, record, "I5", PQ :* QH, p.beta :* EH', J(M.n, nH, 1))
+    _cge_put(M, L, R, K, record, "I5", PQ :* QH, p.beta :* EH', p.beta :!= 0)
     _cge_put(M, L, R, K, record, "I6", QINV, p.qinv :* IADJ, oneC)
     _cge_put(M, L, R, K, record, "I7", QG, p.qg :* GADJ, oneC)
     _cge_put(M, L, R, K, record, "I8", YG,
@@ -818,7 +888,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
 
     // 5.5 System constraints (S6 is imposed through the closure)
     _cge_put(M, L, R, K, record, "S1", rowsum(M.fa :* QF), QFS, oneF)
-    _cge_put(M, L, R, K, record, "S2", QQ, rowsum(QINT) + rowsum(QH) + QG + QINV, oneC)
+    _cge_put(M, L, R, K, record, "S2", QQ, rowsum(QINT) + rowsum(QH) + QG + QINV + M.ct :* QT, oneC)
     _cge_put(M, L, R, K, record, "S3",
              sum(p.pwm :* QM) + (sum(YIF[nD + 2, .]) + p.shir' * DY) / EXR + p.trrg,
              sum(p.pwe :* QE) + sum(p.trdr) + sum(p.trfr) + p.trgr + FSAV, 1)
@@ -854,55 +924,80 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
 {
     struct cge_model scalar M
     struct cge_par scalar p
-    real matrix S, VA, QINT0, QF0, QFq, WFD0, dva, YIF0, QH0, w, TR, MAKE0
+    real matrix S, VA, QINT0, QF0, QFq, WFD0, dva, YIF0, QH0, w, TR, MAKE0, MG, SV
     real colvector sva, sq, st, QM0, cm, tariffs, tm, exports, ce, etax, te, QE0, pwe
+    real colvector cx, ct, MGc, QT0
+    real rowvector spend
     real colvector QA0, ta, QX0, QD0, PM0, stax, QQ0, tq, demand, QINTA0, W0, QVA0
     real colvector cd, rva, ad, rt, dt, dtc, at, rq, dq, dqc, aq, YF0, YI0, tins0, mps0, EH0
     real colvector iD, dtax, dsav, DY0, TROW, cons, gross, safe
     real colvector m, d, num, x0, L, R, K, mag
-    real scalar n, nF, nH, tol, k, r, ratio, total, maxres
+    real scalar n, nC, nF, nH, tol, k, r, ratio, total, maxres
 
     M = _cge_load()
     _cge_need(M, "mapped")
     S = M.S
     n = M.n
+    nC = M.nC
     nF = M.nF
     nH = M.nH
     tol = 1e-9 * max((1, max(abs(S))))
 
     sva = _cge_elast(s_va, n, "sigmava")
-    sq = _cge_elast(s_q, n, "sigmaq")
-    st = _cge_elast(s_t, n, "sigmat")
+    sq = _cge_elast(s_q, nC, "sigmaq")
+    st = _cge_elast(s_t, nC, "sigmat")
 
     // 7.2 Taxes and trade
     QM0 = _cge_sub(S, M.irow, M.iC)'
     cm = QM0 :> tol
     tariffs = _cge_sub(S, M.iimptax, M.iC)'
-    if (max((1 :- cm) :* (abs(tariffs) :> tol))) _cge_fail("import tariff recorded on a commodity without imports", 459)
+    _cge_fail_if((1 :- cm) :* (abs(tariffs) :> tol), M.labels[M.iC], "import tariff recorded on a commodity without imports", 459)
     tm = cm :* tariffs :/ (cm :* QM0 + (1 :- cm))
     exports = _cge_sub(S, M.iC, M.irow)
     ce = exports :> tol
     etax = _cge_sub(S, M.iexptax, M.iC)'
-    if (max((1 :- ce) :* (abs(etax) :> tol))) _cge_fail("export tax recorded on a commodity without exports", 459)
+    _cge_fail_if((1 :- ce) :* (abs(etax) :> tol), M.labels[M.iC], "export tax recorded on a commodity without exports", 459)
     te = ce :* etax :/ (ce :* exports + (1 :- ce))
     QE0 = ce :* (exports - etax)
     pwe = 1 :/ (1 :- te)
 
     QA0 = colsum(S[., M.iA])'
-    if (min(QA0) <= tol) _cge_fail("every activity needs positive output", 459)
+    _cge_fail_if(QA0 :<= tol, M.labels[M.iA], "every activity needs positive output", 459)
     ta = _cge_sub(S, M.iacttax, M.iA)' :/ QA0
     MAKE0 = _cge_sub(S, M.iA, M.iC)                 // MAKE0[a, c]: output of c by a
     if (max(abs(rowsum(MAKE0) - QA0)) > tol) _cge_fail("activity output does not equal its sales to commodities", 459)
     p.theta = MAKE0 :/ QA0
     QX0 = colsum(MAKE0)'
-    QD0 = QX0 - QE0
-    if (min(QD0) <= tol) _cge_fail("version 0.1 needs positive domestic sales of every commodity", 459)
+    cx = QX0 :> tol
+    _cge_fail_if(ce :* (1 :- cx), M.labels[M.iC], "exports recorded for a commodity without domestic output", 459)
+    _cge_fail_if((1 :- cx) :* (1 :- cm), M.labels[M.iC], "a commodity has neither domestic output nor imports", 459)
+    QD0 = cx :* (QX0 - QE0)
+    _cge_fail_if(cx :* (QD0 :<= tol), M.labels[M.iC], "a commodity with domestic output needs positive domestic sales", 459)
     PM0 = cm :* (1 :+ tm)
     stax = _cge_sub(S, M.isaltax, M.iC)'
-    QQ0 = QD0 + PM0 :* QM0 + stax
+    // Margins: MG[t, c] paid by commodity c to margin account t, SV[c, t]
+    // margin services c bought by t
+    if (rows(M.iT)) {
+        MG = _cge_sub(S, M.iT, M.iC)
+        SV = _cge_sub(S, M.iC, M.iT)
+        MGc = colsum(MG)'
+        QT0 = rowsum(SV)
+        spend = colsum(SV)
+    }
+    else {
+        MG = J(0, nC, 0)
+        SV = J(nC, 0, 0)
+        MGc = J(nC, 1, 0)
+        QT0 = J(nC, 1, 0)
+        spend = J(1, 0, 0)
+    }
+    QQ0 = QD0 + PM0 :* QM0 + stax + MGc
     tq = stax :/ QQ0
+    ct = QT0 :> tol
+    if (rows(M.iT)) p.icm = ((SV :/ (spend :* (spend :> tol) + (spend :<= tol))) * MG) :/ QQ0'
+    else p.icm = J(nC, nC, 0)
     demand = rowsum(_cge_sub(S, M.iC, M.iA)) + rowsum(_cge_sub(S, M.iC, M.iH)) +
-             _cge_sub(S, M.iC, M.igov) + _cge_sub(S, M.iC, M.isav)
+             _cge_sub(S, M.iC, M.igov) + _cge_sub(S, M.iC, M.isav) + QT0
     if (max(abs(QQ0 - demand)) > tol) _cge_fail("composite supply does not equal domestic demand for some commodity", 459)
 
     // 7.3 Production
@@ -928,7 +1023,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
         QF0 = QFq
     }
     QVA0 = colsum(VA)'
-    if (min(QVA0) <= tol) _cge_fail("every activity needs positive value added", 459)
+    _cge_fail_if(QVA0 :<= tol, M.labels[M.iA], "every activity needs positive value added", 459)
     p.iva = QVA0 :/ QA0
     p.inta = QINTA0 :/ QA0
 
@@ -957,10 +1052,10 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     rt = 1 :/ st :+ 1
     // 1 - delta is stored (dtc, dqc) rather than computed by subtraction, which
     // loses most significant digits when a share is close to one
-    dt = J(n, 1, 0.5)
-    dtc = J(n, 1, 0.5)
-    at = J(n, 1, 1)
-    for (k = 1; k <= n; k++) {
+    dt = J(nC, 1, 0.5)
+    dtc = J(nC, 1, 0.5)
+    at = J(nC, 1, 1)
+    for (k = 1; k <= nC; k++) {
         if (!ce[k]) continue
         r = rt[k]
         ratio = (QE0[k] / QD0[k])^(r - 1)
@@ -968,13 +1063,14 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
         dtc[k] = ratio / (1 + ratio)
         at[k] = QX0[k] / (dt[k] * QE0[k]^r + dtc[k] * QD0[k]^r)^(1 / r)
     }
-    if (max(cm :* (abs(sq :- 1) :< 1e-12))) _cge_fail("version 0.1 needs sigmaq different from 1 for imported commodities", 198)
+    if (max(cm :* cx :* (abs(sq :- 1) :< 1e-12))) _cge_fail("version 0.1 needs sigmaq different from 1 for imported commodities", 198)
     rq = 1 :/ sq :- 1
-    dq = J(n, 1, 0.5)
-    dqc = J(n, 1, 0.5)
-    aq = QQ0 :/ QD0                         // non-imported commodities (T6)
-    for (k = 1; k <= n; k++) {
-        if (!cm[k]) continue
+    dq = J(nC, 1, 0.5)
+    dqc = J(nC, 1, 0.5)
+    // non-imported commodities (T6) and commodities imported only (T7)
+    aq = cx :* (QQ0 :/ (QD0 + (1 :- cx))) + (1 :- cx) :* (QQ0 :/ (QM0 + (1 :- cm)))
+    for (k = 1; k <= nC; k++) {
+        if (!cm[k] | !cx[k]) continue
         r = rq[k]
         ratio = PM0[k] * (QM0[k] / QD0[k])^(1 + r)
         dq[k] = ratio / (1 + ratio)
@@ -1021,7 +1117,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.cwts = rowsum(QH0) :/ sum(QH0)
     p.dwts = QD0 :/ sum(QD0)
 
-    p.pwm = J(n, 1, 1)
+    p.pwm = J(nC, 1, 1)
     p.pwe = pwe
     p.tm = tm
     p.te = te
@@ -1046,21 +1142,24 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.ce = ce
     M.cm = cm
     M.cd = cd
+    M.cx = cx
+    M.ct = ct
     M.p0 = p
     M.p = p
 
     // Base values of all variables
     _cge_layout(M)
-    total = M.voff[rows(M.voff)] + 1
+    k = rows(M.voff)
+    total = M.voff[k] + M.vrows[k] * M.vcols[k]
     x0 = J(total, 1, 0)
     _cge_setv(M, x0, "PA", J(n, 1, 1))
     _cge_setv(M, x0, "PVA", J(n, 1, 1))
     _cge_setv(M, x0, "PINTA", colsum(p.ica)')
-    _cge_setv(M, x0, "PX", J(n, 1, 1))
-    _cge_setv(M, x0, "PD", J(n, 1, 1))
+    _cge_setv(M, x0, "PX", J(nC, 1, 1))
+    _cge_setv(M, x0, "PD", J(nC, 1, 1))
     _cge_setv(M, x0, "PE", ce)
     _cge_setv(M, x0, "PM", PM0)
-    _cge_setv(M, x0, "PQ", J(n, 1, 1))
+    _cge_setv(M, x0, "PQ", J(nC, 1, 1))
     _cge_setv(M, x0, "W", W0)
     _cge_setv(M, x0, "EXR", 1)
     _cge_setv(M, x0, "CPI", sum(p.cwts))
@@ -1095,6 +1194,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "GADJ", 1)
     _cge_setv(M, x0, "WFDIST", WFD0)
     _cge_setv(M, x0, "WALRAS", 0)
+    _cge_setv(M, x0, "QT", QT0)
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -1106,6 +1206,13 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, M.exists, "QM", cm)
     _cge_setv(M, M.exists, "QF", M.fa)
     _cge_setv(M, M.exists, "WFDIST", M.fa)
+    _cge_setv(M, M.exists, "PX", cx)
+    _cge_setv(M, M.exists, "PD", cx)
+    _cge_setv(M, M.exists, "QX", cx)
+    _cge_setv(M, M.exists, "QD", cx)
+    _cge_setv(M, M.exists, "QT", ct)
+    _cge_setv(M, M.exists, "QINT", QINT0 :!= 0)
+    _cge_setv(M, M.exists, "QH", QH0 :!= 0)
 
     M.nominal = J(total, 1, 0)
     for (k = 1; k <= rows(M.vname); k++) {
@@ -1117,7 +1224,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.positive = J(0, 1, .)
     for (k = 1; k <= rows(M.vname); k++) {
         if (anyof(("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
-                   "QA","QVA","QINTA","QF","QX","QD","QE","QM","QQ"), M.vname[k])) {
+                   "QA","QVA","QINTA","QF","QX","QD","QE","QM","QQ","QT"), M.vname[k])) {
             m = _cge_vpos(M, k)
             M.positive = M.positive \ select(m, M.exists[m] :* (x0[m] :> 0))
         }

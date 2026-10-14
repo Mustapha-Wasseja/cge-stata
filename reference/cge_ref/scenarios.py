@@ -112,6 +112,25 @@ def nonimported_model(**elasticities) -> Model:
     return Model(SAM.from_csv(NONIMPORTED_SAM), synthetic_mapping(), **settings)
 
 
+SUT_SAM = REPO / "data" / "cge_synthetic_sam_sut.csv"
+
+
+def sut_mapping() -> Mapping:
+    """Mapping of the supply-use layout: margin accounts trd and trp, a stock-change
+    account dstk, and com_fuel (imported only) listed after the paired commodities."""
+    m = synthetic_mapping()
+    m.commodities = ["com_agr", "com_man", "com_ser", "com_fuel"]
+    m.savinv = "s-i"
+    m.margin_accounts = ["trd", "trp"]
+    m.stocks = ["dstk"]
+    return m
+
+
+def sut_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(SUT_SAM), sut_mapping(), **settings)
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -163,6 +182,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         solutions["mp_" + name] = solution
     for name, solution in run_simulations(nonimported_model()).items():
         solutions["cnm_" + name] = solution
+    for name, solution in run_simulations(sut_model()).items():
+        solutions["sut_" + name] = solution
     written = []
     for name, solution in solutions.items():
         if not solution.converged:
