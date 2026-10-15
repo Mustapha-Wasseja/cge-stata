@@ -33,6 +33,7 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:pwm}}world import prices (commodities){p_end}
 {p2col:{cmd:pwe}}world export prices (commodities){p_end}
 {p2col:{cmd:ad}}value-added efficiency, that is productivity (activities){p_end}
+{p2col:{cmd:af}}factor efficiency in every activity (factors; one in the base), for example lower labour productivity from illness{p_end}
 {p2col:{cmd:qg}}government consumption in real terms (commodities), for example public spending on health services{p_end}
 {p2col:{cmd:qinv}}investment demand in real terms (commodities){p_end}
 {p2col:{cmd:trdg}}government transfers to households and enterprises (real terms){p_end}
@@ -53,7 +54,11 @@ investment. In the default closure government savings adjust to a change in
 government spending or transfers. {cmd:tshi}, {cmd:qshi}, {cmd:trshi} and
 {cmd:trshir} need a fund named with {cmd:cge_map, insurance()}; the fund
 spends its revenue less a fixed share saved, so a higher contribution rate or
-larger transfers raise its purchases.
+larger transfers raise its purchases. {cmd:af} multiplies the efficiency of a
+factor: factor quantities and wages stay in physical units, so with mobile
+factors a 2 per cent fall in labour efficiency has the same real effects as 2
+per cent less labour. When {helpb cge_calibrate} links efficiency to health
+services, more health services also raise the efficiency variable {cmd:EFF}.
 
 {pstd}
 or a model variable that is fixed under the current closure, such as {cmd:QFS}

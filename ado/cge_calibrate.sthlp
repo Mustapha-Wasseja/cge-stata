@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.8  14oct2026}{...}
+{* *! version 0.1.14  15oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -11,7 +11,8 @@
 
 {p 8 12 2}
 {cmd:cge_calibrate}{cmd:,} {opt sigmava(numlist)} {opt sigmaq(numlist)} {opt sigmat(numlist)}
-[{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)} {opt sigmaa(numlist)}]
+[{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)} {opt sigmaa(numlist)}
+{opt healthcom(names)} {opt healthfac(names)} {opt healthelas(numlist)}]
 
 
 {title:Description}
@@ -73,6 +74,22 @@ alone, income elasticities are 1. Household consumption must be non-negative.
 Under LES, the equivalent variation reported by {helpb cge_results} uses the LES
 expenditure function.
 
+{phang}
+{opt healthcom(names)}, {opt healthfac(names)} and {opt healthelas(numlist)}
+link factor efficiency to health services (from version 0.1.14).
+{opt healthcom()} lists the health commodities; {opt healthfac()} lists the
+factors whose efficiency depends on them (all factors by default); and
+{opt healthelas()} gives the elasticity of each factor's efficiency with
+respect to the volume of health services consumed by households, the
+government and the health insurance fund, one value or one per factor in
+{opt healthfac()}, zero or positive. With elasticity {it:e}, the factor's
+efficiency is {it:(HS/HS0)^e}, where {it:HS} is that volume and {it:HS0} its
+base; the factor then enters value added in efficiency units while its
+quantity, supply and wage stay in physical units. Without these options, or
+with elasticity 0, efficiency changes only through the {cmd:af} parameter of
+{helpb cge_shock}. The health commodities must have some consumption in the
+base. These options must be typed in full.
+
 
 {title:Example}
 
@@ -80,6 +97,7 @@ expenditure function.
 {phang2}{cmd:. cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) sigmaa(0 0.5 1)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
 
 
 {title:Stored results}

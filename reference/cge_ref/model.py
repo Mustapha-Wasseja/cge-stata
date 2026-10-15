@@ -26,7 +26,7 @@ VARIABLES: dict[str, str] = {
     "YF": "F", "YIF": "IF", "YI": "D", "EH": "H", "YG": "", "EG": "", "GSAV": "",
     "FSAV": "", "TINS": "D", "MPS": "D", "TINSADJ": "", "MPSADJ": "", "IADJ": "",
     "GADJ": "", "WFDIST": "FA", "WALRAS": "", "QT": "C", "QER": "C",
-    "YSHI": "", "SHIADJ": "", "QSHI": "C",
+    "YSHI": "", "SHIADJ": "", "QSHI": "C", "EFF": "F", "HS": "",
 }
 
 # Variables measured in local currency: they scale with the numeraire.
@@ -140,7 +140,9 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["Q2C"] = (np.where(cda, v["PVA"] * v["QVA"] * dac, v["QVA"]),
                  np.where(cda, v["PINTA"] * v["QINTA"] * da,
                           v["QINTA"] * ((v["PINTA"] / v["PVA"]) * da / dac) ** (1 / (1 + ra))), ~lt)
-    qf = np.where(fa, v["QF"], 1.0)
+    # Factors in efficiency units (version 0.1.14)
+    z = (p["af"] * v["EFF"])[:, None]
+    qf = np.where(fa, z * v["QF"], 1.0)
     rho = np.where(cd, 1.0, p["rho_va"])
     ces_sum = (p["delta_va"] * qf ** (-rho)).sum(axis=0)
     q3_ces = p["ad"] * ces_sum ** (-1.0 / rho)
@@ -148,9 +150,14 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["Q3"] = (v["QVA"], np.where(cd, q3_cd, q3_ces), every_a)
     wage = v["W"][:, None] * v["WFDIST"]
     pvaqva = v["PVA"] * v["QVA"]
-    q4_ces = pvaqva / ces_sum * p["delta_va"] * qf ** (-rho - 1)
+    q4_ces = pvaqva / ces_sum * p["delta_va"] * qf ** (-rho - 1) * z
     eq["Q4"] = (np.where(cd, wage * v["QF"], wage),
                 np.where(cd, p["delta_va"] * pvaqva, q4_ces), fa)
+    # Health services and factor efficiency (version 0.1.14)
+    eta = p["eta_h"]
+    hs = np.where(s["hc"], v["QH"].sum(axis=1) + v["QG"] + v["QSHI"], 0.0).sum()
+    eq["H1"] = (v["HS"], np.atleast_1d(hs), np.atleast_1d(np.any(eta != 0)))
+    eq["H2"] = (v["EFF"], (v["HS"] / p["hs0"]) ** eta, eta != 0)
     # Intermediate inputs and household purchases exist only where the SAM has a flow
     eq["Q5"] = (v["QINT"], p["ica"] * v["QINTA"][None, :], s["qint"])
     eq["Q6"] = (v["QX"], p["theta"].T @ v["QA"], cx)
@@ -268,7 +275,8 @@ class Model:
 
     def __init__(self, sam: SAM, mapping: Mapping, sigma_va, sigma_q, sigma_t,
                  factor_quantities: dict[tuple[str, str], float] | None = None,
-                 income_elasticities=None, frisch=None, sigma_a=None):
+                 income_elasticities=None, frisch=None, sigma_a=None,
+                 health_commodities=None, health_elasticities=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -286,6 +294,7 @@ class Model:
                         factor_quantities)
         self._household_demand(income_elasticities, frisch)
         self._top_nest(sigma_a)
+        self._health_link(health_commodities, health_elasticities)
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
         with np.errstate(all="ignore"):      # masked elements may divide by zero
             eqs = _equations(self.base, self.params, self.struct)
@@ -566,6 +575,42 @@ class Model:
         aa = np.where(lt, 1.0, np.where(cda, QA0 / (QVA0 ** delta * QINTA0 ** deltac), QA0 / np.where(lt | cda, 1.0, ces)))
         self.struct["lt"], self.struct["cda"] = lt, cda
         self.params.update({"sigma_a": sa, "rho_a": rho, "delta_a": delta, "deltac_a": deltac, "aa": aa})
+
+    def _health_link(self, health_commodities, health_elasticities) -> None:
+        """Factor efficiency (model_spec.md, 5.2 and 7.3): af = 1 and, given health
+        commodities and elasticities by factor, EFF = (HS / HS0)^eta."""
+        C, F, b = self.sets["C"], self.sets["F"], self.base
+        nF = len(F)
+        hcom = list(health_commodities or [])
+        unknown = [c for c in hcom if c not in C]
+        if unknown:
+            raise ValueError(f"health_commodities: {unknown} are not commodities of the model")
+        if health_elasticities is None:
+            eta = np.zeros(nF)
+        elif isinstance(health_elasticities, dict):
+            extra = [f for f in health_elasticities if f not in F]
+            if extra:
+                raise ValueError(f"health_elasticities: {extra} are not factors of the model")
+            eta = np.array([float(health_elasticities.get(f, 0.0)) for f in F])
+        else:
+            eta = np.broadcast_to(np.asarray(health_elasticities, dtype=float), (nF,)).copy()
+        if np.any(~np.isfinite(eta)) or np.any(eta < 0):
+            raise ValueError("health elasticities must be zero or positive")
+        if np.any(eta != 0) and not hcom:
+            raise ValueError("health elasticities need health_commodities")
+        hc = np.array([c in hcom for c in C], dtype=bool)
+        linked = bool(np.any(eta != 0))
+        hs0 = float(np.where(hc, b["QH"].sum(axis=1) + b["QG"] + b["QSHI"], 0.0).sum())
+        if linked and hs0 <= 0:
+            raise SAMError("health services have no consumption by households, the government "
+                           "or the health insurance fund")
+        hs0 = hs0 if linked else 1.0
+        self.struct["hc"] = hc
+        self.params.update({"af": np.ones(nF), "eta_h": eta, "hs0": np.array(hs0)})
+        b["EFF"] = np.ones(nF)
+        b["HS"] = np.atleast_1d(hs0)
+        self.exists["EFF"] = eta != 0
+        self.exists["HS"] = np.atleast_1d(linked)
 
     def _household_demand(self, income_elasticities, frisch) -> None:
         """LES demand (model_spec.md, 7.5) when income elasticities or Frisch parameters are given."""

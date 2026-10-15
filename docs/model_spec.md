@@ -50,6 +50,11 @@ Included:
   a fixed basket of health services with its revenue less a fixed share saved.
   (A donor-funded non-profit institution is mapped as a household that receives
   transfers from the rest of the world.)
+- From version 0.1.14: factors enter value added in efficiency units. Each
+  factor has an exogenous efficiency (for example, lower labour productivity
+  from illness) and, optionally, an efficiency that rises with the volume of
+  health services consumed by households, the government and the health
+  insurance fund, with an elasticity chosen for each factor.
 - From version 0.1.8: exports drawn from composite supply, for commodities whose
   exports are at least their domestic output (re-exports, and exports supplied
   from inventories or valued at purchaser prices).
@@ -70,6 +75,7 @@ and exports; recursive dynamics.
 | $CM \subseteq C$ | imported commodities (base imports > 0) |
 | $CNM = C \setminus CM$ | non-imported commodities |
 | $T$ | margin accounts (may be empty; from version 0.1.7) |
+| $HC \subseteq C$ | health services whose consumption raises factor efficiency (may be empty; from version 0.1.14) |
 | $CT \subseteq C$ | margin commodities: the services that margin accounts buy |
 | $F$ | factors |
 | $H$ | households (including non-profit institutions mapped as households) |
@@ -138,6 +144,8 @@ Incomes, rates and adjustment variables
 | $IADJ$ | investment scaling factor |
 | $GADJ$ | government consumption scaling factor |
 | $WFDIST_{fa}$ | wage distortion factor for factor $f$ in activity $a$ |
+| $EFF_f$ | efficiency of factor $f$ from health services (from version 0.1.14; one for a factor with $\eta_f = 0$) |
+| $HS$ | volume of health services consumed by households, the government and the health insurance fund |
 | $WALRAS$ | slack in the savings-investment balance; zero at a solution |
 
 ## 4. Parameters
@@ -152,6 +160,8 @@ Incomes, rates and adjustment variables
 | $ica_{ca}$ | intermediate input $c$ per unit of aggregate intermediate input of $a$ |
 | $icm_{c'c}$ | margin services of commodity $c' \in CT$ per unit of composite supply of $c$ |
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
+| $af_f$ | exogenous efficiency of factor $f$ in every activity (one in the base; from version 0.1.14) |
+| $\eta_f$, $HS^0$ | elasticity of the efficiency of factor $f$ with respect to health services, and the base volume of health services |
 | $at_c$, $\delta^{t}_c$, $\rho^{t}_c$ | CET efficiency, share and exponent parameters |
 | $aq_c$, $\delta^{q}_c$, $\rho^{q}_c$ | Armington efficiency, share and exponent parameters |
 | $shif_{if}$ | share of factor $f$ income, after health insurance contributions, going to institution $i$ |
@@ -180,6 +190,8 @@ $\sigma^{q}_c$ (substitution between imports and domestic goods). The exponents
 are $\rho^{va}_a = 1/\sigma^{va}_a - 1$, $\rho^{t}_c = 1/\sigma^{t}_c + 1$ and
 $\rho^{q}_c = 1/\sigma^{q}_c - 1$. All elasticities must be positive and finite.
 $\sigma^{va}_a = 1$ selects the Cobb-Douglas form of value added (Q3', Q4').
+From version 0.1.14 the user may also supply health elasticities $\eta_f \ge 0$
+(default 0) with the set $HC$.
 Version 0.1 has no Cobb-Douglas form of the Armington function, so
 $\sigma^{q}_c \neq 1$ is required for imported commodities.
 
@@ -232,17 +244,33 @@ With a CES or Cobb-Douglas top nest, value added and intermediate inputs
 substitute for each other as their prices change; P7 still sets the activity
 price. An activity without intermediate inputs keeps the Leontief top nest.
 
+From version 0.1.14 factors enter value added in efficiency units,
+$\widetilde{QF}_{fa} = af_f\,EFF_f\,QF_{fa}$. Factor quantities $QF_{fa}$,
+supplies $QFS_f$ and wages $W_f$ remain in physical units, so a more efficient
+factor earns more per unit. In the base $af_f = EFF_f = 1$.
+
 Value added, CES case ($\sigma^{va}_a \neq 1$):
 
-$$QVA_a = ad_a\left[\sum_f \delta^{va}_{fa}\,QF_{fa}^{-\rho^{va}_a}\right]^{-1/\rho^{va}_a} \tag{Q3}$$
+$$QVA_a = ad_a\left[\sum_f \delta^{va}_{fa}\,\widetilde{QF}_{fa}^{-\rho^{va}_a}\right]^{-1/\rho^{va}_a} \tag{Q3}$$
 
-$$W_f\,WFDIST_{fa} = PVA_a\,QVA_a\left[\sum_{f'} \delta^{va}_{f'a}\,QF_{f'a}^{-\rho^{va}_a}\right]^{-1}\delta^{va}_{fa}\,QF_{fa}^{-\rho^{va}_a-1} \tag{Q4}$$
+$$W_f\,WFDIST_{fa} = PVA_a\,QVA_a\left[\sum_{f'} \delta^{va}_{f'a}\,\widetilde{QF}_{f'a}^{-\rho^{va}_a}\right]^{-1}\delta^{va}_{fa}\,\widetilde{QF}_{fa}^{-\rho^{va}_a-1}\,af_f\,EFF_f \tag{Q4}$$
 
 Value added, Cobb-Douglas case ($\sigma^{va}_a = 1$):
 
-$$QVA_a = ad_a \prod_f QF_{fa}^{\delta^{va}_{fa}}, \qquad \sum_f \delta^{va}_{fa} = 1 \tag{Q3'}$$
+$$QVA_a = ad_a \prod_f \widetilde{QF}_{fa}^{\delta^{va}_{fa}}, \qquad \sum_f \delta^{va}_{fa} = 1 \tag{Q3'}$$
 
 $$W_f\,WFDIST_{fa}\,QF_{fa} = \delta^{va}_{fa}\,PVA_a\,QVA_a \tag{Q4'}$$
+
+Health services and factor efficiency (from version 0.1.14), when $HC$ is not
+empty and some $\eta_f > 0$:
+
+$$HS = \sum_{c \in HC} \Big(\sum_h QH_{ch} + QG_c + QSHI_c\Big) \tag{H1}$$
+
+$$EFF_f = \left(HS / HS^0\right)^{\eta_f}, \qquad \eta_f > 0 \tag{H2}$$
+
+Health services are summed at base prices (one). With a fixed population the
+ratio $HS/HS^0$ is also the ratio of health services per head to its base.
+Otherwise $EFF_f = 1$.
 
 $$QINT_{ca} = ica_{ca}\,QINTA_a \tag{Q5}$$
 
@@ -574,6 +602,10 @@ from composite supply. Calibration must verify this identity, not assume it.
   and $ad_a = QVA^0_a / \left[\sum_f \delta^{va}_{fa}\,(QF^0_{fa})^{-\rho^{va}_a}\right]^{-1/\rho^{va}_a}$.
 - Cobb-Douglas value added: $\delta^{va}_{fa} = SAM(f, a) / QVA^0_a$ and
   $ad_a = QVA^0_a / \prod_f (QF^0_{fa})^{\delta^{va}_{fa}}$.
+- Factor efficiency (from version 0.1.14): $af_f = EFF^0_f = 1$, so the
+  parameters above are unchanged;
+  $HS^0 = \sum_{c \in HC} \left[\sum_h SAM(c, h) + SAM(c, gov) + SAM(c, shi)\right]$,
+  which must be positive when some $\eta_f > 0$.
 
 ### 7.4 CET and Armington functions
 

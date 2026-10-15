@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.13 implements the standard static model described in
+Version 0.1.14 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -26,6 +26,9 @@ Version 0.1.13 implements the standard static model described in
 - a social health insurance fund (version 0.1.13), financed by contributions on
   factor income and by transfers from the government and the rest of the world,
   which buys health services with its revenue less a fixed share saved;
+- factors in efficiency units (version 0.1.14): an exogenous efficiency for each
+  factor, and optionally an efficiency that rises with the volume of health
+  services consumed, with an elasticity for each factor;
 - selectable closures for the external account, government, savings-investment,
   the numeraire and each factor (mobile, activity-specific or unemployed);
 - SAMs in national-accounts layout: exports recorded as sales by activities,
@@ -45,7 +48,7 @@ the sparse rest (on a 4,439-equation model, about 3 seconds instead of about
 Version 0.1.10 adds shocks to government and investment demand by product and to
 transfers, such as public spending on health services or donor funding.
 Version 0.1.13 adds shocks to the fund's contribution rates, purchases and
-transfers received.
+transfers received; version 0.1.14 adds shocks to factor efficiency.
 
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.

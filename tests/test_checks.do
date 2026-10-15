@@ -483,6 +483,65 @@ quietly replace hhd = hhd + 1 in 17
 quietly cge_sam, labels(account)
 capture cge_map, `hltopts' insurance(shi)
 assert _rc == 459
+* Labour efficiency linked to health services (version 0.1.14): Jacobian,
+* checks, the equivalence of lower efficiency and less labour, and errors
+cge_synthetic, clear health
+quietly cge_sam, labels(account)
+quietly cge_map, `hltopts' insurance(shi)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)
+assert r(max_residual) < 1e-12
+cge_shock qg, elements(com_hlt) scale(1.2)
+cge_shock af, elements(lab) scale(0.98)
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
+quietly cge_solve, name(eff_up)
+cge_check, homogeneity perturb(0.1)
+assert r(failures) == 0
+quietly cge_closure, external(fixexr) savinv(investment) factors(cap:specific)
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
+quietly cge_results, sim(eff_up) clear nodisplay
+quietly count if variable == "EFF"
+assert r(N) == 1
+quietly summarize value if variable == "EFF" & element1 == "lab"
+local eff = r(mean)
+quietly summarize base if variable == "HS"
+local hs0 = r(mean)
+quietly summarize value if variable == "HS"
+assert abs(`eff' - (r(mean) / `hs0')^0.3) < 1e-10 & `eff' != 1
+* Without the link, labour 2 per cent less efficient equals 2 per cent less labour
+cge_synthetic, clear health
+quietly cge_sam, labels(account)
+quietly cge_map, `hltopts' insurance(shi)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock af, elements(lab) scale(0.98)
+quietly cge_solve, name(af98)
+cge_shock, reset
+cge_shock QFS, elements(lab) scale(0.98)
+quietly cge_solve, name(qfs98)
+tempfile af98
+quietly cge_results, sim(af98) clear nodisplay
+rename value v_af
+quietly save `af98'
+quietly cge_results, sim(qfs98) clear nodisplay
+quietly merge 1:1 variable element1 element2 using `af98', assert(match) nogenerate
+quietly generate double rel = abs(v_af - value) / max(1, abs(value))
+quietly summarize rel if inlist(variable, "QA", "QVA", "QQ", "YF", "PQ")
+assert r(max) < 1e-8
+assert abs(v_af - 0.98 * value) < 1e-8 * value if variable == "W" & element1 == "lab"
+* Errors
+cge_synthetic, clear health
+quietly cge_sam, labels(account)
+quietly cge_map, `hltopts' insurance(shi)
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthelas(0.3)
+assert _rc == 198
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab cap) healthelas(0.3 0.1 0.2)
+assert _rc == 198
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_xyz) healthelas(0.3)
+assert _rc == 111
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab)
+assert _rc == 198
+
 * Fund parameters need a fund
 quietly do setup_synthetic.do
 capture cge_shock tshi, elements(lab) scale(1.5)

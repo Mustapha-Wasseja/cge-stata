@@ -174,4 +174,21 @@ cge_shock trshi, scale(1.5)
 cge_solve, name(shi_gov_transfer_up50) tolerance(1e-12)
 _compare_reference shi_gov_transfer_up50
 
+* Labour efficiency linked to health services (version 0.1.14), elasticity 0.3
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)
+assert r(N_equations) == 119
+_standard_simulations eff_
+cge_shock, reset
+cge_shock qg, elements(com_hlt) scale(1.2)
+cge_solve, name(eff_gov_health_up20) tolerance(1e-12)
+_compare_reference eff_gov_health_up20
+cge_shock, reset
+cge_shock tshi, elements(lab) scale(1.5)
+cge_solve, name(eff_contribution_up50) tolerance(1e-12)
+_compare_reference eff_contribution_up50
+cge_shock, reset
+cge_shock af, elements(lab) scale(0.98)
+cge_solve, name(eff_labour_efficiency_down2) tolerance(1e-12)
+_compare_reference eff_labour_efficiency_down2
+
 program drop _compare_reference _standard_simulations

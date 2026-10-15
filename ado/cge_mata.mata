@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.13  2026-10-15
+*! cge_mata.mata  v0.1.14  2026-10-15
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -28,6 +28,10 @@ struct cge_par {
     // transfers from government and the rest of the world
     real colvector tshi, qshi
     real scalar    sshi, trshi, trshir
+    // factor efficiency: exogenous efficiency, elasticity with respect to
+    // health services and base volume of health services
+    real colvector af, etah
+    real scalar    hs0
 }
 
 struct cge_model {
@@ -47,6 +51,8 @@ struct cge_model {
     real scalar      n, nC, nF, nH, nE, nD, nI
     // model structure
     real colvector   ce, cm, cd, cx, ct, cr, cshi
+    // health services whose consumption raises factor efficiency
+    real colvector   chs
     // activities with a Leontief top nest, and with a Cobb-Douglas one
     real colvector   lt, cda
     real matrix      fa
@@ -214,11 +220,11 @@ void _cge_layout(struct cge_model scalar M)
     M.vname = ("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
-               "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI")'
+               "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI","EFF","HS")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
-               "","","FA","","C","C","","","C")'
+               "","","FA","","C","C","","","C","F","")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -809,8 +815,8 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix PA, PVA, PINTA, PX, PD, PE, PM, PQ, W, EXR, CPI, DPI
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
-    real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER, YSHI, SHIADJ, QSHI
-    real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif
+    real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER, YSHI, SHIADJ, QSHI, EFF, HS
+    real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif, z
     real colvector oneA, oneC, oneF, oneH, oneD, DY, rs
     real scalar k, nH, nD
 
@@ -829,7 +835,8 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     TINSADJ = _cge_v(M, x, 37); MPSADJ = _cge_v(M, x, 38); IADJ = _cge_v(M, x, 39)
     GADJ = _cge_v(M, x, 40);  WFDIST = _cge_v(M, x, 41); WALRAS = _cge_v(M, x, 42)
     QT = _cge_v(M, x, 43);    QER = _cge_v(M, x, 44);   YSHI = _cge_v(M, x, 45)
-    SHIADJ = _cge_v(M, x, 46); QSHI = _cge_v(M, x, 47)
+    SHIADJ = _cge_v(M, x, 46); QSHI = _cge_v(M, x, 47);  EFF = _cge_v(M, x, 48)
+    HS = _cge_v(M, x, 49)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -874,7 +881,9 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
              M.cda :* (PINTA :* QINTA :* p.dla) +
              (1 :- M.cda) :* (QINTA :* (((PINTA :/ PVA) :* p.dla :/ p.dlac) :^ (1 :/ (1 :+ p.rha)))),
              1 :- M.lt)
-    qf = M.fa :* QF + (1 :- M.fa)
+    // Factors in efficiency units (from version 0.1.14)
+    z = p.af :* EFF
+    qf = M.fa :* (z :* QF) + (1 :- M.fa)
     rho = (M.cd + (1 :- M.cd) :* p.rva)'
     cessum = colsum(p.dva :* (qf :^ (-rho)))
     q3 = (p.ad' :* (cessum :^ (-1 :/ rho)))'
@@ -885,7 +894,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     wage = W :* WFDIST
     pvaqva = (PVA :* QVA)'
     lhs = wage
-    rhs = (pvaqva :/ cessum) :* p.dva :* (qf :^ (-rho :- 1))
+    rhs = (pvaqva :/ cessum) :* p.dva :* (qf :^ (-rho :- 1)) :* z
     for (k = 1; k <= M.n; k++) {
         if (M.cd[k]) {
             lhs[., k] = wage[., k] :* QF[., k]
@@ -893,6 +902,9 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
         }
     }
     _cge_put(M, L, R, K, record, "Q4", lhs, rhs, M.fa)
+    // Health services and factor efficiency (from version 0.1.14)
+    _cge_put(M, L, R, K, record, "H1", HS, sum(M.chs :* (rowsum(QH) + QG + QSHI)), any(p.etah))
+    _cge_put(M, L, R, K, record, "H2", EFF, (HS / p.hs0) :^ p.etah, p.etah :!= 0)
     // Intermediate inputs and household purchases exist only where the SAM has a flow
     _cge_put(M, L, R, K, record, "Q5", QINT, p.ica :* QINTA', p.ica :!= 0)
     _cge_put(M, L, R, K, record, "Q6", QX, p.theta' * QA, M.cx)
@@ -977,7 +989,8 @@ real scalar _cge_maxres(struct cge_model scalar M, struct cge_par scalar p, real
 // =====================================================================
 
 void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, string scalar fqname,
-                    string scalar s_ie, string scalar s_fr, string scalar s_a)
+                    string scalar s_ie, string scalar s_fr, string scalar s_a, string scalar s_hc,
+                    string scalar s_hf, string scalar s_he)
 {
     struct cge_model scalar M
     struct cge_par scalar p
@@ -1200,6 +1213,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.trshi = (M.ishi ? S[M.ishi, M.igov] : 0)
     p.trshir = (M.ishi ? S[M.ishi, M.irow] : 0)
     M.cshi = (QSHI0 :!= 0)
+    _cge_health(M, p, QH0, QSHI0, s_hc, s_hf, s_he)
     p.cwts = rowsum(QH0) :/ sum(QH0)
     p.dwts = QD0 :/ sum(QD0)
 
@@ -1287,6 +1301,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "YSHI", YSHI0)
     _cge_setv(M, x0, "SHIADJ", 1)
     _cge_setv(M, x0, "QSHI", QSHI0)
+    _cge_setv(M, x0, "EFF", J(nF, 1, 1))
+    _cge_setv(M, x0, "HS", p.hs0)
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -1309,6 +1325,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, M.exists, "YSHI", (M.ishi > 0))
     _cge_setv(M, M.exists, "SHIADJ", (M.ishi > 0))
     _cge_setv(M, M.exists, "QSHI", M.cshi)
+    _cge_setv(M, M.exists, "EFF", p.etah :!= 0)
+    _cge_setv(M, M.exists, "HS", any(p.etah))
 
     M.nominal = J(total, 1, 0)
     for (k = 1; k <= rows(M.vname); k++) {
@@ -1362,6 +1380,44 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     }
     st_numscalar("r(N_equations)", M.neq)
     st_numscalar("r(max_residual)", maxres)
+}
+
+// Factor efficiency (model_spec.md, 5.2 and 7.3): af = 1 and, given health
+// commodities and elasticities, EFF_f = (HS / HS0)^eta_f. Elasticities are one
+// value for every factor in healthfac() (all factors by default) or one each.
+void _cge_health(struct cge_model scalar M, struct cge_par scalar p, real matrix QH0, real colvector QSHI0,
+                 string scalar s_hc, string scalar s_hf, string scalar s_he)
+{
+    real colvector idx, f, eta
+    real rowvector v
+    real scalar hs0
+    M.chs = J(M.nC, 1, 0)
+    if (s_hc != "") {
+        idx = _cge_elements(M.C, s_hc, "commodities")
+        M.chs[idx] = J(rows(idx), 1, 1)
+    }
+    eta = J(M.nF, 1, 0)
+    if (s_he != "") {
+        if (s_hc == "") _cge_fail("healthelas() needs healthcom(): name the health services", 198)
+        if (s_hf == "") f = (1::M.nF)
+        else f = _cge_elements(M.F, s_hf, "factors")
+        v = strtoreal(tokens(s_he))
+        if (cols(v) == 1) v = J(1, rows(f), v)
+        if (cols(v) != rows(f)) {
+            errprintf("healthelas() needs 1 or %f values\n", rows(f))
+            exit(198)
+        }
+        if (hasmissing(v) | min(v) < 0) _cge_fail("healthelas() values must be zero or positive", 198)
+        eta[f] = v'
+    }
+    else if (s_hf != "") _cge_fail("healthfac() needs healthelas()", 198)
+    hs0 = sum(M.chs :* (rowsum(QH0) + p.qg + QSHI0))
+    if (any(eta) & hs0 <= 0) {
+        _cge_fail("health services have no consumption by households, the government or the health insurance fund", 459)
+    }
+    p.af = J(M.nF, 1, 1)
+    p.etah = eta
+    p.hs0 = (any(eta) ? hs0 : 1)
 }
 
 // Top nest of production (model_spec.md, 5.2 and 7.3): Leontief (sigmaa 0, the
@@ -1571,6 +1627,7 @@ real colvector _cge_par_get(struct cge_par scalar p, string scalar name)
     if (name == "qshi") return(p.qshi)
     if (name == "trshi") return(p.trshi)
     if (name == "trshir") return(p.trshir)
+    if (name == "af") return(p.af)
     _cge_fail("cge internal error: unknown parameter " + name, 3498)
 }
 
@@ -1594,6 +1651,7 @@ void _cge_par_set(struct cge_par scalar p, string scalar name, real colvector v)
     else if (name == "qshi") p.qshi = v
     else if (name == "trshi") p.trshi = v
     else if (name == "trshir") p.trshir = v
+    else if (name == "af") p.af = v
 }
 
 real colvector _cge_elements(string colvector set, string scalar elems, string scalar what)
@@ -1641,7 +1699,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
     else if (anyof(("trdg", "trdr"), target)) {
         idx = _cge_elements(M.D, elems, "households and enterprises")
     }
-    else if (anyof(("trfr", "tshi"), target)) {
+    else if (anyof(("trfr", "tshi", "af"), target)) {
         idx = _cge_elements(M.F, elems, "factors")
     }
     else if (anyof(("trgr", "trrg", "trshi", "trshir"), target)) {
@@ -1661,7 +1719,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
 
     k = _cge_vidx(M, target)
     if (k == 0) {
-        _cge_fail(target + " is not a shockable parameter (tm te tq ta pwm pwe ad qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir) or model variable", 198)
+        _cge_fail(target + " is not a shockable parameter (tm te tq ta pwm pwe ad af qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir) or model variable", 198)
     }
     set = M.vset[k]
     if (set == "") {
@@ -1801,14 +1859,28 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp_same(M, rowid, boff, pr, pc, "Q3", "QVA")
     _cge_nz(M.fa, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "Q3", j, "QF", (i :- 1) :* nA :+ j)
+    _cge_nz(M.fa, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "Q3", j, "EFF", i)
     _cge_sp_same(M, rowid, boff, pr, pc, "Q4", ("WFDIST", "QF"))
     for (f = 1; f <= nF; f++) {
         e = (f - 1) * nA :+ cA
         _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "W", f)
         _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "PVA", cA)
         _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "QVA", cA)
-        for (g = 1; g <= nF; g++) _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "QF", (g - 1) * nA :+ cA)
+        for (g = 1; g <= nF; g++) {
+            _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "QF", (g - 1) * nA :+ cA)
+            _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "EFF", g)
+        }
     }
+    _cge_sp(M, rowid, boff, pr, pc, "H1", 1, "HS", 1)
+    i = select(cC, M.chs)
+    for (k = 1; k <= rows(i); k++) {
+        _cge_sp(M, rowid, boff, pr, pc, "H1", J(nH, 1, 1), "QH", (i[k] - 1) * nH :+ (1::nH))
+        _cge_sp(M, rowid, boff, pr, pc, "H1", 1, "QG", i[k])
+        _cge_sp(M, rowid, boff, pr, pc, "H1", 1, "QSHI", i[k])
+    }
+    _cge_sp_same(M, rowid, boff, pr, pc, "H2", "EFF")
+    _cge_sp(M, rowid, boff, pr, pc, "H2", (1::nF), "HS", 1)
     e = (1::nC * nA)
     _cge_sp(M, rowid, boff, pr, pc, "Q5", e, "QINT", e)
     _cge_sp(M, rowid, boff, pr, pc, "Q5", e, "QINTA", mod(e :- 1, nA) :+ 1)

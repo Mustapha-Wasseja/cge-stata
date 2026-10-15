@@ -140,6 +140,8 @@ def sut_model(**elasticities) -> Model:
 
 
 HEALTH_SAM = REPO / "data" / "cge_synthetic_sam_health.csv"
+# Labour efficiency linked to health services (version 0.1.14)
+HEALTH_LINK = {"health_commodities": ["com_hlt"], "health_elasticities": {"lab": 0.3}}
 
 
 def health_mapping() -> Mapping:
@@ -236,6 +238,20 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         Closure(), tol=1e-12, params={"tshi": _scaled(health.params["tshi"], lab, 1.5)})
     solutions["shi_gov_transfer_up50"] = health.solve(
         Closure(), tol=1e-12, params={"trshi": health.params["trshi"] * 1.5})
+    # Labour efficiency linked to health services (version 0.1.14): the standard
+    # shocks, more government health services, a higher contribution rate and an
+    # exogenous fall in labour efficiency
+    eff = health_model(**HEALTH_LINK)
+    for name, solution in run_simulations(eff).items():
+        solutions["eff_" + name] = solution
+    hlt = eff.sets["C"].index("com_hlt")
+    lab = eff.sets["F"].index("lab")
+    solutions["eff_gov_health_up20"] = eff.solve(
+        Closure(), tol=1e-12, params={"qg": _scaled(eff.params["qg"], hlt, 1.2)})
+    solutions["eff_contribution_up50"] = eff.solve(
+        Closure(), tol=1e-12, params={"tshi": _scaled(eff.params["tshi"], lab, 1.5)})
+    solutions["eff_labour_efficiency_down2"] = eff.solve(
+        Closure(), tol=1e-12, params={"af": _scaled(eff.params["af"], lab, 0.98)})
     written = []
     for name, solution in solutions.items():
         if not solution.converged:
