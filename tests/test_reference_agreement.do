@@ -155,4 +155,23 @@ cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 assert r(N_equations) == 103
 _standard_simulations sut_
 
+* Health layout (version 0.1.13): health services and a social health insurance
+* fund financed by contributions on labour income, government and donors
+cge_synthetic, clear health
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)                       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert r(N_equations) == 117
+_standard_simulations shi_
+cge_shock, reset
+cge_shock tshi, elements(lab) scale(1.5)
+cge_solve, name(shi_contribution_up50) tolerance(1e-12)
+_compare_reference shi_contribution_up50
+cge_shock, reset
+cge_shock trshi, scale(1.5)
+cge_solve, name(shi_gov_transfer_up50) tolerance(1e-12)
+_compare_reference shi_gov_transfer_up50
+
 program drop _compare_reference _standard_simulations

@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health}]
 
 
 {title:Options}
@@ -63,6 +63,13 @@ output: {cmd:com_fuel} re-exports 2 of its imports, and {cmd:com_agr} exports
 105 against output of 100, with a fall in its stocks. Map it with
 {cmd:commodities(com_agr com_man com_ser com_fuel)}, {cmd:savinv(si)},
 {cmd:marginaccounts(trd trp)} and {cmd:stocks(dstk)}.
+
+{phang}
+{opt health} loads an 18-account layout with health services ({cmd:act_hlt},
+{cmd:com_hlt}, neither imported, exported nor taxed) and a social health
+insurance fund ({cmd:shi}) that receives contributions of 6 on labour income, 2
+from the government and 1 from abroad, buys 8 of health services and saves 1.
+Map it with the four activities and commodities and {cmd:insurance(shi)}.
 
 
 {title:Description}

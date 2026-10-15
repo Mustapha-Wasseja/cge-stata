@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.12 implements the standard static model described in
+Version 0.1.13 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -23,6 +23,9 @@ Version 0.1.12 implements the standard static model described in
   (version 0.1.2);
 - government with direct, sales, import, export and activity taxes,
   savings-investment and the rest of the world;
+- a social health insurance fund (version 0.1.13), financed by contributions on
+  factor income and by transfers from the government and the rest of the world,
+  which buys health services with its revenue less a fixed share saved;
 - selectable closures for the external account, government, savings-investment,
   the numeraire and each factor (mobile, activity-specific or unemployed);
 - SAMs in national-accounts layout: exports recorded as sales by activities,
@@ -41,6 +44,8 @@ the sparse rest (on a 4,439-equation model, about 3 seconds instead of about
 250). It also repairs the fallback solver, which failed in Stata 13.
 Version 0.1.10 adds shocks to government and investment demand by product and to
 transfers, such as public spending on health services or donor funding.
+Version 0.1.13 adds shocks to the fund's contribution rates, purchases and
+transfers received.
 
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.

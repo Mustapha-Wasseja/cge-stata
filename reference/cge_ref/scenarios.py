@@ -139,6 +139,24 @@ def sut_model(**elasticities) -> Model:
     return Model(SAM.from_csv(SUT_SAM), sut_mapping(), **settings)
 
 
+HEALTH_SAM = REPO / "data" / "cge_synthetic_sam_health.csv"
+
+
+def health_mapping() -> Mapping:
+    """Mapping of the health layout: health services act_hlt and com_hlt, and a
+    social health insurance fund shi."""
+    m = synthetic_mapping()
+    m.activities = ["act_agr", "act_man", "act_ser", "act_hlt"]
+    m.commodities = ["com_agr", "com_man", "com_ser", "com_hlt"]
+    m.insurance = "shi"
+    return m
+
+
+def health_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(HEALTH_SAM), health_mapping(), **settings)
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -182,9 +200,6 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         Closure(), tol=1e-12, **simulation_inputs(mixed)["tariff_removal"])
     for name, solution in run_simulations(institutions_model()).items():
         solutions["inst_" + name] = solution
-    # Spending and transfer shocks (version 0.1.10): government purchases of
-    # com_ser up 20 per cent; transfers from abroad to households and the
-    # enterprise halved
     for name, solution in run_simulations(synthetic_model(sigma_a=TOP_NEST)).items():
         solutions["nest_" + name] = solution
     for name, solution in run_simulations(synthetic_model(**LES_SETTINGS)).items():
@@ -192,6 +207,9 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     inst_les = institutions_model(income_elasticities=LES_SETTINGS["income_elasticities"], frisch=[-2.0, -3.0])
     solutions["inst_les_tariff_removal"] = inst_les.solve(
         Closure(), tol=1e-12, **simulation_inputs(inst_les)["tariff_removal"])
+    # Spending and transfer shocks (version 0.1.10): government purchases of
+    # com_ser up 20 per cent; transfers from abroad to households and the
+    # enterprise halved
     std = synthetic_model()
     solutions["gov_ser_up20"] = std.solve(
         Closure(), tol=1e-12, params={"qg": _scaled(std.params["qg"], std.sets["C"].index("com_ser"), 1.2)})
@@ -208,6 +226,16 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         solutions["cnm_" + name] = solution
     for name, solution in run_simulations(sut_model()).items():
         solutions["sut_" + name] = solution
+    # Health insurance fund (version 0.1.13): the standard shocks, a higher
+    # contribution rate on labour income and larger government transfers to the fund
+    health = health_model()
+    for name, solution in run_simulations(health).items():
+        solutions["shi_" + name] = solution
+    lab = health.sets["F"].index("lab")
+    solutions["shi_contribution_up50"] = health.solve(
+        Closure(), tol=1e-12, params={"tshi": _scaled(health.params["tshi"], lab, 1.5)})
+    solutions["shi_gov_transfer_up50"] = health.solve(
+        Closure(), tol=1e-12, params={"trshi": health.params["trshi"] * 1.5})
     written = []
     for name, solution in solutions.items():
         if not solution.converged:

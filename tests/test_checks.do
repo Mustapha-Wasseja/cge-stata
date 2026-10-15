@@ -448,6 +448,48 @@ quietly cge_results, sim(spending) clear nodisplay
 assert abs(value - 1.2 * base) < 1e-9 if variable == "QG" & element1 == "com_ser"
 quietly do setup_synthetic.do
 
+* Health insurance fund (version 0.1.13): mapping, checks, Jacobian and errors
+local hltopts activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)                            ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_synthetic, clear health
+quietly cge_sam, labels(account)
+capture cge_map, `hltopts'
+assert _rc == 459
+quietly cge_map, `hltopts' insurance(shi)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert r(max_residual) < 1e-12
+cge_shock tshi, elements(lab) scale(1.5)
+cge_shock trshir, value(2)
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
+quietly cge_solve, name(shi_up)
+cge_check, homogeneity perturb(0.1)
+assert r(failures) == 0
+quietly cge_closure, external(fixexr) savinv(investment) factors(cap:specific)
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
+quietly cge_results, sim(shi_up) clear nodisplay
+assert value > base if variable == "QSHI" & element1 == "com_hlt"
+assert value > base if variable == "YIF" & element1 == "shi" & element2 == "lab"
+quietly count if variable == "QSHI"
+assert r(N) == 1
+* A transfer from the fund to households is not represented
+cge_synthetic, clear health
+assert account[11] == "hhd" & account[17] == "sav"
+quietly replace shi = shi + 1 in 11
+quietly replace shi = shi - 1 in 17
+quietly replace hhd = hhd + 1 in 17
+quietly cge_sam, labels(account)
+capture cge_map, `hltopts' insurance(shi)
+assert _rc == 459
+* Fund parameters need a fund
+quietly do setup_synthetic.do
+capture cge_shock tshi, elements(lab) scale(1.5)
+assert _rc == 459
+capture cge_shock trshi, value(1)
+assert _rc == 459
+
 * Shocks: a free variable cannot be set; unknown names are rejected
 quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 capture cge_shock EXR, value(1.1)

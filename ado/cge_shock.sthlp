@@ -40,13 +40,20 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:trfr}}factor income from abroad (factors; foreign currency){p_end}
 {p2col:{cmd:trgr}}transfers from the rest of the world to the government, for example budget support (foreign currency; no elements){p_end}
 {p2col:{cmd:trrg}}government transfers to the rest of the world (foreign currency; no elements){p_end}
+{p2col:{cmd:tshi}}health insurance contribution rates on factor income (factors){p_end}
+{p2col:{cmd:qshi}}base purchases of the health insurance fund (commodities), which {cmd:SHIADJ} scales{p_end}
+{p2col:{cmd:trshi}}government transfers to the health insurance fund (real terms; no elements){p_end}
+{p2col:{cmd:trshir}}transfers from the rest of the world to the health insurance fund (foreign currency; no elements){p_end}
 {p2colreset}{...}
 
 {pstd}
 {cmd:qg} and {cmd:qinv} are base quantities that {cmd:GADJ} and {cmd:IADJ}
 scale; changing them changes the composition of government consumption or
 investment. In the default closure government savings adjust to a change in
-government spending or transfers.
+government spending or transfers. {cmd:tshi}, {cmd:qshi}, {cmd:trshi} and
+{cmd:trshir} need a fund named with {cmd:cge_map, insurance()}; the fund
+spends its revenue less a fixed share saved, so a higher contribution rate or
+larger transfers raise its purchases.
 
 {pstd}
 or a model variable that is fixed under the current closure, such as {cmd:QFS}

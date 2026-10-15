@@ -45,6 +45,11 @@ Included:
   country; trade and transport margins recorded in margin accounts that the
   commodities pay, entering the model as margin services per unit of composite
   supply; and a separate stock-change account, merged into savings-investment.
+- From version 0.1.13: a social health insurance fund, financed by contributions
+  on factor income, government transfers and transfers from abroad, which buys
+  a fixed basket of health services with its revenue less a fixed share saved.
+  (A donor-funded non-profit institution is mapped as a household that receives
+  transfers from the rest of the world.)
 - From version 0.1.8: exports drawn from composite supply, for commodities whose
   exports are at least their domestic output (re-exports, and exports supplied
   from inventories or valued at purchaser prices).
@@ -70,7 +75,7 @@ and exports; recursive dynamics.
 | $H$ | households (including non-profit institutions mapped as households) |
 | $E$ | enterprises (may be empty) |
 | $D = H \cup E$ | domestic non-government institutions |
-| $I = D \cup \{gov, row\}$ | institutions receiving factor income |
+| $I = D \cup \{gov, row\}$ | institutions receiving factor income; from version 0.1.13 also the health insurance fund $shi$, when mapped |
 
 ## 3. Variables
 
@@ -110,6 +115,7 @@ Quantities
 | $QINV_c$ | investment demand |
 | $QT_c$ | demand for margin services, $c \in CT$ |
 | $QER_c$ | exports drawn from composite supply, $c \in CR$ |
+| $QSHI_c$ | purchases of commodity $c$ by the health insurance fund |
 | $QFS_f$ | supply of factor $f$ |
 
 Incomes, rates and adjustment variables
@@ -121,6 +127,8 @@ Incomes, rates and adjustment variables
 | $YI_d$ | income of domestic non-government institution $d$ |
 | $EH_h$ | household consumption spending |
 | $YG$, $EG$ | government revenue and spending |
+| $YSHI$ | revenue of the health insurance fund (from version 0.1.13) |
+| $SHIADJ$ | scaling factor of the fund's purchases |
 | $GSAV$ | government savings |
 | $FSAV$ | foreign savings (foreign currency) |
 | $TINS_d$ | direct tax rate of institution $d$ |
@@ -146,7 +154,10 @@ Incomes, rates and adjustment variables
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
 | $at_c$, $\delta^{t}_c$, $\rho^{t}_c$ | CET efficiency, share and exponent parameters |
 | $aq_c$, $\delta^{q}_c$, $\rho^{q}_c$ | Armington efficiency, share and exponent parameters |
-| $shif_{if}$ | share of factor $f$ income going to institution $i$ |
+| $shif_{if}$ | share of factor $f$ income, after health insurance contributions, going to institution $i$ |
+| $tshi_f$ | health insurance contribution rate on the income of factor $f$ |
+| $\overline{qshi}_c$, $sshi$ | base purchases and savings rate of the health insurance fund |
+| $trnsfr_{shi,gov}$, $trnsfr_{shi,row}$ | transfers to the fund from the government (real terms) and the rest of the world (foreign currency) |
 | $\beta_{ch}$ | marginal budget share of $c$ for household $h$ (the budget share under Cobb-Douglas demand) |
 | $\gamma_{ch}$ | subsistence quantity of $c$ for household $h$ (zero under Cobb-Douglas demand) |
 | $\overline{tins}_d$, $\overline{mps}_d$ | base direct tax rate and savings rate of institution $d$ |
@@ -307,7 +318,9 @@ any, is sold domestically ($QX_c = QD_c$, T3).
 
 $$YF_f = \sum_a W_f\,WFDIST_{fa}\,QF_{fa} + trnsfr_{f,row}\,EXR \tag{I1}$$
 
-$$YIF_{if} = shif_{if}\,YF_f, \qquad i \in I \tag{I2}$$
+$$YIF_{if} = shif_{if}\,(1-tshi_f)\,YF_f, \quad i \in I \setminus \{shi\}; \qquad YIF_{shi,f} = tshi_f\,YF_f \tag{I2}$$
+
+Without a health insurance fund, $tshi_f = 0$.
 
 $$YI_d = \sum_f YIF_{df} + \sum_{d' \in D} shii_{dd'}\,(1-MPS_{d'})(1-TINS_{d'})\,YI_{d'} + trnsfr_{d,gov}\,CPI + trnsfr_{d,row}\,EXR \tag{I3}$$
 
@@ -334,25 +347,37 @@ $$QG_c = \overline{qg}_c\,GADJ \tag{I7}$$
 
 $$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,pwe_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI \tag{I8}$$
 
-$$EG = \sum_c PQ_c\,QG_c + \sum_d trnsfr_{d,gov}\,CPI + trnsfr_{gov,gov}\,CPI + trnsfr_{row,gov}\,EXR \tag{I9}$$
+$$EG = \sum_c PQ_c\,QG_c + \sum_d trnsfr_{d,gov}\,CPI + trnsfr_{gov,gov}\,CPI + trnsfr_{shi,gov}\,CPI + trnsfr_{row,gov}\,EXR \tag{I9}$$
 
 $$TINS_d = \overline{tins}_d\,TINSADJ \tag{I10}$$
 
 $$MPS_d = \overline{mps}_d\,MPSADJ \tag{I11}$$
 
+Health insurance fund (from version 0.1.13), when mapped:
+
+$$YSHI = \sum_f YIF_{shi,f} + trnsfr_{shi,gov}\,CPI + trnsfr_{shi,row}\,EXR \tag{I12}$$
+
+$$QSHI_c = \overline{qshi}_c\,SHIADJ \tag{I13}$$
+
+$$\sum_c PQ_c\,QSHI_c = (1 - sshi)\,YSHI \tag{I14}$$
+
+The fund buys a fixed basket of health services, scaled so that it spends its
+revenue less a fixed share saved. A higher contribution rate or larger transfers
+therefore raise its purchases.
+
 ### 5.5 System constraints
 
 $$\sum_a QF_{fa} = QFS_f \tag{S1}$$
 
-$$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c + QER_c \tag{S2}$$
+$$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c + QER_c + QSHI_c \tag{S2}$$
 
 where $QT_c$ applies only for $c \in CT$ and $QER_c$ only for $c \in CR$.
 
-$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} = \sum_{c \in CE} pwe_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + FSAV \tag{S3}$$
+$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} = \sum_{c \in CE} pwe_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + trnsfr_{shi,row} + FSAV \tag{S3}$$
 
 $$YG = EG + GSAV \tag{S4}$$
 
-$$\sum_d MPS_d\,(1-TINS_d)\,YI_d + GSAV + EXR\cdot FSAV = \sum_c PQ_c\,QINV_c + WALRAS \tag{S5}$$
+$$\sum_d MPS_d\,(1-TINS_d)\,YI_d + GSAV + sshi\,YSHI + EXR\cdot FSAV = \sum_c PQ_c\,QINV_c + WALRAS \tag{S5}$$
 
 $$\text{numeraire: } CPI = \overline{CPI} \quad\text{or}\quad DPI = \overline{DPI} \tag{S6}$$
 
@@ -402,14 +427,15 @@ Stata implementation lists every such flow, grouped by role, before stopping.
 |---|---|
 | commodity $c$ | activities (domestic output); rest of world (imports); import, sales and export tax accounts; margin accounts (margins, from version 0.1.7) |
 | activity | commodities (intermediate inputs); factors; activity tax account |
-| factor | households; enterprises; government; rest of world |
+| factor | households; enterprises; government; rest of world; health insurance fund (contributions, from version 0.1.13) |
 | household | commodities; direct tax account; savings-investment; households and enterprises (transfers); rest of world (transfers) |
 | enterprise | direct tax account; savings-investment; households and enterprises (transfers); rest of world (transfers) |
-| government | commodities; households and enterprises (transfers); government (internal transfers); rest of world (transfers); savings-investment |
+| government | commodities; households and enterprises (transfers); government (internal transfers); rest of world (transfers); savings-investment; health insurance fund (from version 0.1.13) |
 | tax account | government |
 | savings-investment | commodities (investment, including changes in inventories) |
 | margin account | commodities (margin services, from version 0.1.7) |
-| rest of world | commodities (exports); households, enterprises and government (transfers); factors (factor income from abroad); savings-investment |
+| health insurance fund | commodities (purchases); savings-investment (from version 0.1.13) |
+| rest of world | commodities (exports); households, enterprises and government (transfers); factors (factor income from abroad); savings-investment; health insurance fund (from version 0.1.13) |
 
 Negative cells are allowed only in tax rows, the savings-investment row,
 transfer cells (the flows labelled "transfers" above, and factor income from
@@ -567,7 +593,12 @@ from composite supply. Calibration must verify this identity, not assume it.
 
 ### 7.5 Institutions
 
-- $YF^0_f$ = row total of factor $f$; $shif_{if} = SAM(i, f) / YF^0_f$.
+- $YF^0_f$ = row total of factor $f$; $tshi_f = SAM(shi, f) / YF^0_f$ (zero
+  without a fund, and below one); $shif_{if} = SAM(i, f) / \left[(1-tshi_f)\,YF^0_f\right]$
+  for $i \neq shi$.
+- Health insurance fund: $YSHI^0$ = row total of $shi$; $\overline{qshi}_c = SAM(c, shi)$;
+  $sshi = SAM(sav, shi) / YSHI^0$; $trnsfr_{shi,gov} = SAM(shi, gov)$,
+  $trnsfr_{shi,row} = SAM(shi, row)$; $SHIADJ^0 = 1$.
 - $YI^0_d$ = row total of institution $d \in D$;
   $\overline{tins}_d = SAM(tax_{dir}, d) / YI^0_d$.
 - $\overline{mps}_d = SAM(sav, d) / \left[(1 - \overline{tins}_d)\,YI^0_d\right]$.

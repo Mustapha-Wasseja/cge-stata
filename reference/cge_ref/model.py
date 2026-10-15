@@ -26,11 +26,12 @@ VARIABLES: dict[str, str] = {
     "YF": "F", "YIF": "IF", "YI": "D", "EH": "H", "YG": "", "EG": "", "GSAV": "",
     "FSAV": "", "TINS": "D", "MPS": "D", "TINSADJ": "", "MPSADJ": "", "IADJ": "",
     "GADJ": "", "WFDIST": "FA", "WALRAS": "", "QT": "C", "QER": "C",
+    "YSHI": "", "SHIADJ": "", "QSHI": "C",
 }
 
 # Variables measured in local currency: they scale with the numeraire.
 NOMINAL = ("PA", "PVA", "PINTA", "PX", "PD", "PE", "PM", "PQ", "W", "EXR", "CPI", "DPI",
-           "YF", "YIF", "YI", "EH", "YG", "EG", "GSAV", "WALRAS")
+           "YF", "YIF", "YI", "EH", "YG", "EG", "GSAV", "WALRAS", "YSHI")
 
 CLOSURE_OPTIONS = {
     "external": ("flexexr", "fixexr"),
@@ -173,7 +174,12 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     DY = (1 - v["MPS"]) * (1 - v["TINS"]) * v["YI"]
     eq["I1"] = (v["YF"], (wage * v["QF"]).sum(axis=1) + p["trfr"] * v["EXR"],
                 np.ones(v["YF"].shape, dtype=bool))
-    eq["I2"] = (v["YIF"], p["shif"] * v["YF"][None, :], np.ones(v["YIF"].shape, dtype=bool))
+    # Health insurance contributions are taken before factor income is distributed
+    shi = s["shi_row"]
+    yif = p["shif"] * ((1 - p["tshi"]) * v["YF"])[None, :]
+    if shi >= 0:
+        yif[shi] = p["tshi"] * v["YF"]
+    eq["I2"] = (v["YIF"], yif, np.ones(v["YIF"].shape, dtype=bool))
     eq["I3"] = (v["YI"], v["YIF"][:nD].sum(axis=1) + p["shii"] @ DY + p["trdg"] * v["CPI"]
                 + p["trdr"] * v["EXR"], np.ones(nD, dtype=bool))
     eq["I4"] = (v["EH"], p["hc"] * DY[:nH], np.ones(nH, dtype=bool))
@@ -188,21 +194,28 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
                + (p["ta"] * v["PA"] * v["QA"]).sum()
                + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"])
     eq["I8"] = (v["YG"], revenue, one)
-    eq["I9"] = (v["EG"], np.atleast_1d(v["PQ"] @ v["QG"]) + (p["trdg"].sum() + p["trgg"]) * v["CPI"]
+    eq["I9"] = (v["EG"], np.atleast_1d(v["PQ"] @ v["QG"]) + (p["trdg"].sum() + p["trgg"] + p["trshi"]) * v["CPI"]
                 + p["trrg"] * v["EXR"], one)
     eq["I10"] = (v["TINS"], p["tins0"] * v["TINSADJ"], np.ones(nD, dtype=bool))
     eq["I11"] = (v["MPS"], p["mps0"] * v["MPSADJ"], np.ones(nD, dtype=bool))
+    # Health insurance fund (version 0.1.13)
+    has_shi = np.atleast_1d(shi >= 0)
+    eq["I12"] = (v["YSHI"], np.atleast_1d(v["YIF"][shi].sum() if shi >= 0 else 0.0)
+                 + p["trshi"] * v["CPI"] + p["trshir"] * v["EXR"], has_shi)
+    eq["I13"] = (v["QSHI"], p["qshi"] * v["SHIADJ"], s["qshi"])
+    eq["I14"] = (np.atleast_1d(v["PQ"] @ v["QSHI"]), (1 - p["sshi"]) * v["YSHI"], has_shi)
 
     # 5.5 System constraints (S6 is imposed through the closure)
     eq["S1"] = (np.where(fa, v["QF"], 0.0).sum(axis=1), v["QFS"], np.ones(v["QFS"].shape, dtype=bool))
     eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"]
-                + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0), every_c)
+                + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0) + v["QSHI"], every_c)
     eq["S3"] = ((p["pwm"] * v["QM"]).sum() + (v["YIF"][nD + 1].sum() + p["shir"] @ DY) / v["EXR"]
                 + p["trrg"],
                 (p["pwe"] * v["QE"]).sum() + np.where(cr, v["PQ"] * v["QER"], 0.0).sum() / v["EXR"]
-                + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + v["FSAV"], one)
+                + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + p["trshir"] + v["FSAV"], one)
     eq["S4"] = (v["YG"], v["EG"] + v["GSAV"], one)
-    eq["S5"] = ((v["MPS"] * (1 - v["TINS"])) @ v["YI"] + v["GSAV"] + v["EXR"] * v["FSAV"],
+    eq["S5"] = ((v["MPS"] * (1 - v["TINS"])) @ v["YI"] + v["GSAV"] + p["sshi"] * v["YSHI"]
+                + v["EXR"] * v["FSAV"],
                 np.atleast_1d(v["PQ"] @ v["QINV"]) + v["WALRAS"], one)
     return eq
 
@@ -236,7 +249,7 @@ class Solution:
         """Expenditure-side GDP minus income-side GDP; zero at any solution."""
         v, p = self.values, self.params
         exr = v["EXR"][0]
-        expenditure = (v["PQ"] @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QER"])
+        expenditure = (v["PQ"] @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QER"] + v["QSHI"])
                        + exr * (p["pwe"] @ v["QE"]) - exr * (p["pwm"] @ v["QM"]))
         income = (v["PVA"] @ v["QVA"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
                   + exr * (p["tm"] * p["pwm"] * v["QM"]).sum()
@@ -264,7 +277,8 @@ class Model:
         E = mapping.enterprises
         self.sets = {"A": list(A), "C": list(C), "F": list(F), "H": list(H), "E": list(E),
                      "D": list(H) + list(E),
-                     "I": list(H) + list(E) + [mapping.government, mapping.row]}
+                     "I": list(H) + list(E) + [mapping.government, mapping.row]
+                     + ([mapping.insurance] if mapping.insurance is not None else [])}
         self._calibrate(sam, mapping,
                         _per_element(sigma_va, A, "sigma_va"),
                         _per_element(sigma_q, C, "sigma_q"),
@@ -347,7 +361,8 @@ class Model:
         spend = SV.sum(axis=0)
         icm = (SV / np.where(spend > tol, spend, 1.0)[None, :]) @ MG / QQ0[None, :]
         demand = (vec(C, A).sum(axis=1) + vec(C, H).sum(axis=1)
-                  + vec(C, [gov])[:, 0] + vec(C, [sav])[:, 0] + QT0 + QER0)
+                  + vec(C, [gov])[:, 0] + vec(C, [sav])[:, 0] + QT0 + QER0
+                  + (vec(C, [mapping.insurance])[:, 0] if mapping.insurance is not None else 0.0))
         if np.abs(QQ0 - demand).max() > tol:
             raise SAMError("composite supply does not equal domestic demand for some commodity")
 
@@ -422,7 +437,15 @@ class Model:
         YIF0 = vec(I, F)
         if np.abs(YIF0.sum(axis=0) - YF0).max() > tol:
             raise SAMError("factor income paid out does not equal factor income received")
-        shif = YIF0 / YF0[None, :]
+        # Health insurance contributions as a rate on factor income (model_spec.md, 7.5)
+        shi = mapping.insurance
+        shi_row = I.index(shi) if shi is not None else -1
+        tshi = YIF0[shi_row] / YF0 if shi is not None else np.zeros(nF)
+        if np.any(tshi >= 1):
+            raise SAMError("health insurance contributions take all the income of a factor")
+        shif = YIF0 / ((1 - tshi) * YF0)[None, :]
+        if shi is not None:
+            shif[shi_row] = 0.0
         trfr = vec(F, [row])[:, 0]
         YI0 = np.array([sam.row_total(d) for d in D])
         dtax = vec([mapping.dirtax], D)[0]
@@ -454,11 +477,17 @@ class Model:
         trgr, trrg, trgg = cell(gov, row), cell(row, gov), cell(gov, gov)
         qg = vec(C, [gov])[:, 0]
         qinv = vec(C, [sav])[:, 0]
+        qshi = vec(C, [shi])[:, 0] if shi is not None else np.zeros(nC)
+        YSHI0 = sam.row_total(shi) if shi is not None else 0.0
+        if shi is not None and YSHI0 <= tol:
+            raise SAMError("the health insurance fund has no revenue")
+        sshi = cell(sav, shi) / YSHI0 if shi is not None else 0.0
+        trshi, trshir = cell(shi, gov), cell(shi, row)
         cwts = QH0.sum(axis=1) / QH0.sum()
         dwts = QD0 / QD0.sum()
 
         self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct, "cr": cr,
-                       "qint": QINT0 != 0, "qh": QH0 != 0}
+                       "qint": QINT0 != 0, "qh": QH0 != 0, "shi_row": shi_row, "qshi": qshi != 0}
         self.params = {
             "pwm": np.ones(nC), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
             "theta": theta, "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
@@ -468,6 +497,8 @@ class Model:
             "shii": shii, "shir": shir, "hc": hc, "trdg": trdg, "trdr": trdr, "trfr": trfr,
             "trgr": np.array(trgr), "trrg": np.array(trrg), "trgg": np.array(trgg),
             "qg": qg, "qinv": qinv, "cwts": cwts, "dwts": dwts, "icm": icm, "qer": QER0,
+            "tshi": tshi, "qshi": qshi, "sshi": np.array(sshi), "trshi": np.array(trshi),
+            "trshir": np.array(trshir),
             "sigma_va": sigma_va, "sigma_q": sigma_q, "sigma_t": sigma_t,
         }
         s1 = np.ones(1)
@@ -480,11 +511,12 @@ class Model:
             "QG": qg.copy(), "QINV": qinv.copy(), "QFS": QF0.sum(axis=1),
             "YF": YF0, "YIF": YIF0, "YI": YI0, "EH": EH0,
             "YG": np.atleast_1d(sam.row_total(gov)),
-            "EG": np.atleast_1d(qg.sum() + trdg.sum() + trgg + trrg),
+            "EG": np.atleast_1d(qg.sum() + trdg.sum() + trgg + trrg + trshi),
             "GSAV": np.atleast_1d(cell(sav, gov)), "FSAV": np.atleast_1d(cell(sav, row)),
             "TINS": tins0.copy(), "MPS": mps0.copy(),
             "TINSADJ": s1.copy(), "MPSADJ": s1.copy(), "IADJ": s1.copy(), "GADJ": s1.copy(),
             "WFDIST": WFDIST0, "WALRAS": np.zeros(1), "QT": QT0, "QER": QER0.copy(),
+            "YSHI": np.atleast_1d(YSHI0), "SHIADJ": s1.copy(), "QSHI": qshi.copy(),
         }
         self.exists = {name: np.ones(value.shape, dtype=bool) for name, value in self.base.items()}
         self.exists["PE"] = ce.copy()
@@ -499,6 +531,9 @@ class Model:
         self.exists["QER"] = cr.copy()
         self.exists["QINT"] = QINT0 != 0
         self.exists["QH"] = QH0 != 0
+        self.exists["YSHI"] = np.atleast_1d(shi is not None)
+        self.exists["SHIADJ"] = np.atleast_1d(shi is not None)
+        self.exists["QSHI"] = qshi != 0
 
     def _top_nest(self, sigma_a) -> None:
         """Top nest of production (model_spec.md, 5.2 and 7.3): Leontief (sigma_a = 0,

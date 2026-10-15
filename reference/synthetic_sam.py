@@ -282,6 +282,41 @@ def build_sut_layout() -> tuple[list[str], list[list[float]]]:
     return _from_flows(SUT_ACCOUNTS, flows)
 
 
+HEALTH_ACCOUNTS = [
+    "act_agr", "act_man", "act_ser", "act_hlt",
+    "com_agr", "com_man", "com_ser", "com_hlt",
+    "lab", "cap",
+    "hhd", "gov", "shi",
+    "tax_dir", "tax_sal", "tax_imp",
+    "sav", "row",
+]
+
+# Changes to FLOWS for the health layout (version 0.1.13):
+# - health services (act_hlt, com_hlt) are separated from other services: act_hlt
+#   produces 30 with intermediates 6 and value added 24; com_hlt is neither
+#   imported, exported nor taxed;
+# - a social health insurance fund (shi) receives contributions of 6 on labour
+#   income, 2 from government and 1 from abroad, buys health services (8) and
+#   saves 1;
+# - households, paid 6 less labour income, buy 12 of health services and save 2
+#   more; government buys 10 of health services and saves 2 less; foreign
+#   savings fall by 1.
+HEALTH_FLOWS = {
+    ("act_ser", "com_ser"): 120, ("act_hlt", "com_hlt"): 30,
+    ("com_man", "act_ser"): 11, ("com_ser", "act_ser"): 18, ("lab", "act_ser"): 42, ("cap", "act_ser"): 44,
+    ("com_man", "act_hlt"): 4, ("com_ser", "act_hlt"): 2, ("lab", "act_hlt"): 18, ("cap", "act_hlt"): 6,
+    ("com_ser", "hhd"): 60, ("com_hlt", "hhd"): 12, ("com_ser", "gov"): 30, ("com_hlt", "gov"): 10,
+    ("com_hlt", "shi"): 8, ("sav", "shi"): 1,
+    ("shi", "lab"): 6, ("hhd", "lab"): 129, ("shi", "gov"): 2, ("shi", "row"): 1,
+    ("sav", "hhd"): 34, ("sav", "gov"): 1, ("sav", "row"): 14,
+}
+
+
+def build_health_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with a health sector and a social health insurance fund."""
+    return _from_flows(HEALTH_ACCOUNTS, {**FLOWS, **HEALTH_FLOWS})
+
+
 def _from_flows(accounts, flows):
     index = {name: i for i, name in enumerate(accounts)}
     n = len(accounts)
@@ -317,7 +352,8 @@ if __name__ == "__main__":
                              (build_territorial_layout, "cge_synthetic_sam_tc.csv"),
                              (build_multiproduct_layout, "cge_synthetic_sam_mp.csv"),
                              (build_nonimported_layout, "cge_synthetic_sam_cnm.csv"),
-                             (build_sut_layout, "cge_synthetic_sam_sut.csv")):
+                             (build_sut_layout, "cge_synthetic_sam_sut.csv"),
+                             (build_health_layout, "cge_synthetic_sam_health.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))
         if worst > 1e-12:

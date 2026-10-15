@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.7  14oct2026}{...}
+{* *! version 0.1.13  15oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
+[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
 {opt report(filename)} {opt replace}]
 
 {pstd}
@@ -93,6 +93,17 @@ changes in inventories become part of investment demand. A stock-change account
 may receive payments only from savings-investment.
 
 {phang}
+{opt insurance()} names a social health insurance fund (from version 0.1.13).
+The fund may receive contributions from factors (its row, the factors'
+columns), transfers from the government and from the rest of the world, and may
+buy commodities and save; it may have no other flows. Contributions enter the
+model as a fixed rate on each factor's income, taken before that income is
+distributed to institutions. The fund buys a fixed basket of commodities,
+scaled so that it spends its revenue less a fixed share saved
+(docs/model_spec.md, equations I2 and I12 to I14). A donor-funded non-profit
+institution that buys health services is mapped as a household instead.
+
+{phang}
 {opt margins()} lists activities, typically trade and transport, whose margin
 revenue the SAM nets out of their output by recording a negative use of their
 own product. That negative cell is moved to the activity's output, so the
@@ -144,6 +155,13 @@ A supply-use layout with margin accounts, a commodity imported only
 {phang2}{cmd:. cge_synthetic, clear sut}{p_end}
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
 {phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser com_fuel) factors(lab cap) households(hhd) government(gov) savinv(si) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) marginaccounts(trd trp) stocks(dstk)}{p_end}
+
+{pstd}
+Health services and a social health insurance fund:
+
+{phang2}{cmd:. cge_synthetic, clear health}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
 
 
 {title:Also see}

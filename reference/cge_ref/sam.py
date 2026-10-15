@@ -74,6 +74,8 @@ _ALLOWED = {
     ("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"), ("gov", "exptax"), ("gov", "acttax"),
     ("sav", "gov"), ("sav", "row"),
     ("mar", "com"), ("com", "mar"),          # margin accounts (version 0.1.7)
+    # health insurance fund (version 0.1.13)
+    ("shi", "fac"), ("shi", "gov"), ("shi", "row"), ("com", "shi"), ("sav", "shi"),
 }
 # Transfers (they may be negative)
 _TRANSFERS = {
@@ -140,6 +142,8 @@ def _territorial(values: np.ndarray, sam: "SAM", m: "Mapping") -> dict[str, floa
 def _mapped_accounts(m: "Mapping") -> set[str]:
     mapped = {*m.activities, *m.commodities, *m.factors, *m.households, *m.enterprises,
               *m.margin_accounts, m.government, m.savinv, m.row}
+    if m.insurance is not None:
+        mapped.add(m.insurance)
     return mapped | {getattr(m, t) for t in TAX_ROLES if getattr(m, t) is not None}
 
 
@@ -271,6 +275,7 @@ class Mapping:
     territorial: list[str] = dataclasses.field(default_factory=list)
     margin_accounts: list[str] = dataclasses.field(default_factory=list)
     stocks: list[str] = dataclasses.field(default_factory=list)
+    insurance: str | None = None
 
     def roles(self) -> dict[str, str]:
         """Role of every mapped account."""
@@ -293,6 +298,8 @@ class Mapping:
             assign(e, "ent")
         for t in self.margin_accounts:
             assign(t, "mar")
+        if self.insurance is not None:
+            assign(self.insurance, "shi")
         assign(self.government, "gov")
         assign(self.savinv, "sav")
         assign(self.row, "row")
