@@ -397,6 +397,28 @@ quietly cge_map, `mapopts'
 capture cge_solve
 assert _rc == 459
 
+* LES household demand (version 0.1.11): checks, Jacobian and errors
+quietly do setup_synthetic.do "sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)"
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
+cge_shock pwm, scale(1.1)
+quietly cge_solve, name(les_pwm)
+cge_check, homogeneity perturb(0.1)
+assert r(failures) == 0
+quietly cge_results, sim(les_pwm)
+assert el(r(ev), 1, 1) < 0
+cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)                ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4)
+assert _rc == 198
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) frisch(-0.5)
+assert _rc == 198
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1) frisch(-2)
+assert _rc == 198
+
 * Spending and transfer parameters (version 0.1.10)
 quietly do setup_synthetic.do
 cge_shock qg, elements(com_ser) scale(1.2)

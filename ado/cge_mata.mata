@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.10  2026-10-15
+*! cge_mata.mata  v0.1.11  2026-10-15
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -18,7 +18,7 @@ struct cge_par {
     real colvector iva, inta, ad, rva, sva
     real matrix    ica, dva, theta, icm
     real colvector at, dt, dtc, rt, aq, dq, dqc, rq, sq, st
-    real matrix    shif, beta
+    real matrix    shif, beta, gamma
     real colvector tins0, mps0, shir, hc, trdg, trdr, trfr, qg, qinv, cwts, dwts, qer
     real matrix    shii
     real scalar    trgr, trrg, trgg
@@ -887,7 +887,8 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "I3", YI,
              rowsum(YIF[|1, 1 \ nD, M.nF|]) + p.shii * DY + p.trdg :* CPI + p.trdr :* EXR, oneD)
     _cge_put(M, L, R, K, record, "I4", EH, p.hc :* DY[|1 \ nH|], oneH)
-    _cge_put(M, L, R, K, record, "I5", PQ :* QH, p.beta :* EH', p.beta :!= 0)
+    _cge_put(M, L, R, K, record, "I5", PQ :* QH, PQ :* p.gamma + p.beta :* (EH' - PQ' * p.gamma),
+             p.beta :!= 0)
     _cge_put(M, L, R, K, record, "I6", QINV, p.qinv :* IADJ, oneC)
     _cge_put(M, L, R, K, record, "I7", QG, p.qg :* GADJ, oneC)
     _cge_put(M, L, R, K, record, "I8", YG,
@@ -934,7 +935,8 @@ real scalar _cge_maxres(struct cge_model scalar M, struct cge_par scalar p, real
 // Calibration (model_spec.md, Section 7)
 // =====================================================================
 
-void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, string scalar fqname)
+void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, string scalar fqname,
+                    string scalar s_ie, string scalar s_fr)
 {
     struct cge_model scalar M
     struct cge_par scalar p
@@ -1127,6 +1129,10 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.hc = EH0 :/ safe[|1 \ nH|]
     if (sum(EH0) <= tol) _cge_fail("households have no consumption", 459)
     p.beta = QH0 :/ (EH0' :* (EH0' :> 0) + (EH0' :<= 0))
+    // Household demand: Cobb-Douglas (gamma = 0), or LES given income
+    // elasticities and Frisch parameters (model_spec.md, 7.5)
+    p.gamma = J(rows(QH0), cols(QH0), 0)
+    if (s_ie != "" | s_fr != "") _cge_les(p, QH0, EH0, s_ie, s_fr, M.nC, nH)
     p.trdg = _cge_sub(S, iD, M.igov)
     p.trdr = _cge_sub(S, iD, M.irow)
     p.trgr = S[M.igov, M.irow]
@@ -1290,6 +1296,31 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     }
     st_numscalar("r(N_equations)", M.neq)
     st_numscalar("r(max_residual)", maxres)
+}
+
+void _cge_les(struct cge_par scalar p, real matrix QH0, real colvector EH0, string scalar s_ie,
+              string scalar s_fr, real scalar nC, real scalar nH)
+{
+    real colvector ie, fr
+    real rowvector total
+    real matrix b
+    if (s_fr == "") _cge_fail("incelas() needs frisch(): LES demand needs Frisch parameters", 198)
+    ie = (s_ie == "" ? J(nC, 1, 1) : _cge_elast(s_ie, nC, "incelas"))
+    fr = strtoreal(tokens(s_fr))'
+    if (rows(fr) == 1) fr = J(nH, 1, fr)
+    if (rows(fr) != nH) {
+        errprintf("frisch() needs 1 or %f values\n", nH)
+        exit(198)
+    }
+    if (hasmissing(fr) | max(fr) >= -1) {
+        _cge_fail("frisch() values must be below -1, so that subsistence spending is positive", 198)
+    }
+    if (min(QH0) < 0) _cge_fail("LES demand needs non-negative household consumption", 459)
+    b = ie :* p.beta
+    total = colsum(b)
+    p.beta = b :/ (total + (total :<= 0))
+    p.gamma = QH0 + p.beta :* (EH0' :/ fr')
+    printf("{txt}Household demand: linear expenditure system\n")
 }
 
 // =====================================================================
@@ -1700,6 +1731,11 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp(M, rowid, boff, pr, pc, "I5", e, "QH", e)
     _cge_sp(M, rowid, boff, pr, pc, "I5", e, "PQ", floor((e :- 1) :/ nH) :+ 1)
     _cge_sp(M, rowid, boff, pr, pc, "I5", e, "EH", mod(e :- 1, nH) :+ 1)
+    // LES: every purchase of household h depends on the prices of its subsistence quantities
+    for (k = 1; k <= nH; k++) {
+        i = select(cC, p.gamma[., k] :!= 0)
+        for (g = 1; g <= rows(i); g++) _cge_sp(M, rowid, boff, pr, pc, "I5", (cC :- 1) :* nH :+ k, "PQ", i[g])
+    }
     _cge_sp_same(M, rowid, boff, pr, pc, "I6", "QINV")
     _cge_sp(M, rowid, boff, pr, pc, "I6", cC, "IADJ", 1)
     _cge_sp_same(M, rowid, boff, pr, pc, "I7", "QG")
@@ -2124,7 +2160,7 @@ real colvector _cge_ev(struct cge_model scalar M, struct cge_par scalar p, real 
     PQ1 = _cge_v(M, x, _cge_vidx(M, "PQ"))
     EH0 = _cge_v(M, M.x0, _cge_vidx(M, "EH"))
     EH1 = _cge_v(M, x, _cge_vidx(M, "EH"))
-    return(EH1 :* exp(colsum(p.beta :* ln(PQ0 :/ PQ1)))' - EH0)
+    return((PQ0' * p.gamma)' + (EH1 - (PQ1' * p.gamma)') :* exp(colsum(p.beta :* ln(PQ0 :/ PQ1)))' - EH0)
 }
 
 // Expenditure-side GDP minus income-side GDP; zero at any solution

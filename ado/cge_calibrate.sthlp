@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_calibrate}{cmd:,} {opt sigmava(numlist)} {opt sigmaq(numlist)} {opt sigmat(numlist)}
-[{opt fq:uantities(matname)}]
+[{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)}]
 
 
 {title:Description}
@@ -53,11 +53,24 @@ inventories), exports are drawn from composite supply instead, and its
 employment, as a matrix with one row per factor and one column per activity.
 Without it, factor prices are 1 in the base and quantities equal payments.
 
+{phang}
+{opt incelas(numlist)} and {opt frisch(numlist)} select linear expenditure
+system (LES) household demand instead of the default Cobb-Douglas demand.
+{opt incelas()} gives positive income elasticities, one value or one per
+commodity; they are scaled so that marginal budget shares sum to one, which
+keeps their ratios. {opt frisch()} gives the Frisch parameter, one value or one
+per household, below -1; supernumerary spending is then {it:-1/frisch} of
+consumption spending. {opt frisch()} is required with {opt incelas()}; given
+alone, income elasticities are 1. Household consumption must be non-negative.
+Under LES, the equivalent variation reported by {helpb cge_results} uses the LES
+expenditure function.
+
 
 {title:Example}
 
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)}{p_end}
 
 
 {title:Stored results}

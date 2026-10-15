@@ -24,7 +24,8 @@ Included:
   inputs.
 - CET transformation of output between exports and domestic sales; Armington
   CES aggregation of imports and domestic goods.
-- One or more households with Cobb-Douglas consumption demand. Non-profit
+- One or more households with Cobb-Douglas consumption demand or, from
+  version 0.1.11, linear expenditure system (LES) demand. Non-profit
   institutions serving households can be mapped as households.
 - Enterprises (from version 0.1.2), which receive factor income and transfers,
   pay direct taxes, save, and transfer the rest of their income to other
@@ -49,7 +50,7 @@ Included:
   from inventories or valued at purchaser prices).
 
 Deferred to later versions: margins that differ between domestic sales, imports
-and exports; linear expenditure system (LES) demand; recursive dynamics.
+and exports; recursive dynamics.
 
 ## 2. Sets
 
@@ -145,7 +146,8 @@ Incomes, rates and adjustment variables
 | $at_c$, $\delta^{t}_c$, $\rho^{t}_c$ | CET efficiency, share and exponent parameters |
 | $aq_c$, $\delta^{q}_c$, $\rho^{q}_c$ | Armington efficiency, share and exponent parameters |
 | $shif_{if}$ | share of factor $f$ income going to institution $i$ |
-| $\beta_{ch}$ | Cobb-Douglas budget share of $c$ for household $h$ |
+| $\beta_{ch}$ | marginal budget share of $c$ for household $h$ (the budget share under Cobb-Douglas demand) |
+| $\gamma_{ch}$ | subsistence quantity of $c$ for household $h$ (zero under Cobb-Douglas demand) |
 | $\overline{tins}_d$, $\overline{mps}_d$ | base direct tax rate and savings rate of institution $d$ |
 | $shii_{dd'}$ | share of institution $d'$'s income after direct taxes and savings transferred to institution $d$ |
 | $shir_d$ | share of institution $d$'s income after direct taxes and savings transferred to the rest of the world |
@@ -297,7 +299,15 @@ income after direct taxes and savings is transferred. For households,
 $hc_h = 1 - \sum_d shii_{dh} - shir_h$. A transfer from an institution to itself
 (a diagonal SAM cell) is allowed; it appears on both sides of its accounts.
 
-$$PQ_c\,QH_{ch} = \beta_{ch}\,EH_h \tag{I5}$$
+$$PQ_c\,QH_{ch} = PQ_c\,\gamma_{ch} + \beta_{ch}\left(EH_h - \sum_{c'} PQ_{c'}\,\gamma_{c'h}\right) \tag{I5}$$
+
+With $\gamma_{ch} = 0$ this is Cobb-Douglas demand, the default. From version
+0.1.11 the linear expenditure system (LES) is available: households first buy
+subsistence quantities $\gamma_{ch}$ and spend the rest of their consumption
+budget in fixed marginal shares $\beta_{ch}$, so that budget shares change with
+income. The equivalent variation of household $h$ at base prices is
+$EV_h = \sum_c PQ^0_c\gamma_{ch} + \left(EH_h - \sum_c PQ_c\gamma_{ch}\right)\prod_c (PQ^0_c/PQ_c)^{\beta_{ch}} - EH^0_h$,
+which reduces to the Cobb-Douglas form when $\gamma_{ch} = 0$.
 
 $$QINV_c = \overline{qinv}_c\,IADJ \tag{I6}$$
 
@@ -541,8 +551,18 @@ from composite supply. Calibration must verify this identity, not assume it.
   $DY^0_d = YI^0_d - SAM(tax_{dir}, d) - SAM(sav, d)$. Calibration stops with an
   error if $DY^0_d = 0$ while $d$ makes transfers or consumes.
 - $shii_{dd'} = SAM(d, d') / DY^0_{d'}$; $shir_d = SAM(row, d) / DY^0_d$.
-- $EH^0_h = \sum_c SAM(c, h)$; $hc_h = EH^0_h / DY^0_h$;
-  $\beta_{ch} = SAM(c, h) / EH^0_h$.
+- $EH^0_h = \sum_c SAM(c, h)$; $hc_h = EH^0_h / DY^0_h$; budget shares
+  $w_{ch} = SAM(c, h) / EH^0_h$.
+- Cobb-Douglas demand: $\beta_{ch} = w_{ch}$ and $\gamma_{ch} = 0$.
+- LES demand (from version 0.1.11), given income elasticities $\varepsilon_c > 0$
+  and a Frisch parameter $\phi_h < -1$ for each household:
+  $\beta_{ch} = \varepsilon_c\,w_{ch} / \sum_{c'} \varepsilon_{c'}\,w_{c'h}$, so that the
+  marginal shares sum to one (the income elasticities used are then
+  $\beta_{ch}/w_{ch}$, proportional to those supplied), and
+  $\gamma_{ch} = QH^0_{ch} + \beta_{ch}\,EH^0_h / (PQ^0_c\,\phi_h)$. Supernumerary
+  spending $EH^0_h - \sum_c PQ^0_c\gamma_{ch}$ is then $-EH^0_h/\phi_h$, positive
+  and below total spending because $\phi_h < -1$. Household consumption must be
+  non-negative.
 - $trnsfr_{d,gov} = SAM(d, gov)$, $trnsfr_{gov,gov} = SAM(gov, gov)$,
   $trnsfr_{d,row} = SAM(d, row)$, $trnsfr_{f,row} = SAM(f, row)$,
   $trnsfr_{gov,row} = SAM(gov, row)$, $trnsfr_{row,gov} = SAM(row, gov)$.

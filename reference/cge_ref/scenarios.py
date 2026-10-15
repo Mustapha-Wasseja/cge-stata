@@ -31,6 +31,10 @@ MIXED_ELASTICITIES = {
 }
 
 
+# LES household demand (version 0.1.11): test values, not estimates.
+LES_SETTINGS = {"income_elasticities": {"com_agr": 0.6, "com_man": 1.0, "com_ser": 1.4}, "frisch": -2.0}
+
+
 def synthetic_mapping() -> Mapping:
     return Mapping(
         activities=["act_agr", "act_man", "act_ser"],
@@ -177,6 +181,11 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Spending and transfer shocks (version 0.1.10): government purchases of
     # com_ser up 20 per cent; transfers from abroad to households and the
     # enterprise halved
+    for name, solution in run_simulations(synthetic_model(**LES_SETTINGS)).items():
+        solutions["les_" + name] = solution
+    inst_les = institutions_model(income_elasticities=LES_SETTINGS["income_elasticities"], frisch=[-2.0, -3.0])
+    solutions["inst_les_tariff_removal"] = inst_les.solve(
+        Closure(), tol=1e-12, **simulation_inputs(inst_les)["tariff_removal"])
     std = synthetic_model()
     solutions["gov_ser_up20"] = std.solve(
         Closure(), tol=1e-12, params={"qg": _scaled(std.params["qg"], std.sets["C"].index("com_ser"), 1.2)})

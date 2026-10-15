@@ -168,7 +168,9 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["I3"] = (v["YI"], v["YIF"][:nD].sum(axis=1) + p["shii"] @ DY + p["trdg"] * v["CPI"]
                 + p["trdr"] * v["EXR"], np.ones(nD, dtype=bool))
     eq["I4"] = (v["EH"], p["hc"] * DY[:nH], np.ones(nH, dtype=bool))
-    eq["I5"] = (v["PQ"][:, None] * v["QH"], p["beta"] * v["EH"][None, :], s["qh"])
+    supernumerary = v["EH"] - v["PQ"] @ p["gamma"]
+    eq["I5"] = (v["PQ"][:, None] * v["QH"],
+                v["PQ"][:, None] * p["gamma"] + p["beta"] * supernumerary[None, :], s["qh"])
     eq["I6"] = (v["QINV"], p["qinv"] * v["IADJ"], every_c)
     eq["I7"] = (v["QG"], p["qg"] * v["GADJ"], every_c)
     revenue = (v["TINS"] @ v["YI"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
@@ -233,17 +235,18 @@ class Solution:
         return float(expenditure - income)
 
     def equivalent_variation(self) -> np.ndarray:
-        """Household equivalent variation at base prices (Cobb-Douglas demand)."""
-        base, p = self.model.base, self.params
-        ratio = np.prod((base["PQ"][:, None] / self.values["PQ"][:, None]) ** p["beta"], axis=0)
-        return self.values["EH"] * ratio - base["EH"]
+        """Household equivalent variation at base prices (Cobb-Douglas or LES demand)."""
+        base, p, v = self.model.base, self.params, self.values
+        ratio = np.prod((base["PQ"][:, None] / v["PQ"][:, None]) ** p["beta"], axis=0)
+        return base["PQ"] @ p["gamma"] + (v["EH"] - v["PQ"] @ p["gamma"]) * ratio - base["EH"]
 
 
 class Model:
     """Calibrated version 0.1 model."""
 
     def __init__(self, sam: SAM, mapping: Mapping, sigma_va, sigma_q, sigma_t,
-                 factor_quantities: dict[tuple[str, str], float] | None = None):
+                 factor_quantities: dict[tuple[str, str], float] | None = None,
+                 income_elasticities=None, frisch=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -258,6 +261,7 @@ class Model:
                         _per_element(sigma_q, C, "sigma_q"),
                         _per_element(sigma_t, C, "sigma_t"),
                         factor_quantities)
+        self._household_demand(income_elasticities, frisch)
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
         with np.errstate(all="ignore"):      # masked elements may divide by zero
             eqs = _equations(self.base, self.params, self.struct)
@@ -450,7 +454,7 @@ class Model:
             "theta": theta, "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
             "at": at, "delta_t": delta_t, "deltac_t": deltac_t, "rho_t": rho_t,
             "aq": aq, "delta_q": delta_q, "deltac_q": deltac_q, "rho_q": rho_q,
-            "shif": shif, "beta": beta, "tins0": tins0, "mps0": mps0,
+            "shif": shif, "beta": beta, "gamma": np.zeros_like(beta), "tins0": tins0, "mps0": mps0,
             "shii": shii, "shir": shir, "hc": hc, "trdg": trdg, "trdr": trdr, "trfr": trfr,
             "trgr": np.array(trgr), "trrg": np.array(trrg), "trgg": np.array(trgg),
             "qg": qg, "qinv": qinv, "cwts": cwts, "dwts": dwts, "icm": icm, "qer": QER0,
@@ -485,6 +489,31 @@ class Model:
         self.exists["QER"] = cr.copy()
         self.exists["QINT"] = QINT0 != 0
         self.exists["QH"] = QH0 != 0
+
+    def _household_demand(self, income_elasticities, frisch) -> None:
+        """LES demand (model_spec.md, 7.5) when income elasticities or Frisch parameters are given."""
+        if income_elasticities is None and frisch is None:
+            return
+        if frisch is None:
+            raise ValueError("LES demand needs Frisch parameters (frisch)")
+        C, H = self.sets["C"], self.sets["H"]
+        eps = _per_element(1.0 if income_elasticities is None else income_elasticities, C,
+                           "income_elasticities")
+        if isinstance(frisch, dict):
+            phi = np.array([float(frisch[h]) for h in H])
+        else:
+            phi = np.broadcast_to(np.asarray(frisch, dtype=float), (len(H),)).copy()
+        if np.any(~np.isfinite(phi)) or np.any(phi >= -1):
+            raise ValueError("Frisch parameters must be below -1, so that subsistence spending is positive")
+        QH0, EH0 = self.base["QH"], self.base["EH"]
+        if np.any(QH0 < 0):
+            raise SAMError("LES demand needs non-negative household consumption")
+        w = self.params["beta"]
+        b = eps[:, None] * w
+        total = b.sum(axis=0)
+        b = b / np.where(total > 0, total, 1.0)[None, :]
+        self.params["beta"] = b
+        self.params["gamma"] = QH0 + b * (EH0 / phi)[None, :]
 
     # ------------------------------------------------------------------
     # Residuals and solution

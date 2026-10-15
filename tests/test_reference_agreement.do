@@ -61,6 +61,10 @@ cge_shock tm, value(0)
 cge_solve, name(mixed_tariff_removal) tolerance(1e-12)
 _compare_reference mixed_tariff_removal
 
+* LES household demand (version 0.1.11)
+quietly do setup_synthetic.do "sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)"
+_standard_simulations les_
+
 * Government purchases of com_ser up 20 per cent (version 0.1.10)
 quietly do setup_synthetic.do
 cge_shock qg, elements(com_ser) scale(1.2)
@@ -85,6 +89,13 @@ cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser
     savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 _standard_simulations inst_
+
+* LES with two households (version 0.1.11)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2 -3)
+cge_shock tm, value(0)
+cge_solve, name(inst_les_tariff_removal) tolerance(1e-12)
+_compare_reference inst_les_tariff_removal
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 
 * Transfers from abroad to households and the enterprise halved (version 0.1.10)
 cge_shock, reset
