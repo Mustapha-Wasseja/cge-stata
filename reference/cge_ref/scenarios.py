@@ -174,6 +174,15 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         Closure(), tol=1e-12, **simulation_inputs(mixed)["tariff_removal"])
     for name, solution in run_simulations(institutions_model()).items():
         solutions["inst_" + name] = solution
+    # Spending and transfer shocks (version 0.1.10): government purchases of
+    # com_ser up 20 per cent; transfers from abroad to households and the
+    # enterprise halved
+    std = synthetic_model()
+    solutions["gov_ser_up20"] = std.solve(
+        Closure(), tol=1e-12, params={"qg": _scaled(std.params["qg"], std.sets["C"].index("com_ser"), 1.2)})
+    inst = institutions_model()
+    solutions["inst_transfers_abroad_down50"] = inst.solve(
+        Closure(), tol=1e-12, params={"trdr": inst.params["trdr"] * 0.5})
     for name, solution in run_simulations(margins_model()).items():
         solutions["margins_" + name] = solution
     for name, solution in run_simulations(territorial_model()).items():

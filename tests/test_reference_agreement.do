@@ -61,6 +61,12 @@ cge_shock tm, value(0)
 cge_solve, name(mixed_tariff_removal) tolerance(1e-12)
 _compare_reference mixed_tariff_removal
 
+* Government purchases of com_ser up 20 per cent (version 0.1.10)
+quietly do setup_synthetic.do
+cge_shock qg, elements(com_ser) scale(1.2)
+cge_solve, name(gov_ser_up20) tolerance(1e-12)
+_compare_reference gov_ser_up20
+
 * National-accounts layout: exports in activity rows and taxes paid directly to
 * government give the same model, so the same expected results apply
 cge_synthetic, clear national
@@ -79,6 +85,12 @@ cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser
     savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 _standard_simulations inst_
+
+* Transfers from abroad to households and the enterprise halved (version 0.1.10)
+cge_shock, reset
+cge_shock trdr, scale(0.5)
+cge_solve, name(inst_transfers_abroad_down50) tolerance(1e-12)
+_compare_reference inst_transfers_abroad_down50
 
 * Margins layout: margins netted out of act_ser are moved to its output
 cge_synthetic, clear margins

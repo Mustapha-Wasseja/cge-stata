@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.9 implements the standard static model described in
+Version 0.1.10 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
@@ -36,6 +36,8 @@ Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
 derivatives for the aggregate equations with grouped central differences for
 the sparse rest (on a 4,439-equation model, about 3 seconds instead of about
 250). It also repairs the fallback solver, which failed in Stata 13.
+Version 0.1.10 adds shocks to government and investment demand by product and to
+transfers, such as public spending on health services or donor funding.
 
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.

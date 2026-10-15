@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.1.10  15oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -33,7 +33,20 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:pwm}}world import prices (commodities){p_end}
 {p2col:{cmd:pwe}}world export prices (commodities){p_end}
 {p2col:{cmd:ad}}value-added efficiency, that is productivity (activities){p_end}
+{p2col:{cmd:qg}}government consumption in real terms (commodities), for example public spending on health services{p_end}
+{p2col:{cmd:qinv}}investment demand in real terms (commodities){p_end}
+{p2col:{cmd:trdg}}government transfers to households and enterprises (real terms){p_end}
+{p2col:{cmd:trdr}}transfers from the rest of the world to households and enterprises (foreign currency), for example donor funding of a non-profit institution mapped as a household{p_end}
+{p2col:{cmd:trfr}}factor income from abroad (factors; foreign currency){p_end}
+{p2col:{cmd:trgr}}transfers from the rest of the world to the government, for example budget support (foreign currency; no elements){p_end}
+{p2col:{cmd:trrg}}government transfers to the rest of the world (foreign currency; no elements){p_end}
 {p2colreset}{...}
+
+{pstd}
+{cmd:qg} and {cmd:qinv} are base quantities that {cmd:GADJ} and {cmd:IADJ}
+scale; changing them changes the composition of government consumption or
+investment. In the default closure government savings adjust to a change in
+government spending or transfers.
 
 {pstd}
 or a model variable that is fixed under the current closure, such as {cmd:QFS}
@@ -64,6 +77,8 @@ to change; the default is all. For variables indexed by factor and activity
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
 {phang2}{cmd:. cge_shock pwm, elements(com_man) scale(1.1)}{p_end}
 {phang2}{cmd:. cge_shock QFS, elements(lab) scale(1.05)}{p_end}
+{phang2}{cmd:. cge_shock qg, elements(com_ser) scale(1.2)}{p_end}
+{phang2}{cmd:. cge_shock trdr, elements(npi) value(0)}{p_end}
 {phang2}{cmd:. cge_shock, reset}{p_end}
 
 

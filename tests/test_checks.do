@@ -397,6 +397,19 @@ quietly cge_map, `mapopts'
 capture cge_solve
 assert _rc == 459
 
+* Spending and transfer parameters (version 0.1.10)
+quietly do setup_synthetic.do
+cge_shock qg, elements(com_ser) scale(1.2)
+cge_shock trgr, value(2)
+capture cge_shock trgr, elements(com_ser) value(1)
+assert _rc == 198
+capture cge_shock trdr, elements(com_ser) value(1)
+assert _rc == 111
+quietly cge_solve, name(spending)
+quietly cge_results, sim(spending) clear nodisplay
+assert abs(value - 1.2 * base) < 1e-9 if variable == "QG" & element1 == "com_ser"
+quietly do setup_synthetic.do
+
 * Shocks: a free variable cannot be set; unknown names are rejected
 quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 capture cge_shock EXR, value(1.1)

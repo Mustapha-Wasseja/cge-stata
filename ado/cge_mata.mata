@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.9  2026-10-14
+*! cge_mata.mata  v0.1.10  2026-10-15
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -1415,25 +1415,39 @@ void _cge_closure_show(struct cge_model scalar M)
 
 real colvector _cge_par_get(struct cge_par scalar p, string scalar name)
 {
-    if (name == "tm")  return(p.tm)
-    if (name == "te")  return(p.te)
-    if (name == "tq")  return(p.tq)
-    if (name == "ta")  return(p.ta)
-    if (name == "pwm") return(p.pwm)
-    if (name == "pwe") return(p.pwe)
-    if (name == "ad")  return(p.ad)
+    if (name == "tm")   return(p.tm)
+    if (name == "te")   return(p.te)
+    if (name == "tq")   return(p.tq)
+    if (name == "ta")   return(p.ta)
+    if (name == "pwm")  return(p.pwm)
+    if (name == "pwe")  return(p.pwe)
+    if (name == "ad")   return(p.ad)
+    if (name == "qg")   return(p.qg)
+    if (name == "qinv") return(p.qinv)
+    if (name == "trdg") return(p.trdg)
+    if (name == "trdr") return(p.trdr)
+    if (name == "trfr") return(p.trfr)
+    if (name == "trgr") return(p.trgr)
+    if (name == "trrg") return(p.trrg)
     _cge_fail("cge internal error: unknown parameter " + name, 3498)
 }
 
 void _cge_par_set(struct cge_par scalar p, string scalar name, real colvector v)
 {
-    if (name == "tm")       p.tm = v
-    else if (name == "te")  p.te = v
-    else if (name == "tq")  p.tq = v
-    else if (name == "ta")  p.ta = v
-    else if (name == "pwm") p.pwm = v
-    else if (name == "pwe") p.pwe = v
-    else if (name == "ad")  p.ad = v
+    if (name == "tm")        p.tm = v
+    else if (name == "te")   p.te = v
+    else if (name == "tq")   p.tq = v
+    else if (name == "ta")   p.ta = v
+    else if (name == "pwm")  p.pwm = v
+    else if (name == "pwe")  p.pwe = v
+    else if (name == "ad")   p.ad = v
+    else if (name == "qg")   p.qg = v
+    else if (name == "qinv") p.qinv = v
+    else if (name == "trdg") p.trdg = v
+    else if (name == "trdr") p.trdr = v
+    else if (name == "trfr") p.trfr = v
+    else if (name == "trgr") p.trgr = v
+    else if (name == "trrg") p.trrg = v
 }
 
 real colvector _cge_elements(string colvector set, string scalar elems, string scalar what)
@@ -1469,11 +1483,21 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
         return
     }
 
-    if (anyof(("tm", "te", "tq", "pwm", "pwe"), target)) {
+    if (anyof(("tm", "te", "tq", "pwm", "pwe", "qg", "qinv"), target)) {
         idx = _cge_elements(M.C, elems, "commodities")
     }
     else if (anyof(("ta", "ad"), target)) {
         idx = _cge_elements(M.A, elems, "activities")
+    }
+    else if (anyof(("trdg", "trdr"), target)) {
+        idx = _cge_elements(M.D, elems, "households and enterprises")
+    }
+    else if (target == "trfr") {
+        idx = _cge_elements(M.F, elems, "factors")
+    }
+    else if (anyof(("trgr", "trrg"), target)) {
+        if (elems != "" & elems != "all") _cge_fail(target + " has no elements", 198)
+        idx = 1
     }
     else idx = J(0, 1, .)
 
@@ -1488,7 +1512,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
 
     k = _cge_vidx(M, target)
     if (k == 0) {
-        _cge_fail(target + " is not a shockable parameter (tm te tq ta pwm pwe ad) or model variable", 198)
+        _cge_fail(target + " is not a shockable parameter (tm te tq ta pwm pwe ad qg qinv trdg trdr trfr trgr trrg) or model variable", 198)
     }
     set = M.vset[k]
     if (set == "") {
