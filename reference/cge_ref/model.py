@@ -128,8 +128,17 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["P9"] = (v["DPI"], np.atleast_1d(p["dwts"] @ v["PD"]), one)
 
     # 5.2 Production block
-    eq["Q1"] = (v["QVA"], p["iva"] * v["QA"], every_a)
-    eq["Q2"] = (v["QINTA"], p["inta"] * v["QA"], every_a)
+    lt, cda = s["lt"], s["cda"]
+    eq["Q1"] = (v["QVA"], p["iva"] * v["QA"], lt)
+    eq["Q2"] = (v["QINTA"], p["inta"] * v["QA"], lt)
+    # CES or Cobb-Douglas top nest (masked elements may be undefined)
+    ra, da, dac = p["rho_a"], p["delta_a"], p["deltac_a"]
+    ces_out = p["aa"] * (da * v["QVA"] ** (-ra) + dac * v["QINTA"] ** (-ra)) ** (-1 / ra)
+    cd_out = p["aa"] * v["QVA"] ** da * v["QINTA"] ** dac
+    eq["Q1C"] = (v["QA"], np.where(cda, cd_out, ces_out), ~lt)
+    eq["Q2C"] = (np.where(cda, v["PVA"] * v["QVA"] * dac, v["QVA"]),
+                 np.where(cda, v["PINTA"] * v["QINTA"] * da,
+                          v["QINTA"] * ((v["PINTA"] / v["PVA"]) * da / dac) ** (1 / (1 + ra))), ~lt)
     qf = np.where(fa, v["QF"], 1.0)
     rho = np.where(cd, 1.0, p["rho_va"])
     ces_sum = (p["delta_va"] * qf ** (-rho)).sum(axis=0)
@@ -246,7 +255,7 @@ class Model:
 
     def __init__(self, sam: SAM, mapping: Mapping, sigma_va, sigma_q, sigma_t,
                  factor_quantities: dict[tuple[str, str], float] | None = None,
-                 income_elasticities=None, frisch=None):
+                 income_elasticities=None, frisch=None, sigma_a=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -262,6 +271,7 @@ class Model:
                         _per_element(sigma_t, C, "sigma_t"),
                         factor_quantities)
         self._household_demand(income_elasticities, frisch)
+        self._top_nest(sigma_a)
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
         with np.errstate(all="ignore"):      # masked elements may divide by zero
             eqs = _equations(self.base, self.params, self.struct)
@@ -489,6 +499,38 @@ class Model:
         self.exists["QER"] = cr.copy()
         self.exists["QINT"] = QINT0 != 0
         self.exists["QH"] = QH0 != 0
+
+    def _top_nest(self, sigma_a) -> None:
+        """Top nest of production (model_spec.md, 5.2 and 7.3): Leontief (sigma_a = 0,
+        the default), Cobb-Douglas (1) or CES between value added and intermediates."""
+        A, b = self.sets["A"], self.base
+        n = len(A)
+        if sigma_a is None:
+            sa = np.zeros(n)
+        elif isinstance(sigma_a, dict):
+            if set(sigma_a) != set(A):
+                raise ValueError("sigma_a needs one value for each activity")
+            sa = np.array([float(sigma_a[a]) for a in A])
+        else:
+            sa = np.broadcast_to(np.asarray(sigma_a, dtype=float), (n,)).copy()
+        if np.any(~np.isfinite(sa)) or np.any(sa < 0):
+            raise ValueError("sigma_a must be zero (Leontief) or positive")
+        lt = (sa == 0) | (b["QINTA"] <= 0)
+        cda = ~lt & (np.abs(sa - 1.0) < 1e-12)
+        rho = np.where(lt | cda, 0.0, 1.0 / np.where(sa > 0, sa, 1.0) - 1.0)
+        QVA0, QINTA0, QA0 = b["QVA"], np.where(lt, 1.0, b["QINTA"]), b["QA"]
+        PVA0, PINTA0 = b["PVA"], np.where(lt, 1.0, b["PINTA"])
+        ratio = (PVA0 / PINTA0) * (QVA0 / QINTA0) ** (1 + rho)
+        delta = ratio / (1 + ratio)
+        deltac = 1.0 / (1 + ratio)
+        value = PVA0 * QVA0 + PINTA0 * QINTA0
+        delta = np.where(cda, PVA0 * QVA0 / value, delta)
+        deltac = np.where(cda, PINTA0 * QINTA0 / value, deltac)
+        with np.errstate(all="ignore"):
+            ces = (delta * QVA0 ** (-rho) + deltac * QINTA0 ** (-rho)) ** (-1 / rho)
+        aa = np.where(lt, 1.0, np.where(cda, QA0 / (QVA0 ** delta * QINTA0 ** deltac), QA0 / np.where(lt | cda, 1.0, ces)))
+        self.struct["lt"], self.struct["cda"] = lt, cda
+        self.params.update({"sigma_a": sa, "rho_a": rho, "delta_a": delta, "deltac_a": deltac, "aa": aa})
 
     def _household_demand(self, income_elasticities, frisch) -> None:
         """LES demand (model_spec.md, 7.5) when income elasticities or Frisch parameters are given."""

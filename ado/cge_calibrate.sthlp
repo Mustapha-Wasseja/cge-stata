@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_calibrate}{cmd:,} {opt sigmava(numlist)} {opt sigmaq(numlist)} {opt sigmat(numlist)}
-[{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)}]
+[{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)} {opt sigmaa(numlist)}]
 
 
 {title:Description}
@@ -54,6 +54,14 @@ employment, as a matrix with one row per factor and one column per activity.
 Without it, factor prices are 1 in the base and quantities equal payments.
 
 {phang}
+{opt sigmaa(numlist)} gives the elasticity of substitution between value added
+and aggregate intermediate input (the top nest of production), one value or one
+per activity: 0, the default, is the Leontief nest, 1 is Cobb-Douglas, and other
+positive values give a CES nest, under which an activity uses relatively less
+of whichever input becomes dearer. Activities without intermediate inputs keep
+the Leontief nest.
+
+{phang}
 {opt incelas(numlist)} and {opt frisch(numlist)} select linear expenditure
 system (LES) household demand instead of the default Cobb-Douglas demand.
 {opt incelas()} gives positive income elasticities, one value or one per
@@ -71,6 +79,7 @@ expenditure function.
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) sigmaa(0 0.5 1)}{p_end}
 
 
 {title:Stored results}

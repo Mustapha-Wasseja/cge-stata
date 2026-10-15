@@ -8,11 +8,13 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.11 implements the standard static model described in
+Version 0.1.12 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
-- CES or Cobb-Douglas value added, Leontief intermediate inputs; activities may
-  produce several commodities in fixed proportions (version 0.1.4);
+- CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
+  CES or Cobb-Douglas nest between value added and intermediate inputs (version
+  0.1.12); activities may produce several commodities in fixed proportions
+  (version 0.1.4);
 - CET transformation between exports and domestic sales, Armington aggregation
   of imports and domestic goods;
 - households with Cobb-Douglas or, from version 0.1.11, linear expenditure

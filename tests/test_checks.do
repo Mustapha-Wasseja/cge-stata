@@ -397,6 +397,22 @@ quietly cge_map, `mapopts'
 capture cge_solve
 assert _rc == 459
 
+* Top nest (version 0.1.12): checks, Jacobian and errors
+quietly do setup_synthetic.do "sigmava(0.8) sigmaq(2) sigmat(2) sigmaa(0 0.5 1)"
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6
+cge_shock pwm, scale(1.1)
+quietly cge_solve, name(nest_pwm)
+cge_check, homogeneity perturb(0.1)
+assert r(failures) == 0
+cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)                ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) sigmaa(0.5 1)
+assert _rc == 198
+
 * LES household demand (version 0.1.11): checks, Jacobian and errors
 quietly do setup_synthetic.do "sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)"
 mata: _cge_jaccheck()

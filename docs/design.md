@@ -128,6 +128,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.9 | Faster Jacobian: exact derivatives for the aggregate equations and grouped central differences for the sparse rest; the fallback solver repaired (solvenl() takes at most three extra arguments in Stata 13) (done) |
 | 0.1.10 | Shocks to government and investment demand by product (qg, qinv) and to transfers (trdg, trdr, trfr, trgr, trrg) (done) |
 | 0.1.11 | Linear expenditure system (LES) household demand, calibrated from income elasticities and Frisch parameters; LES equivalent variation (done) |
+| 0.1.12 | Leontief, CES or Cobb-Douglas top nest between value added and aggregate intermediate input, by activity (done) |
 | 0.2 | Export-only commodities; elasticity tables; margins that differ between domestic sales, imports and exports, once margin data by market are available |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |

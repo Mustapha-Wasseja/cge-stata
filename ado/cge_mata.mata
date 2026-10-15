@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.11  2026-10-15
+*! cge_mata.mata  v0.1.12  2026-10-15
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -16,6 +16,8 @@ mata:
 struct cge_par {
     real colvector pwm, pwe, tm, te, tq, ta
     real colvector iva, inta, ad, rva, sva
+    // top nest: efficiency, value-added share and its complement, exponent, elasticity
+    real colvector aa, dla, dlac, rha, sa
     real matrix    ica, dva, theta, icm
     real colvector at, dt, dtc, rt, aq, dq, dqc, rq, sq, st
     real matrix    shif, beta, gamma
@@ -39,6 +41,8 @@ struct cge_model {
     real scalar      n, nC, nF, nH, nE, nD, nI
     // model structure
     real colvector   ce, cm, cd, cx, ct, cr
+    // activities with a Leontief top nest, and with a Cobb-Douglas one
+    real colvector   lt, cda
     real matrix      fa
     // parameters: base (p0) and current, including shocks (p)
     struct cge_par scalar p0, p
@@ -792,7 +796,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
     real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER
     real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs
-    real colvector oneA, oneC, oneF, oneH, oneD, DY
+    real colvector oneA, oneC, oneF, oneH, oneD, DY, rs
     real scalar k, nH, nD
 
     PA = _cge_v(M, x, 1);     PVA = _cge_v(M, x, 2);    PINTA = _cge_v(M, x, 3)
@@ -840,8 +844,20 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "P9", DPI, p.dwts' * PD, 1)
 
     // 5.2 Production block
-    _cge_put(M, L, R, K, record, "Q1", QVA, p.iva :* QA, oneA)
-    _cge_put(M, L, R, K, record, "Q2", QINTA, p.inta :* QA, oneA)
+    _cge_put(M, L, R, K, record, "Q1", QVA, p.iva :* QA, M.lt)
+    _cge_put(M, L, R, K, record, "Q2", QINTA, p.inta :* QA, M.lt)
+    // CES or Cobb-Douglas top nest. Mata gives 0 * missing = missing, so the CES
+    // branch uses an exponent of 1 where rho is 0 (Leontief and Cobb-Douglas rows)
+    rs = p.rha + (p.rha :== 0)
+    _cge_put(M, L, R, K, record, "Q1C", QA,
+             M.cda :* (p.aa :* (QVA :^ p.dla) :* (QINTA :^ p.dlac)) +
+             (1 :- M.cda) :* (p.aa :* (p.dla :* (QVA :^ (-rs)) + p.dlac :* (QINTA :^ (-rs))) :^ (-1 :/ rs)),
+             1 :- M.lt)
+    _cge_put(M, L, R, K, record, "Q2C",
+             M.cda :* (PVA :* QVA :* p.dlac) + (1 :- M.cda) :* QVA,
+             M.cda :* (PINTA :* QINTA :* p.dla) +
+             (1 :- M.cda) :* (QINTA :* (((PINTA :/ PVA) :* p.dla :/ p.dlac) :^ (1 :/ (1 :+ p.rha)))),
+             1 :- M.lt)
     qf = M.fa :* QF + (1 :- M.fa)
     rho = (M.cd + (1 :- M.cd) :* p.rva)'
     cessum = colsum(p.dva :* (qf :^ (-rho)))
@@ -936,7 +952,7 @@ real scalar _cge_maxres(struct cge_model scalar M, struct cge_par scalar p, real
 // =====================================================================
 
 void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, string scalar fqname,
-                    string scalar s_ie, string scalar s_fr)
+                    string scalar s_ie, string scalar s_fr, string scalar s_a)
 {
     struct cge_model scalar M
     struct cge_par scalar p
@@ -1048,6 +1064,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_fail_if(QVA0 :<= tol, M.labels[M.iA], "every activity needs positive value added", 459)
     p.iva = QVA0 :/ QA0
     p.inta = QINTA0 :/ QA0
+    _cge_topnest(M, p, s_a, QA0, QVA0, QINTA0, colsum(p.ica)')
 
     cd = abs(sva :- 1) :< 1e-12
     rva = (1 :- cd) :* (1 :/ sva :- 1)
@@ -1296,6 +1313,47 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     }
     st_numscalar("r(N_equations)", M.neq)
     st_numscalar("r(max_residual)", maxres)
+}
+
+// Top nest of production (model_spec.md, 5.2 and 7.3): Leontief (sigmaa 0, the
+// default), Cobb-Douglas (1) or CES between value added and intermediates.
+// Base prices: PVA = 1 and PINTA = sum of the intermediate shares.
+void _cge_topnest(struct cge_model scalar M, struct cge_par scalar p, string scalar s_a, real colvector QA0,
+                  real colvector QVA0, real colvector QINTA0, real colvector PINTA0)
+{
+    real colvector sa, lt, cda, rho, qi, pi, ratio, value
+    real scalar n
+    n = rows(QA0)
+    sa = (s_a == "" ? J(n, 1, 0) : strtoreal(tokens(s_a))')
+    if (rows(sa) == 1) sa = J(n, 1, sa)
+    if (rows(sa) != n) {
+        errprintf("sigmaa() needs 1 or %f values\n", n)
+        exit(198)
+    }
+    if (hasmissing(sa) | min(sa) < 0) _cge_fail("sigmaa() values must be zero (Leontief) or positive", 198)
+    lt = (sa :== 0) :| (QINTA0 :<= 0)
+    if (max((sa :> 0) :* (QINTA0 :<= 0))) {
+        printf("{txt}Note: activities without intermediate inputs keep a Leontief top nest: {res}%s\n",
+               invtokens(select(M.A, (sa :> 0) :* (QINTA0 :<= 0))'))
+    }
+    cda = (1 :- lt) :* (abs(sa :- 1) :< 1e-12)
+    rho = (1 :- lt) :* (1 :- cda) :* (1 :/ (sa + (sa :== 0)) :- 1)
+    qi = lt :+ (1 :- lt) :* QINTA0
+    pi = lt :+ (1 :- lt) :* PINTA0
+    ratio = (1 :/ pi) :* ((QVA0 :/ qi) :^ (1 :+ rho))
+    p.dla = ratio :/ (1 :+ ratio)
+    p.dlac = 1 :/ (1 :+ ratio)
+    value = QVA0 + pi :* qi
+    p.dla = cda :* (QVA0 :/ value) + (1 :- cda) :* p.dla
+    p.dlac = cda :* (pi :* qi :/ value) + (1 :- cda) :* p.dlac
+    p.aa = J(n, 1, 1)
+    p.aa = lt :+ cda :* (QA0 :/ ((QVA0 :^ p.dla) :* (qi :^ p.dlac))) +
+           (1 :- lt) :* (1 :- cda) :* (QA0 :/ ((p.dla :* (QVA0 :^ (-rho)) + p.dlac :* (qi :^ (-rho))) :^
+           (-1 :/ (rho + (rho :== 0)))))
+    p.rha = rho
+    p.sa = sa
+    M.lt = lt
+    M.cda = cda
 }
 
 void _cge_les(struct cge_par scalar p, real matrix QH0, real colvector EH0, string scalar s_ie,
@@ -1678,6 +1736,8 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     // 5.2 Production block
     _cge_sp_same(M, rowid, boff, pr, pc, "Q1", ("QVA", "QA"))
     _cge_sp_same(M, rowid, boff, pr, pc, "Q2", ("QINTA", "QA"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "Q1C", ("QA", "QVA", "QINTA"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "Q2C", ("QVA", "QINTA", "PVA", "PINTA"))
     _cge_sp_same(M, rowid, boff, pr, pc, "Q3", "QVA")
     _cge_nz(M.fa, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "Q3", j, "QF", (i :- 1) :* nA :+ j)

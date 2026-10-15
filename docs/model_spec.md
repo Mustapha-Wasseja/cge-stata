@@ -20,8 +20,8 @@ Included:
   and a commodity may have several producers; each activity is paired with a
   primary commodity, used when rewriting national-accounts layouts.
 - Two-level production: Leontief between value added and aggregate intermediate
-  input; CES (or Cobb-Douglas) value added over factors; Leontief intermediate
-  inputs.
+  input (from version 0.1.12 optionally CES or Cobb-Douglas); CES (or
+  Cobb-Douglas) value added over factors; Leontief intermediate inputs.
 - CET transformation of output between exports and domestic sales; Armington
   CES aggregation of imports and domestic goods.
 - One or more households with Cobb-Douglas consumption demand or, from
@@ -139,7 +139,8 @@ Incomes, rates and adjustment variables
 | $pwm_c$, $pwe_c$ | world import and export prices (foreign currency) |
 | $tm_c$, $te_c$, $tq_c$, $ta_a$ | import, export, sales and activity tax rates |
 | $\theta_{ac}$ | yield: output of commodity $c$ per unit of activity $a$ |
-| $iva_a$, $inta_a$ | value added and aggregate intermediate input per unit of activity |
+| $iva_a$, $inta_a$ | value added and aggregate intermediate input per unit of activity (Leontief top nest) |
+| $aa_a$, $\delta^{a}_a$, $\rho^{a}_a$ | efficiency, value-added share and exponent of a CES or Cobb-Douglas top nest |
 | $ica_{ca}$ | intermediate input $c$ per unit of aggregate intermediate input of $a$ |
 | $icm_{c'c}$ | margin services of commodity $c' \in CT$ per unit of composite supply of $c$ |
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
@@ -160,7 +161,9 @@ Incomes, rates and adjustment variables
 | $cwts_c$, $dwts_c$ | CPI and DPI weights |
 
 Elasticities supplied by the user: $\sigma^{va}_a$ (substitution between
-factors), $\sigma^{t}_c$ (transformation between exports and domestic sales; for
+factors), optionally $\sigma^{a}_a$ (substitution between value added and
+aggregate intermediate input, from version 0.1.12; 0, the default, is Leontief
+and 1 Cobb-Douglas; $\rho^{a}_a = 1/\sigma^{a}_a - 1$), $\sigma^{t}_c$ (transformation between exports and domestic sales; for
 $c \in CR$, the price elasticity of exports from composite supply, T9) and
 $\sigma^{q}_c$ (substitution between imports and domestic goods). The exponents
 are $\rho^{va}_a = 1/\sigma^{va}_a - 1$, $\rho^{t}_c = 1/\sigma^{t}_c + 1$ and
@@ -198,9 +201,25 @@ $$DPI = \sum_c dwts_c\,PD_c \tag{P9}$$
 
 ### 5.2 Production block
 
+Leontief top nest ($\sigma^{a}_a = 0$, the default):
+
 $$QVA_a = iva_a\,QA_a \tag{Q1}$$
 
 $$QINTA_a = inta_a\,QA_a \tag{Q2}$$
+
+CES top nest (from version 0.1.12; $\sigma^{a}_a > 0$, $\sigma^{a}_a \neq 1$):
+
+$$QA_a = aa_a\left[\delta^{a}_a\,QVA_a^{-\rho^{a}_a} + (1-\delta^{a}_a)\,QINTA_a^{-\rho^{a}_a}\right]^{-1/\rho^{a}_a} \tag{Q1C}$$
+
+$$\frac{QVA_a}{QINTA_a} = \left[\frac{PINTA_a}{PVA_a}\cdot\frac{\delta^{a}_a}{1-\delta^{a}_a}\right]^{1/(1+\rho^{a}_a)} \tag{Q2C}$$
+
+Cobb-Douglas top nest ($\sigma^{a}_a = 1$):
+
+$$QA_a = aa_a\,QVA_a^{\delta^{a}_a}\,QINTA_a^{1-\delta^{a}_a}, \qquad PVA_a\,QVA_a\,(1-\delta^{a}_a) = PINTA_a\,QINTA_a\,\delta^{a}_a \tag{Q1C', Q2C'}$$
+
+With a CES or Cobb-Douglas top nest, value added and intermediate inputs
+substitute for each other as their prices change; P7 still sets the activity
+price. An activity without intermediate inputs keeps the Leontief top nest.
 
 Value added, CES case ($\sigma^{va}_a \neq 1$):
 
@@ -519,6 +538,11 @@ from composite supply. Calibration must verify this identity, not assume it.
 - $QINTA^0_a = \sum_c SAM(c, a)$; $ica_{ca} = SAM(c, a) / QINTA^0_a$.
 - $QF^0_{fa} = SAM(f, a) / (W^0_f\,WFDIST^0_{fa})$; $QVA^0_a = \sum_f SAM(f, a)$.
 - $iva_a = QVA^0_a / QA^0_a$; $inta_a = QINTA^0_a / QA^0_a$.
+- CES top nest: with $r_a = (PVA^0_a/PINTA^0_a)\,(QVA^0_a/QINTA^0_a)^{1+\rho^{a}_a}$,
+  $\delta^{a}_a = r_a/(1+r_a)$ and $1-\delta^{a}_a = 1/(1+r_a)$ (both stored);
+  $aa_a = QA^0_a / \left[\delta^{a}_a\,(QVA^0_a)^{-\rho^{a}_a} + (1-\delta^{a}_a)\,(QINTA^0_a)^{-\rho^{a}_a}\right]^{-1/\rho^{a}_a}$.
+- Cobb-Douglas top nest: $\delta^{a}_a = PVA^0_a\,QVA^0_a / (PVA^0_a\,QVA^0_a + PINTA^0_a\,QINTA^0_a)$
+  and $aa_a = QA^0_a / \left[(QVA^0_a)^{\delta^{a}_a}\,(QINTA^0_a)^{1-\delta^{a}_a}\right]$.
 - CES value added: with $w_{fa} = W^0_f\,WFDIST^0_{fa}$,
   $\delta^{va}_{fa} = w_{fa}\,(QF^0_{fa})^{1+\rho^{va}_a} / \sum_{f'} w_{f'a}\,(QF^0_{f'a})^{1+\rho^{va}_a}$
   and $ad_a = QVA^0_a / \left[\sum_f \delta^{va}_{fa}\,(QF^0_{fa})^{-\rho^{va}_a}\right]^{-1/\rho^{va}_a}$.

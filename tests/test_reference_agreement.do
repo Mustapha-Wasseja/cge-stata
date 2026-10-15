@@ -61,6 +61,10 @@ cge_shock tm, value(0)
 cge_solve, name(mixed_tariff_removal) tolerance(1e-12)
 _compare_reference mixed_tariff_removal
 
+* Top nest: Leontief, CES and Cobb-Douglas (version 0.1.12)
+quietly do setup_synthetic.do "sigmava(0.8) sigmaq(2) sigmat(2) sigmaa(0 0.5 1)"
+_standard_simulations nest_
+
 * LES household demand (version 0.1.11)
 quietly do setup_synthetic.do "sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)"
 _standard_simulations les_

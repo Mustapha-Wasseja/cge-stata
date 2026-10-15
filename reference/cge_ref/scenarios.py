@@ -35,6 +35,10 @@ MIXED_ELASTICITIES = {
 LES_SETTINGS = {"income_elasticities": {"com_agr": 0.6, "com_man": 1.0, "com_ser": 1.4}, "frisch": -2.0}
 
 
+# Top nest (version 0.1.12): Leontief, CES and Cobb-Douglas in one model.
+TOP_NEST = {"act_agr": 0.0, "act_man": 0.5, "act_ser": 1.0}
+
+
 def synthetic_mapping() -> Mapping:
     return Mapping(
         activities=["act_agr", "act_man", "act_ser"],
@@ -181,6 +185,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Spending and transfer shocks (version 0.1.10): government purchases of
     # com_ser up 20 per cent; transfers from abroad to households and the
     # enterprise halved
+    for name, solution in run_simulations(synthetic_model(sigma_a=TOP_NEST)).items():
+        solutions["nest_" + name] = solution
     for name, solution in run_simulations(synthetic_model(**LES_SETTINGS)).items():
         solutions["les_" + name] = solution
     inst_les = institutions_model(income_elasticities=LES_SETTINGS["income_elasticities"], frisch=[-2.0, -3.0])
