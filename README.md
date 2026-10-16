@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.14 implements the standard static model described in
+Version 0.1.15 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -49,6 +49,11 @@ Version 0.1.10 adds shocks to government and investment demand by product and to
 transfers, such as public spending on health services or donor funding.
 Version 0.1.13 adds shocks to the fund's contribution rates, purchases and
 transfers received; version 0.1.14 adds shocks to factor efficiency.
+Version 0.1.15 adds standard report tables for several simulations side by side
+(macroeconomic aggregates, government, institutions, factors, sectors, health,
+and equivalent and compensating variations), to screen, Stata or Excel
+(`cge_report`); the calibrated parameters as a dataset (`cge_parameters`); and
+saving and loading a model with its simulations (`cge_save`, `cge_use`).
 
 Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
 is close to one, as with a low elasticity and a very small trade share.
@@ -104,6 +109,8 @@ cge_shock tm, value(0)
 cge_solve, name(notariff)
 cge_results, sim(notariff)
 cge_check, homogeneity perturb(0.1)
+cge_report, sims(notariff) saving(notariff.xlsx, replace)
+cge_save using mymodel, replace
 ```
 
 See [examples/tariff_removal.do](examples/tariff_removal.do) for a worked

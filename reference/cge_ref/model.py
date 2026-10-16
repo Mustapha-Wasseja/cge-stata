@@ -269,6 +269,14 @@ class Solution:
         ratio = np.prod((base["PQ"][:, None] / v["PQ"][:, None]) ** p["beta"], axis=0)
         return base["PQ"] @ p["gamma"] + (v["EH"] - v["PQ"] @ p["gamma"]) * ratio - base["EH"]
 
+    def compensating_variation(self) -> np.ndarray:
+        """Household compensating variation at simulated prices (Cobb-Douglas or LES
+        demand): spending after the shock less the spending that would give base
+        utility at the new prices; positive for a gain."""
+        base, p, v = self.model.base, self.params, self.values
+        ratio = np.prod((v["PQ"][:, None] / base["PQ"][:, None]) ** p["beta"], axis=0)
+        return v["EH"] - v["PQ"] @ p["gamma"] - (base["EH"] - base["PQ"] @ p["gamma"]) * ratio
+
 
 class Model:
     """Calibrated version 0.1 model."""

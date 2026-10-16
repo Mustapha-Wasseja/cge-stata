@@ -131,6 +131,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.12 | Leontief, CES or Cobb-Douglas top nest between value added and aggregate intermediate input, by activity (done) |
 | 0.1.13 | Social health insurance fund: contributions on factor income, transfers from government and the rest of the world, purchases of health services, savings; mapping option insurance() and synthetic health layout (done) |
 | 0.1.14 | Factors in efficiency units: exogenous factor efficiency (af) and an efficiency linked to the volume of health services consumed, with an elasticity by factor (done) |
+| 0.1.15 | Standard report tables for several simulations, to screen, Stata or Excel, with equivalent and compensating variations (cge_report); calibrated parameters as a dataset (cge_parameters); saving and loading a model (cge_save, cge_use) (done) |
 | 0.2 | Export-only commodities; elasticity tables; margins that differ between domestic sales, imports and exports, once margin data by market are available |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |

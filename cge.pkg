@@ -10,7 +10,7 @@ d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja
 d
-d Distribution-Date: 20261014
+d Distribution-Date: 20261016
 d
 f ado/cge.ado
 f ado/cge.sthlp
@@ -32,6 +32,14 @@ f ado/cge_results.ado
 f ado/cge_results.sthlp
 f ado/cge_check.ado
 f ado/cge_check.sthlp
+f ado/cge_report.ado
+f ado/cge_report.sthlp
+f ado/cge_parameters.ado
+f ado/cge_parameters.sthlp
+f ado/cge_save.ado
+f ado/cge_save.sthlp
+f ado/cge_use.ado
+f ado/cge_use.sthlp
 f ado/cge_synthetic.ado
 f ado/cge_synthetic.sthlp
 F data/cge_synthetic_sam.csv

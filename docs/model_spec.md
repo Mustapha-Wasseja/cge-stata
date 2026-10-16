@@ -703,6 +703,44 @@ a floor of one; for a variable whose base value is zero ($WALRAS$) it is
 measured relative to the largest SAM entry, as in check 4. The checks then give
 the same result whatever the units of the SAM.
 
+## 9. Reporting (from version 0.1.15)
+
+`cge_report` and the Python function `cge_ref.report()` compute the same
+measures, at the base point and at each solution. Real measures are valued at
+base prices $PQ^0_c$, $PVA^0_a$ and $EXR^0$, and trade at base world prices
+$pwm^0_c$, $pwe^0_c$; nominal measures use current prices and parameters.
+
+| Measure | Definition |
+|---|---|
+| Nominal GDP | $\sum_c PQ_c\,(\sum_h QH_{ch} + QG_c + QINV_c + QSHI_c + QER_c) + EXR\sum_c pwe_c QE_c - EXR\sum_c pwm_c QM_c$ |
+| Real GDP | the same at base prices and base world prices |
+| GDP deflator | nominal GDP / real GDP |
+| Real consumption, government consumption, investment, fund purchases | $\sum_c PQ^0_c$ times $\sum_h QH_{ch}$, $QG_c$, $QINV_c$, $QSHI_c$ |
+| Real exports, imports | $EXR^0\sum_c pwe^0_c QE_c + \sum_c PQ^0_c QER_c$; $EXR^0\sum_c pwm^0_c QM_c$ |
+| Real value added | $\sum_a PVA^0_a QVA_a$ |
+| Real exchange rate | $EXR / DPI$ |
+| Private savings | $\sum_d MPS_d (1 - TINS_d) YI_d$ |
+| Revenue by tax | direct $\sum_d TINS_d YI_d$; sales $\sum_c tq_c PQ_c QQ_c$; import $EXR \sum_c tm_c pwm_c QM_c$; export $EXR\sum_c te_c pwe_c QE_c$; activity $\sum_a ta_a PA_a QA_a$ |
+| Real wage | $W_f / CPI$ |
+| Exports of a commodity | $QE_c + QER_c$ |
+
+Other measures are model variables: $CPI$, $DPI$, $EXR$, $FSAV$, $YG$, $EG$,
+$GSAV$, $YI_d$, $EH_h$, $W_f$, $YF_f$, $QFS_f$, $QA_a$, $PA_a$, $QVA_a$, $QQ_c$,
+$PQ_c$, $QX_c$, $QD_c$, $QM_c$, and, when the model has them, $HS$, $EFF_f$
+(for $\eta_f > 0$), $YSHI$ and $SHIADJ$.
+
+Welfare, for household $h$ with expenditure function
+$E_h(PQ, u) = \sum_c PQ_c\gamma_{ch} + u\prod_c PQ_c^{\beta_{ch}}$
+(Cobb-Douglas when $\gamma = 0$), base spending $EH^0_h$ and new spending
+$EH_h$:
+
+$$EV_h = \sum_c PQ^0_c\gamma_{ch} + \Big(EH_h - \sum_c PQ_c\gamma_{ch}\Big)\prod_c \Big(\frac{PQ^0_c}{PQ_c}\Big)^{\beta_{ch}} - EH^0_h$$
+
+$$CV_h = EH_h - \sum_c PQ_c\gamma_{ch} - \Big(EH^0_h - \sum_c PQ^0_c\gamma_{ch}\Big)\prod_c \Big(\frac{PQ_c}{PQ^0_c}\Big)^{\beta_{ch}}$$
+
+Both are positive for a gain and reported in per cent of $EH^0_h$. Other
+percentage changes are $100\,(x - x^0)/|x^0|$, and missing when $x^0 = 0$.
+
 ## References
 
 Decaluwé, B., A. Lemelin, V. Robichaud and H. Maisonnave (2013). *PEP-1-1: The

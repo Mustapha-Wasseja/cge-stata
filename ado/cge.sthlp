@@ -37,8 +37,12 @@ closures.
 {p2col:{helpb cge_closure}}choose the closure{p_end}
 {p2col:{helpb cge_shock}}change parameters or fixed variables{p_end}
 {p2col:{helpb cge_solve}}solve and store a simulation{p_end}
-{p2col:{helpb cge_results}}report or save results{p_end}
+{p2col:{helpb cge_results}}display or save all results of a simulation{p_end}
+{p2col:{helpb cge_report}}standard report tables, to screen, Stata or Excel{p_end}
 {p2col:{helpb cge_check}}run validation checks{p_end}
+{p2col:{helpb cge_parameters}}calibrated parameters as a dataset{p_end}
+{p2col:{helpb cge_save}}save the model and its simulations{p_end}
+{p2col:{helpb cge_use}}load a saved model{p_end}
 {p2col:{helpb cge_synthetic}}load the synthetic SAM used in tests and examples{p_end}
 {p2colreset}{...}
 

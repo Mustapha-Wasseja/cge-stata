@@ -193,6 +193,20 @@ def write_results(solution: Solution, path: Path) -> None:
             writer.writerow([name, e1, e2, f"{base:.15g}", f"{value:.15g}"])
 
 
+def write_report(solution: Solution, path: Path) -> None:
+    from .report import report
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["table", "measure", "element", "base", "value"])
+        for table, measure, element, base, value in report(solution):
+            writer.writerow([table, measure, element, f"{base:.15g}", f"{value:.15g}"])
+
+
+# Simulations whose standard report (version 0.1.15) is also compared
+REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_up10",
+            "sut_import_price_up10", "eff_contribution_up50")
+
+
 def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     """Solve the standard simulations and write one CSV file per simulation."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -259,6 +273,10 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         path = directory / f"{name}.csv"
         write_results(solution, path)
         written.append(path)
+        if name in REPORTED:
+            path = directory / f"report_{name}.csv"
+            write_report(solution, path)
+            written.append(path)
     return written
 
 

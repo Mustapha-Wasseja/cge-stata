@@ -64,5 +64,5 @@ follow docs/model_spec.md, Section 3.
 {title:Also see}
 
 {psee}
-{helpb cge}, {helpb cge_solve}, {helpb cge_check}
+{helpb cge}, {helpb cge_solve}, {helpb cge_check}, {helpb cge_report}
 {p_end}

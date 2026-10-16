@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.14  2026-10-15
+*! cge_mata.mata  v0.1.15  2026-10-16
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -88,9 +88,10 @@ struct cge_jpat {
     real scalar    ncolour
 }
 
+// Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.1.0")
+    return("0.1.15")
 }
 
 // =====================================================================
@@ -2546,5 +2547,779 @@ real scalar _cge_report(string scalar label, real scalar value, real scalar tol)
     printf("{txt}  %s %-52s {res}%9.3e\n", (ok ? "[ok]  " : "{err}[fail]{txt}"), label, value)
     return(!ok)
 }
+
+
+// =====================================================================
+// Reporting (model_spec.md, Section 9; from version 0.1.15)
+// =====================================================================
+
+real matrix _cge_vn(struct cge_model scalar M, real colvector x, string scalar name)
+{
+    return(_cge_v(M, x, _cge_vidx(M, name)))
+}
+
+// Compensating variation by household: spending after the shock less the
+// spending that would give base utility at the new prices (Cobb-Douglas or LES)
+real colvector _cge_cv(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    real colvector PQ0, PQ1, EH0, EH1
+    PQ0 = _cge_vn(M, M.x0, "PQ")
+    PQ1 = _cge_vn(M, x, "PQ")
+    EH0 = _cge_vn(M, M.x0, "EH")
+    EH1 = _cge_vn(M, x, "EH")
+    return(EH1 - (PQ1' * p.gamma)' - (EH0 - (PQ0' * p.gamma)') :* exp(colsum(p.beta :* ln(PQ1 :/ PQ0)))')
+}
+
+void _cge_radd(string matrix keys, real colvector val, string scalar table, string scalar measure,
+               string scalar element, real scalar value)
+{
+    keys = keys \ (table, measure, element)
+    val = val \ value
+}
+
+// Report measures at the point x with parameters p, one row per measure.
+// Real measures use base prices, and base world prices for trade.
+void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colvector x,
+                   string matrix keys, real colvector val)
+{
+    struct cge_par scalar p0
+    real colvector PQ, PQ0, QG, QINV, QSHI, QER, QE, QM, fin, YI, TINS, MPS, W, YF, QFS, EH
+    real colvector QA, PA, QVA, PVA0, QQ, QX, QD, EFF
+    real matrix QH
+    real scalar EXR, EXR0, CPI, DPI, gdpn, gdpr, k
+
+    p0 = M.p0
+    keys = J(0, 3, "")
+    val = J(0, 1, .)
+    PQ = _cge_vn(M, x, "PQ");        PQ0 = _cge_vn(M, M.x0, "PQ")
+    QH = _cge_vn(M, x, "QH");        QG = _cge_vn(M, x, "QG")
+    QINV = _cge_vn(M, x, "QINV");    QSHI = _cge_vn(M, x, "QSHI")
+    QER = _cge_vn(M, x, "QER");      QE = _cge_vn(M, x, "QE")
+    QM = _cge_vn(M, x, "QM");        EXR = _cge_vn(M, x, "EXR")
+    EXR0 = _cge_vn(M, M.x0, "EXR");  CPI = _cge_vn(M, x, "CPI")
+    DPI = _cge_vn(M, x, "DPI");      YI = _cge_vn(M, x, "YI")
+    TINS = _cge_vn(M, x, "TINS");    MPS = _cge_vn(M, x, "MPS")
+    W = _cge_vn(M, x, "W");          YF = _cge_vn(M, x, "YF")
+    QFS = _cge_vn(M, x, "QFS");      EH = _cge_vn(M, x, "EH")
+    QA = _cge_vn(M, x, "QA");        PA = _cge_vn(M, x, "PA")
+    QVA = _cge_vn(M, x, "QVA");      PVA0 = _cge_vn(M, M.x0, "PVA")
+    QQ = _cge_vn(M, x, "QQ");        QX = _cge_vn(M, x, "QX")
+    QD = _cge_vn(M, x, "QD");        EFF = _cge_vn(M, x, "EFF")
+
+    fin = rowsum(QH) + QG + QINV + QSHI + QER
+    gdpn = PQ' * fin + EXR * (p.pwe' * QE) - EXR * (p.pwm' * QM)
+    gdpr = PQ0' * fin + EXR0 * (p0.pwe' * QE) - EXR0 * (p0.pwm' * QM)
+    _cge_radd(keys, val, "macro", "gdp_nominal", "", gdpn)
+    _cge_radd(keys, val, "macro", "gdp_real", "", gdpr)
+    _cge_radd(keys, val, "macro", "gdp_deflator", "", gdpn / gdpr)
+    _cge_radd(keys, val, "macro", "consumption_real", "", PQ0' * rowsum(QH))
+    _cge_radd(keys, val, "macro", "government_real", "", PQ0' * QG)
+    _cge_radd(keys, val, "macro", "investment_real", "", PQ0' * QINV)
+    _cge_radd(keys, val, "macro", "insurance_fund_real", "", PQ0' * QSHI)
+    _cge_radd(keys, val, "macro", "exports_real", "", EXR0 * (p0.pwe' * QE) + PQ0' * QER)
+    _cge_radd(keys, val, "macro", "imports_real", "", EXR0 * (p0.pwm' * QM))
+    _cge_radd(keys, val, "macro", "value_added_real", "", PVA0' * QVA)
+    _cge_radd(keys, val, "macro", "cpi", "", CPI)
+    _cge_radd(keys, val, "macro", "dpi", "", DPI)
+    _cge_radd(keys, val, "macro", "exchange_rate", "", EXR)
+    _cge_radd(keys, val, "macro", "real_exchange_rate", "", EXR / DPI)
+    _cge_radd(keys, val, "macro", "private_savings", "", (MPS :* (1 :- TINS))' * YI)
+    _cge_radd(keys, val, "macro", "investment_value", "", PQ' * QINV)
+    _cge_radd(keys, val, "macro", "foreign_savings", "", _cge_vn(M, x, "FSAV"))
+
+    _cge_radd(keys, val, "government", "revenue", "", _cge_vn(M, x, "YG"))
+    _cge_radd(keys, val, "government", "spending", "", _cge_vn(M, x, "EG"))
+    _cge_radd(keys, val, "government", "savings", "", _cge_vn(M, x, "GSAV"))
+    _cge_radd(keys, val, "government", "tax_direct", "", TINS' * YI)
+    _cge_radd(keys, val, "government", "tax_sales", "", sum(p.tq :* PQ :* QQ))
+    _cge_radd(keys, val, "government", "tax_import", "", EXR * sum(p.tm :* p.pwm :* QM))
+    _cge_radd(keys, val, "government", "tax_export", "", EXR * sum(p.te :* p.pwe :* QE))
+    _cge_radd(keys, val, "government", "tax_activity", "", sum(p.ta :* PA :* QA))
+
+    for (k = 1; k <= M.nD; k++) _cge_radd(keys, val, "institutions", "income", M.D[k], YI[k])
+    for (k = 1; k <= M.nH; k++) _cge_radd(keys, val, "institutions", "consumption", M.H[k], EH[k])
+    for (k = 1; k <= M.nF; k++) {
+        _cge_radd(keys, val, "factors", "wage", M.F[k], W[k])
+        _cge_radd(keys, val, "factors", "real_wage", M.F[k], W[k] / CPI)
+        _cge_radd(keys, val, "factors", "income", M.F[k], YF[k])
+        _cge_radd(keys, val, "factors", "supply", M.F[k], QFS[k])
+    }
+    for (k = 1; k <= M.n; k++) {
+        _cge_radd(keys, val, "activities", "output", M.A[k], QA[k])
+        _cge_radd(keys, val, "activities", "price", M.A[k], PA[k])
+        _cge_radd(keys, val, "activities", "value_added", M.A[k], QVA[k])
+    }
+    for (k = 1; k <= M.nC; k++) {
+        _cge_radd(keys, val, "commodities", "supply", M.C[k], QQ[k])
+        _cge_radd(keys, val, "commodities", "price", M.C[k], PQ[k])
+        _cge_radd(keys, val, "commodities", "output", M.C[k], QX[k])
+        _cge_radd(keys, val, "commodities", "domestic_sales", M.C[k], QD[k])
+        _cge_radd(keys, val, "commodities", "exports", M.C[k], QE[k] + QER[k])
+        _cge_radd(keys, val, "commodities", "imports", M.C[k], QM[k])
+    }
+    if (any(M.p0.etah)) {
+        _cge_radd(keys, val, "health", "health_services", "", _cge_vn(M, x, "HS"))
+        for (k = 1; k <= M.nF; k++) {
+            if (M.p0.etah[k] != 0) _cge_radd(keys, val, "health", "efficiency", M.F[k], EFF[k])
+        }
+    }
+    if (M.ishi) {
+        _cge_radd(keys, val, "health", "fund_revenue", "", _cge_vn(M, x, "YSHI"))
+        _cge_radd(keys, val, "health", "fund_volume", "", _cge_vn(M, x, "SHIADJ"))
+    }
+}
+
+// Simulation indexes from a list of names: the most recent one when empty,
+// every one for _all
+real colvector _cge_sim_list(struct cge_model scalar M, string scalar sims)
+{
+    string rowvector tok
+    real colvector s
+    real scalar k
+    if (sims == "") return(_cge_sim_index(M, ""))
+    if (sims == "_all" | sims == "all") {
+        if (rows(M.simname) == 0) _cge_fail("no simulation has been solved; use cge_solve", 459)
+        return((1::rows(M.simname)))
+    }
+    tok = tokens(sims)
+    s = J(cols(tok), 1, 0)
+    for (k = 1; k <= cols(tok); k++) s[k] = _cge_sim_index(M, tok[k])
+    return(s)
+}
+
+// Report rows for simulations s: keys (table, measure, element), base values,
+// simulated values (one column per simulation) and percentage changes. For the
+// equivalent and compensating variations, the base is zero and the percentage
+// is of base household consumption.
+void _cge_report_rows(struct cge_model scalar M, real colvector s, string matrix keys,
+                      real colvector base, real matrix vals, real matrix pct)
+{
+    string matrix k1
+    real colvector v, ev, cv, eh0
+    real scalar j, h, nr
+
+    _cge_measures(M, M.p0, M.x0, keys, base)
+    nr = rows(base)
+    eh0 = _cge_vn(M, M.x0, "EH")
+    for (h = 1; h <= M.nH; h++) {
+        keys = keys \ ("welfare", "equivalent_variation", M.H[h]) \ ("welfare", "compensating_variation", M.H[h])
+        base = base \ 0 \ 0
+    }
+    vals = J(rows(base), rows(s), .)
+    pct = vals
+    for (j = 1; j <= rows(s); j++) {
+        _cge_measures(M, M.simp[s[j]], M.simx[., s[j]], k1, v)
+        ev = _cge_ev(M, M.simp[s[j]], M.simx[., s[j]])
+        cv = _cge_cv(M, M.simp[s[j]], M.simx[., s[j]])
+        for (h = 1; h <= M.nH; h++) v = v \ ev[h] \ cv[h]
+        vals[., j] = v
+        pct[|1, j \ nr, j|] = 100 :* (v[|1 \ nr|] - base[|1 \ nr|]) :/ abs(base[|1 \ nr|])
+        pct[|1, j \ nr, j|] = pct[|1, j \ nr, j|] :/ (base[|1 \ nr|] :!= 0)
+        for (h = 1; h <= M.nH; h++) {
+            pct[nr + 2 * h - 1, j] = 100 * ev[h] / eh0[h]
+            pct[nr + 2 * h, j] = 100 * cv[h] / eh0[h]
+        }
+    }
+}
+
+// Display the report, and optionally fill the dataset in memory (mode "long":
+// one observation per simulation and measure; "wide": one per measure, with
+// a value and a percentage change for each simulation)
+void _cge_report_run(string scalar sims, string scalar tables, real scalar show, string scalar mode)
+{
+    struct cge_model scalar M
+    string matrix keys
+    string rowvector tab, alltab, title
+    real colvector s, base, sel
+    real matrix vals, pct
+    real scalar t, i, j, n, ns, w1
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    s = _cge_sim_list(M, sims)
+    ns = rows(s)
+    _cge_report_rows(M, s, keys, base, vals, pct)
+    alltab = ("macro", "government", "institutions", "factors", "activities", "commodities", "health", "welfare")
+    title = ("Macroeconomic aggregates", "Government", "Institutions", "Factors", "Activities",
+             "Commodities", "Health", "Welfare (per cent of base consumption)")
+    tab = (tables == "" ? ("macro", "government", "institutions", "factors", "health", "welfare") :
+          (tables == "all" ? alltab : tokens(tables)))
+    for (t = 1; t <= cols(tab); t++) {
+        if (!anyof(alltab, tab[t])) _cge_fail("tables(): " + tab[t] + " is not a report table (" +
+                                              invtokens(alltab) + ")", 198)
+    }
+    if (show) {
+        for (t = 1; t <= cols(tab); t++) {
+            sel = select((1::rows(keys)), keys[., 1] :== tab[t])
+            if (rows(sel) == 0) continue
+            w1 = max((24, max(strlen(keys[sel, 2] :+ " " :+ keys[sel, 3])))) + 1
+            printf("\n{txt}%s\n", title[_cge_find(alltab', tab[t])])
+            printf("{txt}%s\n", "{hline " + strofreal(w1 + 13 + 11 * min((ns, 6))) + "}")
+            printf("{txt}%-" + strofreal(w1) + "s %12s", "", (tab[t] == "welfare" ? "" : "base"))
+            for (j = 1; j <= min((ns, 6)); j++) printf(" %10s", abbrev(M.simname[s[j]], 10))
+            printf("\n")
+            for (i = 1; i <= rows(sel); i++) {
+                n = sel[i]
+                printf("{txt}%-" + strofreal(w1) + "s ", keys[n, 2] + (keys[n, 3] == "" ? "" : " " + keys[n, 3]))
+                if (tab[t] == "welfare") printf("%12s", "")
+                else printf("{res}%12.4g", base[n])
+                for (j = 1; j <= min((ns, 6)); j++) printf("{res} %10.3f", pct[n, j])
+                printf("\n")
+            }
+            printf("{txt}%s\n", "{hline " + strofreal(w1 + 13 + 11 * min((ns, 6))) + "}")
+        }
+        printf("{txt}Percentage changes from the base")
+        if (ns > 6) printf("; the first 6 of %f simulations are shown", ns)
+        printf("\n")
+    }
+    if (mode == "long") _cge_report_long(M, s, keys, base, vals, pct)
+    if (mode == "wide") _cge_report_wide(M, s, keys, base, vals, pct)
+    st_numscalar("r(N_measures)", rows(keys))
+    st_numscalar("r(N_sims)", ns)
+}
+
+void _cge_report_long(struct cge_model scalar M, real colvector s, string matrix keys, real colvector base,
+                      real matrix vals, real matrix pct)
+{
+    real scalar n, ns, j
+    string colvector sim
+    n = rows(keys)
+    ns = rows(s)
+    sim = J(0, 1, "")
+    for (j = 1; j <= ns; j++) sim = sim \ J(n, 1, M.simname[s[j]])
+    st_addobs(n * ns)
+    (void) st_addvar("str32", "sim")
+    (void) st_addvar("str16", "table")
+    (void) st_addvar("str32", "measure")
+    (void) st_addvar("str32", "element")
+    (void) st_addvar("double", ("base", "value", "pct"))
+    st_sstore(., "sim", sim)
+    st_sstore(., "table", J(ns, 1, keys[., 1]))
+    st_sstore(., "measure", J(ns, 1, keys[., 2]))
+    st_sstore(., "element", J(ns, 1, keys[., 3]))
+    st_store(., "base", J(ns, 1, base))
+    st_store(., "value", colshape(vals', 1))
+    st_store(., "pct", colshape(pct', 1))
+    st_varlabel("sim", "Simulation")
+    st_varlabel("table", "Report table")
+    st_varlabel("measure", "Measure")
+    st_varlabel("element", "Set element")
+    st_varlabel("base", "Base value")
+    st_varlabel("value", "Simulated value")
+    st_varlabel("pct", "Per cent change (welfare: per cent of base consumption)")
+}
+
+void _cge_report_wide(struct cge_model scalar M, real colvector s, string matrix keys, real colvector base,
+                      real matrix vals, real matrix pct)
+{
+    real scalar n, j
+    n = rows(keys)
+    st_addobs(n)
+    (void) st_addvar("str16", "table")
+    (void) st_addvar("str32", "measure")
+    (void) st_addvar("str32", "element")
+    (void) st_addvar("double", "base")
+    st_sstore(., "table", keys[., 1])
+    st_sstore(., "measure", keys[., 2])
+    st_sstore(., "element", keys[., 3])
+    st_store(., "base", base)
+    st_varlabel("table", "Table")
+    st_varlabel("measure", "Measure")
+    st_varlabel("element", "Element")
+    st_varlabel("base", "Base")
+    for (j = 1; j <= rows(s); j++) {
+        (void) st_addvar("double", ("v" + strofreal(j), "p" + strofreal(j)))
+        st_store(., "v" + strofreal(j), vals[., j])
+        st_store(., "p" + strofreal(j), pct[., j])
+        st_varlabel("v" + strofreal(j), M.simname[s[j]] + ": value")
+        st_varlabel("p" + strofreal(j), M.simname[s[j]] + ": % change")
+    }
+}
+
+// =====================================================================
+// Calibrated parameters as a dataset (from version 0.1.15)
+// =====================================================================
+
+void _cge_padd(string matrix keys, real colvector val, string scalar name, real matrix X,
+               string colvector r, string colvector c)
+{
+    real colvector i
+    real scalar n
+    n = rows(X) * cols(X)
+    if (n == 0) return
+    i = (1::n)
+    // colshape(): subscripting a 1 x 1 vector returns a row
+    keys = keys \ (J(n, 1, name), colshape(r[floor((i :- 1) :/ cols(X)) :+ 1], 1),
+                   (rows(c) ? colshape(c[mod(i :- 1, cols(X)) :+ 1], 1) : J(n, 1, "")))
+    val = val \ colshape(X, 1)
+}
+
+void _cge_param_data(string scalar sim, real scalar current)
+{
+    struct cge_model scalar M
+    struct cge_par scalar p
+    string matrix keys
+    string colvector none
+    real colvector val
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (sim != "") p = M.simp[_cge_sim_index(M, sim)]
+    else p = (current ? M.p : M.p0)
+    keys = J(0, 3, "")
+    val = J(0, 1, .)
+    none = J(0, 1, "")
+    // commodities
+    _cge_padd(keys, val, "pwm", p.pwm, M.C, none);   _cge_padd(keys, val, "pwe", p.pwe, M.C, none)
+    _cge_padd(keys, val, "tm", p.tm, M.C, none);     _cge_padd(keys, val, "te", p.te, M.C, none)
+    _cge_padd(keys, val, "tq", p.tq, M.C, none);     _cge_padd(keys, val, "at", p.at, M.C, none)
+    _cge_padd(keys, val, "dt", p.dt, M.C, none);     _cge_padd(keys, val, "dtc", p.dtc, M.C, none)
+    _cge_padd(keys, val, "rt", p.rt, M.C, none);     _cge_padd(keys, val, "st", p.st, M.C, none)
+    _cge_padd(keys, val, "aq", p.aq, M.C, none);     _cge_padd(keys, val, "dq", p.dq, M.C, none)
+    _cge_padd(keys, val, "dqc", p.dqc, M.C, none);   _cge_padd(keys, val, "rq", p.rq, M.C, none)
+    _cge_padd(keys, val, "sq", p.sq, M.C, none);     _cge_padd(keys, val, "qg", p.qg, M.C, none)
+    _cge_padd(keys, val, "qinv", p.qinv, M.C, none); _cge_padd(keys, val, "qer", p.qer, M.C, none)
+    _cge_padd(keys, val, "cwts", p.cwts, M.C, none); _cge_padd(keys, val, "dwts", p.dwts, M.C, none)
+    _cge_padd(keys, val, "qshi", p.qshi, M.C, none)
+    // activities
+    _cge_padd(keys, val, "ta", p.ta, M.A, none);     _cge_padd(keys, val, "ad", p.ad, M.A, none)
+    _cge_padd(keys, val, "iva", p.iva, M.A, none);   _cge_padd(keys, val, "inta", p.inta, M.A, none)
+    _cge_padd(keys, val, "rva", p.rva, M.A, none);   _cge_padd(keys, val, "sva", p.sva, M.A, none)
+    _cge_padd(keys, val, "aa", p.aa, M.A, none);     _cge_padd(keys, val, "dla", p.dla, M.A, none)
+    _cge_padd(keys, val, "dlac", p.dlac, M.A, none); _cge_padd(keys, val, "rha", p.rha, M.A, none)
+    _cge_padd(keys, val, "sa", p.sa, M.A, none)
+    // matrices
+    _cge_padd(keys, val, "ica", p.ica, M.C, M.A);     _cge_padd(keys, val, "dva", p.dva, M.F, M.A)
+    _cge_padd(keys, val, "theta", p.theta, M.A, M.C); _cge_padd(keys, val, "icm", p.icm, M.C, M.C)
+    _cge_padd(keys, val, "shif", p.shif, M.I, M.F);   _cge_padd(keys, val, "beta", p.beta, M.C, M.H)
+    _cge_padd(keys, val, "gamma", p.gamma, M.C, M.H); _cge_padd(keys, val, "shii", p.shii, M.D, M.D)
+    // institutions and factors
+    _cge_padd(keys, val, "tins0", p.tins0, M.D, none); _cge_padd(keys, val, "mps0", p.mps0, M.D, none)
+    _cge_padd(keys, val, "shir", p.shir, M.D, none);   _cge_padd(keys, val, "trdg", p.trdg, M.D, none)
+    _cge_padd(keys, val, "trdr", p.trdr, M.D, none);   _cge_padd(keys, val, "hc", p.hc, M.H, none)
+    _cge_padd(keys, val, "trfr", p.trfr, M.F, none);   _cge_padd(keys, val, "tshi", p.tshi, M.F, none)
+    _cge_padd(keys, val, "af", p.af, M.F, none);       _cge_padd(keys, val, "etah", p.etah, M.F, none)
+    // scalars
+    _cge_padd(keys, val, "trgr", p.trgr, "", none);    _cge_padd(keys, val, "trrg", p.trrg, "", none)
+    _cge_padd(keys, val, "trgg", p.trgg, "", none);    _cge_padd(keys, val, "sshi", p.sshi, "", none)
+    _cge_padd(keys, val, "trshi", p.trshi, "", none);  _cge_padd(keys, val, "trshir", p.trshir, "", none)
+    _cge_padd(keys, val, "hs0", p.hs0, "", none)
+    st_addobs(rows(val))
+    (void) st_addvar("str8", "parameter")
+    (void) st_addvar("str32", "element1")
+    (void) st_addvar("str32", "element2")
+    (void) st_addvar("double", "value")
+    st_sstore(., "parameter", keys[., 1])
+    st_sstore(., "element1", keys[., 2])
+    st_sstore(., "element2", keys[., 3])
+    st_store(., "value", val)
+    st_varlabel("parameter", "Parameter (docs/model_spec.md, Section 4)")
+    st_varlabel("element1", "First set element")
+    st_varlabel("element2", "Second set element")
+    st_varlabel("value", "Value")
+    st_numscalar("r(N)", rows(val))
+}
+
+// =====================================================================
+// Saving and loading a model (from version 0.1.15)
+// =====================================================================
+
+void _cge_io_put(real scalar fh, string scalar name, transmorphic matrix v)
+{
+    fputmatrix(fh, name)
+    fputmatrix(fh, v)
+}
+
+void _cge_save(string scalar fn, real scalar replace)
+{
+    struct cge_model scalar M
+    real scalar fh
+    M = _cge_load()
+    if (fileexists(fn)) {
+        if (!replace) _cge_fail("file " + fn + " already exists; use replace", 602)
+        unlink(fn)
+    }
+    fh = fopen(fn, "w")
+    fputmatrix(fh, "cge-stata model")
+    fputmatrix(fh, _cge_version())
+    _cge_model_write(fh, M)
+    fputmatrix(fh, "__end__")
+    fclose(fh)
+    printf("{txt}Model saved to {res}%s{txt} (%s, %f simulation(s))\n", fn,
+           (M.calibrated == 1 ? "calibrated" : (M.mapped == 1 ? "mapped" : "SAM only")), rows(M.simname))
+}
+
+void _cge_use(string scalar fn)
+{
+    struct cge_model scalar M
+    struct cge_par scalar q0, q1, qs
+    struct cge_par rowvector sp
+    transmorphic matrix v
+    string scalar name, ver, rest
+    real scalar fh, unknown, ok, cur, d, k
+    if (!fileexists(fn)) _cge_fail("file " + fn + " not found", 601)
+    fh = fopen(fn, "r")
+    v = fgetmatrix(fh)
+    if (eltype(v) != "string" | rows(v) * cols(v) != 1) {
+        fclose(fh)
+        _cge_fail(fn + " is not a cge-stata model file", 610)
+    }
+    if (v != "cge-stata model") {
+        fclose(fh)
+        _cge_fail(fn + " is not a cge-stata model file", 610)
+    }
+    ver = fgetmatrix(fh)
+    unknown = 0
+    // Parameter structures are built in fresh structures and assigned once:
+    // in Stata 13, reading an element of a structure vector back, changing it
+    // and storing it again can hang Mata. A simulation's parameters are
+    // contiguous in the file.
+    q0 = cge_par()
+    q1 = cge_par()
+    qs = cge_par()
+    sp = cge_par(1, 0)
+    cur = 0
+    while (1) {
+        name = fgetmatrix(fh)
+        if (name == "__end__") break
+        v = fgetmatrix(fh)
+        if (substr(name, 1, 3) == "p0.") ok = _cge_par_member(q0, substr(name, 4, .), v)
+        else if (substr(name, 1, 2) == "p.") ok = _cge_par_member(q1, substr(name, 3, .), v)
+        else if (name == "simp.count") {
+            sp = cge_par(1, v)
+            ok = 1
+        }
+        else if (substr(name, 1, 5) == "simp.") {
+            rest = substr(name, 6, .)
+            d = strpos(rest, ".")
+            k = strtoreal(substr(rest, 1, d - 1))
+            if (k != cur) {
+                if (cur) sp[cur] = qs
+                qs = cge_par()
+                cur = k
+            }
+            ok = _cge_par_member(qs, substr(rest, d + 1, .), v)
+        }
+        else ok = _cge_model_member(M, name, v)
+        if (!ok) unknown++
+    }
+    fclose(fh)
+    if (cur) sp[cur] = qs
+    M.p0 = q0
+    M.p = q1
+    M.simp = sp
+    _cge_store(M)
+    printf("{txt}Model loaded from {res}%s{txt} (saved by cge-stata %s; %s, %f simulation(s))\n", fn, ver,
+           (M.calibrated == 1 ? "calibrated" : (M.mapped == 1 ? "mapped" : "SAM only")), rows(M.simname))
+    if (unknown) printf("{txt}Note: %f saved item(s) are not used by this version and were ignored\n", unknown)
+    st_global("r(saved_by)", ver)
+}
+
+
+// BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)
+
+void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefix)
+{
+    _cge_io_put(fh, prefix + "pwm", p.pwm)
+    _cge_io_put(fh, prefix + "pwe", p.pwe)
+    _cge_io_put(fh, prefix + "tm", p.tm)
+    _cge_io_put(fh, prefix + "te", p.te)
+    _cge_io_put(fh, prefix + "tq", p.tq)
+    _cge_io_put(fh, prefix + "ta", p.ta)
+    _cge_io_put(fh, prefix + "iva", p.iva)
+    _cge_io_put(fh, prefix + "inta", p.inta)
+    _cge_io_put(fh, prefix + "ad", p.ad)
+    _cge_io_put(fh, prefix + "rva", p.rva)
+    _cge_io_put(fh, prefix + "sva", p.sva)
+    _cge_io_put(fh, prefix + "aa", p.aa)
+    _cge_io_put(fh, prefix + "dla", p.dla)
+    _cge_io_put(fh, prefix + "dlac", p.dlac)
+    _cge_io_put(fh, prefix + "rha", p.rha)
+    _cge_io_put(fh, prefix + "sa", p.sa)
+    _cge_io_put(fh, prefix + "ica", p.ica)
+    _cge_io_put(fh, prefix + "dva", p.dva)
+    _cge_io_put(fh, prefix + "theta", p.theta)
+    _cge_io_put(fh, prefix + "icm", p.icm)
+    _cge_io_put(fh, prefix + "at", p.at)
+    _cge_io_put(fh, prefix + "dt", p.dt)
+    _cge_io_put(fh, prefix + "dtc", p.dtc)
+    _cge_io_put(fh, prefix + "rt", p.rt)
+    _cge_io_put(fh, prefix + "aq", p.aq)
+    _cge_io_put(fh, prefix + "dq", p.dq)
+    _cge_io_put(fh, prefix + "dqc", p.dqc)
+    _cge_io_put(fh, prefix + "rq", p.rq)
+    _cge_io_put(fh, prefix + "sq", p.sq)
+    _cge_io_put(fh, prefix + "st", p.st)
+    _cge_io_put(fh, prefix + "shif", p.shif)
+    _cge_io_put(fh, prefix + "beta", p.beta)
+    _cge_io_put(fh, prefix + "gamma", p.gamma)
+    _cge_io_put(fh, prefix + "tins0", p.tins0)
+    _cge_io_put(fh, prefix + "mps0", p.mps0)
+    _cge_io_put(fh, prefix + "shir", p.shir)
+    _cge_io_put(fh, prefix + "hc", p.hc)
+    _cge_io_put(fh, prefix + "trdg", p.trdg)
+    _cge_io_put(fh, prefix + "trdr", p.trdr)
+    _cge_io_put(fh, prefix + "trfr", p.trfr)
+    _cge_io_put(fh, prefix + "qg", p.qg)
+    _cge_io_put(fh, prefix + "qinv", p.qinv)
+    _cge_io_put(fh, prefix + "cwts", p.cwts)
+    _cge_io_put(fh, prefix + "dwts", p.dwts)
+    _cge_io_put(fh, prefix + "qer", p.qer)
+    _cge_io_put(fh, prefix + "shii", p.shii)
+    _cge_io_put(fh, prefix + "trgr", p.trgr)
+    _cge_io_put(fh, prefix + "trrg", p.trrg)
+    _cge_io_put(fh, prefix + "trgg", p.trgg)
+    _cge_io_put(fh, prefix + "tshi", p.tshi)
+    _cge_io_put(fh, prefix + "qshi", p.qshi)
+    _cge_io_put(fh, prefix + "sshi", p.sshi)
+    _cge_io_put(fh, prefix + "trshi", p.trshi)
+    _cge_io_put(fh, prefix + "trshir", p.trshir)
+    _cge_io_put(fh, prefix + "af", p.af)
+    _cge_io_put(fh, prefix + "etah", p.etah)
+    _cge_io_put(fh, prefix + "hs0", p.hs0)
+}
+
+real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
+{
+    if (name == "pwm") p.pwm = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "pwe") p.pwe = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "tm") p.tm = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "te") p.te = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "tq") p.tq = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "ta") p.ta = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "iva") p.iva = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "inta") p.inta = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "ad") p.ad = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "rva") p.rva = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "sva") p.sva = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "aa") p.aa = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dla") p.dla = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dlac") p.dlac = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "rha") p.rha = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "sa") p.sa = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "ica") p.ica = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "dva") p.dva = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "theta") p.theta = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "icm") p.icm = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "at") p.at = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dt") p.dt = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dtc") p.dtc = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "rt") p.rt = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "aq") p.aq = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dq") p.dq = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dqc") p.dqc = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "rq") p.rq = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "sq") p.sq = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "st") p.st = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "shif") p.shif = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "beta") p.beta = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "gamma") p.gamma = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "tins0") p.tins0 = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "mps0") p.mps0 = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "shir") p.shir = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "hc") p.hc = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "trdg") p.trdg = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "trdr") p.trdr = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "trfr") p.trfr = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "qg") p.qg = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "qinv") p.qinv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cwts") p.cwts = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dwts") p.dwts = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "qer") p.qer = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "shii") p.shii = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "trgr") p.trgr = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "trrg") p.trrg = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "trgg") p.trgg = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "tshi") p.tshi = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "qshi") p.qshi = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "sshi") p.sshi = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "trshi") p.trshi = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "trshir") p.trshir = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "af") p.af = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "etah") p.etah = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "hs0") p.hs0 = (rows(v) * cols(v) == 0 ? . : v)
+    else return(0)
+    return(1)
+}
+
+void _cge_model_write(real scalar fh, struct cge_model scalar M)
+{
+    real scalar k
+    _cge_io_put(fh, "labels0", M.labels0)
+    _cge_io_put(fh, "labels", M.labels)
+    _cge_io_put(fh, "S0", M.S0)
+    _cge_io_put(fh, "S", M.S)
+    _cge_io_put(fh, "rewritten", M.rewritten)
+    _cge_io_put(fh, "mapped", M.mapped)
+    _cge_io_put(fh, "calibrated", M.calibrated)
+    _cge_io_put(fh, "iA", M.iA)
+    _cge_io_put(fh, "iC", M.iC)
+    _cge_io_put(fh, "iF", M.iF)
+    _cge_io_put(fh, "iH", M.iH)
+    _cge_io_put(fh, "igov", M.igov)
+    _cge_io_put(fh, "isav", M.isav)
+    _cge_io_put(fh, "irow", M.irow)
+    _cge_io_put(fh, "idirtax", M.idirtax)
+    _cge_io_put(fh, "isaltax", M.isaltax)
+    _cge_io_put(fh, "iimptax", M.iimptax)
+    _cge_io_put(fh, "iexptax", M.iexptax)
+    _cge_io_put(fh, "iacttax", M.iacttax)
+    _cge_io_put(fh, "ishi", M.ishi)
+    _cge_io_put(fh, "A", M.A)
+    _cge_io_put(fh, "C", M.C)
+    _cge_io_put(fh, "F", M.F)
+    _cge_io_put(fh, "H", M.H)
+    _cge_io_put(fh, "I", M.I)
+    _cge_io_put(fh, "iE", M.iE)
+    _cge_io_put(fh, "imargins", M.imargins)
+    _cge_io_put(fh, "iterritorial", M.iterritorial)
+    _cge_io_put(fh, "iT", M.iT)
+    _cge_io_put(fh, "istocks", M.istocks)
+    _cge_io_put(fh, "E", M.E)
+    _cge_io_put(fh, "D", M.D)
+    _cge_io_put(fh, "n", M.n)
+    _cge_io_put(fh, "nC", M.nC)
+    _cge_io_put(fh, "nF", M.nF)
+    _cge_io_put(fh, "nH", M.nH)
+    _cge_io_put(fh, "nE", M.nE)
+    _cge_io_put(fh, "nD", M.nD)
+    _cge_io_put(fh, "nI", M.nI)
+    _cge_io_put(fh, "ce", M.ce)
+    _cge_io_put(fh, "cm", M.cm)
+    _cge_io_put(fh, "cd", M.cd)
+    _cge_io_put(fh, "cx", M.cx)
+    _cge_io_put(fh, "ct", M.ct)
+    _cge_io_put(fh, "cr", M.cr)
+    _cge_io_put(fh, "cshi", M.cshi)
+    _cge_io_put(fh, "chs", M.chs)
+    _cge_io_put(fh, "lt", M.lt)
+    _cge_io_put(fh, "cda", M.cda)
+    _cge_io_put(fh, "fa", M.fa)
+    _cge_par_write(fh, M.p0, "p0.")
+    _cge_par_write(fh, M.p, "p.")
+    _cge_io_put(fh, "vname", M.vname)
+    _cge_io_put(fh, "vset", M.vset)
+    _cge_io_put(fh, "voff", M.voff)
+    _cge_io_put(fh, "vrows", M.vrows)
+    _cge_io_put(fh, "vcols", M.vcols)
+    _cge_io_put(fh, "x0", M.x0)
+    _cge_io_put(fh, "xcur", M.xcur)
+    _cge_io_put(fh, "xscale", M.xscale)
+    _cge_io_put(fh, "exists", M.exists)
+    _cge_io_put(fh, "fixed", M.fixed)
+    _cge_io_put(fh, "nominal", M.nominal)
+    _cge_io_put(fh, "positive", M.positive)
+    _cge_io_put(fh, "jr", M.jr)
+    _cge_io_put(fh, "jc", M.jc)
+    _cge_io_put(fh, "drow", M.drow)
+    _cge_io_put(fh, "ename", M.ename)
+    _cge_io_put(fh, "elen", M.elen)
+    _cge_io_put(fh, "escale", M.escale)
+    _cge_io_put(fh, "emask", M.emask)
+    _cge_io_put(fh, "neq", M.neq)
+    _cge_io_put(fh, "c_ext", M.c_ext)
+    _cge_io_put(fh, "c_gov", M.c_gov)
+    _cge_io_put(fh, "c_si", M.c_si)
+    _cge_io_put(fh, "c_num", M.c_num)
+    _cge_io_put(fh, "c_fac", M.c_fac)
+    _cge_io_put(fh, "simname", M.simname)
+    _cge_io_put(fh, "simclosure", M.simclosure)
+    _cge_io_put(fh, "simmethod", M.simmethod)
+    _cge_io_put(fh, "simx", M.simx)
+    _cge_io_put(fh, "simp.count", cols(M.simp))
+    for (k = 1; k <= cols(M.simp); k++) _cge_par_write(fh, M.simp[k], "simp." + strofreal(k) + ".")
+    _cge_io_put(fh, "simconv", M.simconv)
+    _cge_io_put(fh, "simiter", M.simiter)
+    _cge_io_put(fh, "simres", M.simres)
+}
+
+real scalar _cge_model_member(struct cge_model scalar M, string scalar name, transmorphic matrix v)
+{
+    if (name == "labels0") M.labels0 = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "labels") M.labels = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "S0") M.S0 = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "S") M.S = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "rewritten") M.rewritten = (rows(v) * cols(v) == 0 ? J(1, 0, .) : v)
+    else if (name == "mapped") M.mapped = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "calibrated") M.calibrated = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "iA") M.iA = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "iC") M.iC = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "iF") M.iF = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "iH") M.iH = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "igov") M.igov = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "isav") M.isav = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "irow") M.irow = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "idirtax") M.idirtax = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "isaltax") M.isaltax = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "iimptax") M.iimptax = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "iexptax") M.iexptax = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "iacttax") M.iacttax = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "ishi") M.ishi = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "A") M.A = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "C") M.C = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "F") M.F = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "H") M.H = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "I") M.I = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "iE") M.iE = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "imargins") M.imargins = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "iterritorial") M.iterritorial = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "iT") M.iT = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "istocks") M.istocks = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "E") M.E = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "D") M.D = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "n") M.n = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "nC") M.nC = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "nF") M.nF = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "nH") M.nH = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "nE") M.nE = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "nD") M.nD = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "nI") M.nI = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "ce") M.ce = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cm") M.cm = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cd") M.cd = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cx") M.cx = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "ct") M.ct = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cr") M.cr = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cshi") M.cshi = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "chs") M.chs = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "lt") M.lt = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cda") M.cda = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "fa") M.fa = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "vname") M.vname = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "vset") M.vset = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "voff") M.voff = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "vrows") M.vrows = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "vcols") M.vcols = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "x0") M.x0 = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "xcur") M.xcur = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "xscale") M.xscale = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "exists") M.exists = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "fixed") M.fixed = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "nominal") M.nominal = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "positive") M.positive = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "jr") M.jr = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "jc") M.jc = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "drow") M.drow = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "ename") M.ename = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "elen") M.elen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "escale") M.escale = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "emask") M.emask = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "neq") M.neq = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "c_ext") M.c_ext = (rows(v) * cols(v) == 0 ? "" : v)
+    else if (name == "c_gov") M.c_gov = (rows(v) * cols(v) == 0 ? "" : v)
+    else if (name == "c_si") M.c_si = (rows(v) * cols(v) == 0 ? "" : v)
+    else if (name == "c_num") M.c_num = (rows(v) * cols(v) == 0 ? "" : v)
+    else if (name == "c_fac") M.c_fac = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "simname") M.simname = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "simclosure") M.simclosure = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "simmethod") M.simmethod = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "simx") M.simx = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "simconv") M.simconv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "simiter") M.simiter = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "simres") M.simres = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else return(0)
+    return(1)
+}
+
+// END GENERATED: model input-output
 
 end
