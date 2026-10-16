@@ -107,9 +107,10 @@ net install cge, from("https://raw.githubusercontent.com/Mustapha-Wasseja/cge-st
 ```
 
 Stata 13 cannot connect to GitHub over HTTPS (its Java runtime uses an old
-TLS version, and the connection fails with "protocol_version"); Stata 14 and
-later can. With Stata 13, install from a local copy of the repository (cloned,
-or downloaded as a ZIP file from GitHub):
+TLS version, and the connection fails with "protocol_version"); current
+versions of Stata, such as Stata 19, use a newer one. With Stata 13, install
+from a local copy of the repository (cloned, or downloaded as a ZIP file from
+GitHub):
 
 ```stata
 net install cge, from("C:/path/to/cge-stata") replace
