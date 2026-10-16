@@ -50,6 +50,10 @@ Included:
   a fixed basket of health services with its revenue less a fixed share saved.
   (A donor-funded non-profit institution is mapped as a household that receives
   transfers from the rest of the world.)
+- From version 0.2.0: recursive dynamics (Section 10): capital accumulation
+  with investment allocated by relative rental rates, growth of other factors,
+  of population and of exogenous flows, and efficiency growth given or
+  calibrated to growth targets.
 - From version 0.1.14: factors enter value added in efficiency units. Each
   factor has an exogenous efficiency (for example, lower labour productivity
   from illness) and, optionally, an efficiency that rises with the volume of
@@ -60,7 +64,7 @@ Included:
   from inventories or valued at purchaser prices).
 
 Deferred to later versions: margins that differ between domestic sales, imports
-and exports; recursive dynamics.
+and exports.
 
 ## 2. Sets
 
@@ -741,7 +745,63 @@ $$CV_h = EH_h - \sum_c PQ_c\gamma_{ch} - \Big(EH^0_h - \sum_c PQ^0_c\gamma_{ch}\
 Both are positive for a gain and reported in per cent of $EH^0_h$. Other
 percentage changes are $100\,(x - x^0)/|x^0|$, and missing when $x^0 = 0$.
 
+## 10. Recursive dynamics (from version 0.2.0)
+
+A dynamic run solves the static model of Sections 5 to 7 for periods
+$t = 0, 1, \dots, T$. Period 0 is the calibrated base. Agents do not look
+ahead: each period is an equilibrium given the stocks and exogenous values of
+that period, which are updated from the previous period's solution. The
+updates follow the recursive dynamic extension of the standard model
+(Thurlow 2004); the rates are chosen by the user, and none has a default
+other than zero.
+
+Before period $t \geq 1$, in this order:
+
+1. **Capital.** For each capital factor $f \in K$, with depreciation rate
+   $\delta_f$ and base gross rental rate $\rho_f$ (rental per unit of capital
+   at base prices, so the base capital stock is $YF^0_f / \rho_f$), new
+   capital in the factor's units is
+   $$N_{f,t} = \rho_f\,\omega_f\,INV_{t-1}, \qquad INV_{t-1} = \sum_c PQ^0_c\,QINV_{c,t-1}, \qquad \omega_f = YF^0_f \Big/ \sum_{f' \in K} YF^0_{f'},$$
+   real investment at base prices shared among capital factors by base
+   income. If $f$ is specific to each activity,
+   $$QF_{fa,t} = (1-\delta_f)\,QF_{fa,t-1} + N_{f,t}\,\eta_{fa,t},$$
+   with allocation shares that favour activities whose rental rate is above
+   the average,
+   $$\eta_{fa,t} \propto \max\Big[0,\; s_{fa}\Big(1 + \beta\Big(\frac{R_{fa}}{\bar R_f} - 1\Big)\Big)\Big], \qquad s_{fa} = \frac{QF_{fa,t-1}}{\sum_{a'} QF_{fa',t-1}}, \quad R_{fa} = W_{f,t-1}\,WFDIST_{fa,t-1}, \quad \bar R_f = \sum_a s_{fa} R_{fa},$$
+   normalised to sum to one; $\beta \geq 0$ is the sensitivity of
+   investment to rental differences (default 1). If $f$ is mobile,
+   $QFS_{f,t} = (1-\delta_f)\,QFS_{f,t-1} + N_{f,t}$. A capital factor may
+   not be unemployed.
+2. **Other factors.** $QFS_{f,t} = (1+g_f)\,QFS_{f,t-1}$ for a mobile factor;
+   $QF_{fa,t} = (1+g_f)\,QF_{fa,t-1}$ for an activity-specific one. The
+   supply of an unemployed factor is endogenous, so $g_f$ must be zero.
+3. **Population.** $\gamma_{ch,t} = (1+g_P)\,\gamma_{ch,t-1}$ and
+   $HS^0_t = (1+g_P)\,HS^0_{t-1}$: subsistence consumption grows with the
+   population, and the health link compares health services per head.
+4. **Government and foreign flows.** $\overline{qg}_c$,
+   $trnsfr_{d,gov}$, $trnsfr_{gov,gov}$ and $trnsfr_{shi,gov}$ grow at $g_G$;
+   flows in foreign currency ($trnsfr_{d,row}$, $trnsfr_{f,row}$,
+   $trnsfr_{gov,row}$, $trnsfr_{row,gov}$, $trnsfr_{shi,row}$, and $FSAV$ when
+   it is fixed) grow at $g_W$. Other fixed values, including the numeraire,
+   are unchanged.
+5. **Shocks** for period $t$, if any, are applied.
+6. **Efficiency.** $ad_{a,t} = \lambda_{a,t}\,ad_{a,t-1}$, with
+   $\lambda_{a,t} = 1 + g^{ad}_a$; or a uniform $\lambda_t$ given by a
+   baseline run; or, to calibrate a baseline to growth targets, the uniform
+   $\lambda_t$ for which real value added at base prices,
+   $\sum_a PVA^0_a\,QVA_{a,t}$, equals $(1+g^Y_t)$ times its value in
+   $t-1$. That $\lambda_t$ is found by secant iterations starting from
+   $\lambda = 1$ and $\lambda = 1 + g^Y_t$, to a relative gap of $10^{-13}$.
+
+Period $t$ is then solved from the solution of $t-1$. Scenarios that change
+policy should reuse the baseline's $\lambda_t$, so that efficiency does not
+respond to the scenario.
+
 ## References
+
+Thurlow, J. (2004). *A Dynamic Computable General Equilibrium (CGE) Model
+for South Africa: Extending the Static IFPRI Model*. Trade and Industrial
+Policy Strategies, Working Paper 1-2004.
 
 Decaluwé, B., A. Lemelin, V. Robichaud and H. Maisonnave (2013). *PEP-1-1: The
 PEP standard single-country, static CGE model*. Partnership for Economic Policy.

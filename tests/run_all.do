@@ -10,7 +10,7 @@ set more off
 adopath ++ "../ado"
 adopath ++ "../data"
 
-local tests test_environment test_synthetic_sam test_reference_agreement test_checks test_reporting
+local tests test_environment test_synthetic_sam test_reference_agreement test_checks test_reporting test_dynamics
 
 local npass = 0
 local nfail = 0

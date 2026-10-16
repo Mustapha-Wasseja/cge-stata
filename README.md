@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.16 implements the standard static model described in
+Version 0.2.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -49,6 +49,20 @@ Version 0.1.10 adds shocks to government and investment demand by product and to
 transfers, such as public spending on health services or donor funding.
 Version 0.1.13 adds shocks to the fund's contribution rates, purchases and
 transfers received; version 0.1.14 adds shocks to factor efficiency.
+Version 0.2.0 adds recursive dynamics (`cge_dynamic`). Capital accumulates from
+investment, which is allocated among activities by relative rental rates. Other
+factors, population, government and foreign flows grow at given rates.
+Efficiency grows at a given rate or is calibrated to a GDP growth target, and
+scenarios reuse the baseline's efficiency path. Shocks can vary over time.
+Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
+compares a run with its baseline. Five runs agree with the Python reference to
+about 1e-13 in every period.
+It also solves much larger models. Explicit definitions are left out of
+the Newton system, and the rows with many variables get exact derivatives. LU
+factors are reused across Newton steps. A synthetic SAM with 250 activities and
+20 households (40,190 equations, 4,254 solved) solves a tariff removal in about
+3 minutes on a laptop with Stata 13; see [tools/bench](tools/bench/README.md).
+Stata IC limits a SAM to about 2,040 accounts (2,048 variables).
 Version 0.1.15 adds standard report tables for several simulations side by side
 (macroeconomic aggregates, government, institutions, factors, sectors, health,
 and equivalent and compensating variations), to screen, Stata or Excel

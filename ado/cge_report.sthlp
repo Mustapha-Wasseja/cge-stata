@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.15  16oct2026}{...}
+{* *! version 0.2.0  16oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_report} [{cmd:,} {opt sim:s(names)} {opt tab:les(list)} {opt clear}
+{cmd:cge_report} [{cmd:,} {opt sim:s(names)} {opt run(name)} {opt tab:les(list)} {opt clear}
 {opt sav:ing(filename[, replace])} {opt nod:isplay}]
 
 
@@ -49,6 +49,10 @@ Cobb-Douglas or LES expenditure function, and both are positive for a gain.
 {opt sims(names)} lists the simulations; {cmd:_all} selects every stored
 simulation. The default is the most recent one. At most six are displayed;
 all are saved.
+
+{phang}
+{opt run(name)} selects every period of a run solved by {helpb cge_dynamic},
+in period order, instead of {opt sims()}.
 
 {phang}
 {opt tables(list)} lists the tables to display, or {cmd:all}. The default is

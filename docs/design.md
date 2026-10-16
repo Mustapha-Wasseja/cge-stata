@@ -89,6 +89,33 @@ cge_check, homogeneity perturb(0.1)
   closure. Before version 0.1.9 the Jacobian was column by column: on a
   240-account SAM (4,439 equations) it took about 250 seconds per Newton
   iteration on Stata 13/IC, against a dense LU solve of under 3 seconds.
+- Reduced system (from version 0.2.0). Explicit definitions whose variables
+  appear in no row with exact derivatives are left out of the Newton system.
+  They are P1, P2, P6, Q5, Q6, I5, T8, I13 and H2, and their variables are
+  computed from the others (`_cge_derive`) before each residual evaluation.
+  A definition is left out only when its equation elements are exactly the
+  existing elements of its variable (`_cge_reduce_setup`). The pattern of the
+  reduced system is found by substituting each left-out variable by the
+  columns of its definition row. Q5 (intermediate demand) and I5 (household
+  demand) grow with the square of the number of sectors, so most of a large
+  model's equations are left out: 4,254 of 40,190 remain for a SAM with 250
+  activities and 20 households. `cge_solve, full` keeps every equation; the
+  test suite checks that both systems give the same solution and that both
+  grouped Jacobians equal the column-by-column ones.
+- From version 0.2.0 the market-clearing (S2) and activity-price (P7) rows
+  also have exact derivatives (`_cge_dense2`). In the reduced system these are
+  total derivatives through the left-out variables. Without them, each of
+  these rows involves most activities or commodities, and the number of
+  groups of central differences grows with the number of sectors.
+- LU factors are reused for further Newton steps while each step at least
+  halves the residual norm (a chord method). Otherwise a new Jacobian is
+  computed. Mata's `_lud()` returns $A = (LU)[p, .]$, so systems are solved with
+  the right-hand side permuted by `invorder(p)`.
+- Recursive dynamics (from version 0.2.0) solve each period with the static
+  solver, starting from the previous period's solution. The state of a run is
+  kept in a separate structure (`cge_dyn`, external `cge__dyn`) while
+  `cge_dynamic` runs. Each period is stored as an ordinary simulation, tagged
+  with its run, period and efficiency factor.
 - Solve times on Stata 13/IC for a tariff shock before version 0.1.9: 93
   equations (3 sectors), under one second; 561 equations (15 sectors), about
   3 seconds; 1,551 equations (30 sectors), about 12 seconds.
@@ -132,11 +159,11 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.13 | Social health insurance fund: contributions on factor income, transfers from government and the rest of the world, purchases of health services, savings; mapping option insurance() and synthetic health layout (done) |
 | 0.1.14 | Factors in efficiency units: exogenous factor efficiency (af) and an efficiency linked to the volume of health services consumed, with an elasticity by factor (done) |
 | 0.1.15 | Standard report tables for several simulations, to screen, Stata or Excel, with equivalent and compensating variations (cge_report); calibrated parameters as a dataset (cge_parameters); saving and loading a model (cge_save, cge_use) (done) |
+| 0.2.0 | Recursive dynamics (model_spec.md, Section 10): capital accumulation with investment allocated by relative rental rates, growth of factors, population and exogenous flows, efficiency growth given or calibrated to GDP growth targets, time-varying shocks, results against a baseline (cge_dynamic, cge_dynresults); larger models: a reduced Newton system without explicit definitions, exact derivatives for market clearing and activity prices, reuse of LU factors, so that 40,190 equations solve in about 3 minutes (tools/bench) (done) |
 | 0.1.16 | Independent check in GAMS: the model written from the specification in GAMS, calibrated from the SAM alone and solved with PATH, reproduces every test case (tools/gams) (done) |
-| 0.2 | Export-only commodities; elasticity tables; margins that differ between domestic sales, imports and exports, once margin data by market are available |
-| 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
-| 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |
-| 0.5 | Top-down link to household microsimulation |
+| 0.2.1 | Sensitivity analysis: Monte Carlo draws of elasticities with recalibration, and the distribution of results |
+| 0.2.2 | Top-down link to household survey microdata: incomes and prices by household, poverty and inequality |
+| later | Export-only commodities; margins that differ between domestic sales, imports and exports, once margin data by market are available; SAM tools (aggregation, RAS and cross-entropy balancing) |
 
 ## 8. First trial on a national SAM
 

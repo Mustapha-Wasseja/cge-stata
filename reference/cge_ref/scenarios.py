@@ -207,6 +207,59 @@ REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_
             "sut_import_price_up10", "eff_contribution_up50")
 
 
+def dynamic_cases() -> dict:
+    """Dynamic runs compared by the Stata suite (version 0.2.0): name ->
+    (model, settings, closure, shocks)."""
+    from .dynamics import Dynamics
+    specific = Closure(factors={"cap": "specific"})
+    std = synthetic_model()
+    common = {"capital": {"cap": (0.05, 0.15)}, "factor_growth": {"lab": 0.02}, "population_growth": 0.02,
+              "government_growth": 0.03, "foreign_growth": 0.01}
+    inst = institutions_model(income_elasticities=LES_SETTINGS["income_elasticities"], frisch=[-2.0, -3.0])
+    health = health_model(**HEALTH_LINK)
+    return {
+        "dyn_std": (std, Dynamics(periods=4, tfp_growth=0.01, **common), specific, None),
+        "dyn_target": (std, Dynamics(periods=4, gdp_target=0.04, **common), specific, None),
+        "dyn_inst": (inst, Dynamics(periods=4, capital={"cap": (0.06, 0.12)}, factor_growth={"lab": 0.025},
+                                    population_growth=0.025, government_growth=0.03, foreign_growth=0.02,
+                                    tfp_growth={"act_agr": 0.02, "act_man": 0.01, "act_ser": 0.0}),
+                     Closure(), None),
+        "dyn_health": (health, Dynamics(periods=4, gdp_target=0.03, **common), specific, None),
+    }
+
+
+def write_dynamic(directory: Path = EXPECTED_DIR) -> list[Path]:
+    """Expected results of the dynamic runs: one file per run and period, and
+    the efficiency factors of each run."""
+    from .dynamics import Dynamics, run
+    written = []
+    runs = {}
+    for name, (model, settings, closure, shocks) in dynamic_cases().items():
+        runs[name] = run(model, settings, closure, shocks)
+    # A donor exit from the fund from period 2, with the baseline's efficiency path
+    model, settings, closure, _ = dynamic_cases()["dyn_health"]
+
+    def donor_exit(t, p, fx):
+        if t >= 2:
+            p["trshir"] = np.array(0.0)
+
+    exit_settings = Dynamics(**{**settings.__dict__, "gdp_target": None, "tfp_path": runs["dyn_health"].tfp_path})
+    runs["dyn_health_exit"] = run(model, exit_settings, closure, donor_exit)
+    for name, r in runs.items():
+        for t, sol in enumerate(r.solutions):
+            path = directory / f"{name}_p{t}.csv"
+            write_results(sol, path)
+            written.append(path)
+        path = directory / f"{name}_tfp.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(["period", "lambda"])
+            for t, lam in enumerate(r.tfp_path, start=1):
+                writer.writerow([t, f"{lam:.15g}"])
+        written.append(path)
+    return written
+
+
 def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     """Solve the standard simulations and write one CSV file per simulation."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -266,7 +319,7 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         Closure(), tol=1e-12, params={"tshi": _scaled(eff.params["tshi"], lab, 1.5)})
     solutions["eff_labour_efficiency_down2"] = eff.solve(
         Closure(), tol=1e-12, params={"af": _scaled(eff.params["af"], lab, 0.98)})
-    written = []
+    written = write_dynamic(directory)
     for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")

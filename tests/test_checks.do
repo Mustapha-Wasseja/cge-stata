@@ -542,6 +542,34 @@ assert _rc == 111
 capture cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab)
 assert _rc == 198
 
+* Reduced system (version 0.2.0): with every explicit definition left out
+* (LES, a top nest, margins-free health layout with a fund and the health
+* link), the reduced and full systems give the same solution, and both
+* grouped Jacobians equal the column-by-column ones
+cge_synthetic, clear health
+quietly cge_sam, labels(account)
+quietly cge_map, `hltopts' insurance(shi)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4 1.2) frisch(-2) ///
+    sigmaa(0 0.5 1 0.5) healthcom(com_hlt) healthfac(lab) healthelas(0.3)
+local neq = r(N_equations)
+cge_shock pwm, scale(1.1)
+cge_shock qg, elements(com_hlt) scale(1.2)
+mata: _cge_jaccheck()
+assert r(maxdiff) < 1e-6 & r(columns) < `neq'
+mata: _cge_jaccheck(1)
+assert r(maxdiff) < 1e-6 & r(columns) == `neq'
+cge_solve, name(reduced) tolerance(1e-12)
+assert r(N_solved) < `neq' & r(max_residual) < 1e-12
+cge_solve, name(full) tolerance(1e-12) full
+assert r(N_solved) == `neq'
+quietly cge_results, sim(reduced) clear nodisplay
+rename value v_reduced
+tempfile red
+quietly save `red'
+quietly cge_results, sim(full) clear nodisplay
+quietly merge 1:1 variable element1 element2 using `red', assert(match) nogenerate
+assert abs(v_reduced - value) <= 1e-10 * max(1, abs(value))
+
 * Fund parameters need a fund
 quietly do setup_synthetic.do
 capture cge_shock tshi, elements(lab) scale(1.5)

@@ -1,4 +1,4 @@
-*! cge_report.ado  v0.1.15  2026-10-16
+*! cge_report.ado  v0.2.0  2026-10-16
 *! cge-stata: standard report tables for one or more simulations
 *! Macroeconomic aggregates, government, institutions, factors, activities,
 *! commodities, health and welfare (model_spec.md, Section 9)
@@ -8,9 +8,17 @@
 
 program define cge_report, rclass
     version 13.0
-    syntax [, SIMs(string) TABles(string) CLEAR SAVing(string) NODisplay]
+    syntax [, SIMs(string) RUN(name) TABles(string) CLEAR SAVing(string) NODisplay]
 
     _cge_load
+    if "`run'" != "" {
+        if "`sims'" != "" {
+            display as error "choose sims() or run(), not both"
+            exit 198
+        }
+        * Every period of a dynamic run, in order
+        mata: _cge_run_sims_local("`run'", "sims")
+    }
     local file ""
     local replace ""
     if `"`saving'"' != "" {
