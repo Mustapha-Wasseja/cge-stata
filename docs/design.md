@@ -161,7 +161,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.15 | Standard report tables for several simulations, to screen, Stata or Excel, with equivalent and compensating variations (cge_report); calibrated parameters as a dataset (cge_parameters); saving and loading a model (cge_save, cge_use) (done) |
 | 0.2.0 | Recursive dynamics (model_spec.md, Section 10): capital accumulation with investment allocated by relative rental rates, growth of factors, population and exogenous flows, efficiency growth given or calibrated to GDP growth targets, time-varying shocks, results against a baseline (cge_dynamic, cge_dynresults); larger models: a reduced Newton system without explicit definitions, exact derivatives for market clearing and activity prices, reuse of LU factors, so that 40,190 equations solve in about 3 minutes (tools/bench) (done) |
 | 0.1.16 | Independent check in GAMS: the model written from the specification in GAMS, calibrated from the SAM alone and solved with PATH, reproduces every test case (tools/gams) (done) |
-| 0.2.1 | Sensitivity analysis: Monte Carlo draws of elasticities with recalibration, and the distribution of results |
+| 0.2.1 | Sensitivity analysis: Monte Carlo draws of elasticities (uniform or triangular, by sector or common), recalibration for each draw, and the distribution of every report measure (cge_sensitivity) (done) |
 | 0.2.2 | Top-down link to household survey microdata: incomes and prices by household, poverty and inequality |
 | later | Export-only commodities; margins that differ between domestic sales, imports and exports, once margin data by market are available; SAM tools (aggregation, RAS and cross-entropy balancing) |
 

@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.2.0  2026-10-16
+*! cge_mata.mata  v0.2.1  2026-10-16
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -75,6 +75,8 @@ struct cge_model {
     real scalar      neq
     // closure
     string scalar    c_ext, c_gov, c_si, c_num
+    // options of the last calibration (from version 0.2.1)
+    string rowvector calargs
     string colvector c_fac
     // stored simulations
     string colvector simname, simclosure, simmethod
@@ -99,7 +101,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.2.0")
+    return("0.2.1")
 }
 
 // =====================================================================
@@ -1015,6 +1017,9 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
 
     M = _cge_load()
     _cge_need(M, "mapped")
+    // The options of this calibration, so that cge_sensitivity can repeat it
+    // with other elasticities
+    M.calargs = (s_va, s_q, s_t, fqname, s_ie, s_fr, s_a, s_hc, s_hf, s_he)
     S = M.S
     n = M.n
     nC = M.nC
@@ -3724,6 +3729,262 @@ void _cge_dyn_data(string scalar run, string scalar baseline)
     }
 }
 
+// =====================================================================
+// Sensitivity analysis (from version 0.2.1)
+// =====================================================================
+
+// State of a sensitivity analysis while cge_sensitivity runs
+struct cge_sens {
+    string rowvector calargs, vary
+    string scalar    ext, gov, si, num
+    string colvector fac
+    real colvector   cva, cq, ct, ca
+    real matrix      dva, dq, dt, da, pct, val
+    real colvector   conv
+    string matrix    keys
+    real colvector   base
+}
+
+struct cge_sens scalar _cge_sens_load()
+{
+    pointer() scalar q
+    q = findexternal("cge__sens")
+    if (q == NULL) _cge_fail("cge internal error: no sensitivity analysis in progress", 3498)
+    return(*q)
+}
+
+void _cge_sens_store(struct cge_sens scalar G)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__sens")) == NULL) q = crexternal("cge__sens")
+    *q = G
+}
+
+// Multiplicative factors around one: uniform on [1 - s, 1 + s], or symmetric
+// triangular on the same interval; one column per draw. With `common`, the
+// same factor applies to every element.
+real matrix _cge_sens_factors(real scalar n, real scalar draws, real scalar s, string scalar dist,
+                              real scalar common)
+{
+    real scalar m
+    real matrix u
+    m = (common ? 1 : n)
+    if (dist == "triangular") u = runiform(m, draws) + runiform(m, draws) :- 1
+    else u = 2 :* runiform(m, draws) :- 1
+    u = 1 :+ s :* u
+    if (common) return(J(n, 1, 1) * u)
+    return(u)
+}
+
+void _cge_sens_init(real scalar draws, real scalar seed, real scalar spread, string scalar dist,
+                    string scalar vary, real scalar common)
+{
+    struct cge_model scalar M
+    struct cge_sens scalar G
+    string rowvector v
+    real scalar k
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (cols(M.calargs) != 10) _cge_fail("calibrate the model again: this model does not record its calibration", 459)
+    if (spread < 0 | spread >= 1) _cge_fail("spread() must be at least 0 and less than 1", 198)
+    if (dist != "uniform" & dist != "triangular") _cge_fail("distribution() must be uniform or triangular", 198)
+    v = (vary == "" ? ("va", "q", "t") : tokens(vary))
+    for (k = 1; k <= cols(v); k++) {
+        if (!anyof(("va", "q", "t", "a"), v[k])) _cge_fail("vary(): " + v[k] + " is not one of va, q, t and a", 198)
+    }
+    G.vary = v
+    G.calargs = M.calargs
+    G.ext = M.c_ext
+    G.gov = M.c_gov
+    G.si = M.c_si
+    G.num = M.c_num
+    G.fac = M.c_fac
+    G.cva = M.p0.sva
+    G.cq = M.p0.sq
+    G.ct = M.p0.st
+    G.ca = M.p0.sa
+    rseed(seed)
+    // Draws in a fixed order (va, q, t, a), so a seed gives the same draws
+    // whatever is varied
+    G.dva = _cge_sens_factors(M.n, draws, spread, dist, common)
+    G.dq = _cge_sens_factors(M.nC, draws, spread, dist, common)
+    G.dt = _cge_sens_factors(M.nC, draws, spread, dist, common)
+    G.da = _cge_sens_factors(M.n, draws, spread, dist, common)
+    if (!anyof(v, "va")) G.dva = J(M.n, draws, 1)
+    if (!anyof(v, "q")) G.dq = J(M.nC, draws, 1)
+    if (!anyof(v, "t")) G.dt = J(M.nC, draws, 1)
+    if (!anyof(v, "a")) G.da = J(M.n, draws, 1)
+    G.conv = J(draws + 1, 1, 0)
+    G.keys = J(0, 3, "")
+    _cge_sens_store(G)
+}
+
+string scalar _cge_numlist(real colvector v)
+{
+    return(invtokens(strofreal(v', "%21.17g")))
+}
+
+// Elasticities of draw d (0: the central values)
+void _cge_sens_values(struct cge_sens scalar G, real scalar d, real colvector va, real colvector q,
+                      real colvector t, real colvector a)
+{
+    va = G.cva
+    q = G.cq
+    t = G.ct
+    a = G.ca
+    if (d > 0) {
+        va = va :* G.dva[., d]
+        q = q :* G.dq[., d]
+        t = t :* G.dt[., d]
+        a = a :* G.da[., d]
+    }
+}
+
+// Calibrate with the elasticities of draw d, then restore the closure
+void _cge_sens_calibrate(real scalar d)
+{
+    struct cge_model scalar M
+    struct cge_sens scalar G
+    real colvector va, q, t, a
+    string rowvector c
+
+    G = _cge_sens_load()
+    _cge_sens_values(G, d, va, q, t, a)
+    c = G.calargs
+    _cge_calibrate(_cge_numlist(va), _cge_numlist(q), _cge_numlist(t), c[4], c[5], c[6],
+                   (c[7] == "" & !anyof(G.vary, "a") ? "" : _cge_numlist(a)), c[8], c[9], c[10])
+    M = _cge_load()
+    _cge_closure_apply(M, G.ext, G.gov, G.si, G.num, G.fac)
+    _cge_store(M)
+}
+
+// Record the report measures of the simulation just solved, for draw d
+void _cge_sens_collect(real scalar d, real scalar conv)
+{
+    struct cge_model scalar M
+    struct cge_sens scalar G
+    string matrix keys
+    real colvector base, s
+    real matrix vals, pct
+
+    M = _cge_load()
+    G = _cge_sens_load()
+    G.conv[d + 1] = conv
+    if (conv) {
+        s = _cge_sim_index(M, "_sens")
+        _cge_report_rows(M, s, keys, base, vals, pct)
+        if (rows(G.keys) == 0) {
+            G.keys = keys
+            G.base = base
+            G.pct = J(rows(keys), rows(G.conv), .)
+            G.val = G.pct
+        }
+        G.pct[., d + 1] = pct
+        G.val[., d + 1] = vals
+    }
+    _cge_sens_store(G)
+}
+
+// Display the summary and, if asked, fill the dataset in memory
+void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
+{
+    struct cge_model scalar M
+    struct cge_sens scalar G
+    string rowvector tab
+    string colvector lab, d1, d2, d3
+    real colvector ok, sel, x, q, nd, dv, va, qq, tt, aa
+    real matrix P
+    real scalar i, n, nk, j, D, w1, k
+
+    M = _cge_load()
+    G = _cge_sens_load()
+    D = rows(G.conv) - 1
+    if (rows(G.keys) == 0 | !G.conv[1]) _cge_fail("the scenario did not converge with the central elasticities", 430)
+    ok = select((2::(D + 1)), G.conv[|2 \ D + 1|])
+    n = rows(ok)
+    P = G.pct[., ok]
+    if (show) {
+        tab = (tables == "" ? ("macro", "welfare") : (tables == "all" ?
+               ("macro", "government", "institutions", "factors", "activities", "commodities", "health", "welfare") :
+               tokens(tables)))
+        printf("\n{txt}Sensitivity of the scenario to the elasticities: {res}%f{txt} of {res}%f{txt} draws converged\n", n, D)
+        printf("{txt}Per cent changes from the base (welfare: per cent of base consumption)\n")
+        for (k = 1; k <= cols(tab); k++) {
+            sel = select((1::rows(G.keys)), G.keys[., 1] :== tab[k])
+            if (rows(sel) == 0) continue
+            w1 = max((24, max(strlen(G.keys[sel, 2] :+ " " :+ G.keys[sel, 3])))) + 1
+            printf("\n{txt}%s\n{hline %f}\n", tab[k], w1 + 55)
+            printf("{txt}%-" + strofreal(w1) + "s %10s %10s %10s %10s %10s\n", "", "central", "mean", "sd", "p5", "p95")
+            for (i = 1; i <= rows(sel); i++) {
+                j = sel[i]
+                x = select(P[j, .]', P[j, .]' :< .)
+                q = (rows(x) ? sort(x, 1) : J(0, 1, .))
+                printf("{txt}%-" + strofreal(w1) + "s {res}%10.3f %10.3f %10.3f %10.3f %10.3f\n",
+                       G.keys[j, 2] + (G.keys[j, 3] == "" ? "" : " " + G.keys[j, 3]), G.pct[j, 1],
+                       (rows(x) ? mean(x) : .), (rows(x) > 1 ? sqrt(variance(x)) : .),
+                       (rows(x) ? q[max((1, ceil(0.05 * rows(x))))] : .), (rows(x) ? q[max((1, ceil(0.95 * rows(x))))] : .))
+            }
+            printf("{txt}{hline %f}\n", w1 + 55)
+        }
+    }
+    st_numscalar("r(N_draws)", D)
+    st_numscalar("r(N_converged)", n)
+    if (fill) {
+        // Report measures for every draw (draw 0: central elasticities), then the
+        // elasticities of every draw
+        nk = rows(G.keys)
+        nd = J(0, 1, .)
+        d1 = J(0, 1, "")
+        d2 = d1
+        d3 = d1
+        dv = J(0, 1, .)
+        lab = M.A \ M.C \ M.C \ M.A
+        for (j = 0; j <= D; j++) {
+            if (!G.conv[j + 1]) continue
+            nd = nd \ J(nk, 1, j)
+        }
+        st_addobs(rows(nd))
+        (void) st_addvar("double", "draw")
+        (void) st_addvar("str16", "table")
+        (void) st_addvar("str32", "measure")
+        (void) st_addvar("str32", "element")
+        (void) st_addvar("double", ("base", "value", "pct"))
+        st_store(., "draw", nd)
+        st_sstore(., "table", J(rows(nd) / nk, 1, G.keys[., 1]))
+        st_sstore(., "measure", J(rows(nd) / nk, 1, G.keys[., 2]))
+        st_sstore(., "element", J(rows(nd) / nk, 1, G.keys[., 3]))
+        st_store(., "base", J(rows(nd) / nk, 1, G.base))
+        sel = select((1::(D + 1)), G.conv)
+        st_store(., "value", colshape(G.val[., sel]', 1))
+        st_store(., "pct", colshape(G.pct[., sel]', 1))
+        for (j = 0; j <= D; j++) {
+            _cge_sens_values(G, j, va, qq, tt, aa)
+            nd = J(rows(lab), 1, j)
+            k = st_nobs()
+            st_addobs(rows(lab))
+            st_store(((k + 1)::(k + rows(lab))), "draw", nd)
+            st_sstore(((k + 1)::(k + rows(lab))), "table", J(rows(lab), 1, "elasticity"))
+            st_sstore(((k + 1)::(k + rows(lab))), "measure", J(M.n, 1, "sigmava") \ J(M.nC, 1, "sigmaq") \
+                      J(M.nC, 1, "sigmat") \ J(M.n, 1, "sigmaa"))
+            st_sstore(((k + 1)::(k + rows(lab))), "element", lab)
+            st_store(((k + 1)::(k + rows(lab))), "value", va \ qq \ tt \ aa)
+        }
+        st_varlabel("draw", "Draw (0: central elasticities)")
+        st_varlabel("table", "Report table, or elasticity")
+        st_varlabel("measure", "Measure, or elasticity")
+        st_varlabel("element", "Set element")
+        st_varlabel("base", "Base value")
+        st_varlabel("value", "Value in the draw")
+        st_varlabel("pct", "Per cent change (welfare: per cent of base consumption)")
+    }
+}
+
+void _cge_sens_end()
+{
+    if (findexternal("cge__sens") != NULL) rmexternal("cge__sens")
+}
+
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)
 
 void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefix)
@@ -3937,6 +4198,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "c_gov", M.c_gov)
     _cge_io_put(fh, "c_si", M.c_si)
     _cge_io_put(fh, "c_num", M.c_num)
+    _cge_io_put(fh, "calargs", M.calargs)
     _cge_io_put(fh, "c_fac", M.c_fac)
     _cge_io_put(fh, "simname", M.simname)
     _cge_io_put(fh, "simclosure", M.simclosure)
@@ -4036,6 +4298,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "c_gov") M.c_gov = (rows(v) * cols(v) == 0 ? "" : v)
     else if (name == "c_si") M.c_si = (rows(v) * cols(v) == 0 ? "" : v)
     else if (name == "c_num") M.c_num = (rows(v) * cols(v) == 0 ? "" : v)
+    else if (name == "calargs") M.calargs = (rows(v) * cols(v) == 0 ? J(1, 0, "") : v)
     else if (name == "c_fac") M.c_fac = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "simname") M.simname = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "simclosure") M.simclosure = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)

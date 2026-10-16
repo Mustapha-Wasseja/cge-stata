@@ -32,6 +32,8 @@ f ado/cge_dynamic.ado
 f ado/cge_dynamic.sthlp
 f ado/cge_dynresults.ado
 f ado/cge_dynresults.sthlp
+f ado/cge_sensitivity.ado
+f ado/cge_sensitivity.sthlp
 f ado/cge_results.ado
 f ado/cge_results.sthlp
 f ado/cge_check.ado

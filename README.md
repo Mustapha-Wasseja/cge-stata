@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.2.0 implements the standard single-country model described in
+Version 0.2.1 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -57,7 +57,10 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
-It also solves much larger models. Explicit definitions are left out of
+Version 0.2.1 adds sensitivity analysis (`cge_sensitivity`). It runs Monte Carlo
+draws of the elasticities, recalibrates the model for each draw, and gives the
+distribution of every report measure.
+Version 0.2.0 also solves much larger models. Explicit definitions are left out of
 the Newton system, and the rows with many variables get exact derivatives. LU
 factors are reused across Newton steps. A synthetic SAM with 250 activities and
 20 households (40,190 equations, 4,254 solved) solves a tariff removal in about
