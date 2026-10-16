@@ -132,6 +132,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.13 | Social health insurance fund: contributions on factor income, transfers from government and the rest of the world, purchases of health services, savings; mapping option insurance() and synthetic health layout (done) |
 | 0.1.14 | Factors in efficiency units: exogenous factor efficiency (af) and an efficiency linked to the volume of health services consumed, with an elasticity by factor (done) |
 | 0.1.15 | Standard report tables for several simulations, to screen, Stata or Excel, with equivalent and compensating variations (cge_report); calibrated parameters as a dataset (cge_parameters); saving and loading a model (cge_save, cge_use) (done) |
+| 0.1.16 | Independent check in GAMS: the model written from the specification in GAMS, calibrated from the SAM alone and solved with PATH, reproduces every test case (tools/gams) (done) |
 | 0.2 | Export-only commodities; elasticity tables; margins that differ between domestic sales, imports and exports, once margin data by market are available |
 | 0.3 | SAM tools: aggregation, RAS and cross-entropy balancing, elasticity tables |
 | 0.4 | Recursive dynamics: capital accumulation, labour force growth, baseline calibration to growth targets |

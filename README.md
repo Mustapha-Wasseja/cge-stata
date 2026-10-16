@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.1.15 implements the standard static model described in
+Version 0.1.16 implements the standard static model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -130,7 +130,11 @@ Every calibration is checked for benchmark replication. `cge_check` tests SAM
 balance, closure consistency, Walras's law, the GDP identity, homogeneity and
 convergence from perturbed starting values. A Python reference implementation
 of the same equations (`reference/`) runs in continuous integration; the Stata
-test suite compares its results with the reference for six simulations.
+test suite compares its results with the reference (about 90 simulations, to
+about 1e-13). From version 0.1.16 an independent implementation in GAMS
+([tools/gams](tools/gams/README.md)), written from the specification and
+calibrated from the SAM alone, reproduces every case: 84 scenarios across all
+layouts, features and several closures, to 2e-11 or better.
 
 ## Author
 

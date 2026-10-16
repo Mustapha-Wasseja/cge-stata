@@ -1,0 +1,38 @@
+* write.gms -- write the solution: scenario, variable, element1, element2, value
+* $batinclude write.gms <put file> <scenario name>
+%1.pc = 5;
+* numbers below .nz would be written as zero (default 1e-5)
+%1.nz = 0;
+%1.nd = 15;
+%1.nr = 2;
+%1.nw = 24;
+put %1;
+put 'scenario', 'variable', 'element1', 'element2', 'value' /;
+put '%2', '__status__', '', '', cge.modelstat /;
+loop(A, put '%2', 'PA', A.tl, '', PA.l(A) /;  put '%2', 'PVA', A.tl, '', PVA.l(A) /;
+        put '%2', 'PINTA', A.tl, '', PINTA.l(A) /;  put '%2', 'QA', A.tl, '', QA.l(A) /;
+        put '%2', 'QVA', A.tl, '', QVA.l(A) /;  put '%2', 'QINTA', A.tl, '', QINTA.l(A) /);
+loop(C, put '%2', 'PX', C.tl, '', PX.l(C) /;  put '%2', 'PD', C.tl, '', PD.l(C) /;
+        put '%2', 'PE', C.tl, '', PE.l(C) /;  put '%2', 'PM', C.tl, '', PM.l(C) /;
+        put '%2', 'PQ', C.tl, '', PQ.l(C) /;  put '%2', 'QX', C.tl, '', QX.l(C) /;
+        put '%2', 'QD', C.tl, '', QD.l(C) /;  put '%2', 'QE', C.tl, '', QE.l(C) /;
+        put '%2', 'QM', C.tl, '', QM.l(C) /;  put '%2', 'QQ', C.tl, '', QQ.l(C) /;
+        put '%2', 'QG', C.tl, '', QG.l(C) /;  put '%2', 'QINV', C.tl, '', QINV.l(C) /;
+        put '%2', 'QT', C.tl, '', QT.l(C) /;  put '%2', 'QER', C.tl, '', QER.l(C) /;
+        put '%2', 'QSHI', C.tl, '', QSHI.l(C) /);
+loop(F, put '%2', 'W', F.tl, '', W.l(F) /;  put '%2', 'QFS', F.tl, '', QFS.l(F) /;
+        put '%2', 'YF', F.tl, '', YF.l(F) /;  put '%2', 'EFF', F.tl, '', EFF.l(F) /);
+loop((F, A), put '%2', 'QF', F.tl, A.tl, QF.l(F, A) /;  put '%2', 'WFDIST', F.tl, A.tl, WFDIST.l(F, A) /);
+loop((C, A), put '%2', 'QINT', C.tl, A.tl, QINT.l(C, A) /);
+loop((C, H), put '%2', 'QH', C.tl, H.tl, QH.l(C, H) /);
+loop((INS, F), put '%2', 'YIF', INS.tl, F.tl, YIF.l(INS, F) /);
+loop(D, put '%2', 'YI', D.tl, '', YI.l(D) /;  put '%2', 'TINS', D.tl, '', TINS.l(D) /;
+        put '%2', 'MPS', D.tl, '', MPS.l(D) /);
+loop(H, put '%2', 'EH', H.tl, '', EH.l(H) /);
+put '%2', 'EXR', '', '', EXR.l /;  put '%2', 'CPI', '', '', CPI.l /;  put '%2', 'DPI', '', '', DPI.l /;
+put '%2', 'YG', '', '', YG.l /;  put '%2', 'EG', '', '', EG.l /;  put '%2', 'GSAV', '', '', GSAV.l /;
+put '%2', 'FSAV', '', '', FSAV.l /;  put '%2', 'TINSADJ', '', '', TINSADJ.l /;
+put '%2', 'MPSADJ', '', '', MPSADJ.l /;  put '%2', 'IADJ', '', '', IADJ.l /;
+put '%2', 'GADJ', '', '', GADJ.l /;  put '%2', 'WALRAS', '', '', WALRAS.l /;
+put '%2', 'YSHI', '', '', YSHI.l /;  put '%2', 'SHIADJ', '', '', SHIADJ.l /;  put '%2', 'HS', '', '', HS.l /;
+putclose %1;

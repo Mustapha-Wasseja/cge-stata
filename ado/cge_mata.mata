@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.1.15  2026-10-16
+*! cge_mata.mata  v0.1.16  2026-10-16
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -91,7 +91,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.1.15")
+    return("0.1.16")
 }
 
 // =====================================================================

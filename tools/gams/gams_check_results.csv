@@ -1,0 +1,85 @@
+case,scenario,reference,gams_modelstat,rows,missing,base_maxrel,value_maxrel,walras_abs
+standard,tariff_removal,tests/expected,16,106,0,3.053e-16,5.873e-15,6.418e-15
+standard,import_price_up10,tests/expected,16,106,0,3.053e-16,3.172e-12,5.370e-11
+standard,labour_supply_up5,tests/expected,16,106,0,3.053e-16,1.171e-13,1.765e-12
+standard,foreign_savings_down20,tests/expected,16,106,0,3.053e-16,8.027e-14,1.235e-12
+standard,agri_productivity_up5,tests/expected,16,106,0,3.053e-16,5.927e-14,9.008e-13
+mixed,mixed_tariff_removal,tests/expected,16,106,0,3.053e-16,5.089e-15,1.598e-13
+institutions,inst_tariff_removal,tests/expected,16,118,0,4.996e-16,4.516e-13,5.831e-12
+institutions,inst_import_price_up10,tests/expected,16,118,0,4.996e-16,2.315e-11,3.426e-13
+institutions,inst_labour_supply_up5,tests/expected,16,118,0,4.996e-16,3.815e-13,3.346e-13
+institutions,inst_foreign_savings_down20,tests/expected,16,118,0,4.996e-16,6.253e-13,2.545e-13
+institutions,inst_agri_productivity_up5,tests/expected,16,118,0,4.996e-16,8.549e-12,8.476e-13
+top nest,nest_tariff_removal,tests/expected,16,106,0,3.053e-16,2.129e-14,8.940e-13
+top nest,nest_import_price_up10,tests/expected,16,106,0,3.053e-16,9.929e-13,2.236e-12
+top nest,nest_labour_supply_up5,tests/expected,16,106,0,3.053e-16,5.983e-15,1.323e-13
+top nest,nest_foreign_savings_down20,tests/expected,16,106,0,3.053e-16,4.856e-14,2.182e-12
+top nest,nest_agri_productivity_up5,tests/expected,16,106,0,3.053e-16,2.157e-13,3.401e-12
+LES,les_tariff_removal,tests/expected,16,106,0,3.053e-16,3.913e-14,4.074e-13
+LES,les_import_price_up10,tests/expected,16,106,0,3.053e-16,1.574e-12,4.412e-13
+LES,les_labour_supply_up5,tests/expected,16,106,0,3.053e-16,2.249e-13,8.252e-13
+LES,les_foreign_savings_down20,tests/expected,16,106,0,3.053e-16,5.894e-14,1.459e-12
+LES,les_agri_productivity_up5,tests/expected,16,106,0,3.053e-16,3.134e-13,6.233e-12
+institutions LES,inst_les_tariff_removal,tests/expected,16,118,0,4.996e-16,3.048e-13,3.444e-12
+spending,gov_ser_up20,tests/expected,16,106,0,3.053e-16,1.148e-13,1.146e-12
+transfers,inst_transfers_abroad_down50,tests/expected,16,118,0,4.996e-16,8.989e-15,6.566e-13
+margins,margins_tariff_removal,tests/expected,16,105,0,3.053e-16,9.370e-14,3.165e-12
+margins,margins_import_price_up10,tests/expected,16,105,0,3.053e-16,9.323e-13,1.105e-13
+margins,margins_labour_supply_up5,tests/expected,16,105,0,3.053e-16,1.863e-14,4.630e-13
+margins,margins_foreign_savings_down20,tests/expected,16,105,0,3.053e-16,2.674e-14,3.541e-14
+margins,margins_agri_productivity_up5,tests/expected,16,105,0,3.053e-16,2.799e-14,3.760e-13
+territorial,tc_tariff_removal,tests/expected,16,106,0,3.464e-15,2.140e-12,7.812e-12
+territorial,tc_import_price_up10,tests/expected,16,106,0,3.464e-15,1.973e-12,5.839e-12
+territorial,tc_labour_supply_up5,tests/expected,16,106,0,3.464e-15,3.445e-13,1.542e-13
+territorial,tc_foreign_savings_down20,tests/expected,16,106,0,3.464e-15,3.405e-14,3.087e-13
+territorial,tc_agri_productivity_up5,tests/expected,16,106,0,3.464e-15,6.752e-14,7.187e-13
+multi-product,mp_tariff_removal,tests/expected,16,106,0,3.053e-16,3.492e-13,1.766e-11
+multi-product,mp_import_price_up10,tests/expected,16,106,0,3.053e-16,1.026e-11,1.146e-10
+multi-product,mp_labour_supply_up5,tests/expected,16,106,0,3.053e-16,8.353e-15,1.580e-13
+multi-product,mp_foreign_savings_down20,tests/expected,16,106,0,3.053e-16,7.287e-15,3.034e-15
+multi-product,mp_agri_productivity_up5,tests/expected,16,106,0,3.053e-16,9.209e-14,3.635e-12
+non-imported,cnm_tariff_removal,tests/expected,16,104,0,3.053e-16,4.078e-13,1.519e-11
+non-imported,cnm_import_price_up10,tests/expected,16,104,0,3.053e-16,5.845e-13,2.212e-13
+non-imported,cnm_labour_supply_up5,tests/expected,16,104,0,3.053e-16,1.551e-14,1.863e-13
+non-imported,cnm_foreign_savings_down20,tests/expected,16,104,0,3.053e-16,5.023e-14,2.165e-13
+non-imported,cnm_agri_productivity_up5,tests/expected,16,104,0,3.053e-16,1.258e-13,1.751e-12
+supply-use,sut_tariff_removal,tests/expected,16,116,0,4.885e-15,1.050e-14,1.778e-13
+supply-use,sut_import_price_up10,tests/expected,16,116,0,4.885e-15,4.695e-15,8.300e-14
+supply-use,sut_labour_supply_up5,tests/expected,16,116,0,4.885e-15,9.620e-14,5.594e-12
+supply-use,sut_foreign_savings_down20,tests/expected,16,116,0,4.885e-15,8.291e-15,2.593e-13
+supply-use,sut_agri_productivity_up5,tests/expected,16,116,0,4.885e-15,2.072e-14,2.096e-13
+insurance fund,shi_tariff_removal,tests/expected,16,132,0,1.110e-16,5.941e-14,1.427e-12
+insurance fund,shi_import_price_up10,tests/expected,16,132,0,1.110e-16,1.396e-13,1.006e-12
+insurance fund,shi_labour_supply_up5,tests/expected,16,132,0,1.110e-16,1.866e-14,6.300e-13
+insurance fund,shi_foreign_savings_down20,tests/expected,16,132,0,1.110e-16,2.685e-13,2.093e-13
+insurance fund,shi_agri_productivity_up5,tests/expected,16,132,0,1.110e-16,7.803e-14,1.342e-12
+insurance fund,shi_contribution_up50,tests/expected,16,132,0,1.110e-16,3.919e-14,2.321e-13
+insurance fund,shi_gov_transfer_up50,tests/expected,16,132,0,1.110e-16,1.871e-14,5.385e-13
+health link,eff_tariff_removal,tests/expected,16,134,0,1.110e-16,1.336e-14,8.856e-14
+health link,eff_import_price_up10,tests/expected,16,134,0,1.110e-16,6.491e-13,1.549e-12
+health link,eff_labour_supply_up5,tests/expected,16,134,0,1.110e-16,9.721e-15,1.292e-13
+health link,eff_foreign_savings_down20,tests/expected,16,134,0,1.110e-16,6.384e-14,3.651e-13
+health link,eff_agri_productivity_up5,tests/expected,16,134,0,1.110e-16,5.907e-14,8.347e-13
+health link,eff_gov_health_up20,tests/expected,16,134,0,1.110e-16,1.666e-13,2.707e-13
+health link,eff_contribution_up50,tests/expected,16,134,0,1.110e-16,7.657e-13,3.889e-13
+health link,eff_labour_efficiency_down2,tests/expected,16,134,0,1.110e-16,1.959e-13,7.983e-13
+"standard, closure 1",alt1_tariff_removal,Python,16,106,0,2.776e-17,3.590e-15,6.956e-14
+"standard, closure 1",alt1_import_price_up10,Python,16,106,0,2.776e-17,3.678e-14,1.498e-13
+"standard, closure 1",alt1_agri_productivity_up5,Python,16,106,0,2.776e-17,1.072e-12,1.781e-11
+"standard, closure 2",alt2_tariff_removal,Python,16,106,0,2.776e-17,1.065e-14,2.207e-13
+"standard, closure 2",alt2_foreign_savings_down20,Python,16,106,0,2.776e-17,1.493e-14,2.273e-13
+"institutions, closure 1",alt1_tariff_removal,Python,16,118,0,1.388e-17,8.590e-14,9.650e-14
+"institutions, closure 1",alt1_import_price_up10,Python,16,118,0,1.388e-17,7.086e-14,3.981e-13
+"institutions, closure 1",alt1_agri_productivity_up5,Python,16,118,0,1.388e-17,1.206e-12,1.190e-11
+"institutions, closure 2",alt2_tariff_removal,Python,16,118,0,1.388e-17,2.527e-14,2.094e-13
+"institutions, closure 2",alt2_foreign_savings_down20,Python,16,118,0,1.388e-17,5.491e-14,3.852e-14
+"health link, closure 1",alt1_tariff_removal,Python,16,134,0,0.000e+00,6.781e-13,1.038e-15
+"health link, closure 1",alt1_import_price_up10,Python,16,134,0,0.000e+00,2.305e-14,2.918e-13
+"health link, closure 1",alt1_agri_productivity_up5,Python,16,134,0,0.000e+00,2.236e-12,5.216e-12
+"health link, closure 2",alt2_tariff_removal,Python,16,134,0,0.000e+00,1.658e-14,4.379e-13
+"health link, closure 2",alt2_foreign_savings_down20,Python,16,134,0,0.000e+00,2.742e-14,1.304e-13
+"LES, closure 1",alt1_tariff_removal,Python,16,106,0,2.776e-17,9.659e-15,5.562e-13
+"LES, closure 1",alt1_import_price_up10,Python,16,106,0,2.776e-17,2.699e-12,8.952e-11
+"LES, closure 1",alt1_agri_productivity_up5,Python,16,106,0,2.776e-17,3.824e-12,9.616e-11
+"LES, closure 2",alt2_tariff_removal,Python,16,106,0,2.776e-17,1.264e-12,8.332e-17
+"LES, closure 2",alt2_foreign_savings_down20,Python,16,106,0,2.776e-17,9.725e-14,1.503e-13
