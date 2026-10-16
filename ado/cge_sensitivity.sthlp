@@ -25,9 +25,10 @@ one, recalibrates the model from the SAM, restores the closure, runs the
 {opt scenario()} program (which applies shocks with {helpb cge_shock}) and
 solves. It then summarises every report measure of {helpb cge_report} across
 the draws that converged:
-- the result with the central elasticities;
-- the mean and standard deviation;
-- the 5th and 95th percentiles (order statistics).
+
+{phang2}- the result with the central elasticities;{p_end}
+{phang2}- the mean and standard deviation;{p_end}
+{phang2}- the 5th and 95th percentiles (order statistics).{p_end}
 
 {pstd}
 Every other calibration option is kept: factor quantities, LES demand and the

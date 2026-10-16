@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.2.1 implements the standard single-country model described in
+Version 0.2.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -57,6 +57,10 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.2.2 links simulations to household survey data (`cge_microsim`).
+Each survey household's income sources, consumption and prices change as the
+model says they change for its group. The command reports poverty and
+inequality before and after, using the survey's own weights and poverty line.
 Version 0.2.1 adds sensitivity analysis (`cge_sensitivity`). It runs Monte Carlo
 draws of the elasticities, recalibrates the model for each draw, and gives the
 distribution of every report measure.

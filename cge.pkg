@@ -34,6 +34,8 @@ f ado/cge_dynresults.ado
 f ado/cge_dynresults.sthlp
 f ado/cge_sensitivity.ado
 f ado/cge_sensitivity.sthlp
+f ado/cge_microsim.ado
+f ado/cge_microsim.sthlp
 f ado/cge_results.ado
 f ado/cge_results.sthlp
 f ado/cge_check.ado

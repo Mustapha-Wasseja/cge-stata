@@ -797,7 +797,46 @@ Period $t$ is then solved from the solution of $t-1$. Scenarios that change
 policy should reuse the baseline's $\lambda_t$, so that efficiency does not
 respond to the scenario.
 
+## 11. Link to household surveys (from version 0.2.2)
+
+`cge_microsim` passes the results of a simulation to household survey data,
+top-down and without feedback (Bourguignon, Bussolo and Pereira da Silva
+2008). Each survey household $i$ belongs to a CGE household group $h(i)$ and
+keeps its own income composition and, if given, budget shares. The CGE gives,
+for each group $h$, the ratio of new to base values of each income source $k$,
+with zero base values replaced by the ratio of the aggregate shown:
+
+| Source | Ratio $\rho_{hk}$ | If the group's base value is zero |
+|---|---|---|
+| factor $f$ | $YIF_{hf} / YIF^0_{hf}$ | $YF_f / YF^0_f$ |
+| government transfers (`gov`) | $trnsfr_{h,gov}\,CPI / (trnsfr^0_{h,gov}\,CPI^0)$ | $CPI / CPI^0$ |
+| transfers from abroad (`row`) | $trnsfr_{h,row}\,EXR / (trnsfr^0_{h,row}\,EXR^0)$ | $EXR / EXR^0$ |
+| transfers from other domestic institutions (`dom`) | $\sum_{d} shii_{hd}\,DY_d / \sum_{d} shii_{hd}\,DY^0_d$ | $CPI / CPI^0$ |
+| indexed to prices (`cpi`) | $CPI / CPI^0$ | |
+| unchanged (`fixed`) | 1 | |
+
+With income components $y_{ik}$, the household's nominal consumption becomes
+$$C^1_i = C^0_i\,\frac{\sum_k \rho_{h(i)k}\,y_{ik}}{\sum_k y_{ik}}\;\kappa_{h(i)}, \qquad \kappa_h = \frac{(1-MPS_h)(1-TINS_h)}{(1-MPS^0_h)(1-TINS^0_h)},$$
+so that it follows its own income and its group's direct tax and savings
+rates. A household with no income in the components given, or every
+household when no components are given, follows its group's consumption:
+$C^1_i = C^0_i\,EH_h/EH^0_h$. The household's price index is
+$$P_i = \sum_c s_{ic}\,\frac{PQ_c}{PQ^0_c},$$
+with $s_{ic}$ its survey budget shares when budget items are mapped to
+commodities, and the group's base shares $PQ^0_c\,QH^0_{ch}/EH^0_h$ otherwise.
+Real consumption is $R_i = C^1_i / P_i$; this is a first-order (Laspeyres)
+approximation for LES households. With household size $n_i$ and weight $w_i$,
+poverty measures use consumption per person, $r_i = R_i/n_i$ (base
+$C^0_i/n_i$), and person weights $w_i n_i$:
+$$FGT_\alpha = \frac{\sum_i w_i n_i\,\mathbf{1}[r_i < z]\,\big((z - r_i)/z\big)^\alpha}{\sum_i w_i n_i}, \qquad \alpha = 0, 1, 2,$$
+for a poverty line $z$, and the Gini coefficient is that of $r_i$ over persons.
+
 ## References
+
+Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. (2008). *The
+Impact of Macroeconomic Policies on Poverty and Income Distribution:
+Macro-Micro Evaluation Techniques and Tools*. World Bank and Palgrave
+Macmillan.
 
 Thurlow, J. (2004). *A Dynamic Computable General Equilibrium (CGE) Model
 for South Africa: Extending the Static IFPRI Model*. Trade and Industrial

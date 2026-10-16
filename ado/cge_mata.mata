@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.2.1  2026-10-16
+*! cge_mata.mata  v0.2.2  2026-10-16
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -101,7 +101,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.2.1")
+    return("0.2.2")
 }
 
 // =====================================================================
@@ -3983,6 +3983,243 @@ void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
 void _cge_sens_end()
 {
     if (findexternal("cge__sens") != NULL) rmexternal("cge__sens")
+}
+
+// =====================================================================
+// Link to household surveys (model_spec.md, Section 11; from version 0.2.2)
+// =====================================================================
+
+// Ratio of the new to the base value of income source src for household group h
+real scalar _cge_ms_ratio(struct cge_model scalar M, struct cge_par scalar p, real colvector x,
+                          real scalar h, string scalar src)
+{
+    real matrix YIF, YIF0
+    real colvector YF, YF0, DY, DY0, MPS, TINS, YI, MPS0, TINS0, YI0
+    real scalar f, a, b, cpi, cpi0, exr, exr0
+
+    cpi = _cge_vn(M, x, "CPI")
+    cpi0 = _cge_vn(M, M.x0, "CPI")
+    if (src == "fixed") return(1)
+    if (src == "cpi") return(cpi / cpi0)
+    if (src == "gov") {
+        a = M.p0.trdg[h] * cpi0
+        b = p.trdg[h] * cpi
+        return(a == 0 ? cpi / cpi0 : b / a)
+    }
+    if (src == "row") {
+        exr = _cge_vn(M, x, "EXR")
+        exr0 = _cge_vn(M, M.x0, "EXR")
+        a = M.p0.trdr[h] * exr0
+        b = p.trdr[h] * exr
+        return(a == 0 ? exr / exr0 : b / a)
+    }
+    if (src == "dom") {
+        MPS = _cge_vn(M, x, "MPS");      TINS = _cge_vn(M, x, "TINS");      YI = _cge_vn(M, x, "YI")
+        MPS0 = _cge_vn(M, M.x0, "MPS");  TINS0 = _cge_vn(M, M.x0, "TINS");  YI0 = _cge_vn(M, M.x0, "YI")
+        DY = (1 :- MPS) :* (1 :- TINS) :* YI
+        DY0 = (1 :- MPS0) :* (1 :- TINS0) :* YI0
+        a = M.p0.shii[h, .] * DY0
+        b = p.shii[h, .] * DY
+        return(a == 0 ? cpi / cpi0 : b / a)
+    }
+    f = _cge_find(M.F, src)
+    YIF = _cge_vn(M, x, "YIF")
+    YIF0 = _cge_vn(M, M.x0, "YIF")
+    if (YIF0[h, f] == 0) {
+        YF = _cge_vn(M, x, "YF")
+        YF0 = _cge_vn(M, M.x0, "YF")
+        return(YF[f] / YF0[f])
+    }
+    return(YIF[h, f] / YIF0[h, f])
+}
+
+// Weighted Fosters-Greer-Thorbecke index of order a for poverty line z
+real scalar _cge_fgt(real colvector r, real colvector w, real scalar z, real scalar a)
+{
+    real colvector poor, gap
+    poor = (r :< z)
+    gap = poor :* (z :- r) :/ z
+    return(sum(w :* poor :* (a == 0 ? J(rows(r), 1, 1) : gap :^ a)) / sum(w))
+}
+
+// Weighted Gini coefficient
+real scalar _cge_gini(real colvector r, real colvector w)
+{
+    real colvector o, rs, ws, cw, L, cw1, L1
+    if (rows(r) < 2) return(.)
+    o = order(r, 1)
+    rs = r[o]
+    ws = w[o]
+    cw = runningsum(ws) / sum(ws)
+    L = runningsum(rs :* ws) / sum(rs :* ws)
+    cw1 = 0 \ cw[|1 \ rows(cw) - 1|]
+    L1 = 0 \ L[|1 \ rows(L) - 1|]
+    return(1 - sum((cw - cw1) :* (L + L1)))
+}
+
+// "var:target" pairs
+void _cge_ms_pairs(string scalar spec, string scalar what, string rowvector vars, string rowvector targets)
+{
+    string rowvector tok, pair
+    real scalar k
+    tok = tokens(spec)
+    vars = J(1, cols(tok), "")
+    targets = vars
+    for (k = 1; k <= cols(tok); k++) {
+        pair = tokens(tok[k], ":")
+        if (cols(pair) != 3) _cge_fail(what + "(): write variable:" + (what == "income" ? "source" : "commodity") +
+                                       ", for example " + (what == "income" ? "wages:lab" : "food:com_agr"), 198)
+        vars[k] = pair[1]
+        targets[k] = pair[3]
+    }
+}
+
+void _cge_microsim(string scalar sim, string scalar touse, string scalar gvar, string scalar cvar,
+                   string scalar wvar, string scalar svar, string scalar income, string scalar budget,
+                   real scalar zline, string scalar gen, real scalar show)
+{
+    struct cge_model scalar M
+    struct cge_par scalar p
+    string colvector g, ug, rlab
+    string rowvector ivars, isrc, bvars, bcom
+    real colvector x, C0, w, nsz, hi, EH, EH0, MPS, TINS, MPS0, TINS0, kappa, grp, ratio, C1, PQ, PQ0
+    real colvector pr, Pg, P, R, r0, r1, pw, Y0, Y1, tot, ci, sel, present
+    real matrix Y, rho, QH0, wg, B, T
+    real scalar s, n, k, h, j, nH, row, hasline
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    s = _cge_sim_index(M, sim)
+    x = M.simx[., s]
+    p = M.simp[s]
+    nH = M.nH
+    g = st_sdata(., gvar, touse)
+    C0 = st_data(., cvar, touse)
+    n = rows(C0)
+    if (n == 0) _cge_fail("no observations", 2000)
+    w = (wvar == "" ? J(n, 1, 1) : st_data(., wvar, touse))
+    nsz = (svar == "" ? J(n, 1, 1) : st_data(., svar, touse))
+    if (min(w) < 0 | min(nsz) <= 0) _cge_fail("weights must be non-negative and household sizes positive", 459)
+
+    // Household groups
+    hi = J(n, 1, 0)
+    ug = uniqrows(g)
+    for (k = 1; k <= rows(ug); k++) {
+        h = _cge_find(M.H, ug[k])
+        if (h == 0) _cge_fail("group(): " + ug[k] + " is not a household of the model (" + invtokens(M.H') + ")", 111)
+        hi = hi + h :* (g :== ug[k])
+    }
+
+    // Nominal consumption
+    EH = _cge_vn(M, x, "EH")
+    EH0 = _cge_vn(M, M.x0, "EH")
+    MPS = _cge_vn(M, x, "MPS");      TINS = _cge_vn(M, x, "TINS")
+    MPS0 = _cge_vn(M, M.x0, "MPS");  TINS0 = _cge_vn(M, M.x0, "TINS")
+    kappa = ((1 :- MPS[|1 \ nH|]) :* (1 :- TINS[|1 \ nH|])) :/ ((1 :- MPS0[|1 \ nH|]) :* (1 :- TINS0[|1 \ nH|]))
+    grp = EH :/ EH0
+    if (income == "") ratio = grp[hi]
+    else {
+        _cge_ms_pairs(income, "income", ivars, isrc)
+        for (k = 1; k <= cols(isrc); k++) {
+            if (!anyof(("gov", "row", "dom", "cpi", "fixed"), isrc[k]) & !_cge_find(M.F, isrc[k])) {
+                _cge_fail("income(): " + isrc[k] + " is not a factor of the model or one of gov, row, dom, cpi and fixed", 198)
+            }
+        }
+        Y = st_data(., ivars, touse)
+        rho = J(nH, cols(isrc), .)
+        for (h = 1; h <= nH; h++) {
+            for (k = 1; k <= cols(isrc); k++) rho[h, k] = _cge_ms_ratio(M, p, x, h, isrc[k])
+        }
+        Y0 = rowsum(Y)
+        Y1 = rowsum(Y :* rho[hi, .])
+        ratio = (Y0 :!= 0) :* (Y1 :/ (Y0 + (Y0 :== 0))) :* kappa[hi] + (Y0 :== 0) :* grp[hi]
+    }
+    C1 = C0 :* ratio
+
+    // Prices: the household's budget shares, or its group's
+    PQ = _cge_vn(M, x, "PQ")
+    PQ0 = _cge_vn(M, M.x0, "PQ")
+    pr = PQ :/ PQ0
+    QH0 = _cge_vn(M, M.x0, "QH")
+    wg = (PQ0 :* QH0) :/ (EH0' + (EH0' :== 0))
+    Pg = wg' * pr
+    if (budget == "") P = Pg[hi]
+    else {
+        _cge_ms_pairs(budget, "budget", bvars, bcom)
+        ci = J(cols(bcom), 1, 0)
+        for (k = 1; k <= cols(bcom); k++) {
+            ci[k] = _cge_find(M.C, bcom[k])
+            if (ci[k] == 0) _cge_fail("budget(): " + bcom[k] + " is not a commodity of the model", 111)
+        }
+        B = st_data(., bvars, touse)
+        if (min(B) < 0) _cge_fail("budget(): spending on an item cannot be negative", 459)
+        tot = rowsum(B)
+        P = (tot :> 0) :* ((B * pr[ci]) :/ (tot + (tot :== 0))) + (tot :<= 0) :* Pg[hi]
+    }
+    R = C1 :/ P
+    r0 = C0 :/ nsz
+    r1 = R :/ nsz
+    pw = w :* nsz
+
+    // Results: all households, then each group present
+    hasline = (zline > 0 & zline < .)
+    present = uniqrows(hi)
+    rlab = "all" \ M.H[present]
+    T = J(rows(rlab), 11, .)
+    for (row = 1; row <= rows(rlab); row++) {
+        if (row == 1) sel = (1::n)
+        else sel = select((1::n), hi :== present[row - 1])
+        T[row, 1] = sum(pw[sel] :* r0[sel]) / sum(pw[sel])
+        T[row, 2] = sum(pw[sel] :* r1[sel]) / sum(pw[sel])
+        T[row, 3] = 100 * (T[row, 2] / T[row, 1] - 1)
+        if (hasline) {
+            for (j = 0; j <= 2; j++) {
+                T[row, 4 + 2 * j] = _cge_fgt(r0[sel], pw[sel], zline, j)
+                T[row, 5 + 2 * j] = _cge_fgt(r1[sel], pw[sel], zline, j)
+            }
+        }
+        T[row, 10] = _cge_gini(r0[sel], pw[sel])
+        T[row, 11] = _cge_gini(r1[sel], pw[sel])
+    }
+
+    if (show) {
+        printf("\n{txt}Household survey results of simulation {res}%s{txt}: {res}%f{txt} households\n", sim, n)
+        printf("{txt}Real consumption per person (base prices); poverty and inequality over persons\n")
+        printf("{txt}{hline 98}\n")
+        printf("{txt}%-14s %11s %11s %8s %18s %18s %18s\n", "", "base", "simulated", "% chg",
+               (hasline ? "headcount (%)" : ""), (hasline ? "poverty gap (%)" : ""), "Gini (%)")
+        printf("{txt}{hline 98}\n")
+        for (row = 1; row <= rows(rlab); row++) {
+            printf("{txt}%-14s {res}%11.4g %11.4g %8.3f", abbrev(rlab[row], 14), T[row, 1], T[row, 2], T[row, 3])
+            if (hasline) printf("{res}  %7.2f -> %7.2f  %7.2f -> %7.2f", 100 * T[row, 4], 100 * T[row, 5],
+                                100 * T[row, 6], 100 * T[row, 7])
+            else printf("%38s", "")
+            printf("{res}  %7.2f -> %7.2f\n", 100 * T[row, 10], 100 * T[row, 11])
+        }
+        printf("{txt}{hline 98}\n")
+        if (hasline) printf("{txt}Poverty line {res}%g{txt} per person; severity (FGT2) is in r(table)\n", zline)
+    }
+
+    if (gen != "") {
+        (void) st_addvar("double", (gen + "_nom", gen + "_price", gen + "_real", gen + "_pc"))
+        st_store(., gen + "_nom", touse, C1)
+        st_store(., gen + "_price", touse, P)
+        st_store(., gen + "_real", touse, R)
+        st_store(., gen + "_pc", touse, r1)
+        st_varlabel(gen + "_nom", "Nominal consumption, simulation " + sim)
+        st_varlabel(gen + "_price", "Household price index, simulation " + sim)
+        st_varlabel(gen + "_real", "Real consumption (base prices), simulation " + sim)
+        st_varlabel(gen + "_pc", "Real consumption per person, simulation " + sim)
+    }
+    st_matrix("r(table)", T)
+    st_matrixrowstripe("r(table)", (J(rows(rlab), 1, ""), rlab))
+    st_matrixcolstripe("r(table)", (J(11, 1, ""), ("mean_base" \ "mean_sim" \ "mean_pct" \ "fgt0_base" \
+                       "fgt0_sim" \ "fgt1_base" \ "fgt1_sim" \ "fgt2_base" \ "fgt2_sim" \ "gini_base" \ "gini_sim")))
+    st_numscalar("r(N)", n)
+    st_numscalar("r(fgt0_base)", T[1, 4])
+    st_numscalar("r(fgt0_sim)", T[1, 5])
+    st_numscalar("r(gini_base)", T[1, 10])
+    st_numscalar("r(gini_sim)", T[1, 11])
 }
 
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)
