@@ -40,3 +40,12 @@ def test_bundled_csv_matches_generator():
     assert rows[0] == ["account", *labels]
     assert [r[0] for r in rows[1:]] == labels
     assert [[float(v) for v in r[1:]] for r in rows[1:]] == sam
+
+
+def test_bundled_unbalanced_csv_matches_generator():
+    labels, sam = synthetic_sam.build_unbalanced_layout()
+    with (REPO / "data" / "cge_synthetic_sam_unbal.csv").open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    assert rows[0] == ["account", *labels]
+    assert [[float(v) for v in r[1:]] for r in rows[1:]] == sam
+    assert max(abs(d) for d in synthetic_sam.imbalances(sam)) > 1

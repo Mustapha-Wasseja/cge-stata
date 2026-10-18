@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.3.0  18oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -28,11 +28,21 @@ government, savings-investment and the rest of the world, with selectable
 closures.
 
 
+{title:Preparing a SAM}
+
+{p2colset 5 22 24 2}{...}
+{p2col:{helpb cge_sam}}read a SAM of any size, wide or long{p_end}
+{p2col:{helpb cge_template}}write a template for roles and aggregation, in Excel or CSV{p_end}
+{p2col:{helpb cge_aggregate}}merge accounts into groups{p_end}
+{p2col:{helpb cge_balance}}balance the SAM by RAS or cross entropy{p_end}
+{p2col:{helpb cge_samexport}}write the SAM to a file or to memory{p_end}
+{p2colreset}{...}
+
+
 {title:Workflow}
 
 {p2colset 5 22 24 2}{...}
-{p2col:{helpb cge_sam}}read a SAM{p_end}
-{p2col:{helpb cge_map}}assign SAM accounts to model roles{p_end}
+{p2col:{helpb cge_map}}assign SAM accounts to model roles, with options or from a template{p_end}
 {p2col:{helpb cge_calibrate}}calibrate the model and check benchmark replication{p_end}
 {p2col:{helpb cge_closure}}choose the closure{p_end}
 {p2col:{helpb cge_shock}}change parameters or fixed variables{p_end}

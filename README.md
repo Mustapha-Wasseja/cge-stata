@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.2.2 implements the standard single-country model described in
+Version 0.3.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -57,6 +57,15 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.3.0 adds tools to prepare a SAM ([docs/sam_tools.md](docs/sam_tools.md)).
+`cge_sam` reads SAMs of any size, as wide CSV files parsed directly (beyond
+the 2,048 variables of Stata/IC) or as long data with one observation per
+cell. `cge_template` writes an Excel or CSV template in which accounts are
+given their roles, pairs and aggregation groups; `cge_map using` and
+`cge_aggregate using` read it. `cge_aggregate` merges accounts. `cge_balance`
+balances a SAM by generalised RAS, given every account's total, or by cross
+entropy, estimating the totals subject to balance and any known totals; both
+keep signs, zeros and fixed cells. `cge_samexport` writes the SAM.
 Version 0.2.2 links simulations to household survey data (`cge_microsim`).
 Each survey household's income sources, consumption and prices change as the
 model says they change for its group. The command reports poverty and
@@ -69,7 +78,8 @@ the Newton system, and the rows with many variables get exact derivatives. LU
 factors are reused across Newton steps. A synthetic SAM with 250 activities and
 20 households (40,190 equations, 4,254 solved) solves a tariff removal in about
 3 minutes on a laptop with Stata 13; see [tools/bench](tools/bench/README.md).
-Stata IC limits a SAM to about 2,040 accounts (2,048 variables).
+From version 0.3.0, a SAM with more accounts than Stata/IC can hold as
+variables is read directly from a CSV file or from long data.
 Version 0.1.15 adds standard report tables for several simulations side by side
 (macroeconomic aggregates, government, institutions, factors, sectors, health,
 and equivalent and compensating variations), to screen, Stata or Excel
@@ -137,6 +147,16 @@ cge_report, sims(notariff) saving(notariff.xlsx, replace)
 cge_save using mymodel, replace
 ```
 
+Preparing a national SAM:
+
+```stata
+cge_sam using national_sam.csv, clear
+cge_template using sam_roles.xlsx      // fill in roles, pairs and groups in Excel
+cge_aggregate using sam_roles.xlsx
+cge_balance, method(ce)
+cge_map using sam_roles.xlsx
+```
+
 See [examples/tariff_removal.do](examples/tariff_removal.do) for a worked
 example, and `help cge` for the command list.
 
@@ -144,6 +164,8 @@ example, and `help cge` for the command list.
 
 - [docs/model_spec.md](docs/model_spec.md): equations, calibration, closures
   and validation checks.
+- [docs/sam_tools.md](docs/sam_tools.md): reading, writing, aggregating and
+  balancing SAMs, and the mapping template.
 - [docs/design.md](docs/design.md): commands, data structures, solver, testing
   and roadmap.
 - [CONTRIBUTING.md](CONTRIBUTING.md): development conventions.

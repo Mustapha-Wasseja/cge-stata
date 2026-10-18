@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.7  14oct2026}{...}
+{* *! version 0.3.0  18oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced}]
 
 
 {title:Options}
@@ -71,13 +71,21 @@ insurance fund ({cmd:shi}) that receives contributions of 6 on labour income, 2
 from the government and 1 from abroad, buys 8 of health services and saves 1.
 Map it with the four activities and commodities and {cmd:insurance(shi)}.
 
+{phang}
+{opt unbalanced} loads the institutions layout made unbalanced, for the
+balancing examples and tests of {helpb cge_balance}: every non-zero cell is
+changed by up to 6 per cent, by a fixed rule, and rounded to four decimals; the
+negative savings of {cmd:npi} and {cmd:gov} keep their signs. Accounts are out
+of balance by up to 12.
+
 
 {title:Description}
 
 {pstd}
 {cmd:cge_synthetic} loads the synthetic social accounting matrix (SAM) bundled
-with {bf:cge-stata} and checks that it is square, that row and column labels
-match, and that every account balances.
+with {bf:cge-stata}, checks that it is square and that row and column labels
+match, and reports the largest difference between an account's row and column
+totals (zero, except in the unbalanced layout).
 
 {pstd}
 The SAM is constructed for testing and teaching. It does not describe any

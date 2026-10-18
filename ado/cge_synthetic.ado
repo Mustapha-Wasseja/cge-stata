@@ -1,17 +1,17 @@
-*! cge_synthetic.ado  v0.1.13  2026-10-15
+*! cge_synthetic.ado  v0.3.0  2026-10-18
 *! cge-stata: load the synthetic social accounting matrix (SAM)
-*! Loads the bundled synthetic SAM and checks that every account balances
+*! Loads a bundled synthetic SAM and reports its balance
 *!
 *! Author: Mustapha Wasseja
 *! Requires: Stata 13+
 
 program define cge_synthetic, rclass
     version 13.0
-    syntax [, CLEAR NATional INStitutions MARgins TERritorial MULTiproduct NONimported SUT HEALTH]
+    syntax [, CLEAR NATional INStitutions MARgins TERritorial MULTiproduct NONimported SUT HEALTH UNBalanced]
 
     if ("`national'" != "") + ("`institutions'" != "") + ("`margins'" != "") ///
         + ("`territorial'" != "") + ("`multiproduct'" != "") + ("`nonimported'" != "") ///
-        + ("`sut'" != "") + ("`health'" != "") > 1 {
+        + ("`sut'" != "") + ("`health'" != "") + ("`unbalanced'" != "") > 1 {
         display as error "choose only one layout"
         exit 198
     }
@@ -48,6 +48,10 @@ program define cge_synthetic, rclass
     if "`health'" != "" {
         local file cge_synthetic_sam_health.csv
         local layout "health layout"
+    }
+    if "`unbalanced'" != "" {
+        local file cge_synthetic_sam_unbal.csv
+        local layout "institutions layout, unbalanced for the balancing tests"
     }
     quietly findfile `file'
     local samfile `"`r(fn)'"'

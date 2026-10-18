@@ -159,6 +159,57 @@ def health_model(**elasticities) -> Model:
     return Model(SAM.from_csv(HEALTH_SAM), health_mapping(), **settings)
 
 
+# SAM tools (version 0.3.0, docs/sam_tools.md): a SYNTHETIC unbalanced SAM,
+# and the institutions layout aggregated to two sectors and one household
+UNBALANCED_SAM = REPO / "data" / "cge_synthetic_sam_unbal.csv"
+AGGREGATION = {"act_nag": ["act_man", "act_ser"], "com_nag": ["com_man", "com_ser"], "hh": ["hhd", "npi"]}
+
+
+def balance_cases() -> dict:
+    """Balanced SAMs compared by the Stata suite: name -> (SAM, info)."""
+    from .samtools import cross_entropy, ras
+    unbal = SAM.from_csv(UNBALANCED_SAM)
+    return {
+        "ras": ras(unbal, tol=1e-12),
+        "ras_fixed": ras(unbal, targets="rows", totals={"gov": 71.0},
+                         fixed=["hhd:lab", "com_man:sav", "ent:cap"], tol=1e-12),
+        "ce": cross_entropy(unbal, tol=1e-12),
+        "ce_totals": cross_entropy(unbal, totals={"act_agr": 97.0, "hhd": 290.0},
+                                   fixed=["row:*", "hhd:lab"], tol=1e-12),
+    }
+
+
+def aggregated_sam() -> SAM:
+    from .samtools import aggregate
+    return aggregate(SAM.from_csv(INSTITUTIONS_SAM), AGGREGATION)
+
+
+def aggregated_mapping() -> Mapping:
+    return Mapping(activities=["act_agr", "act_nag"], commodities=["com_agr", "com_nag"],
+                   factors=["lab", "cap"], households=["hh"], enterprises=["ent"],
+                   government="gov", savinv="sav", row="row", dirtax="tax_dir",
+                   saltax="tax_sal", imptax="tax_imp")
+
+
+def aggregated_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(aggregated_sam(), aggregated_mapping(), **settings)
+
+
+def write_samtools(directory: Path = EXPECTED_DIR) -> list[Path]:
+    """Balanced and aggregated SAMs (version 0.3.0)."""
+    from .samtools import write_sam
+    written = []
+    for name, (sam, info) in balance_cases().items():
+        path = directory / f"samtools_{name}.csv"
+        write_sam(sam, path)
+        written.append(path)
+    path = directory / "samtools_agg.csv"
+    write_sam(aggregated_sam(), path)
+    written.append(path)
+    return written
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -319,7 +370,10 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
         Closure(), tol=1e-12, params={"tshi": _scaled(eff.params["tshi"], lab, 1.5)})
     solutions["eff_labour_efficiency_down2"] = eff.solve(
         Closure(), tol=1e-12, params={"af": _scaled(eff.params["af"], lab, 0.98)})
-    written = write_dynamic(directory)
+    # An aggregated SAM (version 0.3.0)
+    for name, solution in run_simulations(aggregated_model()).items():
+        solutions["agg_" + name] = solution
+    written = write_dynamic(directory) + write_samtools(directory)
     for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")

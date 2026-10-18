@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.2.2  2026-10-16
+*! cge_mata.mata  v0.3.0  2026-10-18
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -101,7 +101,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.2.2")
+    return("0.3.0")
 }
 
 // =====================================================================
@@ -311,10 +311,9 @@ void _cge_vlabels(struct cge_model scalar M, real scalar k, string colvector e1,
 
 void _cge_sam(string scalar labelvar, string scalar accounts)
 {
-    struct cge_model scalar M
     string colvector labels, names
     real matrix S
-    real scalar nmiss, maxdiff, k
+    real scalar nmiss, k
 
     labels = st_sdata(., labelvar)
     names = tokens(accounts)'
@@ -343,8 +342,20 @@ void _cge_sam(string scalar labelvar, string scalar accounts)
     }
     nmiss = missing(S)
     if (nmiss) S = editmissing(S, 0)
-    maxdiff = max(abs(rowsum(S) - colsum(S)'))
+    _cge_sam_start(labels, S, nmiss, "SAM read")
+}
 
+// =====================================================================
+// SAM tools (docs/sam_tools.md, from version 0.3.0)
+// =====================================================================
+
+// Starts a new model from a SAM: earlier mappings, calibrations and
+// simulations are discarded
+void _cge_sam_start(string colvector labels, real matrix S, real scalar nmiss, string scalar what)
+{
+    struct cge_model scalar M
+    real scalar maxdiff
+    maxdiff = max(abs(rowsum(S) - colsum(S)'))
     M.labels0 = labels
     M.S0 = S
     M.labels = labels
@@ -352,14 +363,1150 @@ void _cge_sam(string scalar labelvar, string scalar accounts)
     M.mapped = 0
     M.calibrated = 0
     _cge_store(M)
-
-    printf("{txt}SAM read: {res}%f{txt} accounts, total {res}%g\n", rows(S), sum(S))
+    printf("{txt}%s: {res}%f{txt} accounts, total {res}%g\n", what, rows(S), sum(S))
     if (nmiss) printf("{txt}Blank cells treated as zero: {res}%f\n", nmiss)
     printf("{txt}Largest row-column imbalance: {res}%9.3e\n", maxdiff)
     st_numscalar("r(N_accounts)", rows(S))
     st_numscalar("r(total)", sum(S))
     st_numscalar("r(maxdiff)", maxdiff)
     st_numscalar("r(N_blank)", nmiss)
+}
+
+// Position of each label, for fast lookups
+transmorphic _cge_index(string colvector labels)
+{
+    transmorphic A
+    real scalar k
+    A = asarray_create()
+    for (k = 1; k <= rows(labels); k++) asarray(A, labels[k], k)
+    return(A)
+}
+
+real scalar _cge_pos(transmorphic A, string scalar label, string scalar what)
+{
+    if (!asarray_contains(A, label)) _cge_fail("account " + label + " (" + what + ") is not in the SAM", 111)
+    return(asarray(A, label))
+}
+
+// A label as a Stata name (Section 1): characters other than letters,
+// digits and the underscore removed, then any leading digits, and the result
+// cut to 32 characters; "" if that is not a valid name
+string scalar _cge_name(string scalar s)
+{
+    string scalar out, ch
+    real scalar k
+    if (st_isname(s)) return(s)
+    out = ""
+    for (k = 1; k <= strlen(s); k++) {
+        ch = substr(s, k, 1)
+        if ((ch >= "a" & ch <= "z") | (ch >= "A" & ch <= "Z") | (ch >= "0" & ch <= "9") | ch == "_") out = out + ch
+    }
+    while (strlen(out) > 0) {
+        ch = substr(out, 1, 1)
+        if (ch < "0" | ch > "9") break
+        out = substr(out, 2, .)
+    }
+    out = substr(out, 1, 32)
+    return(st_isname(out) ? out : "")
+}
+
+// Labels converted to names; each change is displayed, and a label that
+// cannot be converted, or two labels that give the same name, are errors
+string colvector _cge_names(string colvector raw)
+{
+    string colvector out
+    transmorphic A
+    real scalar k, nchanged
+    out = raw
+    A = asarray_create()
+    nchanged = 0
+    for (k = 1; k <= rows(raw); k++) {
+        if (raw[k] == "") _cge_fail("account " + strofreal(k) + " has a blank label", 459)
+        out[k] = _cge_name(raw[k])
+        if (out[k] == "") _cge_fail("account label " + raw[k] + " cannot be converted to a Stata name; rename it", 459)
+        if (out[k] != raw[k]) {
+            nchanged++
+            if (nchanged <= 20) {
+                printf("{txt}Account label {res}%s{txt} is not a valid Stata name; using {res}%s{txt}\n", raw[k], out[k])
+            }
+        }
+        if (asarray_contains(A, out[k])) {
+            _cge_fail("account labels " + asarray(A, out[k]) + " and " + raw[k] + " both give the name " + out[k] +
+                      "; rename one of them", 459)
+        }
+        asarray(A, out[k], raw[k])
+    }
+    if (nchanged > 20) printf("{txt}... and {res}%f{txt} more labels changed\n", nchanged - 20)
+    return(out)
+}
+
+// The whole of a text file, without carriage returns
+string scalar _cge_readfile(string scalar fn)
+{
+    real scalar fh
+    string colvector chunks
+    string scalar chunk
+    if (!fileexists(fn)) _cge_fail("file " + fn + " not found", 601)
+    fh = fopen(fn, "r")
+    chunks = J(0, 1, "")
+    while ((chunk = fread(fh, 4194304)) != J(0, 0, "")) chunks = chunks \ chunk
+    fclose(fh)
+    if (rows(chunks) == 0) return("")
+    return(subinstr(invtokens(chunks', ""), char(13), ""))
+}
+
+// Fields of s separated by the character sep; quotes (for example `""""')
+// protect separators within a field
+string rowvector _cge_split(string scalar s, string scalar sep, string scalar quotes)
+{
+    transmorphic t
+    string rowvector tok, out
+    string scalar l2
+    real rowvector issep, pos, keep
+    // Comma-separated values without quotes or blanks: tokens() is much
+    // faster than tokeninit(); empty fields become "."
+    if (sep == "," & !strpos(s, `"""') & !strpos(s, " ") & !strpos(s, char(9))) {
+        l2 = subinstr(subinstr("," + s + ",", ",,", ",.,"), ",,", ",.,")
+        return(tokens(subinstr(substr(l2, 2, strlen(l2) - 2), ",", " ")))
+    }
+    t = tokeninit("", sep, quotes)
+    tokenset(t, s)
+    tok = tokengetall(t)
+    if (cols(tok) == 0) return("")
+    issep = (tok :== sep)
+    pos = runningsum(issep) :+ 1
+    out = J(1, sum(issep) + 1, "")
+    keep = selectindex(!issep)
+    if (cols(keep)) out[pos[keep]] = tok[keep]
+    return(out)
+}
+
+// Fields without surrounding blanks and quotes
+string rowvector _cge_unquote(string rowvector f)
+{
+    string rowvector out
+    real rowvector q
+    real scalar k, i
+    out = strtrim(f)
+    q = selectindex((substr(out, 1, 1) :== `"""') :& (substr(out, -1, 1) :== `"""') :& (strlen(out) :>= 2))
+    for (k = 1; k <= cols(q); k++) {
+        i = q[k]
+        out[i] = strtrim(subinstr(substr(out[i], 2, strlen(out[i]) - 2), `""""', `"""'))
+    }
+    return(out)
+}
+
+// Number of account columns in the first line of a CSV file
+real scalar _cge_csv_ncols(string scalar fn)
+{
+    real scalar fh, p
+    string scalar s, chunk
+    if (!fileexists(fn)) _cge_fail("file " + fn + " not found", 601)
+    fh = fopen(fn, "r")
+    s = ""
+    while ((chunk = fread(fh, 65536)) != J(0, 0, "")) {
+        s = s + chunk
+        p = strpos(s, char(10))
+        if (p) {
+            s = substr(s, 1, p - 1)
+            break
+        }
+    }
+    fclose(fh)
+    return(cols(_cge_split(subinstr(s, char(13), ""), ",", `""""')) - 1)
+}
+
+// Reads a wide CSV SAM directly (Section 1, form 2)
+void _cge_sam_csv(string scalar fn)
+{
+    string colvector lines, rlab
+    string rowvector head, f
+    real matrix S
+    real rowvector v, blank, bad
+    real scalar n, k, nmiss
+
+    lines = _cge_split(_cge_readfile(fn), char(10), "")'
+    lines = select(lines, strtrim(lines) :!= "")
+    if (rows(lines) < 2) _cge_fail(fn + " has no SAM rows", 459)
+    head = _cge_unquote(_cge_split(lines[1], ",", `""""'))
+    n = cols(head) - 1
+    if (n < 1) _cge_fail(fn + " has no account columns", 459)
+    if (rows(lines) - 1 != n) {
+        errprintf("SAM is not square: %f rows and %f account columns\n", rows(lines) - 1, n)
+        exit(459)
+    }
+    S = J(n, n, 0)
+    rlab = J(n, 1, "")
+    nmiss = 0
+    for (k = 1; k <= n; k++) {
+        f = _cge_unquote(_cge_split(lines[k + 1], ",", `""""'))
+        if (cols(f) != n + 1) {
+            _cge_fail("line " + strofreal(k + 1) + " of " + fn + " has " + strofreal(cols(f)) +
+                      " fields; the first line has " + strofreal(n + 1), 459)
+        }
+        rlab[k] = f[1]
+        f = f[|2 \ n + 1|]
+        blank = (f :== "") :| (f :== ".")
+        v = strtoreal(f)
+        bad = selectindex(!blank :& (v :>= .))
+        if (cols(bad)) {
+            _cge_fail("row " + rlab[k] + ", column " + head[bad[1] + 1] + ": " + f[bad[1]] +
+                      " is not a number", 459)
+        }
+        nmiss = nmiss + sum(blank)
+        S[k, .] = editmissing(v, 0)
+    }
+    for (k = 1; k <= n; k++) {
+        if (rlab[k] != head[k + 1]) {
+            _cge_fail("row " + strofreal(k) + " is labelled " + rlab[k] + " but column " + strofreal(k) +
+                      " is labelled " + head[k + 1] + "; row and column labels must agree, in the same order", 459)
+        }
+    }
+    _cge_sam_start(_cge_names(rlab), S, nmiss, "SAM read")
+}
+
+// Reads a SAM from long data in memory (Section 1, form 3)
+void _cge_sam_long(string scalar rvar, string scalar cvar, string scalar vvar)
+{
+    string colvector r, c, raw
+    real colvector v, ri, ci, key, ord
+    real matrix S
+    transmorphic A
+    real scalar i, n, nmiss, k
+    string scalar x
+
+    r = strtrim(st_sdata(., rvar))
+    c = strtrim(st_sdata(., cvar))
+    v = st_data(., vvar)
+    if (rows(r) == 0) _cge_fail("no observations", 2000)
+    A = asarray_create()
+    raw = J(2 * rows(r), 1, "")
+    ri = J(rows(r), 1, .)
+    ci = J(rows(r), 1, .)
+    // Accounts in the order of their first appearance as row accounts, then
+    // any accounts that appear only as column accounts
+    n = 0
+    for (i = 1; i <= rows(r); i++) {
+        if (r[i] == "" | c[i] == "") _cge_fail("observation " + strofreal(i) + " has a blank account label", 459)
+        x = r[i]
+        if (!asarray_contains(A, x)) {
+            n++
+            asarray(A, x, n)
+            raw[n] = x
+        }
+        ri[i] = asarray(A, x)
+    }
+    for (i = 1; i <= rows(r); i++) {
+        x = c[i]
+        if (!asarray_contains(A, x)) {
+            n++
+            asarray(A, x, n)
+            raw[n] = x
+        }
+        ci[i] = asarray(A, x)
+    }
+    raw = raw[|1 \ n|]
+    key = (ri :- 1) :* n :+ ci
+    ord = order(key, 1)
+    for (k = 2; k <= rows(ord); k++) {
+        if (key[ord[k]] == key[ord[k - 1]]) {
+            _cge_fail("cell " + raw[ri[ord[k]]] + ", " + raw[ci[ord[k]]] + " is given twice", 459)
+        }
+    }
+    nmiss = sum(v :>= .)
+    v = editmissing(v, 0)
+    S = J(n, n, 0)
+    for (i = 1; i <= rows(v); i++) S[ri[i], ci[i]] = v[i]
+    _cge_sam_start(_cge_names(raw), S, nmiss, "SAM read")
+}
+
+// Numbers as text that reads back as the same double (Section 2)
+string rowvector _cge_numstr(real rowvector x)
+{
+    string rowvector s, sn
+    real rowvector bad, nz
+    real scalar k
+    s = J(1, cols(x), "0")
+    nz = selectindex(x :!= 0)
+    if (cols(nz) == 0) return(s)
+    sn = strtrim(strofreal(x[nz], "%21.0g"))
+    bad = selectindex(strtoreal(sn) :!= x[nz])
+    for (k = 1; k <= cols(bad); k++) sn[bad[k]] = strtrim(strofreal(x[nz[bad[k]]], "%24.17g"))
+    s[nz] = sn
+    return(s)
+}
+
+// The SAM as read, aggregated or balanced, or after the layout rewrites
+void _cge_sam_pick(real scalar mapped, string colvector labels, real matrix S)
+{
+    struct cge_model scalar M
+    M = _cge_load()
+    if (mapped) {
+        _cge_need(M, "mapped")
+        labels = M.labels
+        S = M.S
+    }
+    else {
+        labels = M.labels0
+        S = M.S0
+    }
+}
+
+// Writes the SAM to a CSV file (Section 2)
+void _cge_sam_write(string scalar fn, real scalar islong, real scalar mapped, real scalar replace)
+{
+    string colvector labels, lines
+    real matrix S
+    real rowvector nz
+    real scalar fh, k, j, ncell
+
+    _cge_sam_pick(mapped, labels, S)
+    if (fileexists(fn)) {
+        if (!replace) _cge_fail("file " + fn + " already exists; specify replace", 602)
+        unlink(fn)
+    }
+    fh = fopen(fn, "w")
+    ncell = 0
+    if (islong) {
+        fput(fh, "row,column,value")
+        for (k = 1; k <= rows(S); k++) {
+            nz = selectindex(S[k, .] :!= 0)
+            if (cols(nz) == 0) continue
+            lines = (labels[k] :+ "," :+ labels[nz]' :+ "," :+ _cge_numstr(S[k, nz]))'
+            for (j = 1; j <= rows(lines); j++) fput(fh, lines[j])
+            ncell = ncell + cols(nz)
+        }
+    }
+    else {
+        fput(fh, "account," + invtokens(labels', ","))
+        for (k = 1; k <= rows(S); k++) fput(fh, labels[k] + "," + invtokens(_cge_numstr(S[k, .]), ","))
+    }
+    fclose(fh)
+    if (islong) printf("{txt}SAM saved to {res}%s{txt}: {res}%f{txt} non-zero cells\n", fn, ncell)
+    else printf("{txt}SAM saved to {res}%s{txt}: {res}%f{txt} accounts\n", fn, rows(S))
+}
+
+// Puts the SAM in the (empty) data in memory (Section 2)
+void _cge_sam_todata(real scalar islong, real scalar mapped)
+{
+    string colvector labels, rl, cl
+    real matrix S
+    real colvector vl
+    real rowvector nz
+    real scalar k, n, w, m
+
+    _cge_sam_pick(mapped, labels, S)
+    n = rows(S)
+    w = max((1, max(strlen(labels))))
+    if (islong) {
+        m = sum(S :!= 0)
+        rl = J(m, 1, "")
+        cl = J(m, 1, "")
+        vl = J(m, 1, .)
+        m = 0
+        for (k = 1; k <= n; k++) {
+            nz = selectindex(S[k, .] :!= 0)
+            if (cols(nz) == 0) continue
+            rl[|m + 1 \ m + cols(nz)|] = J(cols(nz), 1, labels[k])
+            cl[|m + 1 \ m + cols(nz)|] = labels[nz]
+            vl[|m + 1 \ m + cols(nz)|] = S[k, nz]'
+            m = m + cols(nz)
+        }
+        st_addobs(m)
+        (void) st_addvar("str" + strofreal(w), "row")
+        (void) st_addvar("str" + strofreal(w), "column")
+        (void) st_addvar("double", "value")
+        if (m) {
+            st_sstore(., "row", rl)
+            st_sstore(., "column", cl)
+            st_store(., "value", vl)
+        }
+        return
+    }
+    if (n + 1 > st_numscalar("c(maxvar)")) {
+        _cge_fail("the SAM has " + strofreal(n) + " accounts, more than fit as variables (c(maxvar) is " +
+                  strofreal(st_numscalar("c(maxvar)")) + "); save it as .csv or use the option long", 900)
+    }
+    st_addobs(n)
+    (void) st_addvar("str" + strofreal(w), "account")
+    st_sstore(., "account", labels)
+    st_store(., st_addvar(J(1, n, "double"), labels'), S)
+}
+
+// ---------------------------------------------------------------------
+// Mapping template (Section 3)
+// ---------------------------------------------------------------------
+
+string rowvector _cge_role_options()
+{
+    return(("activities", "commodities", "factors", "households", "enterprises", "government",
+            "savinv", "row", "dirtax", "saltax", "imptax", "exptax", "acttax", "margins",
+            "territorial", "marginaccounts", "stocks", "insurance"))
+}
+
+// A role entry in standard form: the cge_map options it names, in the order
+// of _cge_role_options()
+string scalar _cge_role_norm(string scalar cell, string scalar account)
+{
+    string rowvector opts, sing, tok
+    real rowvector has
+    real scalar k, m
+    opts = _cge_role_options()
+    sing = ("activity", "commodity", "factor", "household", "enterprise", "", "", "", "", "", "",
+            "", "", "margin", "", "marginaccount", "stock", "")
+    tok = tokens(strlower(subinstr(cell, ",", " ")))
+    has = J(1, cols(opts), 0)
+    for (k = 1; k <= cols(tok); k++) {
+        for (m = 1; m <= cols(opts); m++) if (tok[k] == opts[m] | tok[k] == sing[m]) break
+        if (m > cols(opts)) {
+            _cge_fail("role " + tok[k] + " of account " + account + " is not a cge_map option (see the " +
+                      "template's roles sheet or help cge_template)", 198)
+        }
+        has[m] = 1
+    }
+    if (!max(has)) return("")
+    return(invtokens(select(opts, has)))
+}
+
+void _cge_tmpl_add(string colvector role, real colvector idx, string scalar name)
+{
+    real scalar k
+    for (k = 1; k <= rows(idx); k++) {
+        if (idx[k] >= 1 & idx[k] <= rows(role)) role[idx[k]] = strtrim(role[idx[k]] + " " + name)
+    }
+}
+
+// Puts the template of the SAM in memory in the (empty) data (Section 3);
+// role and pair come from the mapping, if there is one
+void _cge_template_data()
+{
+    struct cge_model scalar M
+    string colvector role, pair, labels
+    string rowvector taxname
+    real colvector taxidx
+    real scalar n0, k
+
+    M = _cge_load()
+    labels = M.labels0
+    n0 = rows(labels)
+    role = J(n0, 1, "")
+    pair = J(n0, 1, "")
+    if (M.mapped) {
+        _cge_tmpl_add(role, M.iA, "activities")
+        _cge_tmpl_add(role, M.iC, "commodities")
+        _cge_tmpl_add(role, M.iF, "factors")
+        _cge_tmpl_add(role, M.iH, "households")
+        _cge_tmpl_add(role, M.iE, "enterprises")
+        _cge_tmpl_add(role, M.igov, "government")
+        _cge_tmpl_add(role, M.isav, "savinv")
+        _cge_tmpl_add(role, M.irow, "row")
+        // A tax paid directly to government was routed through an internal
+        // account after the accounts of the SAM
+        taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax")
+        taxidx = (M.idirtax \ M.isaltax \ M.iimptax \ M.iexptax \ M.iacttax)
+        for (k = 1; k <= 5; k++) {
+            if (taxidx[k] > n0) _cge_tmpl_add(role, M.igov, taxname[k])
+            else if (taxidx[k] > 0) _cge_tmpl_add(role, taxidx[k], taxname[k])
+        }
+        _cge_tmpl_add(role, M.imargins, "margins")
+        _cge_tmpl_add(role, M.iterritorial, "territorial")
+        _cge_tmpl_add(role, M.iT, "marginaccounts")
+        _cge_tmpl_add(role, M.istocks, "stocks")
+        if (M.ishi) _cge_tmpl_add(role, M.ishi, "insurance")
+        for (k = 1; k <= rows(M.iA); k++) pair[M.iA[k]] = M.labels[M.iC[k]]
+    }
+    st_addobs(n0)
+    (void) st_addvar("str" + strofreal(max((1, max(strlen(labels))))), "account")
+    (void) st_addvar("str" + strofreal(max((1, max(strlen(role))))), "role")
+    (void) st_addvar("str" + strofreal(max((1, max(strlen(pair))))), "pair")
+    (void) st_addvar("str1", "group")
+    (void) st_addvar(("double", "double", "double"), ("row_total", "column_total", "difference"))
+    st_sstore(., "account", labels)
+    st_sstore(., "role", role)
+    st_sstore(., "pair", pair)
+    st_store(., ("row_total", "column_total", "difference"),
+             (rowsum(M.S0), colsum(M.S0)', rowsum(M.S0) - colsum(M.S0)'))
+    printf("{txt}Template of {res}%f{txt} accounts%s\n", n0, (M.mapped ? ", with roles from the current mapping" : ""))
+}
+
+// Stores the template in memory (account, role, pair, group) for cge_map
+// and cge_aggregate; an empty variable name gives a blank column
+void _cge_tmpl_store(string scalar accvar, string scalar rolevar, string scalar pairvar, string scalar groupvar)
+{
+    string matrix T
+    pointer() scalar q
+    T = strtrim(st_sdata(., accvar))
+    T = T, (rolevar != "" ? strtrim(st_sdata(., rolevar)) : J(rows(T), 1, ""))
+    T = T, (pairvar != "" ? strtrim(st_sdata(., pairvar)) : J(rows(T), 1, ""))
+    T = T, (groupvar != "" ? strtrim(st_sdata(., groupvar)) : J(rows(T), 1, ""))
+    T = select(T, T[., 1] :!= "")
+    if (rows(T) == 0) _cge_fail("the template has no accounts", 459)
+    if ((q = findexternal("cge__template")) == NULL) q = crexternal("cge__template")
+    *q = T
+}
+
+string matrix _cge_tmpl_get()
+{
+    pointer() scalar q
+    q = findexternal("cge__template")
+    if (q == NULL) _cge_fail("no template has been read", 459)
+    return(*q)
+}
+
+// Members of each account of the SAM in memory: the template rows of the
+// account itself, if the SAM has the template's accounts, or of the
+// accounts in its group, if the SAM has the template's groups
+pointer(real colvector) colvector _cge_tmpl_members(string colvector L, string matrix T, real scalar grouped)
+{
+    pointer(real colvector) colvector mem
+    transmorphic A, G
+    string colvector eff
+    real scalar k, ok
+    A = asarray_create()
+    for (k = 1; k <= rows(T); k++) {
+        if (asarray_contains(A, T[k, 1])) _cge_fail("account " + T[k, 1] + " appears twice in the template", 459)
+        asarray(A, T[k, 1], k)
+    }
+    eff = T[., 1]
+    for (k = 1; k <= rows(T); k++) if (T[k, 4] != "") eff[k] = T[k, 4]
+    G = asarray_create()
+    for (k = 1; k <= rows(T); k++) {
+        if (asarray_contains(G, eff[k])) asarray(G, eff[k], (asarray(G, eff[k]) \ k))
+        else asarray(G, eff[k], k)
+    }
+    // The SAM has the template's accounts, or its groups
+    grouped = 0
+    ok = (rows(L) == rows(T))
+    for (k = 1; ok & k <= rows(L); k++) ok = asarray_contains(A, L[k])
+    if (!ok) {
+        grouped = 1
+        ok = (rows(L) == asarray_elements(G))
+        for (k = 1; ok & k <= rows(L); k++) ok = asarray_contains(G, L[k])
+        if (!ok) _cge_fail("the accounts of the SAM in memory are neither the template's accounts nor its groups", 459)
+    }
+    mem = J(rows(L), 1, NULL)
+    for (k = 1; k <= rows(L); k++) {
+        if (grouped) mem[k] = &(asarray(G, L[k]))
+        else mem[k] = &(asarray(A, L[k]))
+    }
+    return(mem)
+}
+
+// Maps the SAM from the template in memory (Section 3)
+void _cge_map_template(string scalar reportfile, real scalar replace)
+{
+    struct cge_model scalar M
+    string matrix T
+    string colvector L, role, pairc, eff, lists
+    string rowvector opts, single, tt, hl
+    string scalar r1, p, cmd
+    real colvector hh
+    pointer(real colvector) colvector mem
+    real colvector m, acts, coms, pairs, used, cands
+    real rowvector vals
+    transmorphic AL, AT
+    real scalar n, k, j, grouped, a, mx, o
+
+    M = _cge_load()
+    T = _cge_tmpl_get()
+    L = M.labels0
+    n = rows(L)
+    mem = _cge_tmpl_members(L, T, grouped)
+    AL = _cge_index(L)
+    AT = _cge_index(T[., 1])
+    eff = T[., 1]
+    for (k = 1; k <= rows(T); k++) if (T[k, 4] != "") eff[k] = T[k, 4]
+
+    // Roles, which must agree within a group, and pairs
+    role = J(n, 1, "")
+    pairc = J(n, 1, "")
+    for (k = 1; k <= n; k++) {
+        m = *mem[k]
+        role[k] = _cge_role_norm(T[m[1], 2], T[m[1], 1])
+        for (j = 2; j <= rows(m); j++) {
+            r1 = _cge_role_norm(T[m[j], 2], T[m[j], 1])
+            if (r1 != role[k]) {
+                _cge_fail("accounts " + T[m[1], 1] + " and " + T[m[j], 1] + " of group " + L[k] +
+                          " have different roles", 459)
+            }
+        }
+        for (j = 1; j <= rows(m); j++) {
+            p = T[m[j], 3]
+            if (p == "") continue
+            // The pair as an account of the SAM in memory: itself, or its group
+            if (!asarray_contains(AL, p)) {
+                if (grouped & asarray_contains(AT, p)) p = eff[asarray(AT, p)]
+                if (!asarray_contains(AL, p)) _cge_fail("pair " + T[m[j], 3] + " of account " + T[m[j], 1] + " is not in the SAM", 111)
+            }
+            if (pairc[k] != "" & pairc[k] != p) {
+                _cge_fail("the members of group " + L[k] + " are paired with different commodities (" +
+                          pairc[k] + ", " + p + ")", 459)
+            }
+            pairc[k] = p
+        }
+    }
+
+    // Accounts of each option, in the order of the SAM
+    opts = _cge_role_options()
+    lists = J(cols(opts), 1, "")
+    for (o = 1; o <= cols(opts); o++) {
+        for (k = 1; k <= n; k++) {
+            if (anyof(tokens(role[k]), opts[o])) lists[o] = strtrim(lists[o] + " " + L[k])
+        }
+    }
+    single = ("government", "savinv", "row", "dirtax", "saltax", "imptax", "exptax", "acttax", "insurance")
+    for (o = 1; o <= cols(opts); o++) {
+        if (!anyof(single, opts[o])) continue
+        if (cols(tokens(lists[o])) > 1) _cge_fail("role " + opts[o] + " is given to more than one account: " + lists[o], 198)
+        if (o <= 8 & o >= 6 & lists[o] == "") _cge_fail("no account has the role " + opts[o], 198)
+    }
+    for (o = 1; o <= 4; o++) if (lists[o] == "") _cge_fail("no account has the role " + opts[o], 198)
+    // territorial(): the correction commodity, which households consume, first
+    tt = tokens(lists[15])
+    if (cols(tt) == 2) {
+        hh = J(0, 1, .)
+        hl = tokens(lists[4])
+        for (k = 1; k <= cols(hl); k++) hh = hh \ asarray(AL, hl[k])
+        if (sum(abs(M.S0[asarray(AL, tt[1]), hh'])) == 0 & sum(abs(M.S0[asarray(AL, tt[2]), hh'])) != 0) {
+            lists[15] = tt[2] + " " + tt[1]
+        }
+    }
+
+    // Pairs: the pair column, or the commodity whose column pays the activity most
+    acts = J(0, 1, .)
+    coms = J(0, 1, .)
+    for (k = 1; k <= n; k++) {
+        if (anyof(tokens(role[k]), "activities")) acts = acts \ k
+        if (anyof(tokens(role[k]), "commodities")) coms = coms \ k
+    }
+    if (rows(coms) < rows(acts)) _cge_fail("there are fewer commodities than activities; each activity needs a paired commodity", 198)
+    pairs = J(rows(acts), 1, 0)
+    for (j = 1; j <= rows(acts); j++) {
+        a = acts[j]
+        if (pairc[a] != "") {
+            pairs[j] = asarray(AL, pairc[a])
+            if (!anyof(coms, pairs[j])) _cge_fail("activity " + L[a] + " is paired with " + pairc[a] + ", which is not a commodity", 198)
+        }
+        else {
+            vals = M.S0[a, coms']
+            mx = max(vals)
+            if (mx <= 0) _cge_fail("activity " + L[a] + " sells to no commodity; give its pair in the template", 459)
+            cands = selectindex(vals' :== mx)
+            if (rows(cands) > 1) _cge_fail("activity " + L[a] + " sells equal amounts to several commodities; give its pair in the template", 459)
+            pairs[j] = coms[cands[1]]
+        }
+    }
+    for (j = 1; j <= rows(acts); j++) {
+        for (k = j + 1; k <= rows(acts); k++) {
+            if (pairs[j] == pairs[k]) _cge_fail("commodity " + L[pairs[j]] + " is paired with both " + L[acts[j]] + " and " + L[acts[k]], 459)
+        }
+    }
+    used = J(n, 1, 0)
+    used[pairs] = J(rows(pairs), 1, 1)
+    lists[2] = invtokens(L[pairs]')
+    for (k = 1; k <= rows(coms); k++) if (!used[coms[k]]) lists[2] = lists[2] + " " + L[coms[k]]
+
+    // The equivalent command
+    cmd = "cge_map,"
+    for (o = 1; o <= cols(opts); o++) if (lists[o] != "") cmd = cmd + " " + opts[o] + "(" + lists[o] + ")"
+    if (strlen(cmd) <= 2000) printf("{txt}Mapping from the template:\n{res}%s\n", cmd)
+    else printf("{txt}Mapping from the template ({res}%f{txt} accounts)\n", n)
+    _cge_map(lists[1], lists[2], lists[3], lists[4], lists[5], lists[6], lists[7], lists[8], lists[9],
+             lists[10], lists[11], lists[12], lists[13], lists[14], lists[15], lists[16], lists[17],
+             lists[18], reportfile, replace)
+    st_global("r(command)", cmd)
+}
+
+// ---------------------------------------------------------------------
+// Aggregation (Section 4)
+// ---------------------------------------------------------------------
+
+// group[k] is the group of account k of the SAM in memory ("" keeps it)
+void _cge_aggregate(string colvector group, real scalar netdiag)
+{
+    struct cge_model scalar M
+    string colvector L, g, newl
+    real colvector gi, size
+    real matrix S, R, X
+    transmorphic A
+    real scalar n, m, k, ndiag, sdiag
+
+    M = _cge_load()
+    L = M.labels0
+    S = M.S0
+    n = rows(L)
+    g = group
+    for (k = 1; k <= n; k++) if (g[k] == "") g[k] = L[k]
+    A = asarray_create()
+    newl = J(n, 1, "")
+    gi = J(n, 1, 0)
+    m = 0
+    for (k = 1; k <= n; k++) {
+        if (!asarray_contains(A, g[k])) {
+            if (!st_isname(g[k])) _cge_fail("group " + g[k] + " is not a valid Stata name", 198)
+            m++
+            asarray(A, g[k], m)
+            newl[m] = g[k]
+        }
+        gi[k] = asarray(A, g[k])
+    }
+    newl = newl[|1 \ m|]
+    // X = G S G', summing rows then columns in the order of the accounts
+    R = J(m, n, 0)
+    for (k = 1; k <= n; k++) R[gi[k], .] = R[gi[k], .] + S[k, .]
+    X = J(m, m, 0)
+    for (k = 1; k <= n; k++) X[., gi[k]] = X[., gi[k]] + R[., k]
+    ndiag = sum(diagonal(X) :!= 0)
+    sdiag = sum(diagonal(X))
+    if (netdiag) _diag(X, J(m, 1, 0))
+    size = J(m, 1, 0)
+    for (k = 1; k <= n; k++) size[gi[k]] = size[gi[k]] + 1
+    printf("{txt}Accounts merged: {res}%f{txt} accounts into {res}%f{txt} groups; {res}%f{txt} accounts left as they are\n",
+           sum((size :> 1) :* size), sum(size :> 1), sum(size :== 1))
+    if (ndiag) {
+        printf("{txt}Diagonal cells (flows within an account): {res}%f{txt}, total {res}%g{txt}%s\n", ndiag, sdiag,
+               (netdiag ? ", removed" : ", kept"))
+    }
+    _cge_sam_start(newl, X, 0, "Aggregated SAM")
+    st_numscalar("r(N_diagonal)", ndiag)
+    st_numscalar("r(diagonal)", sdiag)
+}
+
+// groups(new: old old ..., new: old ...)
+void _cge_aggregate_spec(string scalar spec, real scalar netdiag)
+{
+    struct cge_model scalar M
+    string colvector L, group
+    string rowvector parts, mem
+    string scalar name
+    transmorphic AL
+    real scalar k, j, p, i
+
+    M = _cge_load()
+    L = M.labels0
+    AL = _cge_index(L)
+    group = J(rows(L), 1, "")
+    parts = _cge_split(spec, ",", "")
+    for (k = 1; k <= cols(parts); k++) {
+        p = strpos(parts[k], ":")
+        if (strtrim(parts[k]) == "") continue
+        if (!p) _cge_fail("groups(): " + strtrim(parts[k]) + " needs the form new: old old ...", 198)
+        name = strtrim(substr(parts[k], 1, p - 1))
+        mem = tokens(substr(parts[k], p + 1, .))
+        if (name == "" | cols(mem) == 0) _cge_fail("groups(): " + strtrim(parts[k]) + " needs the form new: old old ...", 198)
+        for (j = 1; j <= cols(mem); j++) {
+            i = _cge_pos(AL, mem[j], "groups()")
+            if (group[i] != "") _cge_fail("groups(): account " + mem[j] + " is in two groups", 198)
+            group[i] = name
+        }
+    }
+    // A group may take the label of one of its members, but not of another account
+    for (k = 1; k <= rows(L); k++) {
+        if (group[k] != "" & group[k] != L[k] & asarray_contains(AL, group[k])) {
+            i = asarray(AL, group[k])
+            if (group[i] != group[k]) _cge_fail("groups(): group " + group[k] + " has the label of an account that is not one of its members", 198)
+        }
+    }
+    _cge_aggregate(group, netdiag)
+}
+
+// The template's group column; members of a group must have the same role
+void _cge_aggregate_template(real scalar netdiag)
+{
+    struct cge_model scalar M
+    string matrix T
+    string colvector L, group
+    pointer(real colvector) colvector mem
+    transmorphic AT, G
+    real colvector m
+    real scalar k, j, grouped
+    string scalar g, r1, r2
+
+    M = _cge_load()
+    T = _cge_tmpl_get()
+    L = M.labels0
+    mem = _cge_tmpl_members(L, T, grouped)
+    if (grouped) _cge_fail("the SAM in memory has already been aggregated with this template", 459)
+    AT = _cge_index(T[., 1])
+    group = J(rows(L), 1, "")
+    for (k = 1; k <= rows(L); k++) group[k] = T[asarray(AT, L[k]), 4]
+    // Roles within each group
+    G = asarray_create()
+    for (k = 1; k <= rows(L); k++) {
+        g = (group[k] == "" ? L[k] : group[k])
+        if (asarray_contains(G, g)) {
+            j = asarray(G, g)
+            r1 = _cge_role_norm(T[asarray(AT, L[j]), 2], L[j])
+            r2 = _cge_role_norm(T[asarray(AT, L[k]), 2], L[k])
+            if (r1 != r2) _cge_fail("accounts " + L[j] + " and " + L[k] + " of group " + g + " have different roles", 459)
+        }
+        else asarray(G, g, k)
+    }
+    _cge_aggregate(group, netdiag)
+}
+
+// ---------------------------------------------------------------------
+// Balancing (Section 5)
+// ---------------------------------------------------------------------
+
+// Cells kept at their values: row:col, row:*, *:col or an account
+real matrix _cge_fixedmask(string colvector L, string scalar spec)
+{
+    real matrix mask
+    string rowvector tok
+    string scalar r, c
+    transmorphic AL
+    real scalar n, k, p, i, j
+
+    n = rows(L)
+    AL = _cge_index(L)
+    mask = J(n, n, 0)
+    tok = tokens(spec)
+    for (k = 1; k <= cols(tok); k++) {
+        p = strpos(tok[k], ":")
+        if (!p) {
+            i = _cge_pos(AL, tok[k], "fixed()")
+            mask[i, .] = J(1, n, 1)
+            mask[., i] = J(n, 1, 1)
+            continue
+        }
+        r = substr(tok[k], 1, p - 1)
+        c = substr(tok[k], p + 1, .)
+        if (r == "*" & c == "*") _cge_fail("fixed(): *:* would fix every cell", 198)
+        if (r == "*") mask[., _cge_pos(AL, c, "fixed()")] = J(n, 1, 1)
+        else if (c == "*") mask[_cge_pos(AL, r, "fixed()"), .] = J(1, n, 1)
+        else {
+            i = _cge_pos(AL, r, "fixed()")
+            j = _cge_pos(AL, c, "fixed()")
+            mask[i, j] = 1
+        }
+    }
+    return(mask)
+}
+
+// totals(account:value ...)
+void _cge_totals(string colvector L, string scalar spec, real colvector K, real colvector t)
+{
+    string rowvector tok
+    transmorphic AL
+    real scalar k, p, i
+    AL = _cge_index(L)
+    tok = tokens(spec)
+    K = J(0, 1, .)
+    t = J(0, 1, .)
+    for (k = 1; k <= cols(tok); k++) {
+        p = strpos(tok[k], ":")
+        if (!p) _cge_fail("totals(): " + tok[k] + " needs the form account:value", 198)
+        i = _cge_pos(AL, substr(tok[k], 1, p - 1), "totals()")
+        if (anyof(K, i)) _cge_fail("totals(): " + L[i] + " is given twice", 198)
+        K = K \ i
+        t = t \ strtoreal(substr(tok[k], p + 1, .))
+        if (t[rows(t)] >= .) _cge_fail("totals(): " + tok[k] + " has no valid value", 198)
+    }
+}
+
+// Positive root x of p x^2 - u x - n = 0, in the stable form for each sign of u
+real colvector _cge_ras_factor(real colvector u, real colvector p, real colvector nn, real colvector active,
+                               string scalar what, string colvector L)
+{
+    real colvector x, d, i1, i2, bad
+    x = J(rows(u), 1, 1)
+    d = sqrt(u:^2 :+ 4 :* p :* nn)
+    i1 = selectindex(active :& (u :>= 0))
+    i2 = selectindex(active :& (u :< 0))
+    if (rows(i1)) x[i1] = (u[i1] :+ d[i1]) :/ (2 :* p[i1])
+    if (rows(i2)) x[i2] = 2 :* nn[i2] :/ (d[i2] :- u[i2])
+    bad = selectindex(active :& ((x :>= .) :| (x :<= 0)))
+    if (rows(bad)) _cge_fail("the " + what + " target of " + L[bad[1]] + " cannot be met with the signs of its cells", 459)
+    return(x)
+}
+
+// Generalised RAS (Section 5.1)
+real matrix _cge_ras(string colvector L, real matrix S0, real matrix fixed, string scalar rule,
+                     real colvector K, real colvector tK, real scalar tol, real scalar maxit,
+                     real scalar it, real colvector t)
+{
+    real matrix free, P, N, F, Pt, Nt
+    real colvector given, rowfree, colfree, frow, fcol, u, v, r, s, rt, ct, hist, implied
+    real scalar n, scale, k, err
+
+    n = rows(L)
+    scale = max((1, max(abs(S0))))
+    free = (S0 :!= 0) :& !fixed
+    P = S0 :* (free :& (S0 :> 0))
+    N = -S0 :* (free :& (S0 :< 0))
+    F = S0 :* !free
+    if (rule == "average") t = 0.5 :* (rowsum(S0) + colsum(S0)')
+    else if (rule == "rows") t = rowsum(S0)
+    else t = colsum(S0)'
+    given = J(n, 1, 0)
+    if (rows(K)) {
+        t[K] = tK
+        given[K] = J(rows(K), 1, 1)
+    }
+    rowfree = (rowsum(free) :> 0)
+    colfree = (colsum(free)' :> 0)
+    frow = rowsum(F)
+    fcol = colsum(F)'
+    // An account whose row (or column) cannot change has that total as its target
+    for (k = 1; k <= n; k++) {
+        implied = J(0, 1, .)
+        if (!rowfree[k]) implied = implied \ frow[k]
+        if (!colfree[k]) implied = implied \ fcol[k]
+        if (rows(implied) == 0) continue
+        if (rows(implied) == 2) {
+            if (abs(implied[1] - implied[2]) > tol * scale) {
+                _cge_fail(L[k] + ": its row and column cannot change and their totals differ", 459)
+            }
+        }
+        if (given[k] & abs(t[k] - implied[1]) > tol * scale) {
+            _cge_fail(L[k] + ": the given total differs from the total of cells that cannot change", 459)
+        }
+        t[k] = implied[1]
+    }
+    u = t - frow
+    v = t - fcol
+    Pt = P'
+    Nt = N'
+    r = J(n, 1, 1)
+    s = J(n, 1, 1)
+    hist = J(maxit, 1, .)
+    for (it = 1; it <= maxit; it++) {
+        r = _cge_ras_factor(u, P * s, N * (1 :/ s), rowfree, "row", L)
+        s = _cge_ras_factor(v, Pt * r, Nt * (1 :/ r), colfree, "column", L)
+        // Row and column totals without forming the matrix
+        rt = r :* (P * s) - (N * (1 :/ s)) :/ r + frow
+        ct = s :* (Pt * r) - (Nt * (1 :/ r)) :/ s + fcol
+        err = max((max(abs(rt - t)), max(abs(ct - t))))
+        if (err <= tol * scale) break
+        // A gap that no longer falls: the targets cannot be met
+        hist[it] = err
+        if (it > 100) {
+            if (err >= (1 - 1e-6) * hist[it - 100]) {
+                _cge_fail(sprintf("RAS stopped after %f iterations with a gap of %g that no longer falls: the " +
+                                  "targets cannot be met with the zeros and fixed cells of the SAM", it, err), 430)
+            }
+        }
+    }
+    if (it > maxit) _cge_fail(sprintf("RAS did not converge in %f iterations", maxit), 430)
+    return((r :* P :* s') - N :/ (r * s') + F)
+}
+
+// Accounts connected by off-diagonal cells that may change: a set number
+// for each account, numbered from the account with the lowest position
+real colvector _cge_components(real matrix free)
+{
+    real matrix link
+    real colvector comp, stack, nb
+    real scalar n, start, k, nc
+    n = rows(free)
+    link = (free :| free')
+    _diag(link, J(n, 1, 0))
+    comp = J(n, 1, 0)
+    nc = 0
+    for (start = 1; start <= n; start++) {
+        if (comp[start]) continue
+        nc++
+        comp[start] = nc
+        stack = start
+        while (rows(stack)) {
+            k = stack[rows(stack)]
+            stack = (rows(stack) > 1 ? stack[|1 \ rows(stack) - 1|] : J(0, 1, .))
+            nb = selectindex(link[., k] :& (comp :== 0))
+            if (rows(nb)) {
+                comp[nb] = J(rows(nb), 1, nc)
+                stack = stack \ nb
+            }
+        }
+    }
+    return(comp)
+}
+
+// Cells of the cross-entropy solution for multipliers theta (Section 5.2)
+void _cge_ce_cells(real colvector theta, real colvector imu, real colvector iK, real matrix P, real matrix N,
+                   real matrix Xp, real matrix Xn, real colvector mu, real colvector rho)
+{
+    real matrix A
+    real scalar n, nmu
+    n = rows(P)
+    nmu = rows(imu)
+    mu = J(n, 1, 0)
+    if (nmu) mu[imu] = theta[|1 \ nmu|]
+    rho = J(n, 1, 0)
+    if (rows(iK)) rho[iK] = theta[|nmu + 1 \ rows(theta)|]
+    // a_ij = mu_i - mu_j + rho_i (a column and a row vector are not c-conformable)
+    A = (mu + rho) * J(1, n, 1) - J(n, 1, 1) * mu'
+    Xp = P :* exp(A :* (P :> 0))
+    Xn = N :* exp(-A :* (N :> 0))
+}
+
+real scalar _cge_ce_phi(real colvector theta, real colvector imu, real colvector iK, real matrix P, real matrix N,
+                        real colvector c, real colvector frow, real colvector t)
+{
+    real matrix Xp, Xn
+    real colvector mu, rho
+    _cge_ce_cells(theta, imu, iK, P, N, Xp, Xn, mu, rho)
+    // sum() ignores missing values, so an overflow is checked first
+    if (hasmissing(Xp) | hasmissing(Xn)) return(.)
+    return(sum(Xp) + sum(Xn) + mu' * c + (rows(iK) ? rho[iK]' * (frow[iK] - t[iK]) : 0))
+}
+
+// Cross entropy (Section 5.2)
+real matrix _cge_ce(string colvector L, real matrix S0, real matrix fixed, real colvector K, real colvector tK,
+                    real scalar tol, real scalar maxit, real scalar it)
+{
+    real matrix free, P, N, F, Xp, Xn, X, W, Hmm, Hrm, H
+    real colvector c, frow, fcol, rowfree, colfree, known, t, rhofree, comp, mufree, iK, imu, members
+    real colvector theta, mu, rho, g, h, grad, step, rs, cs, trial, rx
+    real scalar n, scale, k, kk, implied, nmu, nK, err, f0, f1, slope, alpha, ls
+
+    n = rows(L)
+    scale = max((1, max(abs(S0))))
+    free = (S0 :!= 0) :& !fixed
+    P = S0 :* (free :& (S0 :> 0))
+    N = -S0 :* (free :& (S0 :< 0))
+    F = S0 :* !free
+    frow = rowsum(F)
+    fcol = colsum(F)'
+    c = frow - fcol
+    rowfree = (rowsum(free) :> 0)
+    colfree = (colsum(free)' :> 0)
+    known = J(n, 1, 0)
+    t = J(n, 1, 0)
+    if (rows(K)) {
+        known[K] = J(rows(K), 1, 1)
+        t[K] = tK
+    }
+    // A known total whose row or column cannot change is implied by the fixed
+    // cells; it must agree with them and needs no multiplier
+    rhofree = known
+    for (kk = 1; kk <= rows(K); kk++) {
+        k = K[kk]
+        implied = (rowfree[k] ? . : frow[k])
+        if (!colfree[k]) implied = fcol[k]
+        if (implied < .) {
+            if (abs(t[k] - implied) > tol * scale) {
+                _cge_fail(L[k] + ": the given total differs from the total of cells that cannot change", 459)
+            }
+            rhofree[k] = 0
+        }
+    }
+    // One balance multiplier in each connected set of accounts is fixed at
+    // zero; the fixed cells of each set must balance among themselves
+    comp = _cge_components(free)
+    mufree = J(n, 1, 1)
+    for (k = 1; k <= max(comp); k++) {
+        members = selectindex(comp :== k)
+        if (abs(sum(c[members])) > tol * scale) {
+            _cge_fail("the cells that cannot change do not balance for accounts " +
+                      invtokens(L[members]'), 459)
+        }
+        mufree[members[1]] = 0
+    }
+    iK = selectindex(rhofree)
+    imu = selectindex(mufree)
+    nmu = rows(imu)
+    nK = rows(iK)
+
+    theta = J(nmu + nK, 1, 0)
+    _cge_ce_cells(theta, imu, iK, P, N, Xp, Xn, mu, rho)
+    for (it = 0; it <= maxit; it++) {
+        X = Xp - Xn + F
+        rx = rowsum(X)
+        g = rx - colsum(X)'
+        h = (nK ? rx[iK] - t[iK] : J(0, 1, .))
+        err = max(abs(g))
+        if (nK) err = max((err, max(abs(h))))
+        if (err <= tol * scale) break
+        if (it == maxit) _cge_fail(sprintf("cross entropy did not converge in %f iterations", maxit), 430)
+        W = Xp + Xn
+        rs = rowsum(W)
+        cs = colsum(W)'
+        Hmm = diag(rs + cs) - W - W'
+        if (nK) {
+            Hrm = -W[iK, .]
+            for (kk = 1; kk <= nK; kk++) Hrm[kk, iK[kk]] = Hrm[kk, iK[kk]] + rs[iK[kk]]
+            H = (Hmm[imu, imu], Hrm[., imu]' \ Hrm[., imu], diag(rs[iK]))
+            grad = g[imu] \ h
+        }
+        else {
+            H = Hmm[imu, imu]
+            grad = g[imu]
+        }
+        step = -cholsolve(H, grad)
+        if (hasmissing(step)) step = -lusolve(H, grad)
+        if (hasmissing(step)) _cge_fail("cross entropy: the Newton system is singular; the pattern of cells may not allow a unique balanced SAM", 430)
+        f0 = _cge_ce_phi(theta, imu, iK, P, N, c, frow, t)
+        slope = grad' * step
+        // Close to the solution the predicted decrease is below the rounding
+        // of the dual, and the full Newton step is taken
+        if (-slope <= 1e-12 * max((1, abs(f0)))) trial = theta + step
+        else {
+            alpha = 1
+            for (ls = 1; ls <= 60; ls++) {
+                trial = theta + alpha :* step
+                f1 = _cge_ce_phi(trial, imu, iK, P, N, c, frow, t)
+                if (f1 < . & f1 <= f0 + 1e-4 * alpha * slope) break
+                alpha = alpha / 2
+            }
+            if (ls > 60) _cge_fail("cross entropy: the line search failed; no balanced SAM with this pattern may exist", 430)
+        }
+        theta = trial
+        _cge_ce_cells(theta, imu, iK, P, N, Xp, Xn, mu, rho)
+    }
+    return(X)
+}
+
+void _cge_balance(string scalar method, string scalar rule, string scalar totals, string scalar fixspec,
+                  real scalar tol, real scalar maxit, real scalar show)
+{
+    struct cge_model scalar M
+    string colvector L
+    real matrix S0, X, fixed
+    real colvector K, tK, t, d, top, i, j
+    real scalar it, n, before, after, total0, nchanged, maxrel, k, nshow, scale
+
+    M = _cge_load()
+    L = M.labels0
+    S0 = M.S0
+    n = rows(L)
+    fixed = _cge_fixedmask(L, fixspec)
+    _cge_totals(L, totals, K, tK)
+    before = max(abs(rowsum(S0) - colsum(S0)'))
+    total0 = sum(S0)
+    if (method == "ras") X = _cge_ras(L, S0, fixed, rule, K, tK, tol, maxit, it, t)
+    else X = _cge_ce(L, S0, fixed, K, tK, tol, maxit, it)
+    after = max(abs(rowsum(X) - colsum(X)'))
+    nchanged = sum(X :!= S0)
+    d = vec(abs(X - S0))
+    scale = max((1, max(abs(S0))))
+    maxrel = max(vec(abs(X - S0) :/ (abs(S0) + (S0 :== 0))))
+    printf("{txt}%s: converged in {res}%f{txt} iterations\n", (method == "ras" ? "RAS" : "Cross entropy"), it)
+    printf("{txt}Largest row-column imbalance: {res}%9.3e{txt} before, {res}%9.3e{txt} after\n", before, after)
+    printf("{txt}SAM total: {res}%g{txt} before, {res}%g{txt} after\n", total0, sum(X))
+    printf("{txt}Cells changed: {res}%f{txt} of {res}%f{txt} non-zero; largest relative change {res}%9.3e\n",
+           nchanged, sum(S0 :!= 0), maxrel)
+    if (show & nchanged) {
+        nshow = min((10, nchanged))
+        top = order(d, -1)
+        top = top[|1 \ nshow|]
+        j = ceil(top :/ n)
+        i = top - (j :- 1) :* n
+        printf("\n{txt}Largest changes\n")
+        printf("{txt}{space 2}%-20s %-20s %14s %14s %10s\n", "row", "column", "before", "after", "change %")
+        for (k = 1; k <= nshow; k++) {
+            printf("{txt}{space 2}%-20s %-20s {res}%14.6g %14.6g %10.3f\n", abbrev(L[i[k]], 20), abbrev(L[j[k]], 20),
+                   S0[i[k], j[k]], X[i[k], j[k]], 100 * (X[i[k], j[k]] / S0[i[k], j[k]] - 1))
+        }
+        printf("\n")
+    }
+    _cge_sam_start(L, X, 0, "Balanced SAM")
+    st_numscalar("r(iterations)", it)
+    st_numscalar("r(maxdiff_before)", before)
+    st_numscalar("r(total_before)", total0)
+    st_numscalar("r(N_changed)", nchanged)
+    st_numscalar("r(maxrelchange)", maxrel)
+    st_global("r(method)", method)
 }
 
 real colvector _cge_lookup(struct cge_model scalar M, string scalar list, string scalar what)

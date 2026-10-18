@@ -5,12 +5,14 @@ d Builds, calibrates and solves static and recursive dynamic, single-country CGE
 d from a social accounting matrix, using Stata and Mata: CES or
 d Cobb-Douglas value added, CET exports, Armington imports,
 d households, government, savings-investment and the rest of the
-d world, with selectable closures and built-in validation checks.
+d world, with selectable closures and built-in validation checks; SAM tools
+d for reading SAMs of any size, mapping templates, aggregation and RAS or
+d cross-entropy balancing.
 d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja
 d
-d Distribution-Date: 20261016
+d Distribution-Date: 20261018
 d
 f ado/cge.ado
 f ado/cge.sthlp
@@ -18,6 +20,15 @@ f ado/_cge_load.ado
 F ado/cge_mata.mata
 f ado/cge_sam.ado
 f ado/cge_sam.sthlp
+f ado/cge_template.ado
+f ado/cge_template.sthlp
+f ado/_cge_tmpl.ado
+f ado/cge_aggregate.ado
+f ado/cge_aggregate.sthlp
+f ado/cge_balance.ado
+f ado/cge_balance.sthlp
+f ado/cge_samexport.ado
+f ado/cge_samexport.sthlp
 f ado/cge_map.ado
 f ado/cge_map.sthlp
 f ado/cge_calibrate.ado
@@ -59,3 +70,4 @@ F data/cge_synthetic_sam_mp.csv
 F data/cge_synthetic_sam_cnm.csv
 F data/cge_synthetic_sam_sut.csv
 F data/cge_synthetic_sam_health.csv
+F data/cge_synthetic_sam_unbal.csv

@@ -28,8 +28,12 @@ This document sets out how `cge-stata` is organised. The model equations are in
 |---|---|
 | `cge` | Package version and command list |
 | `cge_synthetic` | Load the synthetic SAM |
-| `cge_sam` | Read a SAM from memory or from a CSV, Stata or Excel file; check that it is square and consistently labelled; report its balance |
-| `cge_map` | Assign SAM accounts to model roles and check the SAM against the supported flows (model_spec.md, Section 7.0) |
+| `cge_sam` | Read a SAM from memory or from a CSV, Stata or Excel file, wide or long, of any size (a wide CSV file is parsed directly when its accounts do not fit as variables); check that it is square and consistently labelled; report its balance |
+| `cge_template` | Write an Excel or CSV template of the accounts, with roles, pairs and aggregation groups to fill in (sam_tools.md, Section 3) |
+| `cge_aggregate` | Merge accounts into groups, from a template or an option (sam_tools.md, Section 4) |
+| `cge_balance` | Balance the SAM by generalised RAS or cross entropy, keeping signs, zeros and fixed cells (sam_tools.md, Section 5) |
+| `cge_samexport` | Write the SAM, as read, aggregated or balanced, or after the layout rewrites, to a file or to memory |
+| `cge_map` | Assign SAM accounts to model roles, with options or from a template, and check the SAM against the supported flows (model_spec.md, Section 7.0) |
 | `cge_calibrate` | Compute base values and parameters from the mapped SAM and the elasticities; check benchmark replication |
 | `cge_closure` | Choose closures for the external account, government, savings-investment, the numeraire and each factor; check that the system is square |
 | `cge_shock` | Change tax rates, world prices or productivity, or any variable fixed by the closure (factor supplies, foreign savings, and so on) |
@@ -132,8 +136,8 @@ Stata 13, so that one library serves Stata 13 and later.
 
 | Suite | Where it runs | Contents |
 |---|---|---|
-| `reference/tests` (pytest) | continuous integration and locally | synthetic SAM; calibration; validation checks; dual unit-cost checks; closures; direction of effects |
-| `tests/*.do` (Stata) | locally, via `tools/run_stata_tests.ps1` | Mata solver; synthetic SAM; agreement with the Python results for six simulations; validation checks; all 64 closure combinations; alternative closures; factor quantities; error handling |
+| `reference/tests` (pytest) | continuous integration and locally | synthetic SAM; calibration; validation checks; dual unit-cost checks; closures; direction of effects; SAM aggregation and balancing (signs, zeros and fixed cells kept, targets met, cross entropy with every total known equal to RAS, optimality conditions) |
+| `tests/*.do` (Stata) | locally, via `tools/run_stata_tests.ps1` | Mata solver; synthetic SAM; agreement with the Python results for about 100 simulations; validation checks; all 64 closure combinations; alternative closures; factor quantities; error handling; SAM tools against the Python balanced and aggregated SAMs, mapping from templates, the three readers and a 2,100-account SAM |
 
 The Python suite writes its simulation results to `tests/expected/` as CSV
 files. The Stata suite compares its own results with those files, which ties the
@@ -163,7 +167,13 @@ two implementations together without requiring Stata in continuous integration.
 | 0.1.16 | Independent check in GAMS: the model written from the specification in GAMS, calibrated from the SAM alone and solved with PATH, reproduces every test case (tools/gams) (done) |
 | 0.2.1 | Sensitivity analysis: Monte Carlo draws of elasticities (uniform or triangular, by sector or common), recalibration for each draw, and the distribution of every report measure (cge_sensitivity) (done) |
 | 0.2.2 | Top-down link to household survey data (model_spec.md, Section 11): income sources, consumption and prices by survey household, poverty (FGT) and inequality (Gini) before and after (cge_microsim) (done) |
-| later | Export-only commodities; margins that differ between domestic sales, imports and exports, once margin data by market are available; SAM tools (aggregation, RAS and cross-entropy balancing) |
+| 0.3.0 | SAM tools (docs/sam_tools.md): SAMs of any size, read directly from CSV or from long data; a mapping template in Excel or CSV for roles, pairs and groups (cge_template, cge_map using); aggregation (cge_aggregate); balancing by generalised RAS or cross entropy with known totals and fixed cells (cge_balance); writing the SAM (cge_samexport) (done) |
+| 0.3.1 | Policy instruments: revenue-neutral tax replacement; VAT with input credits; government debt and interest in dynamic runs |
+| 0.3.2 | Home consumption at producer prices; export demand that falls as export prices rise; export-only commodities; margins that differ by market |
+| 0.3.3 | Labour-market regimes: a wage curve, and a minimum wage with regime switching |
+| 0.3.4 | Health outcomes and days worked; population and mortality effects in dynamic runs |
+| 0.3.5 | A library of elasticities from published estimates, with citations |
+| 0.4.0 | Manual and worked examples from a raw SAM to results; a draft article for the Stata Journal |
 
 ## 8. First trial on a national SAM
 

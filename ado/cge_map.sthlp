@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.13  15oct2026}{...}
+{* *! version 0.3.0  18oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -14,6 +14,9 @@
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
 [{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
 {opt report(filename)} {opt replace}]
+
+{p 8 12 2}
+{cmd:cge_map using} {it:template} [{cmd:,} {opt sheet(string)} {opt report(filename)} {opt replace}]
 
 {pstd}
 Options must be typed in full.
@@ -47,6 +50,17 @@ activities listed in {opt margins()} are moved to their output. Stock-change
 accounts listed in {opt stocks()} are merged into savings-investment. Taxes paid
 directly to the government account are routed through internal tax accounts;
 see the tax options below. The SAM in memory is not changed.
+
+
+{pstd}
+With {cmd:using}, the roles are read from a template written by
+{helpb cge_template} and filled in (docs/sam_tools.md, Section 3). Each
+account's {cmd:role} names the options that list it; activities are paired with
+the commodities in the {cmd:pair} column or, where it is blank, with the
+commodity whose column pays them most. If the SAM was aggregated with the same
+template ({helpb cge_aggregate}), each group takes the role of its members.
+The equivalent {cmd:cge_map} command is displayed and stored in
+{cmd:r(command)}. A template avoids long option lists for large SAMs.
 
 
 {title:Options}
@@ -135,6 +149,10 @@ for {opt acttax()}) are routed through an internal tax account. At most one of
 account.
 
 {phang}
+{opt sheet(string)} names the worksheet of an Excel template; the default is
+{cmd:accounts}, or else the first sheet.
+
+{phang}
 {opt report(filename)} saves every problem cell to a CSV file with the
 columns {cmd:problem}, {cmd:paid_by}, {cmd:paid_by_role}, {cmd:received_by},
 {cmd:received_by_role} and {cmd:value}. The file is written whether or not
@@ -164,8 +182,24 @@ Health services and a social health insurance fund:
 {phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
 
 
+{pstd}
+From a template, filled in Excel:
+
+{phang2}{cmd:. cge_template using roles.xlsx}{p_end}
+{phang2}{cmd:. cge_map using roles.xlsx}{p_end}
+
+
+{title:Stored results}
+
+{synoptset 22 tabbed}{...}
+{p2col 5 22 26 2: Scalars}{p_end}
+{synopt:{cmd:r(N_negative_sales)}}number of negative sales of commodities by activities{p_end}
+{p2col 5 22 26 2: Macros}{p_end}
+{synopt:{cmd:r(command)}}with a template, the equivalent {cmd:cge_map} command{p_end}
+
+
 {title:Also see}
 
 {psee}
-{helpb cge}, {helpb cge_sam}, {helpb cge_calibrate}
+{helpb cge}, {helpb cge_sam}, {helpb cge_template}, {helpb cge_aggregate}, {helpb cge_calibrate}
 {p_end}

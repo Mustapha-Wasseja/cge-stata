@@ -454,6 +454,8 @@ largest absolute cell), and every account with a non-zero flow must be mapped to
 a role. Every non-zero cell must be one of the flows below. Any other flow stops
 calibration with an error that names the paying and receiving accounts; the
 Stata implementation lists every such flow, grouped by role, before stopping.
+Reading, aggregating and balancing a SAM before it is mapped are described in
+[sam_tools.md](sam_tools.md) (from version 0.3.0); they do not change the model.
 
 | Paid by (column) | Received by (row) |
 |---|---|

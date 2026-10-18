@@ -312,6 +312,20 @@ HEALTH_FLOWS = {
 }
 
 
+def build_unbalanced_layout() -> tuple[list[str], list[list[float]]]:
+    """The institutions layout made unbalanced, for the SAM balancing tests
+    (docs/sam_tools.md, Section 6): every non-zero cell (i, j) is multiplied by
+    1 + 0.06 sin(1.3 (i + 1) + 0.7 (j + 1)) and rounded to four decimals. The
+    negative savings of npi and gov keep their signs."""
+    import math
+    labels, sam = build_institutions_layout()
+    for i, row in enumerate(sam):
+        for j, value in enumerate(row):
+            if value != 0:
+                row[j] = round(value * (1 + 0.06 * math.sin(1.3 * (i + 1) + 0.7 * (j + 1))), 4)
+    return labels, sam
+
+
 def build_health_layout() -> tuple[list[str], list[list[float]]]:
     """The synthetic economy with a health sector and a social health insurance fund."""
     return _from_flows(HEALTH_ACCOUNTS, {**FLOWS, **HEALTH_FLOWS})
@@ -353,9 +367,14 @@ if __name__ == "__main__":
                              (build_multiproduct_layout, "cge_synthetic_sam_mp.csv"),
                              (build_nonimported_layout, "cge_synthetic_sam_cnm.csv"),
                              (build_sut_layout, "cge_synthetic_sam_sut.csv"),
-                             (build_health_layout, "cge_synthetic_sam_health.csv")):
+                             (build_health_layout, "cge_synthetic_sam_health.csv"),
+                             (build_unbalanced_layout, "cge_synthetic_sam_unbal.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))
+        if layout is build_unbalanced_layout:
+            write_csv(data / filename, layout)
+            print(f"Wrote {data / filename} ({len(names)} accounts, unbalanced by up to {worst:.4f})")
+            continue
         if worst > 1e-12:
             raise SystemExit(f"{filename} is not balanced (max imbalance {worst})")
         write_csv(data / filename, layout)
