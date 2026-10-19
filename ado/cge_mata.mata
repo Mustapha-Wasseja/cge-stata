@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.3.0  2026-10-18
+*! cge_mata.mata  v0.3.1  2026-10-20
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -32,6 +32,13 @@ struct cge_par {
     // health services and base volume of health services
     real colvector af, etah
     real scalar    hs0
+    // VAT (from version 0.3.1): rates by commodity and credit shares by activity
+    real colvector tv, kappa
+    // public debt (from version 0.3.1): flag, stocks at the start of the period
+    // (domestic in local currency, foreign in foreign currency), interest
+    // rates, holders of domestic debt and the foreign share of new borrowing
+    real scalar    debt, ddebt, fdebt, rd, rf, phi
+    real colvector hold
 }
 
 struct cge_model {
@@ -44,6 +51,8 @@ struct cge_model {
     real scalar      igov, isav, irow, idirtax, isaltax, iimptax, iexptax, iacttax
     // health insurance fund (0 when none is mapped)
     real scalar      ishi
+    // VAT account (0 when none is mapped; from version 0.3.1)
+    real scalar      ivattax
     string colvector A, C, F, H, I
     real colvector   iE, imargins, iterritorial, iT, istocks
     string colvector E, D
@@ -101,7 +110,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.3.0")
+    return("0.3.1")
 }
 
 // =====================================================================
@@ -231,11 +240,13 @@ void _cge_layout(struct cge_model scalar M)
     M.vname = ("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
-               "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI","EFF","HS")'
+               "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI","EFF","HS",
+               "TQADJ","TMADJ","TVADJ")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
-               "","","FA","","C","C","","","C","F","")'
+               "","","FA","","C","C","","","C","F","",
+               "","","")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -741,7 +752,7 @@ string rowvector _cge_role_options()
 {
     return(("activities", "commodities", "factors", "households", "enterprises", "government",
             "savinv", "row", "dirtax", "saltax", "imptax", "exptax", "acttax", "margins",
-            "territorial", "marginaccounts", "stocks", "insurance"))
+            "territorial", "marginaccounts", "stocks", "insurance", "vattax"))
 }
 
 // A role entry in standard form: the cge_map options it names, in the order
@@ -753,7 +764,7 @@ string scalar _cge_role_norm(string scalar cell, string scalar account)
     real scalar k, m
     opts = _cge_role_options()
     sing = ("activity", "commodity", "factor", "household", "enterprise", "", "", "", "", "", "",
-            "", "", "margin", "", "marginaccount", "stock", "")
+            "", "", "margin", "", "marginaccount", "stock", "", "vat")
     tok = tokens(strlower(subinstr(cell, ",", " ")))
     has = J(1, cols(opts), 0)
     for (k = 1; k <= cols(tok); k++) {
@@ -802,9 +813,14 @@ void _cge_template_data()
         _cge_tmpl_add(role, M.irow, "row")
         // A tax paid directly to government was routed through an internal
         // account after the accounts of the SAM
-        taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax")
-        taxidx = (M.idirtax \ M.isaltax \ M.iimptax \ M.iexptax \ M.iacttax)
-        for (k = 1; k <= 5; k++) {
+        taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax", "vattax")
+        taxidx = (M.idirtax \ M.isaltax \ M.iimptax \ M.iexptax \ M.iacttax \
+                  ((M.ivattax > 0 & M.ivattax < .) ? M.ivattax : 0))
+        for (k = 1; k <= 6; k++) {
+            // VAT moved out of the sales tax by vatshare() has no role in the template
+            if (k == 6 & taxidx[k] > n0) {
+                if (M.labels[taxidx[k]] == "_vatshare") continue
+            }
             if (taxidx[k] > n0) _cge_tmpl_add(role, M.igov, taxname[k])
             else if (taxidx[k] > 0) _cge_tmpl_add(role, taxidx[k], taxname[k])
         }
@@ -893,7 +909,7 @@ pointer(real colvector) colvector _cge_tmpl_members(string colvector L, string m
 }
 
 // Maps the SAM from the template in memory (Section 3)
-void _cge_map_template(string scalar reportfile, real scalar replace)
+void _cge_map_template(string scalar reportfile, real scalar replace, | string scalar vatshare)
 {
     struct cge_model scalar M
     string matrix T
@@ -954,7 +970,8 @@ void _cge_map_template(string scalar reportfile, real scalar replace)
             if (anyof(tokens(role[k]), opts[o])) lists[o] = strtrim(lists[o] + " " + L[k])
         }
     }
-    single = ("government", "savinv", "row", "dirtax", "saltax", "imptax", "exptax", "acttax", "insurance")
+    single = ("government", "savinv", "row", "dirtax", "saltax", "imptax", "exptax", "acttax", "insurance",
+              "vattax")
     for (o = 1; o <= cols(opts); o++) {
         if (!anyof(single, opts[o])) continue
         if (cols(tokens(lists[o])) > 1) _cge_fail("role " + opts[o] + " is given to more than one account: " + lists[o], 198)
@@ -1009,11 +1026,12 @@ void _cge_map_template(string scalar reportfile, real scalar replace)
     // The equivalent command
     cmd = "cge_map,"
     for (o = 1; o <= cols(opts); o++) if (lists[o] != "") cmd = cmd + " " + opts[o] + "(" + lists[o] + ")"
+    if (vatshare != "") cmd = cmd + " vatshare(" + vatshare + ")"
     if (strlen(cmd) <= 2000) printf("{txt}Mapping from the template:\n{res}%s\n", cmd)
     else printf("{txt}Mapping from the template ({res}%f{txt} accounts)\n", n)
     _cge_map(lists[1], lists[2], lists[3], lists[4], lists[5], lists[6], lists[7], lists[8], lists[9],
              lists[10], lists[11], lists[12], lists[13], lists[14], lists[15], lists[16], lists[17],
-             lists[18], reportfile, replace)
+             lists[18], reportfile, replace, lists[19], vatshare)
     st_global("r(command)", cmd)
 }
 
@@ -1529,7 +1547,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
               string scalar saltax, string scalar imptax, string scalar exptax, string scalar acttax,
               string scalar margins, string scalar territorial, string scalar margacc,
               string scalar stocks, string scalar insurance, string scalar reportfile,
-              real scalar replace)
+              real scalar replace, | string scalar vattax, string scalar vatshare)
 {
     struct cge_model scalar M
     real colvector role, iA, iC, imarg, iterr, istk, ishi, mapped, restc
@@ -1539,7 +1557,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     string rowvector rolename, taxname
     real scalar i, j, k, tol, nacc, rr, rc, x
     string colvector taxacc, labels
-    real colvector taxidx, direct, payers
+    real colvector taxidx, direct, payers, taxrole, rwidx, vshare
 
     M = _cge_load()
     M.labels = M.labels0
@@ -1549,7 +1567,11 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     rolename = ("activity", "commodity", "factor", "household", "government",
                 "savings-investment", "rest of world", "direct tax", "sales tax",
                 "import tax", "export tax", "activity tax", "enterprise", "margin account",
-                "insurance fund", "unmapped")
+                "insurance fund", "VAT account", "unmapped")
+    // Role codes of the tax accounts, and the entries of M.rewritten for taxes
+    // paid directly to the government (VAT from version 0.3.1)
+    taxrole = (8 \ 9 \ 10 \ 11 \ 12 \ 16)
+    rwidx = (2 \ 3 \ 4 \ 5 \ 6 \ 11)
 
     M.iA = _cge_lookup(M, acts, "activity")
     M.iC = _cge_lookup(M, coms, "commodity")
@@ -1563,11 +1585,12 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     ishi = _cge_lookup(M, insurance, "health insurance fund")
     if (rows(ishi) > 1) _cge_fail("insurance() takes one account", 198)
     M.ishi = (rows(ishi) ? ishi[1] : 0)
-    taxacc = (dirtax \ saltax \ imptax \ exptax \ acttax)
-    taxidx = J(5, 1, 0)
-    for (k = 1; k <= 5; k++) {
-        if (taxacc[k] != "") taxidx[k] = _cge_lookup(M, taxacc[k], rolename[7 + k])
+    taxacc = (dirtax \ saltax \ imptax \ exptax \ acttax \ vattax)
+    taxidx = J(6, 1, 0)
+    for (k = 1; k <= 6; k++) {
+        if (taxacc[k] != "") taxidx[k] = _cge_lookup(M, taxacc[k], rolename[taxrole[k]])
     }
+    if (vattax != "" & vatshare != "") _cge_fail("give either vattax() or vatshare(), not both", 198)
 
     if (rows(M.iC) < rows(M.iA)) {
         _cge_fail("each activity needs a paired commodity: list the commodities paired with the " +
@@ -1578,11 +1601,11 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     // exports recorded as sales by activities, and taxes paid directly to the
     // government account, which are routed through internal tax accounts.
     direct = (taxidx :== M.igov)
-    if (sum(direct[(2, 3, 4)]) > 1) {
-        _cge_fail("only one of saltax(), imptax() and exptax() may name the government account", 198)
+    if (sum(direct[(2, 3, 4, 6)]) > 1) {
+        _cge_fail("only one of saltax(), imptax(), exptax() and vattax() may name the government account", 198)
     }
     labels = M.labels0
-    M.rewritten = J(1, 10, 0)
+    M.rewritten = J(1, 12, 0)
     for (k = 1; k <= rows(M.iA); k++) {
         x = S[M.iA[k], M.irow]
         if (x != 0) {
@@ -1675,8 +1698,8 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         }
     }
     M.istocks = istk
-    taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax")
-    for (k = 1; k <= 5; k++) {
+    taxname = ("dirtax", "saltax", "imptax", "exptax", "acttax", "vattax")
+    for (k = 1; k <= 6; k++) {
         if (!direct[k]) continue
         payers = (k == 1 ? (M.iH \ M.iE) : (k == 5 ? M.iA : M.iC))
         if (_cge_find(labels, "_" + taxname[k])) {
@@ -1689,7 +1712,24 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
         S[M.igov, payers'] = J(1, rows(payers), 0)
         S[M.igov, nacc + 1] = sum(S[nacc + 1, .])
         taxidx[k] = nacc + 1
-        M.rewritten[1 + k] = sum(S[nacc + 1, .])
+        M.rewritten[rwidx[k]] = sum(S[nacc + 1, .])
+    }
+    // VAT recorded within the sales tax (model_spec.md, 12.2): the given share
+    // of each commodity's sales tax is moved to an internal account _vatshare
+    if (vatshare != "") {
+        if (taxidx[2] == 0) _cge_fail("vatshare() needs a sales tax account: give saltax()", 198)
+        if (_cge_find(labels, "_vatshare")) _cge_fail("the SAM already has an account named _vatshare", 198)
+        vshare = _cge_shares(vatshare, labels[M.iC], 0, "vatshare")
+        nacc = rows(labels)
+        S = (S, J(nacc, 1, 0)) \ J(1, nacc + 1, 0)
+        labels = labels \ "_vatshare"
+        S[nacc + 1, M.iC'] = vshare' :* S[taxidx[2], M.iC']
+        S[taxidx[2], M.iC'] = S[taxidx[2], M.iC'] - S[nacc + 1, M.iC']
+        x = sum(S[nacc + 1, .])
+        S[M.igov, nacc + 1] = x
+        S[M.igov, taxidx[2]] = S[M.igov, taxidx[2]] - x
+        taxidx[6] = nacc + 1
+        M.rewritten[12] = x
     }
     M.labels = labels
     M.S = S
@@ -1699,6 +1739,7 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     M.iimptax = taxidx[3]
     M.iexptax = taxidx[4]
     M.iacttax = taxidx[5]
+    M.ivattax = taxidx[6]
     _cge_map_rewrites(M)
 
     // Role of every account; an account may have only one role
@@ -1713,17 +1754,17 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     _cge_assign(M, role, M.isav, 6, rolename)
     _cge_assign(M, role, M.irow, 7, rolename)
     _cge_assign(M, role, ishi, 15, rolename)
-    for (k = 1; k <= 5; k++) if (taxidx[k] > 0) _cge_assign(M, role, taxidx[k], 7 + k, rolename)
+    for (k = 1; k <= 6; k++) if (taxidx[k] > 0) _cge_assign(M, role, taxidx[k], taxrole[k], rolename)
 
-    // Accounts without a role get code 16 ("unmapped"); every problem found
+    // Accounts without a role get code 17 ("unmapped"); every problem found
     // is collected as (problem code, row, column, value) and reported at the end:
     // 1 unmapped account with flows, 2 unsupported flow, 3 activity paid by a
     // commodity it is not paired with, 4 negative flow, 5 unbalanced account.
-    role = role + 16 :* (role :== 0)
+    role = role + 17 :* (role :== 0)
     issues = J(0, 4, .)
     tol = 1e-8 * max((1, max(abs(S))))
     for (i = 1; i <= nacc; i++) {
-        if (role[i] == 16 & (max(abs(S[i, .])) > tol | max(abs(S[., i])) > tol)) {
+        if (role[i] == 17 & (max(abs(S[i, .])) > tol | max(abs(S[., i])) > tol)) {
             issues = issues \ (1, i, i, sum(S[i, .]))
         }
         if (abs(sum(S[i, .]) - sum(S[., i])) > tol) {
@@ -1732,8 +1773,9 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     }
 
     // Supported flows (row role, column role); role 13 is an enterprise,
-    // role 14 a margin account and role 15 a health insurance fund
-    allowed = J(16, 16, 0)
+    // role 14 a margin account, role 15 a health insurance fund and role 16 a
+    // VAT account
+    allowed = J(17, 17, 0)
     allowed[1, 2] = 1
     allowed[2, 1] = 1; allowed[3, 1] = 1; allowed[12, 1] = 1
     allowed[7, 2] = 1; allowed[10, 2] = 1; allowed[9, 2] = 1; allowed[11, 2] = 1
@@ -1744,10 +1786,11 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     allowed[6, 5] = 1; allowed[6, 7] = 1
     allowed[14, 2] = 1; allowed[2, 14] = 1
     allowed[15, 3] = 1; allowed[15, 5] = 1; allowed[15, 7] = 1; allowed[2, 15] = 1; allowed[6, 15] = 1
+    allowed[16, 2] = 1; allowed[5, 16] = 1
     // Transfers: among households and enterprises, from them to the rest of
     // the world, from government (to them, itself and abroad) and from the
     // rest of the world (to them, government and factors)
-    transfers = J(16, 16, 0)
+    transfers = J(17, 17, 0)
     transfers[(4, 13), (4, 13)] = J(2, 2, 1)
     transfers[7, (4, 13)] = J(1, 2, 1)
     transfers[(4, 13, 5, 7), 5] = J(4, 1, 1)
@@ -1755,8 +1798,8 @@ void _cge_map(string scalar acts, string scalar coms, string scalar facs, string
     allowed = allowed :| transfers
     // Cells that may be negative
     negok = transfers
-    negok[(6, 8, 9, 10, 11, 12), .] = J(6, 16, 1)
-    negok[5, (8, 9, 10, 11, 12)] = J(1, 5, 1)
+    negok[(6, 8, 9, 10, 11, 12, 16), .] = J(7, 17, 1)
+    negok[5, (8, 9, 10, 11, 12, 16)] = J(1, 6, 1)
     negok[2, 6] = 1         // investment demand: a fall in inventories
     negok[1, 2] = 1         // sales of commodities by activities: negative yields
 
@@ -1827,6 +1870,15 @@ void _cge_map_rewrites(struct cge_model scalar M)
             "Export taxes paid to government, routed through account _exptax",
             "Activity taxes paid to government, routed through account _acttax")
     account = ("", "_dirtax", "_saltax", "_imptax", "_exptax", "_acttax")
+    if (cols(M.rewritten) >= 12) {
+        if (_cge_find(M.labels, "_vattax")) {
+            printf("{txt}VAT paid to government, routed through account _vattax: {res}%g\n", M.rewritten[11])
+        }
+        if (_cge_find(M.labels, "_vatshare")) {
+            printf("{txt}VAT within the sales tax, moved to account _vatshare: {res}%g\n", M.rewritten[12])
+        }
+        st_numscalar("r(vat_moved)", M.rewritten[12])
+    }
     if (M.rewritten[1] != 0) printf("{txt}%s: {res}%g\n", what[1], M.rewritten[1])
     if (rows(M.imargins)) {
         printf("{txt}Margins netted out of %s, moved to their output: {res}%g\n",
@@ -1974,8 +2026,9 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
     real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER, YSHI, SHIADJ, QSHI, EFF, HS
-    real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif, z
-    real colvector oneA, oneC, oneF, oneH, oneD, DY, rs
+    real matrix TQADJ, TMADJ, TVADJ
+    real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif, z, vint
+    real colvector oneA, oneC, oneF, oneH, oneD, DY, rs, tq, tm, tv, PH
     real scalar k, nH, nD
 
     PA = _cge_v(M, x, 1);     PVA = _cge_v(M, x, 2);    PINTA = _cge_v(M, x, 3)
@@ -1995,6 +2048,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     QT = _cge_v(M, x, 43);    QER = _cge_v(M, x, 44);   YSHI = _cge_v(M, x, 45)
     SHIADJ = _cge_v(M, x, 46); QSHI = _cge_v(M, x, 47);  EFF = _cge_v(M, x, 48)
     HS = _cge_v(M, x, 49)
+    TQADJ = _cge_v(M, x, 50); TMADJ = _cge_v(M, x, 51); TVADJ = _cge_v(M, x, 52)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -2011,17 +2065,25 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     nH = M.nH
     nD = M.nD
 
+    // Rates after scaling (from version 0.3.1); PH is the price paid by final
+    // users, including VAT, and vint the VAT activities cannot recover
+    tq = p.tq :* TQADJ
+    tm = p.tm :* TMADJ
+    tv = p.tv :* TVADJ
+    PH = PQ :* (1 :+ tv)
+    vint = tv * (1 :- p.kappa)'
+
     // 5.1 Price block
-    _cge_put(M, L, R, K, record, "P1", PM, p.pwm :* (1 :+ p.tm) :* EXR, M.cm)
+    _cge_put(M, L, R, K, record, "P1", PM, p.pwm :* (1 :+ tm) :* EXR, M.cm)
     _cge_put(M, L, R, K, record, "P2", PE, p.pwe :* (1 :- p.te) :* EXR, M.ce)
     // p.icm' * PQ: cost of margin services per unit of composite supply
-    _cge_put(M, L, R, K, record, "P3", PQ :* (1 :- p.tq) :* QQ,
+    _cge_put(M, L, R, K, record, "P3", PQ :* (1 :- tq) :* QQ,
              M.cx :* PD :* QD + M.cm :* PM :* QM + (p.icm' * PQ) :* QQ, oneC)
     _cge_put(M, L, R, K, record, "P4", PX :* QX, PD :* QD + M.ce :* PE :* QE, M.cx)
     _cge_put(M, L, R, K, record, "P5", PA, p.theta * PX, oneA)
-    _cge_put(M, L, R, K, record, "P6", PINTA, p.ica' * PQ, oneA)
+    _cge_put(M, L, R, K, record, "P6", PINTA, (p.ica :* (1 :+ vint))' * PQ, oneA)
     _cge_put(M, L, R, K, record, "P7", PA :* (1 :- p.ta) :* QA, PVA :* QVA + PINTA :* QINTA, oneA)
-    _cge_put(M, L, R, K, record, "P8", CPI, p.cwts' * PQ, 1)
+    _cge_put(M, L, R, K, record, "P8", CPI, p.cwts' * PH, 1)
     _cge_put(M, L, R, K, record, "P9", DPI, p.dwts' * PD, 1)
 
     // 5.2 Production block
@@ -2090,37 +2152,40 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     if (M.ishi) yif[M.nI, .] = (p.tshi :* YF)'
     _cge_put(M, L, R, K, record, "I2", YIF, yif, J(M.nI, M.nF, 1))
     _cge_put(M, L, R, K, record, "I3", YI,
-             rowsum(YIF[|1, 1 \ nD, M.nF|]) + p.shii * DY + p.trdg :* CPI + p.trdr :* EXR, oneD)
+             rowsum(YIF[|1, 1 \ nD, M.nF|]) + p.shii * DY + p.trdg :* CPI + p.trdr :* EXR
+             + p.hold :* (p.rd * p.ddebt), oneD)
     _cge_put(M, L, R, K, record, "I4", EH, p.hc :* DY[|1 \ nH|], oneH)
-    _cge_put(M, L, R, K, record, "I5", PQ :* QH, PQ :* p.gamma + p.beta :* (EH' - PQ' * p.gamma),
+    _cge_put(M, L, R, K, record, "I5", PH :* QH, PH :* p.gamma + p.beta :* (EH' - PH' * p.gamma),
              p.beta :!= 0)
     _cge_put(M, L, R, K, record, "I6", QINV, p.qinv :* IADJ, oneC)
     _cge_put(M, L, R, K, record, "I7", QG, p.qg :* GADJ, oneC)
     _cge_put(M, L, R, K, record, "I8", YG,
-             TINS' * YI + sum(p.tq :* PQ :* QQ) + sum(p.tm :* p.pwm :* QM) * EXR
+             TINS' * YI + sum(tq :* PQ :* QQ) + sum(tm :* p.pwm :* QM) * EXR
              + sum(p.te :* p.pwe :* QE) * EXR + sum(p.ta :* PA :* QA)
+             + sum(tv :* PQ :* (rowsum(QH) + QG + QINV + QSHI + rowsum(QINT :* (1 :- p.kappa)')))
              + sum(YIF[nD + 1, .]) + p.trgr * EXR + p.trgg * CPI, 1)
     _cge_put(M, L, R, K, record, "I9", EG,
-             PQ' * QG + (sum(p.trdg) + p.trgg + p.trshi) * CPI + p.trrg * EXR, 1)
+             PH' * QG + (sum(p.trdg) + p.trgg + p.trshi) * CPI + p.trrg * EXR
+             + p.rd * p.ddebt + p.rf * p.fdebt * EXR, 1)
     _cge_put(M, L, R, K, record, "I10", TINS, p.tins0 :* TINSADJ, oneD)
     _cge_put(M, L, R, K, record, "I11", MPS, p.mps0 :* MPSADJ, oneD)
     // Health insurance fund (from version 0.1.13); the last institution
     _cge_put(M, L, R, K, record, "I12", YSHI,
              (M.ishi ? sum(YIF[M.nI, .]) : 0) + p.trshi * CPI + p.trshir * EXR, (M.ishi > 0))
     _cge_put(M, L, R, K, record, "I13", QSHI, p.qshi :* SHIADJ, M.cshi)
-    _cge_put(M, L, R, K, record, "I14", PQ' * QSHI, (1 - p.sshi) * YSHI, (M.ishi > 0))
+    _cge_put(M, L, R, K, record, "I14", PH' * QSHI, (1 - p.sshi) * YSHI, (M.ishi > 0))
 
     // 5.5 System constraints (S6 is imposed through the closure)
     _cge_put(M, L, R, K, record, "S1", rowsum(M.fa :* QF), QFS, oneF)
     _cge_put(M, L, R, K, record, "S2", QQ,
              rowsum(QINT) + rowsum(QH) + QG + QINV + M.ct :* QT + M.cr :* QER + QSHI, oneC)
     _cge_put(M, L, R, K, record, "S3",
-             sum(p.pwm :* QM) + (sum(YIF[nD + 2, .]) + p.shir' * DY) / EXR + p.trrg,
+             sum(p.pwm :* QM) + (sum(YIF[nD + 2, .]) + p.shir' * DY) / EXR + p.trrg + p.rf * p.fdebt,
              sum(p.pwe :* QE) + sum(M.cr :* PQ :* QER) / EXR + sum(p.trdr) + sum(p.trfr) + p.trgr
              + p.trshir + FSAV, 1)
     _cge_put(M, L, R, K, record, "S4", YG, EG + GSAV, 1)
     _cge_put(M, L, R, K, record, "S5", (MPS :* (1 :- TINS))' * YI + GSAV + p.sshi * YSHI + EXR * FSAV,
-             PQ' * QINV + WALRAS, 1)
+             PH' * QINV + WALRAS, 1)
 }
 
 // Scaled residuals of the existing equation elements. Mata's sum functions
@@ -2148,7 +2213,8 @@ real scalar _cge_maxres(struct cge_model scalar M, struct cge_par scalar p, real
 
 void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, string scalar fqname,
                     string scalar s_ie, string scalar s_fr, string scalar s_a, string scalar s_hc,
-                    string scalar s_hf, string scalar s_he)
+                    string scalar s_hf, string scalar s_he, | string scalar s_vc, string scalar s_debt,
+                    string scalar s_int, string scalar s_hold, string scalar s_borrow)
 {
     struct cge_model scalar M
     struct cge_par scalar p
@@ -2160,13 +2226,16 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     real colvector cd, rva, ad, rt, dt, dtc, at, rq, dq, dqc, aq, YF0, YI0, tins0, mps0, EH0
     real colvector iD, dtax, dsav, DY0, TROW, cons, gross, safe
     real colvector m, d, num, x0, L, R, K, mag
+    real matrix VINT, VH
+    real colvector kappa, vg, vinv, vshi, vat, tv, PINTA0
     real scalar n, nC, nF, nH, tol, k, r, ratio, total, maxres, YSHI0
 
     M = _cge_load()
     _cge_need(M, "mapped")
     // The options of this calibration, so that cge_sensitivity can repeat it
     // with other elasticities
-    M.calargs = (s_va, s_q, s_t, fqname, s_ie, s_fr, s_a, s_hc, s_hf, s_he)
+    M.calargs = (s_va, s_q, s_t, fqname, s_ie, s_fr, s_a, s_hc, s_hf, s_he, s_vc, s_debt, s_int,
+                 s_hold, s_borrow)
     S = M.S
     n = M.n
     nC = M.nC
@@ -2233,15 +2302,34 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     ct = QT0 :> tol
     if (rows(M.iT)) p.icm = ((SV :/ (spend :* (spend :> tol) + (spend :<= tol))) * MG) :/ QQ0'
     else p.icm = J(nC, nC, 0)
-    QSHI0 = (M.ishi ? _cge_sub(S, M.iC, M.ishi) : J(nC, 1, 0))
-    demand = rowsum(_cge_sub(S, M.iC, M.iA)) + rowsum(_cge_sub(S, M.iC, M.iH)) +
-             _cge_sub(S, M.iC, M.igov) + _cge_sub(S, M.iC, M.isav) + QT0 + QER0 + QSHI0
+    // VAT (model_spec.md, 12.2): rates from the VAT account, then the quantity
+    // of each use at PQ = 1
+    kappa = _cge_shares(s_vc, M.A, 1, "vatcredit")
+    if (s_vc != "" & !(M.ivattax > 0 & M.ivattax < .)) _cge_fail("vatcredit() needs a VAT account: map one with cge_map, vattax() or vatshare()", 198)
+    VINT = _cge_sub(S, M.iC, M.iA)
+    VH = _cge_sub(S, M.iC, M.iH)
+    vg = _cge_sub(S, M.iC, M.igov)
+    vinv = _cge_sub(S, M.iC, M.isav)
+    vshi = (M.ishi ? _cge_sub(S, M.iC, M.ishi) : J(nC, 1, 0))
+    vat = ((M.ivattax > 0 & M.ivattax < .) ? _cge_sub(S, M.ivattax, M.iC)' : J(nC, 1, 0))
+    tv = J(nC, 1, 0)
+    for (k = 1; k <= nC; k++) {
+        if (abs(vat[k]) <= tol) continue
+        tv[k] = _cge_vat_rate(vat[k], (VINT[k, .], VH[k, .], vg[k], vinv[k], vshi[k])',
+                              ((1 :- kappa)', J(1, nH + 3, 1))', M.labels[M.iC[k]])
+    }
+    QINT0 = VINT :/ (1 :+ tv * (1 :- kappa)')
+    QH0 = VH :/ (1 :+ tv)
+    QSHI0 = vshi :/ (1 :+ tv)
+    p.qg = vg :/ (1 :+ tv)
+    p.qinv = vinv :/ (1 :+ tv)
+    demand = rowsum(QINT0) + rowsum(QH0) + p.qg + p.qinv + QT0 + QER0 + QSHI0
     if (max(abs(QQ0 - demand)) > tol) _cge_fail("composite supply does not equal domestic demand for some commodity", 459)
 
     // 7.3 Production
-    QINT0 = _cge_sub(S, M.iC, M.iA)
     QINTA0 = colsum(QINT0)'
     p.ica = QINT0 :/ (QINTA0' + (QINTA0' :<= 0))
+    PINTA0 = colsum(p.ica :* (1 :+ tv * (1 :- kappa)'))'
     VA = _cge_sub(S, M.iF, M.iA)
     M.fa = VA :> tol
     if (fqname == "") {
@@ -2264,7 +2352,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_fail_if(QVA0 :<= tol, M.labels[M.iA], "every activity needs positive value added", 459)
     p.iva = QVA0 :/ QA0
     p.inta = QINTA0 :/ QA0
-    _cge_topnest(M, p, s_a, QA0, QVA0, QINTA0, colsum(p.ica)')
+    _cge_topnest(M, p, s_a, QA0, QVA0, QINTA0, PINTA0)
 
     cd = abs(sva :- 1) :< 1e-12
     rva = (1 :- cd) :* (1 :/ sva :- 1)
@@ -2341,8 +2429,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     DY0 = YI0 - dtax - dsav
     TR = _cge_sub(S, iD, iD)
     TROW = _cge_sub(S, M.irow, iD)'
-    QH0 = _cge_sub(S, M.iC, M.iH)
-    EH0 = colsum(QH0)'
+    EH0 = colsum(VH)'
     cons = EH0 \ J(M.nE, 1, 0)
     gross = colsum(abs(TR))' + abs(TROW) + abs(cons)
     if (max((abs(DY0) :<= tol) :* (gross :> tol))) {
@@ -2354,18 +2441,16 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.shir = TROW :/ safe
     p.hc = EH0 :/ safe[|1 \ nH|]
     if (sum(EH0) <= tol) _cge_fail("households have no consumption", 459)
-    p.beta = QH0 :/ (EH0' :* (EH0' :> 0) + (EH0' :<= 0))
+    p.beta = VH :/ (EH0' :* (EH0' :> 0) + (EH0' :<= 0))
     // Household demand: Cobb-Douglas (gamma = 0), or LES given income
     // elasticities and Frisch parameters (model_spec.md, 7.5)
     p.gamma = J(rows(QH0), cols(QH0), 0)
-    if (s_ie != "" | s_fr != "") _cge_les(p, QH0, EH0, s_ie, s_fr, M.nC, nH)
+    if (s_ie != "" | s_fr != "") _cge_les(p, QH0, EH0, s_ie, s_fr, M.nC, nH, 1 :+ tv)
     p.trdg = _cge_sub(S, iD, M.igov)
     p.trdr = _cge_sub(S, iD, M.irow)
     p.trgr = S[M.igov, M.irow]
     p.trrg = S[M.irow, M.igov]
     p.trgg = S[M.igov, M.igov]
-    p.qg = _cge_sub(S, M.iC, M.igov)
-    p.qinv = _cge_sub(S, M.iC, M.isav)
     // Health insurance fund: purchases, savings rate and transfers received
     p.qshi = QSHI0
     YSHI0 = (M.ishi ? sum(S[M.ishi, .]) : 0)
@@ -2375,7 +2460,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.trshir = (M.ishi ? S[M.ishi, M.irow] : 0)
     M.cshi = (QSHI0 :!= 0)
     _cge_health(M, p, QH0, QSHI0, s_hc, s_hf, s_he)
-    p.cwts = rowsum(QH0) :/ sum(QH0)
+    p.cwts = rowsum(VH) :/ sum(VH) :/ (1 :+ tv)
     p.dwts = QD0 :/ sum(QD0)
 
     p.pwm = J(nC, 1, 1)
@@ -2401,6 +2486,10 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.st = st
     p.tins0 = tins0
     p.mps0 = mps0
+    p.tv = tv
+    p.kappa = kappa
+    // Public debt (model_spec.md, 12.3): interest separated from government transfers
+    _cge_debt(M, p, s_debt, s_int, s_hold, s_borrow, tol)
     M.ce = ce
     M.cm = cm
     M.cd = cd
@@ -2417,7 +2506,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     x0 = J(total, 1, 0)
     _cge_setv(M, x0, "PA", J(n, 1, 1))
     _cge_setv(M, x0, "PVA", J(n, 1, 1))
-    _cge_setv(M, x0, "PINTA", colsum(p.ica)')
+    _cge_setv(M, x0, "PINTA", PINTA0)
     _cge_setv(M, x0, "PX", J(nC, 1, 1))
     _cge_setv(M, x0, "PD", J(nC, 1, 1))
     _cge_setv(M, x0, "PE", ce)
@@ -2425,7 +2514,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "PQ", J(nC, 1, 1))
     _cge_setv(M, x0, "W", W0)
     _cge_setv(M, x0, "EXR", 1)
-    _cge_setv(M, x0, "CPI", sum(p.cwts))
+    _cge_setv(M, x0, "CPI", p.cwts' * (1 :+ tv))
     _cge_setv(M, x0, "DPI", sum(p.dwts))
     _cge_setv(M, x0, "QA", QA0)
     _cge_setv(M, x0, "QVA", QVA0)
@@ -2446,7 +2535,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "YI", YI0)
     _cge_setv(M, x0, "EH", EH0)
     _cge_setv(M, x0, "YG", sum(S[M.igov, .]))
-    _cge_setv(M, x0, "EG", sum(p.qg) + sum(p.trdg) + p.trgg + p.trrg + p.trshi)
+    _cge_setv(M, x0, "EG", sum(vg) + sum(_cge_sub(S, iD, M.igov)) + p.trgg + S[M.irow, M.igov] + p.trshi)
     _cge_setv(M, x0, "GSAV", S[M.isav, M.igov])
     _cge_setv(M, x0, "FSAV", S[M.isav, M.irow])
     _cge_setv(M, x0, "TINS", tins0)
@@ -2464,6 +2553,9 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "QSHI", QSHI0)
     _cge_setv(M, x0, "EFF", J(nF, 1, 1))
     _cge_setv(M, x0, "HS", p.hs0)
+    _cge_setv(M, x0, "TQADJ", 1)
+    _cge_setv(M, x0, "TMADJ", 1)
+    _cge_setv(M, x0, "TVADJ", 1)
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -2625,8 +2717,129 @@ void _cge_topnest(struct cge_model scalar M, struct cge_par scalar p, string sca
     M.cda = cda
 }
 
+// Shares by element of a set, as "label:share ..." or one number for all,
+// between 0 and 1; dflt for elements not listed
+real colvector _cge_shares(string scalar spec, string colvector set, real scalar dflt, string scalar name)
+{
+    real colvector out
+    string rowvector tok
+    real scalar k, pos, i, v
+    out = J(rows(set), 1, dflt)
+    tok = tokens(spec)
+    if (cols(tok) == 1 & !strpos(spec, ":")) out = J(rows(set), 1, strtoreal(tok[1]))
+    else {
+        for (k = 1; k <= cols(tok); k++) {
+            pos = strpos(tok[k], ":")
+            if (!pos) _cge_fail(name + "() entries take the form label:share, or give one share for all", 198)
+            i = _cge_find(set, substr(tok[k], 1, pos - 1))
+            if (!i) _cge_fail(name + "(): " + substr(tok[k], 1, pos - 1) + " is not one of the model's accounts of that kind", 111)
+            v = strtoreal(substr(tok[k], pos + 1, .))
+            out[i] = v
+        }
+    }
+    if (hasmissing(out) | min(out) < 0 | max(out) > 1) _cge_fail(name + "() shares must lie between 0 and 1", 198)
+    return(out)
+}
+
+// VAT rate tv such that v' (tv liab / (1 + tv liab)) = vat (model_spec.md,
+// 12.2), by Newton's method from the first-order value
+real scalar _cge_vat_rate(real scalar vat, real colvector v, real colvector liab, string scalar label)
+{
+    real scalar base, tv, f, df, step, k
+    base = v' * liab
+    if (base == 0) _cge_fail("VAT is recorded on " + label + " but no use of it bears VAT", 459)
+    tv = vat / base
+    for (k = 1; k <= 100; k++) {
+        f = v' * (tv :* liab :/ (1 :+ tv :* liab)) - vat
+        df = v' * (liab :/ (1 :+ tv :* liab):^2)
+        step = f / df
+        tv = tv - step
+        if (abs(step) <= 1e-15 * max((1, abs(tv)))) break
+    }
+    if (k > 100) _cge_fail("the VAT rate of " + label + " could not be calibrated", 430)
+    if (min(1 :+ tv :* liab) <= 0) _cge_fail("the VAT rate of " + label + " is below -100 per cent", 459)
+    return(tv)
+}
+
+// "domestic:# foreign:#" as (domestic, foreign)
+real rowvector _cge_domfor(string scalar spec, string scalar name)
+{
+    real rowvector out
+    string rowvector tok
+    string scalar key
+    real scalar k, pos
+    out = (0, 0)
+    tok = tokens(spec)
+    for (k = 1; k <= cols(tok); k++) {
+        pos = strpos(tok[k], ":")
+        if (!pos) _cge_fail(name + "() entries take the form domestic:# and foreign:#", 198)
+        key = strlower(substr(tok[k], 1, pos - 1))
+        if (key == "domestic") out[1] = strtoreal(substr(tok[k], pos + 1, .))
+        else if (key == "foreign") out[2] = strtoreal(substr(tok[k], pos + 1, .))
+        else _cge_fail(name + "(): " + key + " is not domestic or foreign", 198)
+    }
+    if (hasmissing(out)) _cge_fail(name + "() needs numbers", 198)
+    return(out)
+}
+
+// Public debt and interest (model_spec.md, 12.3): the base transfers from
+// government are split into interest on the stated debt and other transfers
+void _cge_debt(struct cge_model scalar M, struct cge_par scalar p, string scalar s_debt, string scalar s_int,
+               string scalar s_hold, string scalar s_borrow, real scalar tol)
+{
+    real rowvector dbt, rate
+    real colvector pos, hold, trdg, bad
+    real scalar dd, df, rd, rf, trrg, phi
+
+    p.debt = 0
+    p.ddebt = 0
+    p.fdebt = 0
+    p.rd = 0
+    p.rf = 0
+    p.phi = 0
+    p.hold = J(M.nD, 1, 0)
+    if (s_debt == "" & s_int == "" & s_hold == "" & s_borrow == "") return
+    dbt = _cge_domfor(s_debt, "debt")
+    rate = _cge_domfor(s_int, "interest")
+    dd = dbt[1]
+    df = dbt[2]
+    rd = rate[1]
+    rf = rate[2]
+    if (min(dbt) < 0 | min(rate) <= -1) _cge_fail("debt must be non-negative and interest rates above -1", 198)
+    if (s_hold == "") {
+        pos = p.trdg :* (p.trdg :> 0)
+        if (rd * dd != 0 & sum(pos) <= 0) _cge_fail("the government makes no transfers to domestic institutions; give the debt holders with debtholders()", 459)
+        hold = (sum(pos) > 0 ? pos :/ sum(pos) : J(M.nD, 1, 0))
+    }
+    else {
+        hold = _cge_shares(s_hold, M.D, 0, "debtholders")
+        if (abs(sum(hold) - 1) > 1e-12) _cge_fail("debtholders() shares must sum to one", 198)
+    }
+    trdg = p.trdg - hold :* (rd * dd)
+    trrg = p.trrg - rf * df
+    bad = trdg :< -tol
+    _cge_fail_if(bad, M.D, "government transfers are smaller than the interest on the stated debt for", 459)
+    if (trrg < -tol) _cge_fail("government transfers to the rest of the world are smaller than the interest on the stated foreign debt", 459)
+    if (s_borrow == "") phi = (dd + df > 0 ? df / (dd + df) : 0)
+    else {
+        phi = strtoreal(s_borrow)
+        if (phi >= . | phi < 0 | phi > 1) _cge_fail("foreignborrowing() must lie between 0 and 1", 198)
+    }
+    p.trdg = trdg
+    p.trrg = trrg
+    p.debt = 1
+    p.ddebt = dd
+    p.fdebt = df
+    p.rd = rd
+    p.rf = rf
+    p.hold = hold
+    p.phi = phi
+    printf("{txt}Public debt: {res}%g{txt} at home at {res}%g{txt}, {res}%g{txt} abroad at {res}%g{txt}; interest of {res}%g{txt} separated from government transfers\n",
+           dd, rd, df, rf, rd * dd + rf * df)
+}
+
 void _cge_les(struct cge_par scalar p, real matrix QH0, real colvector EH0, string scalar s_ie,
-              string scalar s_fr, real scalar nC, real scalar nH)
+              string scalar s_fr, real scalar nC, real scalar nH, real colvector ph0)
 {
     real colvector ie, fr
     real rowvector total
@@ -2646,7 +2859,9 @@ void _cge_les(struct cge_par scalar p, real matrix QH0, real colvector EH0, stri
     b = ie :* p.beta
     total = colsum(b)
     p.beta = b :/ (total + (total :<= 0))
-    p.gamma = QH0 + p.beta :* (EH0' :/ fr')
+    // Subsistence quantities at the prices final users pay (PH, with VAT)
+    // (in Mata :/ binds more tightly than :*)
+    p.gamma = QH0 + (p.beta :* (EH0' :/ fr')) :/ ph0
     printf("{txt}Household demand: linear expenditure system\n")
 }
 
@@ -2669,15 +2884,36 @@ void _cge_closure_apply(struct cge_model scalar M, string scalar ext, string sca
 {
     real colvector fixed
     real scalar k, nfree
+    string rowvector tok, inst, adj
+    string scalar instrument
+    real colvector rates
 
     fixed = J(rows(M.x0), 1, 0)
     _cge_fix(M, fixed, "GADJ", 0)
     if (ext == "flexexr") _cge_fix(M, fixed, "FSAV", 0)
     else if (ext == "fixexr") _cge_fix(M, fixed, "EXR", 0)
     else _cge_fail("external() must be flexexr or fixexr", 198)
-    if (gov == "flexgsav") _cge_fix(M, fixed, "TINSADJ", 0)
-    else if (gov == "fixgsav") _cge_fix(M, fixed, "GSAV", 0)
-    else _cge_fail("government() must be flexgsav or fixgsav", 198)
+    // Government (model_spec.md, 12.1): with fixed savings, direct, sales,
+    // import or VAT rates adjust; the other tax scaling factors are fixed
+    inst = ("direct", "sales", "import", "vat")
+    adj = ("TINSADJ", "TQADJ", "TMADJ", "TVADJ")
+    tok = tokens(subinstr(gov, ":", " "))
+    if (cols(tok) == 0) tok = "flexgsav"
+    instrument = ""
+    if (tok[1] == "flexgsav" & cols(tok) == 1) instrument = ""
+    else if (tok[1] == "fixgsav" & cols(tok) <= 2) {
+        instrument = (cols(tok) == 2 ? tok[2] : "direct")
+        if (!anyof(inst, instrument)) _cge_fail("government(fixgsav " + instrument + "): the adjusting tax is direct, sales, import or vat", 198)
+    }
+    else _cge_fail("government() must be flexgsav, or fixgsav with direct, sales, import or vat", 198)
+    for (k = 1; k <= 4; k++) if (inst[k] != instrument) _cge_fix(M, fixed, adj[k], 0)
+    if (instrument != "") {
+        _cge_fix(M, fixed, "GSAV", 0)
+        rates = (instrument == "direct" ? M.p0.tins0 : (instrument == "sales" ? M.p0.tq :
+                 (instrument == "import" ? M.p0.tm : M.p0.tv)))
+        if (!any(rates)) _cge_fail("government(fixgsav " + instrument + "): that tax raises no revenue in the base", 459)
+    }
+    gov = (instrument == "" ? "flexgsav" : (instrument == "direct" ? "fixgsav" : "fixgsav:" + instrument))
     if (si == "savings") _cge_fix(M, fixed, "MPSADJ", 0)
     else if (si == "investment") _cge_fix(M, fixed, "IADJ", 0)
     else _cge_fail("savinv() must be savings or investment", 198)
@@ -2792,6 +3028,12 @@ real colvector _cge_par_get(struct cge_par scalar p, string scalar name)
     if (name == "trshi") return(p.trshi)
     if (name == "trshir") return(p.trshir)
     if (name == "af") return(p.af)
+    if (name == "tv") return(p.tv)
+    if (name == "kappa") return(p.kappa)
+    if (name == "rd") return(p.rd)
+    if (name == "rf") return(p.rf)
+    if (name == "ddebt") return(p.ddebt)
+    if (name == "fdebt") return(p.fdebt)
     _cge_fail("cge internal error: unknown parameter " + name, 3498)
 }
 
@@ -2816,6 +3058,12 @@ void _cge_par_set(struct cge_par scalar p, string scalar name, real colvector v)
     else if (name == "trshi") p.trshi = v
     else if (name == "trshir") p.trshir = v
     else if (name == "af") p.af = v
+    else if (name == "tv") p.tv = v
+    else if (name == "kappa") p.kappa = v
+    else if (name == "rd") p.rd = v
+    else if (name == "rf") p.rf = v
+    else if (name == "ddebt") p.ddebt = v
+    else if (name == "fdebt") p.fdebt = v
 }
 
 real colvector _cge_elements(string colvector set, string scalar elems, string scalar what)
@@ -2854,10 +3102,17 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
     if (anyof(("tshi", "qshi", "trshi", "trshir"), target) & !M.ishi) {
         _cge_fail(target + " needs a health insurance fund: name it with cge_map, insurance()", 459)
     }
-    if (anyof(("tm", "te", "tq", "pwm", "pwe", "qg", "qinv", "qshi"), target)) {
+    // VAT and public debt (from version 0.3.1)
+    if (anyof(("tv", "kappa"), target) & !(M.ivattax > 0 & M.ivattax < .)) {
+        _cge_fail(target + " needs a VAT account: map one with cge_map, vattax() or vatshare() (vatshare(0) creates an empty one)", 459)
+    }
+    if (anyof(("rd", "rf", "ddebt", "fdebt"), target) & M.p0.debt != 1) {
+        _cge_fail(target + " needs public debt: calibrate with debt() and interest()", 459)
+    }
+    if (anyof(("tm", "te", "tq", "pwm", "pwe", "qg", "qinv", "qshi", "tv"), target)) {
         idx = _cge_elements(M.C, elems, "commodities")
     }
-    else if (anyof(("ta", "ad"), target)) {
+    else if (anyof(("ta", "ad", "kappa"), target)) {
         idx = _cge_elements(M.A, elems, "activities")
     }
     else if (anyof(("trdg", "trdr"), target)) {
@@ -2866,7 +3121,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
     else if (anyof(("trfr", "tshi", "af"), target)) {
         idx = _cge_elements(M.F, elems, "factors")
     }
-    else if (anyof(("trgr", "trrg", "trshi", "trshir"), target)) {
+    else if (anyof(("trgr", "trrg", "trshi", "trshir", "rd", "rf", "ddebt", "fdebt"), target)) {
         if (elems != "" & elems != "all") _cge_fail(target + " has no elements", 198)
         idx = 1
     }
@@ -2875,6 +3130,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
     if (rows(idx)) {
         v = _cge_par_get(M.p, target)
         v[idx] = (mode == "scale" ? v[idx] :* value : J(rows(idx), 1, value))
+        if (target == "kappa" & (min(v) < 0 | max(v) > 1)) _cge_fail("VAT credit shares (kappa) must lie between 0 and 1", 198)
         _cge_par_set(M.p, target, v)
         _cge_store(M)
         printf("{txt}Parameter {res}%s{txt} changed for %f element(s)\n", target, rows(idx))
@@ -2883,7 +3139,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
 
     k = _cge_vidx(M, target)
     if (k == 0) {
-        _cge_fail(target + " is not a shockable parameter (tm te tq ta pwm pwe ad af qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir) or model variable", 198)
+        _cge_fail(target + " is not a shockable parameter (tm te tq ta tv kappa pwm pwe ad af qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir rd rf ddebt fdebt) or model variable", 198)
     }
     set = M.vset[k]
     if (set == "") {
@@ -2964,18 +3220,20 @@ string matrix _cge_dcandidates()
 // the formulas are those of _cge_eq
 void _cge_derive(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
 {
-    real colvector PQ, EH
-    real scalar EXR
+    real colvector PQ, EH, PH
+    real scalar EXR, TVADJ
     EXR = _cge_v(M, x, 10)
     PQ = _cge_v(M, x, 8)
-    if (M.dact[1]) _cge_setv(M, x, "PM", M.cm :* (p.pwm :* (1 :+ p.tm) :* EXR))
+    TVADJ = _cge_v(M, x, 52)
+    PH = PQ :* (1 :+ p.tv :* TVADJ)
+    if (M.dact[1]) _cge_setv(M, x, "PM", M.cm :* (p.pwm :* (1 :+ p.tm :* _cge_v(M, x, 51)) :* EXR))
     if (M.dact[2]) _cge_setv(M, x, "PE", M.ce :* (p.pwe :* (1 :- p.te) :* EXR))
-    if (M.dact[3]) _cge_setv(M, x, "PINTA", p.ica' * PQ)
+    if (M.dact[3]) _cge_setv(M, x, "PINTA", (p.ica :* (1 :+ (p.tv :* TVADJ) * (1 :- p.kappa)'))' * PQ)
     if (M.dact[4]) _cge_setv(M, x, "QINT", p.ica :* _cge_v(M, x, 15)')
     if (M.dact[5]) _cge_setv(M, x, "QX", M.cx :* (p.theta' * _cge_v(M, x, 13)))
     if (M.dact[6]) {
         EH = _cge_v(M, x, 30)
-        _cge_setv(M, x, "QH", (p.beta :!= 0) :* (PQ :* p.gamma + p.beta :* (EH' :- PQ' * p.gamma)) :/ PQ)
+        _cge_setv(M, x, "QH", (p.beta :!= 0) :* (PH :* p.gamma + p.beta :* (EH' :- PH' * p.gamma)) :/ PH)
     }
     if (M.dact[7]) _cge_setv(M, x, "QT", M.ct :* (p.icm * _cge_v(M, x, 22)))
     if (M.dact[8]) _cge_setv(M, x, "QSHI", p.qshi :* _cge_v(M, x, 46))
@@ -2999,6 +3257,9 @@ void _cge_reduce_setup(struct cge_model scalar M, real colvector rowid, real col
     dpos = J(0, 1, .)
     drow = J(0, 1, .)
     for (k = 1; k <= rows(cand); k++) {
+        // With VAT, government revenue (I8, exact derivatives) depends on QINT,
+        // QH and QSHI, so they and PINTA are kept in the system
+        if (M.ivattax > 0 & M.ivattax < . & anyof((3, 4, 6, 8), k)) continue
         g = _cge_find(M.ename, cand[k, 1])
         v = _cge_vidx(M, cand[k, 2])
         if (g == 0 | v == 0) continue
@@ -3158,11 +3419,13 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     // 5.1 Price block
     _cge_sp_same(M, rowid, boff, pr, pc, "P1", "PM")
     _cge_sp(M, rowid, boff, pr, pc, "P1", cC, "EXR", 1)
+    _cge_sp(M, rowid, boff, pr, pc, "P1", cC, "TMADJ", 1)
     _cge_sp_same(M, rowid, boff, pr, pc, "P2", "PE")
     _cge_sp(M, rowid, boff, pr, pc, "P2", cC, "EXR", 1)
     _cge_sp_same(M, rowid, boff, pr, pc, "P3", ("PQ", "QQ", "PD", "QD", "PM", "QM"))
     _cge_nz(p.icm, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "P3", j, "PQ", i)
+    _cge_sp(M, rowid, boff, pr, pc, "P3", cC, "TQADJ", 1)
     _cge_sp_same(M, rowid, boff, pr, pc, "P4", ("PX", "QX", "PD", "QD", "PE", "QE"))
     _cge_sp_same(M, rowid, boff, pr, pc, "P5", "PA")
     _cge_nz(p.theta, i, j)
@@ -3170,6 +3433,7 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp_same(M, rowid, boff, pr, pc, "P6", "PINTA")
     _cge_nz(p.ica, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "P6", j, "PQ", i)
+    _cge_sp(M, rowid, boff, pr, pc, "P6", cA, "TVADJ", 1)
     // P7 has exact derivatives (_cge_dense2)
 
     // 5.2 Production block
@@ -3244,6 +3508,7 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp(M, rowid, boff, pr, pc, "I5", e, "QH", e)
     _cge_sp(M, rowid, boff, pr, pc, "I5", e, "PQ", floor((e :- 1) :/ nH) :+ 1)
     _cge_sp(M, rowid, boff, pr, pc, "I5", e, "EH", mod(e :- 1, nH) :+ 1)
+    _cge_sp(M, rowid, boff, pr, pc, "I5", e, "TVADJ", 1)
     // LES: every purchase of household h depends on the prices of its subsistence quantities
     for (k = 1; k <= nH; k++) {
         i = select(cC, p.gamma[., k] :!= 0)
@@ -3266,6 +3531,7 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp(M, rowid, boff, pr, pc, "I14", J(nC, 1, 1), "PQ", cC)
     _cge_sp(M, rowid, boff, pr, pc, "I14", J(nC, 1, 1), "QSHI", cC)
     _cge_sp(M, rowid, boff, pr, pc, "I14", 1, "YSHI", 1)
+    _cge_sp(M, rowid, boff, pr, pc, "I14", 1, "TVADJ", 1)
 
     // 5.5 System constraints
     // S2 has exact derivatives (_cge_dense2)
@@ -3298,9 +3564,10 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
 // per factor), S3, S5
 real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
 {
-    real matrix G, WFD, QF, YIF
+    real matrix G, WFD, QF, YIF, QH, QINT
     real colvector PQ, QQ, QM, QE, PA, QA, QG, QINV, QER, YI, TINS, MPS, W, cQF, cWFD, cYIF
-    real scalar EXR, FSAV, nA, nF, nD, f, r, A, B
+    real colvector QSHI, tq, tm, tv, PH, vbase, cQH, cQINT
+    real scalar EXR, FSAV, nA, nF, nD, nH, f, r, A, B, c, TQADJ, TMADJ, TVADJ
 
     nA = M.n
     nF = M.nF
@@ -3313,13 +3580,25 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     W = _cge_v(M, x, 9);     WFD = _cge_v(M, x, 41);  QF = _cge_v(M, x, 16)
     YIF = _cge_v(M, x, 28)
     EXR = _cge_v(M, x, 10);  FSAV = _cge_v(M, x, 34)
+    QH = _cge_v(M, x, 23);   QINT = _cge_v(M, x, 17); QSHI = _cge_v(M, x, 47)
+    TQADJ = _cge_v(M, x, 50); TMADJ = _cge_v(M, x, 51); TVADJ = _cge_v(M, x, 52)
+    nH = M.nH
+    tq = p.tq :* TQADJ
+    tm = p.tm :* TMADJ
+    tv = p.tv :* TVADJ
+    PH = PQ :* (1 :+ tv)
+    // VAT base by commodity: final demand and the inputs activities cannot recover
+    vbase = rowsum(QH) + QG + QINV + QSHI + rowsum(QINT :* (1 :- p.kappa)')
+    cQH = _cge_vcols(M, "QH")
+    cQINT = _cge_vcols(M, "QINT")
     cQF = _cge_vcols(M, "QF")
     cWFD = _cge_vcols(M, "WFDIST")
     cYIF = _cge_vcols(M, "YIF")
 
     // P8, P9: price indexes
     G[1, _cge_vcols(M, "CPI")] = 1
-    G[1, _cge_vcols(M, "PQ")'] = -p.cwts'
+    G[1, _cge_vcols(M, "PQ")'] = -(p.cwts :* (1 :+ tv))'
+    G[1, _cge_vcols(M, "TVADJ")] = -sum(p.cwts :* PQ :* p.tv)
     G[2, _cge_vcols(M, "DPI")] = 1
     G[2, _cge_vcols(M, "PD")'] = -p.dwts'
     // I1: factor incomes
@@ -3336,11 +3615,23 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     G[r, _cge_vcols(M, "YG")] = 1
     G[r, _cge_vcols(M, "TINS")'] = -YI'
     G[r, _cge_vcols(M, "YI")'] = -TINS'
-    G[r, _cge_vcols(M, "PQ")'] = -(p.tq :* QQ)'
-    G[r, _cge_vcols(M, "QQ")'] = -(p.tq :* PQ)'
-    G[r, _cge_vcols(M, "QM")'] = -EXR :* (p.tm :* p.pwm)'
+    G[r, _cge_vcols(M, "PQ")'] = -(tq :* QQ + tv :* vbase)'
+    G[r, _cge_vcols(M, "QQ")'] = -(tq :* PQ)'
+    G[r, _cge_vcols(M, "QM")'] = -EXR :* (tm :* p.pwm)'
     G[r, _cge_vcols(M, "QE")'] = -EXR :* (p.te :* p.pwe)'
-    G[r, _cge_vcols(M, "EXR")] = -(sum(p.tm :* p.pwm :* QM) + sum(p.te :* p.pwe :* QE) + p.trgr)
+    G[r, _cge_vcols(M, "EXR")] = -(sum(tm :* p.pwm :* QM) + sum(p.te :* p.pwe :* QE) + p.trgr)
+    G[r, _cge_vcols(M, "TQADJ")] = -sum(p.tq :* PQ :* QQ)
+    G[r, _cge_vcols(M, "TMADJ")] = -EXR * sum(p.tm :* p.pwm :* QM)
+    G[r, _cge_vcols(M, "TVADJ")] = -sum(p.tv :* PQ :* vbase)
+    // VAT on each use
+    G[r, _cge_vcols(M, "QG")'] = -(tv :* PQ)'
+    G[r, _cge_vcols(M, "QINV")'] = -(tv :* PQ)'
+    G[r, _cge_vcols(M, "QSHI")'] = -(tv :* PQ)'
+    for (c = 1; c <= M.nC; c++) {
+        if (tv[c] == 0) continue
+        G[r, cQH[|(c - 1) * nH + 1 \ c * nH|]'] = J(1, nH, -tv[c] * PQ[c])
+        G[r, cQINT[|(c - 1) * nA + 1 \ c * nA|]'] = -tv[c] * PQ[c] :* (1 :- p.kappa)'
+    }
     G[r, _cge_vcols(M, "PA")'] = -(p.ta :* QA)'
     G[r, _cge_vcols(M, "QA")'] = -(p.ta :* PA)'
     G[r, cYIF[|nD * nF + 1 \ (nD + 1) * nF|]'] = J(1, nF, -1)
@@ -3348,10 +3639,11 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     // I9: government spending
     r = 4 + nF
     G[r, _cge_vcols(M, "EG")] = 1
-    G[r, _cge_vcols(M, "PQ")'] = -QG'
-    G[r, _cge_vcols(M, "QG")'] = -PQ'
+    G[r, _cge_vcols(M, "PQ")'] = -((1 :+ tv) :* QG)'
+    G[r, _cge_vcols(M, "QG")'] = -PH'
+    G[r, _cge_vcols(M, "TVADJ")] = -sum(p.tv :* PQ :* QG)
     G[r, _cge_vcols(M, "CPI")] = -(sum(p.trdg) + p.trgg + p.trshi)
-    G[r, _cge_vcols(M, "EXR")] = -p.trrg
+    G[r, _cge_vcols(M, "EXR")] = -(p.trrg + p.rf * p.fdebt)
     // S1: factor markets
     for (f = 1; f <= nF; f++) {
         r = 4 + nF + f
@@ -3381,8 +3673,9 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     G[r, _cge_vcols(M, "YSHI")] = p.sshi
     G[r, _cge_vcols(M, "EXR")] = FSAV
     G[r, _cge_vcols(M, "FSAV")] = EXR
-    G[r, _cge_vcols(M, "PQ")'] = -QINV'
-    G[r, _cge_vcols(M, "QINV")'] = -PQ'
+    G[r, _cge_vcols(M, "PQ")'] = -((1 :+ tv) :* QINV)'
+    G[r, _cge_vcols(M, "QINV")'] = -PH'
+    G[r, _cge_vcols(M, "TVADJ")] = -sum(p.tv :* PQ :* QINV)
     G[r, _cge_vcols(M, "WALRAS")] = -1
     return(G)
 }
@@ -3821,12 +4114,29 @@ real scalar _cge_sim_index(struct cge_model scalar M, string scalar sim)
     return(k)
 }
 
+// Price paid by final users, including VAT (model_spec.md, P8; from version
+// 0.3.1): PH = PQ (1 + tv TVADJ)
+real colvector _cge_ph(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    return(_cge_v(M, x, 8) :* (1 :+ p.tv :* _cge_v(M, x, 52)))
+}
+
+// Net VAT revenue (I8)
+real scalar _cge_vat(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    real colvector base
+    base = rowsum(_cge_v(M, x, 23)) + _cge_v(M, x, 24) + _cge_v(M, x, 25) + _cge_v(M, x, 47) +
+           rowsum(_cge_v(M, x, 17) :* (1 :- p.kappa)')
+    return(sum(p.tv :* _cge_v(M, x, 52) :* _cge_v(M, x, 8) :* base))
+}
+
 real colvector _cge_ev(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
 {
     real matrix PQ0, PQ1
     real colvector EH0, EH1
-    PQ0 = _cge_v(M, M.x0, _cge_vidx(M, "PQ"))
-    PQ1 = _cge_v(M, x, _cge_vidx(M, "PQ"))
+    // With VAT, the prices households pay
+    PQ0 = _cge_ph(M, M.p0, M.x0)
+    PQ1 = _cge_ph(M, p, x)
     EH0 = _cge_v(M, M.x0, _cge_vidx(M, "EH"))
     EH1 = _cge_v(M, x, _cge_vidx(M, "EH"))
     return((PQ0' * p.gamma)' + (EH1 - (PQ1' * p.gamma)') :* exp(colsum(p.beta :* ln(PQ0 :/ PQ1)))' - EH0)
@@ -3842,9 +4152,11 @@ real scalar _cge_gdpgap(struct cge_model scalar M, struct cge_par scalar p, real
     EXR = _cge_v(M, x, 10);  PVA = _cge_v(M, x, 2);   QVA = _cge_v(M, x, 14)
     QQ = _cge_v(M, x, 22);   PA = _cge_v(M, x, 1);    QA = _cge_v(M, x, 13)
     QER = _cge_v(M, x, 44);  QSHI = _cge_v(M, x, 47)
-    expend = PQ' * (rowsum(QH) + QG + QINV + QER + QSHI) + EXR * (p.pwe' * QE) - EXR * (p.pwm' * QM)
-    income = PVA' * QVA + sum(p.tq :* PQ :* QQ) + EXR * sum(p.tm :* p.pwm :* QM) +
-             EXR * sum(p.te :* p.pwe :* QE) + sum(p.ta :* PA :* QA)
+    expend = _cge_ph(M, p, x)' * (rowsum(QH) + QG + QINV + QSHI) + PQ' * QER +
+             EXR * (p.pwe' * QE) - EXR * (p.pwm' * QM)
+    income = PVA' * QVA + sum(p.tq :* _cge_v(M, x, 50) :* PQ :* QQ) +
+             EXR * sum(p.tm :* _cge_v(M, x, 51) :* p.pwm :* QM) +
+             EXR * sum(p.te :* p.pwe :* QE) + sum(p.ta :* PA :* QA) + _cge_vat(M, p, x)
     return(expend - income)
 }
 
@@ -4029,8 +4341,8 @@ real matrix _cge_vn(struct cge_model scalar M, real colvector x, string scalar n
 real colvector _cge_cv(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
 {
     real colvector PQ0, PQ1, EH0, EH1
-    PQ0 = _cge_vn(M, M.x0, "PQ")
-    PQ1 = _cge_vn(M, x, "PQ")
+    PQ0 = _cge_ph(M, M.p0, M.x0)
+    PQ1 = _cge_ph(M, p, x)
     EH0 = _cge_vn(M, M.x0, "EH")
     EH1 = _cge_vn(M, x, "EH")
     return(EH1 - (PQ1' * p.gamma)' - (EH0 - (PQ0' * p.gamma)') :* exp(colsum(p.beta :* ln(PQ1 :/ PQ0)))')
@@ -4050,9 +4362,9 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
 {
     struct cge_par scalar p0
     real colvector PQ, PQ0, QG, QINV, QSHI, QER, QE, QM, fin, YI, TINS, MPS, W, YF, QFS, EH
-    real colvector QA, PA, QVA, PVA0, QQ, QX, QD, EFF
+    real colvector QA, PA, QVA, PVA0, QQ, QX, QD, EFF, PH, PH0
     real matrix QH
-    real scalar EXR, EXR0, CPI, DPI, gdpn, gdpr, k
+    real scalar EXR, EXR0, CPI, DPI, gdpn, gdpr, k, gsav, intd, intf, endd, endf
 
     p0 = M.p0
     keys = J(0, 3, "")
@@ -4072,16 +4384,20 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
     QQ = _cge_vn(M, x, "QQ");        QX = _cge_vn(M, x, "QX")
     QD = _cge_vn(M, x, "QD");        EFF = _cge_vn(M, x, "EFF")
 
-    fin = rowsum(QH) + QG + QINV + QSHI + QER
-    gdpn = PQ' * fin + EXR * (p.pwe' * QE) - EXR * (p.pwm' * QM)
-    gdpr = PQ0' * fin + EXR0 * (p0.pwe' * QE) - EXR0 * (p0.pwm' * QM)
+    // Final demand at final-user prices, including VAT; exports from composite
+    // supply at PQ (from version 0.3.1)
+    PH = _cge_ph(M, p, x)
+    PH0 = _cge_ph(M, p0, M.x0)
+    fin = rowsum(QH) + QG + QINV + QSHI
+    gdpn = PH' * fin + PQ' * QER + EXR * (p.pwe' * QE) - EXR * (p.pwm' * QM)
+    gdpr = PH0' * fin + PQ0' * QER + EXR0 * (p0.pwe' * QE) - EXR0 * (p0.pwm' * QM)
     _cge_radd(keys, val, "macro", "gdp_nominal", "", gdpn)
     _cge_radd(keys, val, "macro", "gdp_real", "", gdpr)
     _cge_radd(keys, val, "macro", "gdp_deflator", "", gdpn / gdpr)
-    _cge_radd(keys, val, "macro", "consumption_real", "", PQ0' * rowsum(QH))
-    _cge_radd(keys, val, "macro", "government_real", "", PQ0' * QG)
-    _cge_radd(keys, val, "macro", "investment_real", "", PQ0' * QINV)
-    _cge_radd(keys, val, "macro", "insurance_fund_real", "", PQ0' * QSHI)
+    _cge_radd(keys, val, "macro", "consumption_real", "", PH0' * rowsum(QH))
+    _cge_radd(keys, val, "macro", "government_real", "", PH0' * QG)
+    _cge_radd(keys, val, "macro", "investment_real", "", PH0' * QINV)
+    _cge_radd(keys, val, "macro", "insurance_fund_real", "", PH0' * QSHI)
     _cge_radd(keys, val, "macro", "exports_real", "", EXR0 * (p0.pwe' * QE) + PQ0' * QER)
     _cge_radd(keys, val, "macro", "imports_real", "", EXR0 * (p0.pwm' * QM))
     _cge_radd(keys, val, "macro", "value_added_real", "", PVA0' * QVA)
@@ -4090,17 +4406,35 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
     _cge_radd(keys, val, "macro", "exchange_rate", "", EXR)
     _cge_radd(keys, val, "macro", "real_exchange_rate", "", EXR / DPI)
     _cge_radd(keys, val, "macro", "private_savings", "", (MPS :* (1 :- TINS))' * YI)
-    _cge_radd(keys, val, "macro", "investment_value", "", PQ' * QINV)
+    _cge_radd(keys, val, "macro", "investment_value", "", PH' * QINV)
     _cge_radd(keys, val, "macro", "foreign_savings", "", _cge_vn(M, x, "FSAV"))
 
     _cge_radd(keys, val, "government", "revenue", "", _cge_vn(M, x, "YG"))
     _cge_radd(keys, val, "government", "spending", "", _cge_vn(M, x, "EG"))
     _cge_radd(keys, val, "government", "savings", "", _cge_vn(M, x, "GSAV"))
     _cge_radd(keys, val, "government", "tax_direct", "", TINS' * YI)
-    _cge_radd(keys, val, "government", "tax_sales", "", sum(p.tq :* PQ :* QQ))
-    _cge_radd(keys, val, "government", "tax_import", "", EXR * sum(p.tm :* p.pwm :* QM))
+    _cge_radd(keys, val, "government", "tax_sales", "", sum(p.tq :* _cge_vn(M, x, "TQADJ") :* PQ :* QQ))
+    _cge_radd(keys, val, "government", "tax_import", "", EXR * sum(p.tm :* _cge_vn(M, x, "TMADJ") :* p.pwm :* QM))
     _cge_radd(keys, val, "government", "tax_export", "", EXR * sum(p.te :* p.pwe :* QE))
     _cge_radd(keys, val, "government", "tax_activity", "", sum(p.ta :* PA :* QA))
+    _cge_radd(keys, val, "government", "tax_vat", "", _cge_vat(M, p, x))
+
+    // Public debt (model_spec.md, 12.3): stocks at the end of the period
+    if (p0.debt == 1) {
+        gsav = _cge_vn(M, x, "GSAV")
+        intd = p.rd * p.ddebt
+        intf = p.rf * p.fdebt * EXR
+        endd = p.ddebt + (1 - p.phi) * (-gsav)
+        endf = p.fdebt + p.phi * (-gsav) / EXR
+        _cge_radd(keys, val, "debt", "interest_domestic", "", intd)
+        _cge_radd(keys, val, "debt", "interest_foreign", "", intf)
+        _cge_radd(keys, val, "debt", "primary_balance", "", gsav + intd + intf)
+        _cge_radd(keys, val, "debt", "debt_domestic", "", endd)
+        _cge_radd(keys, val, "debt", "debt_foreign", "", endf * EXR)
+        _cge_radd(keys, val, "debt", "debt_foreign_fc", "", endf)
+        _cge_radd(keys, val, "debt", "debt_total", "", endd + endf * EXR)
+        _cge_radd(keys, val, "debt", "debt_gdp", "", 100 * (endd + endf * EXR) / gdpn)
+    }
 
     for (k = 1; k <= M.nD; k++) _cge_radd(keys, val, "institutions", "income", M.D[k], YI[k])
     for (k = 1; k <= M.nH; k++) _cge_radd(keys, val, "institutions", "consumption", M.H[k], EH[k])
@@ -4205,10 +4539,10 @@ void _cge_report_run(string scalar sims, string scalar tables, real scalar show,
     s = _cge_sim_list(M, sims)
     ns = rows(s)
     _cge_report_rows(M, s, keys, base, vals, pct)
-    alltab = ("macro", "government", "institutions", "factors", "activities", "commodities", "health", "welfare")
-    title = ("Macroeconomic aggregates", "Government", "Institutions", "Factors", "Activities",
+    alltab = ("macro", "government", "debt", "institutions", "factors", "activities", "commodities", "health", "welfare")
+    title = ("Macroeconomic aggregates", "Government", "Public debt", "Institutions", "Factors", "Activities",
              "Commodities", "Health", "Welfare (per cent of base consumption)")
-    tab = (tables == "" ? ("macro", "government", "institutions", "factors", "health", "welfare") :
+    tab = (tables == "" ? ("macro", "government", "debt", "institutions", "factors", "health", "welfare") :
           (tables == "all" ? alltab : tokens(tables)))
     for (t = 1; t <= cols(tab); t++) {
         if (!anyof(alltab, tab[t])) _cge_fail("tables(): " + tab[t] + " is not a report table (" +
@@ -4345,14 +4679,14 @@ void _cge_param_data(string scalar sim, real scalar current)
     _cge_padd(keys, val, "sq", p.sq, M.C, none);     _cge_padd(keys, val, "qg", p.qg, M.C, none)
     _cge_padd(keys, val, "qinv", p.qinv, M.C, none); _cge_padd(keys, val, "qer", p.qer, M.C, none)
     _cge_padd(keys, val, "cwts", p.cwts, M.C, none); _cge_padd(keys, val, "dwts", p.dwts, M.C, none)
-    _cge_padd(keys, val, "qshi", p.qshi, M.C, none)
+    _cge_padd(keys, val, "qshi", p.qshi, M.C, none); _cge_padd(keys, val, "tv", p.tv, M.C, none)
     // activities
     _cge_padd(keys, val, "ta", p.ta, M.A, none);     _cge_padd(keys, val, "ad", p.ad, M.A, none)
     _cge_padd(keys, val, "iva", p.iva, M.A, none);   _cge_padd(keys, val, "inta", p.inta, M.A, none)
     _cge_padd(keys, val, "rva", p.rva, M.A, none);   _cge_padd(keys, val, "sva", p.sva, M.A, none)
     _cge_padd(keys, val, "aa", p.aa, M.A, none);     _cge_padd(keys, val, "dla", p.dla, M.A, none)
     _cge_padd(keys, val, "dlac", p.dlac, M.A, none); _cge_padd(keys, val, "rha", p.rha, M.A, none)
-    _cge_padd(keys, val, "sa", p.sa, M.A, none)
+    _cge_padd(keys, val, "sa", p.sa, M.A, none);     _cge_padd(keys, val, "kappa", p.kappa, M.A, none)
     // matrices
     _cge_padd(keys, val, "ica", p.ica, M.C, M.A);     _cge_padd(keys, val, "dva", p.dva, M.F, M.A)
     _cge_padd(keys, val, "theta", p.theta, M.A, M.C); _cge_padd(keys, val, "icm", p.icm, M.C, M.C)
@@ -4364,11 +4698,15 @@ void _cge_param_data(string scalar sim, real scalar current)
     _cge_padd(keys, val, "trdr", p.trdr, M.D, none);   _cge_padd(keys, val, "hc", p.hc, M.H, none)
     _cge_padd(keys, val, "trfr", p.trfr, M.F, none);   _cge_padd(keys, val, "tshi", p.tshi, M.F, none)
     _cge_padd(keys, val, "af", p.af, M.F, none);       _cge_padd(keys, val, "etah", p.etah, M.F, none)
+    _cge_padd(keys, val, "hold", p.hold, M.D, none)
     // scalars
     _cge_padd(keys, val, "trgr", p.trgr, "", none);    _cge_padd(keys, val, "trrg", p.trrg, "", none)
     _cge_padd(keys, val, "trgg", p.trgg, "", none);    _cge_padd(keys, val, "sshi", p.sshi, "", none)
     _cge_padd(keys, val, "trshi", p.trshi, "", none);  _cge_padd(keys, val, "trshir", p.trshir, "", none)
     _cge_padd(keys, val, "hs0", p.hs0, "", none)
+    _cge_padd(keys, val, "debt", p.debt, "", none);    _cge_padd(keys, val, "ddebt", p.ddebt, "", none)
+    _cge_padd(keys, val, "fdebt", p.fdebt, "", none);  _cge_padd(keys, val, "rd", p.rd, "", none)
+    _cge_padd(keys, val, "rf", p.rf, "", none);        _cge_padd(keys, val, "phi", p.phi, "", none)
     st_addobs(rows(val))
     (void) st_addvar("str8", "parameter")
     (void) st_addvar("str32", "element1")
@@ -4430,22 +4768,55 @@ string scalar _cge_signature()
     return(sig)
 }
 
+// Defaults of the parameters added in version 0.3.1, for models saved before it
+void _cge_par_fill(struct cge_par scalar p, struct cge_model scalar M)
+{
+    if (M.calibrated != 1) return
+    if (rows(p.tv) == 0) p.tv = J(M.nC, 1, 0)
+    if (rows(p.kappa) == 0) p.kappa = J(M.n, 1, 1)
+    if (rows(p.hold) == 0) p.hold = J(M.nD, 1, 0)
+    if (p.debt >= .) p.debt = 0
+    if (p.ddebt >= .) p.ddebt = 0
+    if (p.fdebt >= .) p.fdebt = 0
+    if (p.rd >= .) p.rd = 0
+    if (p.rf >= .) p.rf = 0
+    if (p.phi >= .) p.phi = 0
+}
+
+void _cge_use_upgrade(struct cge_model scalar M)
+{
+    real scalar nold
+    nold = rows(M.x0)
+    _cge_layout(M)
+    M.x0 = M.x0 \ J(3, 1, 1)
+    M.xcur = M.xcur \ J(3, 1, 1)
+    M.xscale = M.xscale \ J(3, 1, 1)
+    M.exists = M.exists \ J(3, 1, 1)
+    M.fixed = M.fixed \ J(3, 1, 1)
+    M.nominal = M.nominal \ J(3, 1, 0)
+    M.simx = M.simx \ J(3, cols(M.simx), 1)
+    if (rows(M.x0) != nold + 3) _cge_fail("cge internal error: the saved model's variables do not match", 3498)
+    _cge_pattern(M, M.p0)
+}
+
 void _cge_use(string scalar fn)
 {
     struct cge_model scalar M
     struct cge_par scalar q0, q1, qs
     struct cge_par rowvector sp
-    transmorphic matrix v
+    transmorphic matrix v, hd
     string scalar name, ver, rest, sig, head
     real scalar fh, unknown, ok, cur, d, k
     if (!fileexists(fn)) _cge_fail("file " + fn + " not found", 601)
-    // Compare the first bytes with those fputmatrix() writes for the file's
-    // identifier: fgetmatrix() on another kind of file stops with an error and
-    // would leave the file open
+    // Check the file's identifier before fgetmatrix(), which stops with an
+    // error on another kind of file and would leave it open. Some header bytes
+    // that fputmatrix() writes differ between Stata sessions, so only the
+    // format's opening bytes and the identifier itself are compared.
     sig = _cge_signature()
     fh = fopen(fn, "r")
-    head = fread(fh, strlen(sig))
-    if (head != sig) {
+    hd = fread(fh, strlen(sig))
+    head = (rows(hd) * cols(hd) ? hd : "")
+    if (substr(head, 1, 5) != substr(sig, 1, 5) | !strpos(head, "cge-stata model")) {
         fclose(fh)
         _cge_fail(fn + " is not a cge-stata model file", 610)
     }
@@ -4477,7 +4848,10 @@ void _cge_use(string scalar fn)
             d = strpos(rest, ".")
             k = strtoreal(substr(rest, 1, d - 1))
             if (k != cur) {
-                if (cur) sp[cur] = qs
+                if (cur) {
+                    _cge_par_fill(qs, M)
+                    sp[cur] = qs
+                }
                 qs = cge_par()
                 cur = k
             }
@@ -4487,10 +4861,20 @@ void _cge_use(string scalar fn)
         if (!ok) unknown++
     }
     fclose(fh)
-    if (cur) sp[cur] = qs
+    if (cur) {
+        _cge_par_fill(qs, M)
+        sp[cur] = qs
+    }
+    _cge_par_fill(q0, M)
+    _cge_par_fill(q1, M)
     M.p0 = q0
     M.p = q1
     M.simp = sp
+    // Files saved before version 0.3.1 have no VAT account and no tax scaling
+    // factors TQADJ, TMADJ and TVADJ: these are added, fixed at one, and the
+    // Jacobian pattern is rebuilt
+    if (M.ivattax >= .) M.ivattax = 0
+    if (M.calibrated == 1 & !_cge_vidx(M, "TQADJ")) _cge_use_upgrade(M)
     // Files saved before version 0.2.0 have no dynamic-run items
     if (rows(M.simrun) != rows(M.simname)) {
         M.simrun = J(rows(M.simname), 1, "")
@@ -4651,7 +5035,7 @@ void _cge_dyn_advance()
     struct cge_dyn scalar D
     real matrix QF, WFD
     real colvector QFS, W, inv0, YF0, q, s, rent, eta
-    real scalar f, inv, newk, avg, yk
+    real scalar f, inv, newk, avg, yk, def
 
     M = _cge_load()
     D = _cge_dyn_load()
@@ -4699,6 +5083,13 @@ void _cge_dyn_advance()
     M.p.trrg = M.p.trrg * (1 + D.gfor)
     M.p.trshir = M.p.trshir * (1 + D.gfor)
     if (M.c_ext == "flexexr") _cge_setv(M, M.xcur, "FSAV", _cge_vn(M, M.xcur, "FSAV") * (1 + D.gfor))
+    // 5. Public debt (model_spec.md, 12.3): last period's deficit is borrowed,
+    // the share phi abroad; a surplus repays debt in the same shares
+    if (M.p.debt == 1) {
+        def = -_cge_vn(M, D.prev, "GSAV")
+        M.p.ddebt = M.p.ddebt + (1 - M.p.phi) * def
+        M.p.fdebt = M.p.fdebt + M.p.phi * def / _cge_vn(M, D.prev, "EXR")
+    }
     _cge_store(M)
 }
 
@@ -4933,7 +5324,7 @@ void _cge_sens_init(real scalar draws, real scalar seed, real scalar spread, str
 
     M = _cge_load()
     _cge_need(M, "calibrated")
-    if (cols(M.calargs) != 10) _cge_fail("calibrate the model again: this model does not record its calibration", 459)
+    if (cols(M.calargs) < 10) _cge_fail("calibrate the model again: this model does not record its calibration", 459)
     if (spread < 0 | spread >= 1) _cge_fail("spread() must be at least 0 and less than 1", 198)
     if (dist != "uniform" & dist != "triangular") _cge_fail("distribution() must be uniform or triangular", 198)
     v = (vary == "" ? ("va", "q", "t") : tokens(vary))
@@ -4998,9 +5389,13 @@ void _cge_sens_calibrate(real scalar d)
 
     G = _cge_sens_load()
     _cge_sens_values(G, d, va, q, t, a)
+    // Options of the last calibration; models calibrated before version 0.3.1
+    // stored ten of them
     c = G.calargs
+    if (cols(c) < 15) c = c, J(1, 15 - cols(c), "")
     _cge_calibrate(_cge_numlist(va), _cge_numlist(q), _cge_numlist(t), c[4], c[5], c[6],
-                   (c[7] == "" & !anyof(G.vary, "a") ? "" : _cge_numlist(a)), c[8], c[9], c[10])
+                   (c[7] == "" & !anyof(G.vary, "a") ? "" : _cge_numlist(a)), c[8], c[9], c[10],
+                   c[11], c[12], c[13], c[14], c[15])
     M = _cge_load()
     _cge_closure_apply(M, G.ext, G.gov, G.si, G.num, G.fac)
     _cge_store(M)
@@ -5053,7 +5448,7 @@ void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
     P = G.pct[., ok]
     if (show) {
         tab = (tables == "" ? ("macro", "welfare") : (tables == "all" ?
-               ("macro", "government", "institutions", "factors", "activities", "commodities", "health", "welfare") :
+               ("macro", "government", "debt", "institutions", "factors", "activities", "commodities", "health", "welfare") :
                tokens(tables)))
         printf("\n{txt}Sensitivity of the scenario to the elasticities: {res}%f{txt} of {res}%f{txt} draws converged\n", n, D)
         printf("{txt}Per cent changes from the base (welfare: per cent of base consumption)\n")
@@ -5283,9 +5678,9 @@ void _cge_microsim(string scalar sim, string scalar touse, string scalar gvar, s
     }
     C1 = C0 :* ratio
 
-    // Prices: the household's budget shares, or its group's
-    PQ = _cge_vn(M, x, "PQ")
-    PQ0 = _cge_vn(M, M.x0, "PQ")
+    // Prices households pay (including VAT): the household's budget shares, or its group's
+    PQ = _cge_ph(M, p, x)
+    PQ0 = _cge_ph(M, M.p0, M.x0)
     pr = PQ :/ PQ0
     QH0 = _cge_vn(M, M.x0, "QH")
     wg = (PQ0 :* QH0) :/ (EH0' + (EH0' :== 0))
@@ -5430,6 +5825,15 @@ void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefi
     _cge_io_put(fh, prefix + "af", p.af)
     _cge_io_put(fh, prefix + "etah", p.etah)
     _cge_io_put(fh, prefix + "hs0", p.hs0)
+    _cge_io_put(fh, prefix + "tv", p.tv)
+    _cge_io_put(fh, prefix + "kappa", p.kappa)
+    _cge_io_put(fh, prefix + "debt", p.debt)
+    _cge_io_put(fh, prefix + "ddebt", p.ddebt)
+    _cge_io_put(fh, prefix + "fdebt", p.fdebt)
+    _cge_io_put(fh, prefix + "rd", p.rd)
+    _cge_io_put(fh, prefix + "rf", p.rf)
+    _cge_io_put(fh, prefix + "phi", p.phi)
+    _cge_io_put(fh, prefix + "hold", p.hold)
 }
 
 real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
@@ -5491,6 +5895,15 @@ real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmo
     else if (name == "af") p.af = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "etah") p.etah = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "hs0") p.hs0 = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "tv") p.tv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "kappa") p.kappa = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "debt") p.debt = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "ddebt") p.ddebt = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "fdebt") p.fdebt = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "rd") p.rd = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "rf") p.rf = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "phi") p.phi = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "hold") p.hold = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else return(0)
     return(1)
 }
@@ -5518,6 +5931,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "iexptax", M.iexptax)
     _cge_io_put(fh, "iacttax", M.iacttax)
     _cge_io_put(fh, "ishi", M.ishi)
+    _cge_io_put(fh, "ivattax", M.ivattax)
     _cge_io_put(fh, "A", M.A)
     _cge_io_put(fh, "C", M.C)
     _cge_io_put(fh, "F", M.F)
@@ -5620,6 +6034,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "iexptax") M.iexptax = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "iacttax") M.iacttax = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "ishi") M.ishi = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "ivattax") M.ivattax = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "A") M.A = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "C") M.C = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "F") M.F = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)

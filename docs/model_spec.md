@@ -144,6 +144,7 @@ Incomes, rates and adjustment variables
 | $TINS_d$ | direct tax rate of institution $d$ |
 | $MPS_d$ | marginal propensity to save of institution $d$ |
 | $TINSADJ$ | direct tax scaling factor |
+| $TQADJ$, $TMADJ$, $TVADJ$ | scaling factors of the sales tax, import tariff and VAT rates (from version 0.3.1; one unless the closure frees one of them, Section 12.1) |
 | $MPSADJ$ | savings rate scaling factor |
 | $IADJ$ | investment scaling factor |
 | $GADJ$ | government consumption scaling factor |
@@ -158,6 +159,8 @@ Incomes, rates and adjustment variables
 |---|---|
 | $pwm_c$, $pwe_c$ | world import and export prices (foreign currency) |
 | $tm_c$, $te_c$, $tq_c$, $ta_a$ | import, export, sales and activity tax rates |
+| $tv_c$, $\kappa_a$ | VAT rate on commodity $c$, and the share of VAT on its inputs that activity $a$ recovers as a credit (from version 0.3.1; $tv_c = 0$ and $\kappa_a = 1$ without VAT; Section 12.2) |
+| $DD$, $DF$, $r^d$, $r^f$, $hold_d$, $\phi$ | public debt held at home (local currency) and abroad (foreign currency) at the start of the period, their interest rates, the share of domestic interest received by institution $d$, and the share of new borrowing from abroad (from version 0.3.1; zero without debt; Section 12.3) |
 | $\theta_{ac}$ | yield: output of commodity $c$ per unit of activity $a$ |
 | $iva_a$, $inta_a$ | value added and aggregate intermediate input per unit of activity (Leontief top nest) |
 | $aa_a$, $\delta^{a}_a$, $\rho^{a}_a$ | efficiency, value-added share and exponent of a CES or Cobb-Douglas top nest |
@@ -203,11 +206,11 @@ $\sigma^{q}_c \neq 1$ is required for imported commodities.
 
 ### 5.1 Price block
 
-$$PM_c = pwm_c\,(1+tm_c)\,EXR, \qquad c \in CM \tag{P1}$$
+$$PM_c = pwm_c\,(1+tm_c\,TMADJ)\,EXR, \qquad c \in CM \tag{P1}$$
 
 $$PE_c = pwe_c\,(1-te_c)\,EXR, \qquad c \in CE \tag{P2}$$
 
-$$PQ_c\,(1-tq_c)\,QQ_c = PD_c\,QD_c + PM_c\,QM_c + \sum_{c' \in CT} PQ_{c'}\,icm_{c'c}\,QQ_c \tag{P3}$$
+$$PQ_c\,(1-tq_c\,TQADJ)\,QQ_c = PD_c\,QD_c + PM_c\,QM_c + \sum_{c' \in CT} PQ_{c'}\,icm_{c'c}\,QQ_c \tag{P3}$$
 
 where the domestic term applies only for $c \in CX$, the import term only for
 $c \in CM$, and the margin term only when $c$ pays margins.
@@ -218,11 +221,15 @@ where the export term applies only for $c \in CE$.
 
 $$PA_a = \sum_c \theta_{ac}\,PX_c \tag{P5}$$
 
-$$PINTA_a = \sum_{c} PQ_c\,ica_{ca} \tag{P6}$$
+$$PINTA_a = \sum_{c} PQ_c\,\big(1 + tv_c\,TVADJ\,(1-\kappa_a)\big)\,ica_{ca} \tag{P6}$$
 
 $$PA_a\,(1-ta_a)\,QA_a = PVA_a\,QVA_a + PINTA_a\,QINTA_a \tag{P7}$$
 
-$$CPI = \sum_c cwts_c\,PQ_c \tag{P8}$$
+$$CPI = \sum_c cwts_c\,PH_c \tag{P8}$$
+
+where $PH_c = PQ_c\,(1 + tv_c\,TVADJ)$ is the price paid by final users,
+including VAT (from version 0.3.1; $PH_c = PQ_c$ without VAT). It is an
+expression, not a variable.
 
 $$DPI = \sum_c dwts_c\,PD_c \tag{P9}$$
 
@@ -354,7 +361,7 @@ $$YIF_{if} = shif_{if}\,(1-tshi_f)\,YF_f, \quad i \in I \setminus \{shi\}; \qqua
 
 Without a health insurance fund, $tshi_f = 0$.
 
-$$YI_d = \sum_f YIF_{df} + \sum_{d' \in D} shii_{dd'}\,(1-MPS_{d'})(1-TINS_{d'})\,YI_{d'} + trnsfr_{d,gov}\,CPI + trnsfr_{d,row}\,EXR \tag{I3}$$
+$$YI_d = \sum_f YIF_{df} + \sum_{d' \in D} shii_{dd'}\,(1-MPS_{d'})(1-TINS_{d'})\,YI_{d'} + trnsfr_{d,gov}\,CPI + trnsfr_{d,row}\,EXR + hold_d\,r^d\,DD \tag{I3}$$
 
 $$EH_h = hc_h\,(1-MPS_h)(1-TINS_h)\,YI_h \tag{I4}$$
 
@@ -363,7 +370,7 @@ income after direct taxes and savings is transferred. For households,
 $hc_h = 1 - \sum_d shii_{dh} - shir_h$. A transfer from an institution to itself
 (a diagonal SAM cell) is allowed; it appears on both sides of its accounts.
 
-$$PQ_c\,QH_{ch} = PQ_c\,\gamma_{ch} + \beta_{ch}\left(EH_h - \sum_{c'} PQ_{c'}\,\gamma_{c'h}\right) \tag{I5}$$
+$$PH_c\,QH_{ch} = PH_c\,\gamma_{ch} + \beta_{ch}\left(EH_h - \sum_{c'} PH_{c'}\,\gamma_{c'h}\right) \tag{I5}$$
 
 With $\gamma_{ch} = 0$ this is Cobb-Douglas demand, the default. From version
 0.1.11 the linear expenditure system (LES) is available: households first buy
@@ -377,9 +384,13 @@ $$QINV_c = \overline{qinv}_c\,IADJ \tag{I6}$$
 
 $$QG_c = \overline{qg}_c\,GADJ \tag{I7}$$
 
-$$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,pwe_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI \tag{I8}$$
+$$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,TQADJ\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,TMADJ\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,pwe_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + VAT + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI \tag{I8}$$
 
-$$EG = \sum_c PQ_c\,QG_c + \sum_d trnsfr_{d,gov}\,CPI + trnsfr_{gov,gov}\,CPI + trnsfr_{shi,gov}\,CPI + trnsfr_{row,gov}\,EXR \tag{I9}$$
+with VAT revenue (zero without VAT)
+
+$$VAT = TVADJ \sum_c tv_c\,PQ_c \Big(\sum_h QH_{ch} + QG_c + QINV_c + QSHI_c + \sum_a (1-\kappa_a)\,QINT_{ca}\Big)$$
+
+$$EG = \sum_c PH_c\,QG_c + \sum_d trnsfr_{d,gov}\,CPI + trnsfr_{gov,gov}\,CPI + trnsfr_{shi,gov}\,CPI + trnsfr_{row,gov}\,EXR + r^d\,DD + r^f\,DF\,EXR \tag{I9}$$
 
 $$TINS_d = \overline{tins}_d\,TINSADJ \tag{I10}$$
 
@@ -391,7 +402,7 @@ $$YSHI = \sum_f YIF_{shi,f} + trnsfr_{shi,gov}\,CPI + trnsfr_{shi,row}\,EXR \tag
 
 $$QSHI_c = \overline{qshi}_c\,SHIADJ \tag{I13}$$
 
-$$\sum_c PQ_c\,QSHI_c = (1 - sshi)\,YSHI \tag{I14}$$
+$$\sum_c PH_c\,QSHI_c = (1 - sshi)\,YSHI \tag{I14}$$
 
 The fund buys a fixed basket of health services, scaled so that it spends its
 revenue less a fixed share saved. A higher contribution rate or larger transfers
@@ -405,11 +416,11 @@ $$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c + QER_c + QSHI
 
 where $QT_c$ applies only for $c \in CT$ and $QER_c$ only for $c \in CR$.
 
-$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} = \sum_{c \in CE} pwe_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + trnsfr_{shi,row} + FSAV \tag{S3}$$
+$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} + r^f\,DF = \sum_{c \in CE} pwe_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + trnsfr_{shi,row} + FSAV \tag{S3}$$
 
 $$YG = EG + GSAV \tag{S4}$$
 
-$$\sum_d MPS_d\,(1-TINS_d)\,YI_d + GSAV + sshi\,YSHI + EXR\cdot FSAV = \sum_c PQ_c\,QINV_c + WALRAS \tag{S5}$$
+$$\sum_d MPS_d\,(1-TINS_d)\,YI_d + GSAV + sshi\,YSHI + EXR\cdot FSAV = \sum_c PH_c\,QINV_c + WALRAS \tag{S5}$$
 
 $$\text{numeraire: } CPI = \overline{CPI} \quad\text{or}\quad DPI = \overline{DPI} \tag{S6}$$
 
@@ -429,7 +440,8 @@ each pair and leaves the other free.
 | External account | flexible exchange rate (default) | $FSAV$ | $EXR$ |
 | | fixed exchange rate | $EXR$ | $FSAV$ |
 | Government | flexible government savings (default) | $TINSADJ$, $GADJ$ | $GSAV$ |
-| | fixed government savings | $GSAV$, $GADJ$ | $TINSADJ$ |
+| | fixed government savings, direct tax rates adjust | $GSAV$, $GADJ$ | $TINSADJ$ |
+| | fixed government savings, sales tax, import tariff or VAT rates adjust (from version 0.3.1) | $GSAV$, $GADJ$, $TINSADJ$ | $TQADJ$, $TMADJ$ or $TVADJ$ |
 | Savings-investment | savings-driven (default) | $MPSADJ$ | $IADJ$ |
 | | investment-driven | $IADJ$ | $MPSADJ$ |
 | Factor $f$ | mobile, fully employed (default) | $QFS_f$, $WFDIST_{fa}$ | $W_f$, $QF_{fa}$ |
@@ -437,6 +449,9 @@ each pair and leaves the other free.
 | | unemployment at a fixed wage | $W_f$, $WFDIST_{fa}$ | $QFS_f$, $QF_{fa}$ |
 | Numeraire | CPI (default) | $CPI$ | $DPI$ |
 | | DPI | $DPI$ | $CPI$ |
+
+$TQADJ$, $TMADJ$ and $TVADJ$ are fixed, at one in the base, except the one
+that the government closure frees (Section 12.1).
 
 Variable and equation counts must be checked for every closure: the number of
 free variables must equal the number of equations.
@@ -582,15 +597,17 @@ quantities are supplied (Section 7.7).
 - For other commodities, $QD^0_c = QX^0_c$.
 - Margins paid by commodity $c$: $MG^0_c = \sum_{t \in T} SAM(t, c)$.
 - $QQ^0_c = QD^0_c + PM^0_c\,QM^0_c + SAM(tax_{sal}, c) + MG^0_c$ and
-  $tq_c = SAM(tax_{sal}, c) / QQ^0_c$.
+  $tq_c = SAM(tax_{sal}, c) / QQ^0_c$. VAT is not part of $QQ^0_c$; with
+  VAT, the uses of each commodity are quantities at $PQ^0_c = 1$ derived
+  from the SAM values as in Section 12.2.
 - Margin services: $QT^0_{c'} = \sum_{t \in T} SAM(c', t)$, and
   $icm_{c'c} = \sum_{t \in T} SAM(t, c)\,\dfrac{SAM(c', t)}{\sum_{c''} SAM(c'', t)} \Big/ QQ^0_c$,
   so that margins collected by account $t$ are spent on services in the
   proportions that $t$ buys them.
 
 SAM balance implies that $QQ^0_c$ equals total demand for $c$ at purchaser
-prices, other than exports from domestic output: the commodity row total minus
-$QE^0_c$, including purchases of margin services by margin accounts and exports
+prices, other than exports from domestic output and VAT: the commodity row
+total minus $QE^0_c$ and $SAM(vat, c)$, including purchases of margin services by margin accounts and exports
 from composite supply. Calibration must verify this identity, not assume it.
 
 ### 7.3 Production
@@ -652,17 +669,19 @@ from composite supply. Calibration must verify this identity, not assume it.
   $\beta_{ch} = \varepsilon_c\,w_{ch} / \sum_{c'} \varepsilon_{c'}\,w_{c'h}$, so that the
   marginal shares sum to one (the income elasticities used are then
   $\beta_{ch}/w_{ch}$, proportional to those supplied), and
-  $\gamma_{ch} = QH^0_{ch} + \beta_{ch}\,EH^0_h / (PQ^0_c\,\phi_h)$. Supernumerary
+  $\gamma_{ch} = QH^0_{ch} + \beta_{ch}\,EH^0_h / (PH^0_c\,\phi_h)$. Supernumerary
   spending $EH^0_h - \sum_c PQ^0_c\gamma_{ch}$ is then $-EH^0_h/\phi_h$, positive
   and below total spending because $\phi_h < -1$. Household consumption must be
   non-negative.
 - $trnsfr_{d,gov} = SAM(d, gov)$, $trnsfr_{gov,gov} = SAM(gov, gov)$,
   $trnsfr_{d,row} = SAM(d, row)$, $trnsfr_{f,row} = SAM(f, row)$,
   $trnsfr_{gov,row} = SAM(gov, row)$, $trnsfr_{row,gov} = SAM(row, gov)$.
-- $\overline{qg}_c = SAM(c, gov)$, $\overline{qinv}_c = SAM(c, sav)$,
+- $\overline{qg}_c = SAM(c, gov)$, $\overline{qinv}_c = SAM(c, sav)$ (divided by
+  $1 + tv_c$ with VAT, Section 12.2),
   $GSAV^0 = SAM(sav, gov)$, $FSAV^0 = SAM(sav, row)$.
 - $TINSADJ^0 = MPSADJ^0 = IADJ^0 = GADJ^0 = 1$.
-- $cwts_c = \sum_h SAM(c, h) / \sum_{c'} \sum_h SAM(c', h)$;
+- $cwts_c = \sum_h SAM(c, h) / \left[(1+tv_c) \sum_{c'} \sum_h SAM(c', h)\right]$, so
+  that $CPI^0 = 1$;
   $dwts_c = QD^0_c / \sum_{c'} QD^0_{c'}$.
 
 SAM balance implies $hc_h = 1 - \sum_d shii_{dh} - shir_h$ for households and
@@ -718,15 +737,16 @@ $pwm^0_c$, $pwe^0_c$; nominal measures use current prices and parameters.
 
 | Measure | Definition |
 |---|---|
-| Nominal GDP | $\sum_c PQ_c\,(\sum_h QH_{ch} + QG_c + QINV_c + QSHI_c + QER_c) + EXR\sum_c pwe_c QE_c - EXR\sum_c pwm_c QM_c$ |
-| Real GDP | the same at base prices and base world prices |
+| Nominal GDP | $\sum_c PH_c\,(\sum_h QH_{ch} + QG_c + QINV_c + QSHI_c) + \sum_c PQ_c\,QER_c + EXR\sum_c pwe_c QE_c - EXR\sum_c pwm_c QM_c$ |
+| Real GDP | the same at base prices ($PH^0_c$, $PQ^0_c$) and base world prices |
 | GDP deflator | nominal GDP / real GDP |
-| Real consumption, government consumption, investment, fund purchases | $\sum_c PQ^0_c$ times $\sum_h QH_{ch}$, $QG_c$, $QINV_c$, $QSHI_c$ |
+| Real consumption, government consumption, investment, fund purchases | $\sum_c PH^0_c$ times $\sum_h QH_{ch}$, $QG_c$, $QINV_c$, $QSHI_c$ |
 | Real exports, imports | $EXR^0\sum_c pwe^0_c QE_c + \sum_c PQ^0_c QER_c$; $EXR^0\sum_c pwm^0_c QM_c$ |
 | Real value added | $\sum_a PVA^0_a QVA_a$ |
 | Real exchange rate | $EXR / DPI$ |
 | Private savings | $\sum_d MPS_d (1 - TINS_d) YI_d$ |
-| Revenue by tax | direct $\sum_d TINS_d YI_d$; sales $\sum_c tq_c PQ_c QQ_c$; import $EXR \sum_c tm_c pwm_c QM_c$; export $EXR\sum_c te_c pwe_c QE_c$; activity $\sum_a ta_a PA_a QA_a$ |
+| Revenue by tax | direct $\sum_d TINS_d YI_d$; sales $\sum_c tq_c TQADJ\,PQ_c QQ_c$; import $EXR \sum_c tm_c TMADJ\,pwm_c QM_c$; export $EXR\sum_c te_c pwe_c QE_c$; activity $\sum_a ta_a PA_a QA_a$; VAT (I8) |
+| Public debt (Section 12.3, when the model has debt) | interest paid at home $r^d DD$ and abroad $r^f DF\,EXR$; primary balance $GSAV + r^d DD + r^f DF\,EXR$; debt at the end of the period at home $DD + (1-\phi)(-GSAV)$ and abroad, in local currency, $\left[DF + \phi(-GSAV)/EXR\right] EXR$; their total, and the total in per cent of nominal GDP |
 | Real wage | $W_f / CPI$ |
 | Exports of a commodity | $QE_c + QER_c$ |
 
@@ -737,7 +757,8 @@ $PQ_c$, $QX_c$, $QD_c$, $QM_c$, and, when the model has them, $HS$, $EFF_f$
 
 Welfare, for household $h$ with expenditure function
 $E_h(PQ, u) = \sum_c PQ_c\gamma_{ch} + u\prod_c PQ_c^{\beta_{ch}}$
-(Cobb-Douglas when $\gamma = 0$), base spending $EH^0_h$ and new spending
+(Cobb-Douglas when $\gamma = 0$; with VAT, $PQ$ stands for $PH$ in these
+formulas), base spending $EH^0_h$ and new spending
 $EH_h$:
 
 $$EV_h = \sum_c PQ^0_c\gamma_{ch} + \Big(EH_h - \sum_c PQ_c\gamma_{ch}\Big)\prod_c \Big(\frac{PQ^0_c}{PQ_c}\Big)^{\beta_{ch}} - EH^0_h$$
@@ -786,8 +807,15 @@ Before period $t \geq 1$, in this order:
    $trnsfr_{gov,row}$, $trnsfr_{row,gov}$, $trnsfr_{shi,row}$, and $FSAV$ when
    it is fixed) grow at $g_W$. Other fixed values, including the numeraire,
    are unchanged.
-5. **Shocks** for period $t$, if any, are applied.
-6. **Efficiency.** $ad_{a,t} = \lambda_{a,t}\,ad_{a,t-1}$, with
+5. **Public debt** (from version 0.3.1, when the model has debt). The
+   deficit of period $t-1$, $-GSAV_{t-1}$, is borrowed, a share $\phi$
+   abroad:
+   $$DD_t = DD_{t-1} + (1-\phi)\,(-GSAV_{t-1}), \qquad DF_t = DF_{t-1} + \phi\,(-GSAV_{t-1}) / EXR_{t-1}.$$
+   A surplus repays debt in the same shares. Interest in period $t$ is
+   paid on these stocks (I3, I9, S3).
+6. **Shocks** for period $t$, if any, are applied; they may change the
+   debt stocks and interest rates.
+7. **Efficiency.** $ad_{a,t} = \lambda_{a,t}\,ad_{a,t-1}$, with
    $\lambda_{a,t} = 1 + g^{ad}_a$; or a uniform $\lambda_t$ given by a
    baseline run; or, to calibrate a baseline to growth targets, the uniform
    $\lambda_t$ for which real value added at base prices,
@@ -832,6 +860,115 @@ poverty measures use consumption per person, $r_i = R_i/n_i$ (base
 $C^0_i/n_i$), and person weights $w_i n_i$:
 $$FGT_\alpha = \frac{\sum_i w_i n_i\,\mathbf{1}[r_i < z]\,\big((z - r_i)/z\big)^\alpha}{\sum_i w_i n_i}, \qquad \alpha = 0, 1, 2,$$
 for a poverty line $z$, and the Gini coefficient is that of $r_i$ over persons.
+
+## 12. Fiscal instruments (from version 0.3.1)
+
+### 12.1 Revenue-neutral tax replacement
+
+The sales tax, import tariff and VAT rates are scaled by $TQADJ$, $TMADJ$
+and $TVADJ$ (P1, P3, P6, P8, I8), as direct tax rates are scaled by
+$TINSADJ$ (I10). All four are fixed at one, except under a closure that fixes
+government savings and names one of them as the adjusting instrument:
+
+| `government()` | Fixed | Free |
+|---|---|---|
+| `flexgsav` (default) | $TINSADJ$, $TQADJ$, $TMADJ$, $TVADJ$, $GADJ$ | $GSAV$ |
+| `fixgsav` or `fixgsav direct` | $GSAV$, $TQADJ$, $TMADJ$, $TVADJ$, $GADJ$ | $TINSADJ$ |
+| `fixgsav sales` | $GSAV$, $TINSADJ$, $TMADJ$, $TVADJ$, $GADJ$ | $TQADJ$ |
+| `fixgsav import` | $GSAV$, $TINSADJ$, $TQADJ$, $TVADJ$, $GADJ$ | $TMADJ$ |
+| `fixgsav vat` | $GSAV$, $TINSADJ$, $TQADJ$, $TMADJ$, $GADJ$ | $TVADJ$ |
+
+The instrument scales every base rate of that tax in proportion, so rates
+that are zero in the base stay zero; the tax must raise revenue in the base.
+With $GADJ$ fixed, government consumption is unchanged in real terms, so the
+closure keeps government savings at their base value: in real terms under the
+CPI numeraire, in terms of domestic producer prices under the DPI numeraire.
+It replaces lost revenue, for example from a tariff cut, with whichever tax
+the user chooses, and the scaling factor shows the rise in rates required.
+Under these closures a shock to the instrument's own rates, such as removing
+tariffs while tariffs adjust, is not meaningful: the scaling factor offsets
+it.
+
+### 12.2 Value added tax with input credits
+
+VAT is charged on sales of each commodity at the rate $tv_c$, on the price
+$PQ_c$ before VAT. Final users (households, the government, investment and
+the health insurance fund) pay $PH_c = PQ_c(1 + tv_c)$. An activity recovers
+the share $\kappa_a$ of the VAT on its inputs as a credit, and so pays
+$PQ_c\,(1 + tv_c\,(1-\kappa_a))$ (P6). $\kappa_a = 1$, the default, is a
+registered activity with full credits; $\kappa_a = 0$ an exempt or
+unregistered one, which bears VAT on its inputs. Exports, whether from
+domestic output or from composite supply, and purchases of margin services
+are zero-rated. Net VAT revenue (I8) is therefore the VAT on final demand
+plus the VAT that activities cannot recover.
+
+**SAM.** VAT is recorded in a VAT account whose row collects VAT from the
+commodity columns, $SAM(vat, c)$, net of credits, and whose column pays the
+government (`cge_map` option `vattax()`). When the SAM records VAT within
+the sales tax account, the option `vatshare()` gives the VAT share of each
+commodity's sales tax; that share of $SAM(tax_{sal}, c)$ is moved to an
+internal account `_vattax` before the checks (as for taxes paid directly to
+the government, Section 7.0). VAT cells may be negative. The flows added to
+Section 7.0 are commodity to VAT account, and VAT account to government.
+
+**Calibration.** With $PQ^0_c = 1$, each use $u$ of commodity $c$ recorded in
+the SAM at value $V_{cu}$ (purchaser prices) is a quantity
+$V_{cu}/(1 + tv_c\,k_u)$, where the VAT liability $k_u$ is 1 for final users,
+$1-\kappa_a$ for activity $a$ and 0 for exports and margin services. The rate
+$tv_c$ solves
+
+$$SAM(vat, c) = \sum_u V_{cu}\,\frac{tv_c\,k_u}{1 + tv_c\,k_u},$$
+
+which is increasing in $tv_c$ when the uses are positive. It is solved by
+Newton's method from $tv_c = SAM(vat, c) / \sum_u k_u V_{cu}$, to a relative
+change of $10^{-15}$; $tv_c = 0$ when $SAM(vat, c) = 0$. A commodity with VAT
+but no use that bears it is an error. Then
+
+- $QINT^0_{ca} = SAM(c, a) / (1 + tv_c(1-\kappa_a))$, $QINTA^0_a = \sum_c QINT^0_{ca}$,
+  $ica_{ca} = QINT^0_{ca} / QINTA^0_a$ and
+  $PINTA^0_a = \sum_c SAM(c, a) / QINTA^0_a$;
+- $QH^0_{ch}$, $\overline{qg}_c$, $\overline{qinv}_c$ and $\overline{qshi}_c$ are the SAM
+  values divided by $1 + tv_c$, and $PH^0_c = 1 + tv_c$;
+- $QQ^0_c$ (Section 7.2) equals the sum of these quantities, margin services
+  and exports from composite supply; calibration verifies it.
+
+Spending values, budget shares $\beta_{ch}$ and the government and fund
+accounts are unchanged, because they are values at purchaser prices. Without
+VAT every quantity equals its SAM value, as before. The VAT rate and credit
+shares can be shocked ($tv$, $\kappa$).
+
+### 12.3 Public debt and interest
+
+National SAMs record interest on public debt within government transfers: to
+domestic institutions, $SAM(d, gov)$, and to the rest of the world,
+$SAM(row, gov)$. Given the debt stocks at the start of the base year, held at
+home $DD^0$ (local currency) and abroad $DF^0$ (foreign currency, equal to
+local currency at $EXR^0 = 1$), and their interest rates $r^d$ and $r^f$,
+calibration separates the interest from the other transfers:
+
+$$trnsfr_{d,gov} = SAM(d, gov) - hold_d\,r^d\,DD^0, \qquad trnsfr_{row,gov} = SAM(row, gov) - r^f\,DF^0,$$
+
+where $hold_d$ is the share of domestic interest received by institution $d$.
+By default it is proportional to $SAM(d, gov)$, so that interest is the same
+share of every institution's transfers; the user may give other shares, which
+must be non-negative and sum to one. A non-interest transfer that would be
+negative is an error: the SAM's transfers are then too small for the stated
+debt and rate. The base equilibrium is unchanged, since at base prices the
+interest terms of I3, I9 and S3 equal the transfers they replace.
+
+Interest is then paid in nominal terms, on domestic debt in local currency
+and on foreign debt in foreign currency (I3, I9, S3), while other transfers
+keep their indexation. A static simulation can change the interest rates or
+the stocks, for example a rise in $r^f$ or debt relief that lowers $DF$.
+
+In a dynamic run (Section 10, step 5) the deficit is borrowed, the share
+$\phi$ abroad; by default $\phi$ is the foreign share of the base debt,
+$DF^0 / (DD^0 + DF^0)$. Net borrowing is modelled, not gross borrowing and
+amortisation separately: maturing debt is assumed to be refinanced. The
+change in the stock of foreign debt measured in local currency is net
+foreign borrowing plus a valuation change, $DF_{t-1}\,(EXR_t - EXR_{t-1})$.
+Neither default risk nor a link from debt to interest rates is modelled; the
+rates are exogenous and can be changed by shocks.
 
 ## References
 

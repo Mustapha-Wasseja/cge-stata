@@ -55,7 +55,7 @@ def test_na_layout_gives_the_same_model():
 
 def test_two_commodity_taxes_naming_government_are_rejected():
     mapping = dataclasses.replace(na_mapping(), imptax="gov")
-    with pytest.raises(SAMError, match="only one of saltax, imptax and exptax"):
+    with pytest.raises(SAMError, match="only one of saltax, imptax, exptax and vattax"):
         prepare(SAM.from_csv(NA_SAM), mapping)
 
 

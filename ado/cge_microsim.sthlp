@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.2.2  16oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -32,7 +32,7 @@ the household's group.{p_end}
 {phang2}- Nominal consumption follows the household's income and its group's
 direct tax and savings rates.{p_end}
 {phang2}- Consumption is deflated by a price index from the household's own
-budget shares, or its group's.{p_end}
+budget shares, or its group's, at the prices households pay, including VAT.{p_end}
 
 {pstd}
 The command then reports, for all households and for each group:

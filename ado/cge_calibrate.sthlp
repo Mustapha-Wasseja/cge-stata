@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.14  15oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -12,7 +12,9 @@
 {p 8 12 2}
 {cmd:cge_calibrate}{cmd:,} {opt sigmava(numlist)} {opt sigmaq(numlist)} {opt sigmat(numlist)}
 [{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)} {opt sigmaa(numlist)}
-{opt healthcom(names)} {opt healthfac(names)} {opt healthelas(numlist)}]
+{opt healthcom(names)} {opt healthfac(names)} {opt healthelas(numlist)}
+{opt vatc:redit(spec)} {opt debt(spec)} {opt int:erest(spec)} {opt debth:olders(spec)}
+{opt for:eignborrowing(#)}]
 
 
 {title:Description}
@@ -90,6 +92,38 @@ with elasticity 0, efficiency changes only through the {cmd:af} parameter of
 {helpb cge_shock}. The health commodities must have some consumption in the
 base. These options must be typed in full.
 
+{phang}
+{opt vatcredit(spec)} gives, for a model with a VAT account (see {helpb cge_map}),
+the share of the VAT on its inputs that each activity recovers as a credit
+(from version 0.3.1; docs/model_spec.md, Section 12.2): {it:activity}{cmd::}{it:share}
+pairs or one share for all, between 0 and 1. The default, 1, is full credit, so
+that VAT falls on final demand only; 0 is an exempt or unregistered activity,
+which bears VAT on its inputs. The VAT rate of each commodity is calibrated so
+that VAT on its uses, net of credits, equals the SAM's VAT; the quantities of
+the uses are their SAM values divided by one plus the VAT they bear.
+
+{phang}
+{opt debt(spec)} and {opt interest(spec)} give public debt at the start of the
+base year and its interest rates, as {cmd:domestic:}{it:#} and
+{cmd:foreign:}{it:#} (from version 0.3.1; Section 12.3). Domestic debt is in
+SAM units, foreign debt in foreign currency (equal to SAM units at the base
+exchange rate). Interest is assumed to be recorded within the government's
+transfers to domestic institutions and abroad; it is separated from them, and
+then paid in nominal terms on the debt, so that the base is unchanged and
+interest rates and debt stocks can be shocked. A transfer smaller than its
+interest is an error. In dynamic runs ({helpb cge_dynamic}) the deficit adds
+to the debt.
+
+{phang}
+{opt debtholders(spec)} gives the shares of domestic interest received by
+households and enterprises, as {it:institution}{cmd::}{it:share} pairs that sum
+to one. By default they are proportional to the government's transfers to
+each.
+
+{phang}
+{opt foreignborrowing(#)} is the share of the deficit borrowed abroad in
+dynamic runs; by default the foreign share of the base debt.
+
 
 {title:Example}
 
@@ -98,6 +132,8 @@ base. These options must be typed in full.
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) sigmaa(0 0.5 1)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) vatcredit(act_agr:0 act_ser:0.5)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) debt(domestic:100 foreign:40) interest(domestic:0.05 foreign:0.03)}{p_end}
 
 
 {title:Stored results}

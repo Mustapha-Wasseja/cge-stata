@@ -47,9 +47,11 @@ GAMS_FILES = ("cge_model.gms", "cge_scenario.gms", "closure.gms", "write.gms")
 PARAMS = {"pwm": "pwm", "pwe": "pwe", "tm": "tm", "te": "te", "tq": "tq", "ta": "ta", "ad": "ad",
           "qg": "qgbar", "qinv": "qinvbar", "trdg": "trdg", "trdr": "trdr", "trfr": "trfr",
           "trgr": "trgr", "trrg": "trrg", "tshi": "tshi", "qshi": "qshibar", "trshi": "trshi",
-          "trshir": "trshir", "af": "af"}
+          "trshir": "trshir", "af": "af", "tv": "tv", "kappa": "kappa", "rd": "rd", "rf": "rf",
+          "ddebt": "ddebt", "fdebt": "fdebt"}
 PARAM_SETS = {"pwm": "C", "pwe": "C", "tm": "C", "te": "C", "tq": "C", "ta": "A", "ad": "A", "qg": "C",
-              "qinv": "C", "trdg": "D", "trdr": "D", "trfr": "F", "tshi": "F", "qshi": "C", "af": "F"}
+              "qinv": "C", "trdg": "D", "trdr": "D", "trfr": "F", "tshi": "F", "qshi": "C", "af": "F",
+              "tv": "C", "kappa": "A"}
 FIXED_SETS = {"QFS": "F", "FSAV": "", "EXR": "", "GSAV": "", "IADJ": "", "MPSADJ": "", "TINSADJ": "",
               "CPI": "", "DPI": "", "W": "F", "GADJ": ""}
 
@@ -68,8 +70,9 @@ def gams_set(name: str, elements, domain: str = "AC") -> str:
     return f"set {name}({domain}) / {body} /;"
 
 
-def write_data(model, les: dict | None, path: Path) -> None:
-    """The prepared SAM, the mapping and the elasticities as a GAMS include file."""
+def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict | None = None) -> None:
+    """The prepared SAM, the mapping and the settings supplied by the user (elasticities,
+    VAT credit shares, debt and interest rates) as a GAMS include file."""
     m, sam, S, p = model.mapping, model.sam, model.sets, model.params
     lines = ["* data for cge_model.gms, written by run_gams_check.py",
              "set AC 'accounts' / " + ", ".join(q(a) for a in sam.labels) + " /;"]
@@ -78,6 +81,7 @@ def write_data(model, les: dict | None, path: Path) -> None:
              "SHIS": [m.insurance] if m.insurance else [], "DTAXS": [m.dirtax] if m.dirtax else [],
              "STAXS": [m.saltax] if m.saltax else [], "MTAXS": [m.imptax] if m.imptax else [],
              "ETAXS": [m.exptax] if m.exptax else [], "ATAXS": [m.acttax] if m.acttax else [],
+             "VTAXS": [m.vattax] if m.vattax else [],
              "HCOM": [c for c, h in zip(S["C"], model.struct["hc"]) if h]}
     lines += [gams_set(k, v) for k, v in roles.items()]
     cells = [f"{q(r)}.{q(c)} {num(sam.values[i, j])}" for i, r in enumerate(sam.labels)
@@ -101,6 +105,24 @@ def write_data(model, les: dict | None, path: Path) -> None:
         lines.append("scalar les / 1 /;")
     else:
         lines += ["parameter incel(AC) / /;", "parameter frisch(AC) / /;", "scalar les / 0 /;"]
+    # VAT credit shares by activity (1, full credit, unless given)
+    credit = {a: 1.0 for a in S["A"]}
+    if isinstance(vat_credit, dict):
+        credit.update(vat_credit)
+    elif vat_credit is not None:
+        credit = {a: float(vat_credit) for a in S["A"]}
+    lines.append(param("kappain", S["A"], [credit[a] for a in S["A"]]))
+    # Public debt: the stocks and rates given by the user; holders and the
+    # foreign share of borrowing are left to their defaults
+    debt = debt or {}
+    stocks, rates = debt.get("debt", {}), debt.get("interest", {})
+    lines += [f"scalar debtin / {1 if debt else 0} /;",
+              f"scalar ddebtin / {num(stocks.get('domestic', 0.0))} /;",
+              f"scalar fdebtin / {num(stocks.get('foreign', 0.0))} /;",
+              f"scalar rdin / {num(rates.get('domestic', 0.0))} /;",
+              f"scalar rfin / {num(rates.get('foreign', 0.0))} /;",
+              "scalar holdgiven / 0 /;", "parameter holdin(AC) / /;",
+              "scalar phigiven / 0 /;", "scalar phiin / 0 /;"]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -121,10 +143,13 @@ def shock_statements(model, shock: dict, closure: Closure) -> tuple[str, str]:
             target = f"{g}({q(label)})" if label else g
             rhs = f"{num(new[k] / base[k])} * {target}" if base[k] != 0 else num(new[k])
             par.append(f"{target} = {rhs};")
-    cl = {"external": ("clext", ["flexexr", "fixexr"]), "government": ("clgov", ["flexgsav", "fixgsav"]),
+    cl = {"external": ("clext", ["flexexr", "fixexr"]),
+          "government": ("clgov", ["flexgsav", "fixgsav", "fixgsav sales", "fixgsav import", "fixgsav vat"]),
           "savinv": ("clsi", ["savings", "investment"]), "numeraire": ("clnum", ["cpi", "dpi"])}
     for attr, (flag, options) in cl.items():
-        par.append(f"{flag} = {options.index(getattr(closure, attr)) + 1};")
+        value = getattr(closure, attr)
+        value = "fixgsav" if value == "fixgsav direct" else value
+        par.append(f"{flag} = {options.index(value) + 1};")
     codes = {"mobile": 1, "specific": 2, "unemployed": 3}
     for f in model.sets["F"]:
         par.append(f"fclo({q(f)}) = {codes[closure.factors.get(f, 'mobile')]};")
@@ -187,9 +212,9 @@ def cases() -> list[dict]:
     std = sc.synthetic_model()
     out = []
 
-    def add(label, model, shocks, prefix="", les=None, closure=None, python=False):
+    def add(label, model, shocks, prefix="", les=None, closure=None, python=False, vat=None, debt=None):
         out.append({"label": label, "model": model, "shocks": shocks, "prefix": prefix, "les": les,
-                    "closure": closure or Closure(), "python": python})
+                    "closure": closure or Closure(), "python": python, "vat": vat, "debt": debt})
 
     add("standard", std, sc.simulation_inputs(std))
     mixed = sc.synthetic_model(**sc.MIXED_ELASTICITIES)
@@ -226,6 +251,33 @@ def cases() -> list[dict]:
     shocks["contribution_up50"] = {"params": {"tshi": sc._scaled(eff.params["tshi"], lab, 1.5)}}
     shocks["labour_efficiency_down2"] = {"params": {"af": sc._scaled(eff.params["af"], lab, 0.98)}}
     add("health link", eff, shocks, "eff_")
+    # Fiscal instruments (version 0.3.1, model_spec.md, Section 12)
+    vat = sc.vat_model()
+    p = vat.params
+    shocks = sc.simulation_inputs(vat)
+    shocks["rate_up20"] = {"params": {"tv": p["tv"] * 1.2}}
+    shocks["credit_full"] = {"params": {"kappa": np.ones_like(p["kappa"])}}
+    add("VAT", vat, shocks, "vat_", vat=sc.VAT_CREDIT)
+    add("VAT, VAT replaces tariffs", vat, {"tariff_removal_vat": {"params": {"tm": np.zeros_like(p["tm"])}}},
+        "vat_", closure=Closure(government="fixgsav vat"), vat=sc.VAT_CREDIT)
+    add("VAT, tariffs replace VAT", vat, {"rate_cut_import": {"params": {"tv": p["tv"] * 0.8}}},
+        "vat_", closure=Closure(government="fixgsav import"), vat=sc.VAT_CREDIT)
+    notariff = {"tariff_removal_sales": {"params": {"tm": np.zeros_like(std.params["tm"])}}}
+    add("sales tax replaces tariffs", std, notariff, "rep_", closure=Closure(government="fixgsav sales"))
+    notariff = {"tariff_removal_direct": {"params": {"tm": np.zeros_like(std.params["tm"])}}}
+    add("direct tax replaces tariffs", std, notariff, "rep_", closure=Closure(government="fixgsav"))
+    vshare = sc.vatshare_model()
+    add("VAT within the sales tax", vshare,
+        {"tariff_removal": {"params": {"tm": np.zeros_like(vshare.params["tm"])}}}, "vshare_")
+    intro = sc.vatshare_model(shares=0.0)
+    add("VAT introduced", intro, {"vat10": {"params": {"tv": np.full_like(intro.params["tv"], 0.1)}}}, "vintro_")
+    debt = sc.debt_model()
+    p = debt.params
+    add("public debt", debt, {"rate_up": {"params": {"rf": p["rf"] * 2}},
+                              "relief": {"params": {"fdebt": p["fdebt"] * 0.5}}}, "debt_", debt=sc.DEBT)
+    add("public debt, DPI numeraire", debt,
+        {"tariff_removal_dpi": {"params": {"tm": np.zeros_like(p["tm"])}}}, "debt_",
+        closure=Closure(numeraire="dpi"), debt=sc.DEBT)
     # Alternative closures, compared with the Python reference
     alt1 = Closure(external="fixexr", government="fixgsav", savinv="investment", numeraire="dpi",
                    factors={"cap": "specific"})
@@ -257,7 +309,7 @@ def main() -> None:
         for f in GAMS_FILES:
             shutil.copy(HERE / f, d / f)
         model = case["model"]
-        write_data(model, case["les"], d / "data.inc")
+        write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"])
         run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work"], d)
         bstatus, base = read_gams(d / "base.csv")
         for name, shock in case["shocks"].items():

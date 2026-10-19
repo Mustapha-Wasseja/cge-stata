@@ -312,6 +312,31 @@ HEALTH_FLOWS = {
 }
 
 
+VAT_ACCOUNTS = [
+    "act_agr", "act_man", "act_ser",
+    "com_agr", "com_man", "com_ser",
+    "lab", "cap",
+    "hhd", "gov",
+    "tax_dir", "tax_sal", "tax_imp", "tax_vat",
+    "sav", "row",
+]
+
+# Changes to FLOWS for the VAT layout (version 0.3.1): net VAT of 18 paid by
+# the commodities to a VAT account, passed to the government and returned to
+# households as transfers, which spend it on consumption at prices including VAT.
+VAT_FLOWS = {
+    ("tax_vat", "com_agr"): 3, ("tax_vat", "com_man"): 9, ("tax_vat", "com_ser"): 6,
+    ("gov", "tax_vat"): 18,
+    ("com_agr", "hhd"): 73, ("com_man", "hhd"): 89, ("com_ser", "hhd"): 86,
+    ("hhd", "gov"): 33,
+}
+
+
+def build_vat_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with a VAT account."""
+    return _from_flows(VAT_ACCOUNTS, {**FLOWS, **VAT_FLOWS})
+
+
 def build_unbalanced_layout() -> tuple[list[str], list[list[float]]]:
     """The institutions layout made unbalanced, for the SAM balancing tests
     (docs/sam_tools.md, Section 6): every non-zero cell (i, j) is multiplied by
@@ -368,6 +393,7 @@ if __name__ == "__main__":
                              (build_nonimported_layout, "cge_synthetic_sam_cnm.csv"),
                              (build_sut_layout, "cge_synthetic_sam_sut.csv"),
                              (build_health_layout, "cge_synthetic_sam_health.csv"),
+                             (build_vat_layout, "cge_synthetic_sam_vat.csv"),
                              (build_unbalanced_layout, "cge_synthetic_sam_unbal.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))

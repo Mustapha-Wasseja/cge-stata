@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -25,7 +25,9 @@ The model is documented equation by equation in docs/model_spec.md in the
 package repository: CES or Cobb-Douglas value added, Leontief intermediate
 inputs, CET exports, Armington imports, households with Cobb-Douglas demand,
 government, savings-investment and the rest of the world, with selectable
-closures.
+closures. Fiscal instruments (from version 0.3.1, Section 12) include VAT with
+input credits, closures in which a chosen tax replaces lost revenue, and public
+debt with interest.
 
 
 {title:Preparing a SAM}

@@ -159,6 +159,75 @@ def health_model(**elasticities) -> Model:
     return Model(SAM.from_csv(HEALTH_SAM), health_mapping(), **settings)
 
 
+# Fiscal instruments (version 0.3.1, model_spec.md, Section 12): a VAT
+# layout with credit shares (act_agr exempt, act_ser half recovered), VAT
+# within the sales tax of the standard layout, and public debt in the
+# institutions layout. Test values, not estimates.
+VAT_SAM = REPO / "data" / "cge_synthetic_sam_vat.csv"
+VAT_CREDIT = {"act_agr": 0.0, "act_man": 1.0, "act_ser": 0.5}
+VAT_SHARES = {"com_man": 0.5, "com_ser": 1.0}
+DEBT = {"debt": {"domestic": 100.0, "foreign": 40.0}, "interest": {"domestic": 0.05, "foreign": 0.03}}
+
+
+def vat_mapping() -> Mapping:
+    m = synthetic_mapping()
+    m.vattax = "tax_vat"
+    return m
+
+
+def vat_model(**settings) -> Model:
+    settings = {**TEST_ELASTICITIES, "vat_credit": VAT_CREDIT, **settings}
+    return Model(SAM.from_csv(VAT_SAM), vat_mapping(), **settings)
+
+
+def vatshare_model(shares=None, **settings) -> Model:
+    m = synthetic_mapping()
+    m.vat_shares = VAT_SHARES if shares is None else shares
+    return Model(SAM.from_csv(SYNTHETIC_SAM), m, **{**TEST_ELASTICITIES, **settings})
+
+
+def debt_model(**settings) -> Model:
+    return institutions_model(**{**DEBT, **settings})
+
+
+def fiscal_cases() -> dict:
+    """Static fiscal simulations (version 0.3.1): name -> solution."""
+    out = {}
+    vat = vat_model()
+    for name, solution in run_simulations(vat).items():
+        out["vat_" + name] = solution
+    p = vat.params
+    out["vat_rate_up20"] = vat.solve(Closure(), tol=1e-12, params={"tv": p["tv"] * 1.2})
+    out["vat_credit_full"] = vat.solve(Closure(), tol=1e-12, params={"kappa": np.ones_like(p["kappa"])})
+    notariff = {"tm": np.zeros_like(p["tm"])}
+    out["vat_tariff_removal_vat"] = vat.solve(Closure(government="fixgsav vat"), tol=1e-12, params=notariff)
+    out["vat_rate_cut_import"] = vat.solve(Closure(government="fixgsav import"), tol=1e-12,
+                                           params={"tv": p["tv"] * 0.8})
+    std = synthetic_model()
+    notariff = {"tm": np.zeros_like(std.params["tm"])}
+    out["rep_tariff_removal_sales"] = std.solve(Closure(government="fixgsav sales"), tol=1e-12, params=notariff)
+    out["rep_tariff_removal_direct"] = std.solve(Closure(government="fixgsav"), tol=1e-12, params=notariff)
+    vshare = vatshare_model()
+    out["vshare_tariff_removal"] = vshare.solve(Closure(), tol=1e-12,
+                                                params={"tm": np.zeros_like(vshare.params["tm"])})
+    # A VAT introduced where the SAM has none: an empty VAT account, then a
+    # 10 per cent rate on every commodity
+    intro = vatshare_model(shares=0.0)
+    out["vintro_vat10"] = intro.solve(Closure(), tol=1e-12, params={"tv": np.full_like(intro.params["tv"], 0.1)})
+    debt = debt_model()
+    out["debt_rate_up"] = debt.solve(Closure(), tol=1e-12, params={"rf": debt.params["rf"] * 2})
+    out["debt_relief"] = debt.solve(Closure(), tol=1e-12, params={"fdebt": debt.params["fdebt"] * 0.5})
+    out["debt_tariff_removal_dpi"] = debt.solve(Closure(numeraire="dpi"), tol=1e-12,
+                                                params={"tm": np.zeros_like(debt.params["tm"])})
+    return out
+
+
+def debt_relief(t, p, fx):
+    """Debt relief in period 2: half the foreign debt is cancelled."""
+    if t == 2:
+        p["fdebt"] = p["fdebt"] * 0.5
+
+
 # SAM tools (version 0.3.0, docs/sam_tools.md): a SYNTHETIC unbalanced SAM,
 # and the institutions layout aggregated to two sectors and one household
 UNBALANCED_SAM = REPO / "data" / "cge_synthetic_sam_unbal.csv"
@@ -255,7 +324,8 @@ def write_report(solution: Solution, path: Path) -> None:
 
 # Simulations whose standard report (version 0.1.15) is also compared
 REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_up10",
-            "sut_import_price_up10", "eff_contribution_up50")
+            "sut_import_price_up10", "eff_contribution_up50", "vat_rate_up20",
+            "vat_tariff_removal_vat", "rep_tariff_removal_sales", "debt_rate_up", "debt_relief")
 
 
 def dynamic_cases() -> dict:
@@ -276,6 +346,10 @@ def dynamic_cases() -> dict:
                                     tfp_growth={"act_agr": 0.02, "act_man": 0.01, "act_ser": 0.0}),
                      Closure(), None),
         "dyn_health": (health, Dynamics(periods=4, gdp_target=0.03, **common), specific, None),
+        # Public debt (version 0.3.1): deficits are borrowed; debt relief in period 2
+        "dyn_debt": (debt_model(), Dynamics(periods=4, tfp_growth=0.01, **common), specific, None),
+        "dyn_debt_relief": (debt_model(), Dynamics(periods=4, tfp_growth=0.01, **common), specific,
+                            debt_relief),
     }
 
 
@@ -301,6 +375,10 @@ def write_dynamic(directory: Path = EXPECTED_DIR) -> list[Path]:
             path = directory / f"{name}_p{t}.csv"
             write_results(sol, path)
             written.append(path)
+            if name.startswith("dyn_debt"):
+                path = directory / f"report_{name}_p{t}.csv"
+                write_report(sol, path)
+                written.append(path)
         path = directory / f"{name}_tfp.csv"
         with path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle, lineterminator="\n")
@@ -373,6 +451,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # An aggregated SAM (version 0.3.0)
     for name, solution in run_simulations(aggregated_model()).items():
         solutions["agg_" + name] = solution
+    # Fiscal instruments (version 0.3.1)
+    solutions.update(fiscal_cases())
     written = write_dynamic(directory) + write_samtools(directory)
     for name, solution in solutions.items():
         if not solution.converged:

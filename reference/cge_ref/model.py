@@ -27,7 +27,12 @@ VARIABLES: dict[str, str] = {
     "FSAV": "", "TINS": "D", "MPS": "D", "TINSADJ": "", "MPSADJ": "", "IADJ": "",
     "GADJ": "", "WFDIST": "FA", "WALRAS": "", "QT": "C", "QER": "C",
     "YSHI": "", "SHIADJ": "", "QSHI": "C", "EFF": "F", "HS": "",
+    "TQADJ": "", "TMADJ": "", "TVADJ": "",
 }
+
+# Tax scaling factors freed by each government closure (version 0.3.1)
+INSTRUMENTS = {"direct": ("TINSADJ", "tins0"), "sales": ("TQADJ", "tq"), "import": ("TMADJ", "tm"),
+               "vat": ("TVADJ", "tv")}
 
 # Variables measured in local currency: they scale with the numeraire.
 NOMINAL = ("PA", "PVA", "PINTA", "PX", "PD", "PE", "PM", "PQ", "W", "EXR", "CPI", "DPI",
@@ -35,7 +40,10 @@ NOMINAL = ("PA", "PVA", "PINTA", "PX", "PD", "PE", "PM", "PQ", "W", "EXR", "CPI"
 
 CLOSURE_OPTIONS = {
     "external": ("flexexr", "fixexr"),
-    "government": ("flexgsav", "fixgsav"),
+    # fixgsav with the instrument that adjusts (version 0.3.1); fixgsav alone
+    # means direct taxes, as before
+    "government": ("flexgsav", "fixgsav", "fixgsav direct", "fixgsav sales", "fixgsav import",
+                   "fixgsav vat"),
     "savinv": ("savings", "investment"),
     "numeraire": ("cpi", "dpi"),
 }
@@ -60,12 +68,27 @@ class Closure:
             if option not in FACTOR_OPTIONS:
                 raise ValueError(f"factor closure for {factor} must be one of {FACTOR_OPTIONS}")
 
+    @property
+    def instrument(self) -> str | None:
+        """Tax that adjusts under fixed government savings (None under flexgsav)."""
+        if self.government == "flexgsav":
+            return None
+        parts = self.government.split()
+        return parts[1] if len(parts) > 1 else "direct"
+
     def fixed(self, model: "Model") -> dict[str, np.ndarray]:
         """Boolean arrays marking the variables held fixed under this closure."""
         fixed = {name: np.zeros(value.shape, dtype=bool) for name, value in model.base.items()}
         fixed["GADJ"][:] = True
         fixed["FSAV" if self.external == "flexexr" else "EXR"][:] = True
-        fixed["TINSADJ" if self.government == "flexgsav" else "GSAV"][:] = True
+        for adj, _ in INSTRUMENTS.values():
+            fixed[adj][:] = True
+        if self.government != "flexgsav":
+            fixed["GSAV"][:] = True
+            adj, rate = INSTRUMENTS[self.instrument]
+            if not np.any(model.params[rate] != 0):
+                raise ValueError(f"government closure: the {self.instrument} tax raises no revenue in the base")
+            fixed[adj][:] = False
         fixed["MPSADJ" if self.savinv == "savings" else "IADJ"][:] = True
         fixed["CPI" if self.numeraire == "cpi" else "DPI"][:] = True
 
@@ -104,6 +127,43 @@ def _per_element(value, labels: list[str], name: str) -> np.ndarray:
     return array
 
 
+def _credit_shares(value, labels: list[str]) -> np.ndarray:
+    """VAT credit share of each activity (default 1, full credit)."""
+    if value is None:
+        return np.ones(len(labels))
+    if isinstance(value, dict):
+        unknown = [a for a in value if a not in labels]
+        if unknown:
+            raise ValueError(f"vat_credit: {unknown} are not activities")
+        out = np.array([float(value.get(a, 1.0)) for a in labels])
+    else:
+        out = np.full(len(labels), float(value))
+    if np.any(out < 0) or np.any(out > 1):
+        raise ValueError("VAT credit shares must lie between 0 and 1")
+    return out
+
+
+def _vat_rate(vat: float, values: np.ndarray, liab: np.ndarray, label: str) -> float:
+    """tv such that sum(values * tv * liab / (1 + tv * liab)) = vat (model_spec.md,
+    12.2), by Newton's method from the first-order value."""
+    base = float(values @ liab)
+    if base == 0:
+        raise SAMError(f"VAT is recorded on {label} but no use of it bears VAT")
+    tv = vat / base
+    for _ in range(100):
+        f = float(values @ (tv * liab / (1 + tv * liab))) - vat
+        df = float(values @ (liab / (1 + tv * liab) ** 2))
+        step = f / df
+        tv -= step
+        if abs(step) <= 1e-15 * max(1.0, abs(tv)):
+            break
+    else:
+        raise SAMError(f"the VAT rate of {label} could not be calibrated")
+    if np.any(1 + tv * liab <= 0):
+        raise SAMError(f"the VAT rate of {label} is below -100 per cent")
+    return tv
+
+
 def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Left side, right side and existence mask of every equation block."""
     ce, cm, fa, cd, cx, ct, cr = s["ce"], s["cm"], s["fa"], s["cd"], s["cx"], s["ct"], s["cr"]
@@ -114,18 +174,23 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     one = np.ones(1, dtype=bool)
 
     eq: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    # Rates after scaling (version 0.3.1); PH is the price paid by final users,
+    # including VAT, and vint the VAT that activities cannot recover
+    tq, tm, tv = p["tq"] * v["TQADJ"], p["tm"] * v["TMADJ"], p["tv"] * v["TVADJ"]
+    ph = v["PQ"] * (1 + tv)
+    vint = np.outer(tv, 1 - p["kappa"])
     # 5.1 Price block
-    eq["P1"] = (v["PM"], p["pwm"] * (1 + p["tm"]) * v["EXR"], cm)
+    eq["P1"] = (v["PM"], p["pwm"] * (1 + tm) * v["EXR"], cm)
     eq["P2"] = (v["PE"], p["pwe"] * (1 - p["te"]) * v["EXR"], ce)
     margin_cost = (v["PQ"] @ p["icm"]) * v["QQ"]   # sum over c' of PQ[c'] icm[c', c] QQ[c]
-    eq["P3"] = (v["PQ"] * (1 - p["tq"]) * v["QQ"],
+    eq["P3"] = (v["PQ"] * (1 - tq) * v["QQ"],
                 np.where(cx, v["PD"] * v["QD"], 0.0) + np.where(cm, v["PM"] * v["QM"], 0.0) + margin_cost,
                 every_c)
     eq["P4"] = (v["PX"] * v["QX"], v["PD"] * v["QD"] + np.where(ce, v["PE"] * v["QE"], 0.0), cx)
     eq["P5"] = (v["PA"], p["theta"] @ v["PX"], every_a)
-    eq["P6"] = (v["PINTA"], p["ica"].T @ v["PQ"], every_a)
+    eq["P6"] = (v["PINTA"], (p["ica"] * (1 + vint)).T @ v["PQ"], every_a)
     eq["P7"] = (v["PA"] * (1 - p["ta"]) * v["QA"], v["PVA"] * v["QVA"] + v["PINTA"] * v["QINTA"], every_a)
-    eq["P8"] = (v["CPI"], np.atleast_1d(p["cwts"] @ v["PQ"]), one)
+    eq["P8"] = (v["CPI"], np.atleast_1d(p["cwts"] @ ph), one)
     eq["P9"] = (v["DPI"], np.atleast_1d(p["dwts"] @ v["PD"]), one)
 
     # 5.2 Production block
@@ -188,21 +253,21 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
         yif[shi] = p["tshi"] * v["YF"]
     eq["I2"] = (v["YIF"], yif, np.ones(v["YIF"].shape, dtype=bool))
     eq["I3"] = (v["YI"], v["YIF"][:nD].sum(axis=1) + p["shii"] @ DY + p["trdg"] * v["CPI"]
-                + p["trdr"] * v["EXR"], np.ones(nD, dtype=bool))
+                + p["trdr"] * v["EXR"] + p["hold"] * p["rd"] * p["ddebt"], np.ones(nD, dtype=bool))
     eq["I4"] = (v["EH"], p["hc"] * DY[:nH], np.ones(nH, dtype=bool))
-    supernumerary = v["EH"] - v["PQ"] @ p["gamma"]
-    eq["I5"] = (v["PQ"][:, None] * v["QH"],
-                v["PQ"][:, None] * p["gamma"] + p["beta"] * supernumerary[None, :], s["qh"])
+    supernumerary = v["EH"] - ph @ p["gamma"]
+    eq["I5"] = (ph[:, None] * v["QH"],
+                ph[:, None] * p["gamma"] + p["beta"] * supernumerary[None, :], s["qh"])
     eq["I6"] = (v["QINV"], p["qinv"] * v["IADJ"], every_c)
     eq["I7"] = (v["QG"], p["qg"] * v["GADJ"], every_c)
-    revenue = (v["TINS"] @ v["YI"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
-               + (p["tm"] * p["pwm"] * v["QM"]).sum() * v["EXR"]
+    revenue = (v["TINS"] @ v["YI"] + (tq * v["PQ"] * v["QQ"]).sum()
+               + (tm * p["pwm"] * v["QM"]).sum() * v["EXR"]
                + (p["te"] * p["pwe"] * v["QE"]).sum() * v["EXR"]
-               + (p["ta"] * v["PA"] * v["QA"]).sum()
+               + (p["ta"] * v["PA"] * v["QA"]).sum() + vat_revenue(v, p)
                + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"])
     eq["I8"] = (v["YG"], revenue, one)
-    eq["I9"] = (v["EG"], np.atleast_1d(v["PQ"] @ v["QG"]) + (p["trdg"].sum() + p["trgg"] + p["trshi"]) * v["CPI"]
-                + p["trrg"] * v["EXR"], one)
+    eq["I9"] = (v["EG"], np.atleast_1d(ph @ v["QG"]) + (p["trdg"].sum() + p["trgg"] + p["trshi"]) * v["CPI"]
+                + p["trrg"] * v["EXR"] + p["rd"] * p["ddebt"] + p["rf"] * p["fdebt"] * v["EXR"], one)
     eq["I10"] = (v["TINS"], p["tins0"] * v["TINSADJ"], np.ones(nD, dtype=bool))
     eq["I11"] = (v["MPS"], p["mps0"] * v["MPSADJ"], np.ones(nD, dtype=bool))
     # Health insurance fund (version 0.1.13)
@@ -210,21 +275,34 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["I12"] = (v["YSHI"], np.atleast_1d(v["YIF"][shi].sum() if shi >= 0 else 0.0)
                  + p["trshi"] * v["CPI"] + p["trshir"] * v["EXR"], has_shi)
     eq["I13"] = (v["QSHI"], p["qshi"] * v["SHIADJ"], s["qshi"])
-    eq["I14"] = (np.atleast_1d(v["PQ"] @ v["QSHI"]), (1 - p["sshi"]) * v["YSHI"], has_shi)
+    eq["I14"] = (np.atleast_1d(ph @ v["QSHI"]), (1 - p["sshi"]) * v["YSHI"], has_shi)
 
     # 5.5 System constraints (S6 is imposed through the closure)
     eq["S1"] = (np.where(fa, v["QF"], 0.0).sum(axis=1), v["QFS"], np.ones(v["QFS"].shape, dtype=bool))
     eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"]
                 + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0) + v["QSHI"], every_c)
     eq["S3"] = ((p["pwm"] * v["QM"]).sum() + (v["YIF"][nD + 1].sum() + p["shir"] @ DY) / v["EXR"]
-                + p["trrg"],
+                + p["trrg"] + p["rf"] * p["fdebt"],
                 (p["pwe"] * v["QE"]).sum() + np.where(cr, v["PQ"] * v["QER"], 0.0).sum() / v["EXR"]
                 + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + p["trshir"] + v["FSAV"], one)
     eq["S4"] = (v["YG"], v["EG"] + v["GSAV"], one)
     eq["S5"] = ((v["MPS"] * (1 - v["TINS"])) @ v["YI"] + v["GSAV"] + p["sshi"] * v["YSHI"]
                 + v["EXR"] * v["FSAV"],
-                np.atleast_1d(v["PQ"] @ v["QINV"]) + v["WALRAS"], one)
+                np.atleast_1d(ph @ v["QINV"]) + v["WALRAS"], one)
     return eq
+
+
+def final_price(v: dict, p: dict) -> np.ndarray:
+    """PH: the price paid by final users, including VAT (version 0.3.1)."""
+    return v["PQ"] * (1 + p["tv"] * v["TVADJ"])
+
+
+def vat_revenue(v: dict, p: dict) -> np.ndarray:
+    """Net VAT: on final demand, and on the inputs activities cannot recover (I8)."""
+    tv = p["tv"] * v["TVADJ"]
+    base = (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]
+            + (v["QINT"] * (1 - p["kappa"])[None, :]).sum(axis=1))
+    return np.atleast_1d((tv * v["PQ"] * base).sum())
 
 
 @dataclass
@@ -256,26 +334,30 @@ class Solution:
         """Expenditure-side GDP minus income-side GDP; zero at any solution."""
         v, p = self.values, self.params
         exr = v["EXR"][0]
-        expenditure = (v["PQ"] @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QER"] + v["QSHI"])
+        ph = final_price(v, p)
+        expenditure = (ph @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]) + v["PQ"] @ v["QER"]
                        + exr * (p["pwe"] @ v["QE"]) - exr * (p["pwm"] @ v["QM"]))
-        income = (v["PVA"] @ v["QVA"] + (p["tq"] * v["PQ"] * v["QQ"]).sum()
-                  + exr * (p["tm"] * p["pwm"] * v["QM"]).sum()
-                  + exr * (p["te"] * p["pwe"] * v["QE"]).sum() + (p["ta"] * v["PA"] * v["QA"]).sum())
+        income = (v["PVA"] @ v["QVA"] + (p["tq"] * v["TQADJ"] * v["PQ"] * v["QQ"]).sum()
+                  + exr * (p["tm"] * v["TMADJ"] * p["pwm"] * v["QM"]).sum()
+                  + exr * (p["te"] * p["pwe"] * v["QE"]).sum() + (p["ta"] * v["PA"] * v["QA"]).sum()
+                  + vat_revenue(v, p)[0])
         return float(expenditure - income)
 
     def equivalent_variation(self) -> np.ndarray:
         """Household equivalent variation at base prices (Cobb-Douglas or LES demand)."""
         base, p, v = self.model.base, self.params, self.values
-        ratio = np.prod((base["PQ"][:, None] / v["PQ"][:, None]) ** p["beta"], axis=0)
-        return base["PQ"] @ p["gamma"] + (v["EH"] - v["PQ"] @ p["gamma"]) * ratio - base["EH"]
+        ph0, ph = final_price(base, self.model.params), final_price(v, p)
+        ratio = np.prod((ph0[:, None] / ph[:, None]) ** p["beta"], axis=0)
+        return ph0 @ p["gamma"] + (v["EH"] - ph @ p["gamma"]) * ratio - base["EH"]
 
     def compensating_variation(self) -> np.ndarray:
         """Household compensating variation at simulated prices (Cobb-Douglas or LES
         demand): spending after the shock less the spending that would give base
         utility at the new prices; positive for a gain."""
         base, p, v = self.model.base, self.params, self.values
-        ratio = np.prod((v["PQ"][:, None] / base["PQ"][:, None]) ** p["beta"], axis=0)
-        return v["EH"] - v["PQ"] @ p["gamma"] - (base["EH"] - base["PQ"] @ p["gamma"]) * ratio
+        ph0, ph = final_price(base, self.model.params), final_price(v, p)
+        ratio = np.prod((ph[:, None] / ph0[:, None]) ** p["beta"], axis=0)
+        return v["EH"] - ph @ p["gamma"] - (base["EH"] - ph0 @ p["gamma"]) * ratio
 
 
 class Model:
@@ -284,7 +366,8 @@ class Model:
     def __init__(self, sam: SAM, mapping: Mapping, sigma_va, sigma_q, sigma_t,
                  factor_quantities: dict[tuple[str, str], float] | None = None,
                  income_elasticities=None, frisch=None, sigma_a=None,
-                 health_commodities=None, health_elasticities=None):
+                 health_commodities=None, health_elasticities=None, vat_credit=None,
+                 debt=None, interest=None, debt_holders=None, foreign_borrowing=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -299,8 +382,9 @@ class Model:
                         _per_element(sigma_va, A, "sigma_va"),
                         _per_element(sigma_q, C, "sigma_q"),
                         _per_element(sigma_t, C, "sigma_t"),
-                        factor_quantities)
+                        factor_quantities, vat_credit)
         self._household_demand(income_elasticities, frisch)
+        self._debt(debt, interest, debt_holders, foreign_borrowing)
         self._top_nest(sigma_a)
         self._health_link(health_commodities, health_elasticities)
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
@@ -316,7 +400,7 @@ class Model:
     # ------------------------------------------------------------------
     # Calibration (docs/model_spec.md, Section 7)
     # ------------------------------------------------------------------
-    def _calibrate(self, sam, mapping, sigma_va, sigma_q, sigma_t, factor_quantities):
+    def _calibrate(self, sam, mapping, sigma_va, sigma_q, sigma_t, factor_quantities, vat_credit=None):
         A, C, F, H = self.sets["A"], self.sets["C"], self.sets["F"], self.sets["H"]
         I = self.sets["I"]
         gov, sav, row = mapping.government, mapping.savinv, mapping.row
@@ -377,16 +461,30 @@ class Model:
         ct = QT0 > tol
         spend = SV.sum(axis=0)
         icm = (SV / np.where(spend > tol, spend, 1.0)[None, :]) @ MG / QQ0[None, :]
-        demand = (vec(C, A).sum(axis=1) + vec(C, H).sum(axis=1)
-                  + vec(C, [gov])[:, 0] + vec(C, [sav])[:, 0] + QT0 + QER0
-                  + (vec(C, [mapping.insurance])[:, 0] if mapping.insurance is not None else 0.0))
+        # VAT (model_spec.md, 12.2): rates from the VAT account, then the
+        # quantity of each use at PQ = 1
+        kappa = _credit_shares(vat_credit, A)
+        VINT = vec(C, A)
+        VH = vec(C, H)
+        vg, vinv = vec(C, [gov])[:, 0], vec(C, [sav])[:, 0]
+        vshi = vec(C, [mapping.insurance])[:, 0] if mapping.insurance is not None else np.zeros(nC)
+        vat = vec([mapping.vattax], C)[0]
+        tv = np.zeros(nC)
+        for k in np.flatnonzero(np.abs(vat) > tol):
+            values = np.concatenate([VINT[k], VH[k], [vg[k], vinv[k], vshi[k]]])
+            liab = np.concatenate([1 - kappa, np.ones(nH + 3)])
+            tv[k] = _vat_rate(vat[k], values, liab, C[k])
+        QINT0 = VINT / (1 + np.outer(tv, 1 - kappa))
+        QH0 = VH / (1 + tv)[:, None]
+        qg, qinv, qshi = vg / (1 + tv), vinv / (1 + tv), vshi / (1 + tv)
+        demand = QINT0.sum(axis=1) + QH0.sum(axis=1) + qg + qinv + qshi + QT0 + QER0
         if np.abs(QQ0 - demand).max() > tol:
             raise SAMError("composite supply does not equal domestic demand for some commodity")
 
         # 7.2 Production
-        QINT0 = vec(C, A)
         QINTA0 = QINT0.sum(axis=0)
         ica = QINT0 / np.where(QINTA0 > 0, QINTA0, 1.0)
+        PINTA0 = (ica * (1 + np.outer(tv, 1 - kappa))).sum(axis=0)
         VA = vec(F, A)
         fa = VA > tol
         if factor_quantities is None:
@@ -472,8 +570,7 @@ class Model:
         DY0 = YI0 - dtax - dsav
         TR = vec(D, D)                       # TR[d, d'] = transfer from d' to d
         TROW = vec([row], D)[0]
-        QH0 = vec(C, H)
-        EH0 = QH0.sum(axis=0)
+        EH0 = VH.sum(axis=0)
         uses = TR.sum(axis=0) + TROW + np.concatenate([EH0, np.zeros(len(D) - nH)])
         gross = (np.abs(TR).sum(axis=0) + np.abs(TROW)
                  + np.concatenate([np.abs(EH0), np.zeros(len(D) - nH)]))
@@ -488,19 +585,16 @@ class Model:
         hc = EH0 / safe[:nH]
         if EH0.sum() <= tol:
             raise SAMError("households have no consumption")
-        beta = QH0 / np.where(EH0 > 0, EH0, 1.0)[None, :]
+        beta = VH / np.where(EH0 > 0, EH0, 1.0)[None, :]
         trdg = vec(D, [gov])[:, 0]
         trdr = vec(D, [row])[:, 0]
         trgr, trrg, trgg = cell(gov, row), cell(row, gov), cell(gov, gov)
-        qg = vec(C, [gov])[:, 0]
-        qinv = vec(C, [sav])[:, 0]
-        qshi = vec(C, [shi])[:, 0] if shi is not None else np.zeros(nC)
         YSHI0 = sam.row_total(shi) if shi is not None else 0.0
         if shi is not None and YSHI0 <= tol:
             raise SAMError("the health insurance fund has no revenue")
         sshi = cell(sav, shi) / YSHI0 if shi is not None else 0.0
         trshi, trshir = cell(shi, gov), cell(shi, row)
-        cwts = QH0.sum(axis=1) / QH0.sum()
+        cwts = VH.sum(axis=1) / VH.sum() / (1 + tv)
         dwts = QD0 / QD0.sum()
 
         self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct, "cr": cr,
@@ -517,23 +611,28 @@ class Model:
             "tshi": tshi, "qshi": qshi, "sshi": np.array(sshi), "trshi": np.array(trshi),
             "trshir": np.array(trshir),
             "sigma_va": sigma_va, "sigma_q": sigma_q, "sigma_t": sigma_t,
+            "tv": tv, "kappa": kappa,
+            # public debt (version 0.3.1): none unless calibrated with debt
+            "debt": np.array(0.0), "ddebt": np.array(0.0), "fdebt": np.array(0.0),
+            "rd": np.array(0.0), "rf": np.array(0.0), "hold": np.zeros(len(D)), "phi": np.array(0.0),
         }
         s1 = np.ones(1)
         self.base = {
-            "PA": np.ones(nA), "PVA": np.ones(nA), "PINTA": ica.sum(axis=0), "PX": np.ones(nC),
+            "PA": np.ones(nA), "PVA": np.ones(nA), "PINTA": PINTA0, "PX": np.ones(nC),
             "PD": np.ones(nC), "PE": np.where(ce, 1.0, 0.0), "PM": PM0, "PQ": np.ones(nC),
-            "W": W0, "EXR": s1.copy(), "CPI": np.atleast_1d(cwts.sum()), "DPI": np.atleast_1d(dwts.sum()),
+            "W": W0, "EXR": s1.copy(), "CPI": np.atleast_1d(cwts @ (1 + tv)), "DPI": np.atleast_1d(dwts.sum()),
             "QA": QA0, "QVA": QVA0, "QINTA": QINTA0, "QF": QF0, "QINT": QINT0, "QX": QX0,
             "QD": QD0, "QE": QE0, "QM": np.where(cm, QM0, 0.0), "QQ": QQ0, "QH": QH0,
             "QG": qg.copy(), "QINV": qinv.copy(), "QFS": QF0.sum(axis=1),
             "YF": YF0, "YIF": YIF0, "YI": YI0, "EH": EH0,
             "YG": np.atleast_1d(sam.row_total(gov)),
-            "EG": np.atleast_1d(qg.sum() + trdg.sum() + trgg + trrg + trshi),
+            "EG": np.atleast_1d(vg.sum() + trdg.sum() + trgg + trrg + trshi),
             "GSAV": np.atleast_1d(cell(sav, gov)), "FSAV": np.atleast_1d(cell(sav, row)),
             "TINS": tins0.copy(), "MPS": mps0.copy(),
             "TINSADJ": s1.copy(), "MPSADJ": s1.copy(), "IADJ": s1.copy(), "GADJ": s1.copy(),
             "WFDIST": WFDIST0, "WALRAS": np.zeros(1), "QT": QT0, "QER": QER0.copy(),
             "YSHI": np.atleast_1d(YSHI0), "SHIADJ": s1.copy(), "QSHI": qshi.copy(),
+            "TQADJ": s1.copy(), "TMADJ": s1.copy(), "TVADJ": s1.copy(),
         }
         self.exists = {name: np.ones(value.shape, dtype=bool) for name, value in self.base.items()}
         self.exists["PE"] = ce.copy()
@@ -620,6 +719,51 @@ class Model:
         self.exists["EFF"] = eta != 0
         self.exists["HS"] = np.atleast_1d(linked)
 
+    def _debt(self, debt, interest, holders, foreign_borrowing) -> None:
+        """Public debt and interest (model_spec.md, 12.3): base transfers from
+        government are split into interest on the stated debt and other transfers."""
+        if debt is None and interest is None and holders is None and foreign_borrowing is None:
+            return
+        debt, interest = dict(debt or {}), dict(interest or {})
+        for name, spec in (("debt", debt), ("interest", interest)):
+            extra = set(spec) - {"domestic", "foreign"}
+            if extra:
+                raise ValueError(f"{name}: {sorted(extra)} are not domestic or foreign")
+        dd, df = float(debt.get("domestic", 0.0)), float(debt.get("foreign", 0.0))
+        rd, rf = float(interest.get("domestic", 0.0)), float(interest.get("foreign", 0.0))
+        if min(dd, df) < 0 or min(rd, rf) <= -1:
+            raise ValueError("debt must be non-negative and interest rates above -1")
+        p, D = self.params, self.sets["D"]
+        tol = 1e-9 * max(1.0, float(np.abs(self.sam.values).max()))
+        if holders is None:
+            pos = np.maximum(p["trdg"], 0.0)
+            if rd * dd != 0 and pos.sum() <= 0:
+                raise SAMError("the government makes no transfers to domestic institutions; give the debt holders")
+            hold = pos / pos.sum() if pos.sum() > 0 else np.zeros(len(D))
+        else:
+            unknown = set(holders) - set(D)
+            if unknown:
+                raise ValueError(f"debt_holders: {sorted(unknown)} are not domestic institutions")
+            hold = np.array([float(holders.get(d, 0.0)) for d in D])
+            if np.any(hold < 0) or abs(hold.sum() - 1) > 1e-12:
+                raise ValueError("debt holder shares must be non-negative and sum to one")
+        trdg = p["trdg"] - hold * rd * dd
+        trrg = float(p["trrg"]) - rf * df
+        bad = trdg < -tol
+        if np.any(bad):
+            raise SAMError("government transfers to " + " ".join(d for d, b in zip(D, bad) if b)
+                           + " are smaller than their interest on the stated debt")
+        if trrg < -tol:
+            raise SAMError("government transfers to the rest of the world are smaller than the "
+                           "interest on the stated foreign debt")
+        if foreign_borrowing is None:
+            phi = df / (dd + df) if dd + df > 0 else 0.0
+        else:
+            phi = float(foreign_borrowing)
+        p.update({"trdg": trdg, "trrg": np.array(trrg), "debt": np.array(1.0), "ddebt": np.array(dd),
+                  "fdebt": np.array(df), "rd": np.array(rd), "rf": np.array(rf), "hold": hold,
+                  "phi": np.array(phi)})
+
     def _household_demand(self, income_elasticities, frisch) -> None:
         """LES demand (model_spec.md, 7.5) when income elasticities or Frisch parameters are given."""
         if income_elasticities is None and frisch is None:
@@ -643,7 +787,8 @@ class Model:
         total = b.sum(axis=0)
         b = b / np.where(total > 0, total, 1.0)[None, :]
         self.params["beta"] = b
-        self.params["gamma"] = QH0 + b * (EH0 / phi)[None, :]
+        ph0 = final_price(self.base, self.params)
+        self.params["gamma"] = QH0 + b * (EH0 / phi)[None, :] / ph0[:, None]
 
     # ------------------------------------------------------------------
     # Residuals and solution

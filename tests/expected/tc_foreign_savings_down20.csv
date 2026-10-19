@@ -105,3 +105,6 @@ WFDIST,cap,act_agr,1,1
 WFDIST,cap,act_man,1,1
 WFDIST,cap,act_ser,1,1
 WALRAS,,,0,2.45104319061492e-14
+TQADJ,,,1,1
+TMADJ,,,1,1
+TVADJ,,,1,1

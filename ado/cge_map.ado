@@ -1,4 +1,4 @@
-*! cge_map.ado  v0.3.0  2026-10-18
+*! cge_map.ado  v0.3.1  2026-10-20
 *! cge-stata: assign SAM accounts to model roles
 *! Checks the SAM against the flows the model represents (model_spec.md, 7.0);
 *! the roles may be read from a template (docs/sam_tools.md, Section 3)
@@ -13,19 +13,19 @@ program define cge_map, rclass
         enterprises(namelist) margins(namelist) territorial(namelist)              ///
         marginaccounts(namelist) stocks(namelist) insurance(name)                  ///
         dirtax(name) saltax(name) imptax(name) exptax(name) acttax(name)           ///
-        SHEET(string) report(string) replace]
+        vattax(name) VATShare(string) SHEET(string) report(string) replace]
 
     _cge_load
     local roles `activities'`commodities'`factors'`households'`government'`savinv'`row'
     local roles `roles'`enterprises'`margins'`territorial'`marginaccounts'`stocks'`insurance'
-    local roles `roles'`dirtax'`saltax'`imptax'`exptax'`acttax'
+    local roles `roles'`dirtax'`saltax'`imptax'`exptax'`acttax'`vattax'
     if `"`using'"' != "" {
         if "`roles'" != "" {
             display as error "with a template, give no role options"
             exit 198
         }
         _cge_tmpl using `"`using'"', sheet(`"`sheet'"')
-        mata: _cge_map_template(`"`report'"', ("`replace'" != ""))
+        mata: _cge_map_template(`"`report'"', ("`replace'" != ""), strtrim(st_local("vatshare")))
         return add
         exit
     }
@@ -43,7 +43,6 @@ program define cge_map, rclass
         "`enterprises'", "`government'", "`savinv'", "`row'", "`dirtax'",          ///
         "`saltax'", "`imptax'", "`exptax'", "`acttax'", "`margins'",                ///
         "`territorial'", "`marginaccounts'", "`stocks'", "`insurance'",             ///
-        `"`report'"',                                                                  ///
-        ("`replace'" != ""))
+        `"`report'"', ("`replace'" != ""), "`vattax'", strtrim(st_local("vatshare")))
     return add
 end

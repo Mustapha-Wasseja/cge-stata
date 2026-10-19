@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.2.0  16oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -45,10 +45,15 @@ with {opt population()}.{p_end}
 {phang2}4. Government consumption and real transfers grow at
 {opt govgrowth()}; flows in foreign currency, and fixed foreign savings, at
 {opt foreigngrowth()}.{p_end}
-{phang2}5. The program in {opt shocks()} is called with the period as its
-argument; it may use {helpb cge_shock}. Shocks persist in later periods, so a
-shock with {opt scale()} should be applied only once.{p_end}
-{phang2}6. Value-added efficiency grows at {opt tfp()}; or follows the path
+{phang2}5. With public debt ({helpb cge_calibrate}, {opt debt()}), the previous
+period's deficit is borrowed, the share {opt foreignborrowing()} abroad, and
+interest is paid on the new stocks; a surplus repays debt in the same shares
+(from version 0.3.1).{p_end}
+{phang2}6. The program in {opt shocks()} is called with the period as its
+argument; it may use {helpb cge_shock}, for example to cancel debt with
+{cmd:cge_shock fdebt}. Shocks persist in later periods, so a shock with
+{opt scale()} should be applied only once.{p_end}
+{phang2}7. Value-added efficiency grows at {opt tfp()}; or follows the path
 of the run named in {opt baseline()}; or, with {opt gdpgrowth()}, grows
 uniformly at the rate for which real value added at base prices grows at the
 target.{p_end}

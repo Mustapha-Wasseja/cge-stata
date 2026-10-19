@@ -76,6 +76,7 @@ _ALLOWED = {
     ("mar", "com"), ("com", "mar"),          # margin accounts (version 0.1.7)
     # health insurance fund (version 0.1.13)
     ("shi", "fac"), ("shi", "gov"), ("shi", "row"), ("com", "shi"), ("sav", "shi"),
+    ("vattax", "com"), ("gov", "vattax"),    # VAT account (version 0.3.1)
 }
 # Transfers (they may be negative)
 _TRANSFERS = {
@@ -88,13 +89,13 @@ _ALLOWED |= _TRANSFERS
 
 # Row roles whose cells may be negative (taxes, subsidies, savings), and other
 # cells that may be negative (transfers and tax-account payments).
-_MAY_BE_NEGATIVE = {"dirtax", "saltax", "imptax", "exptax", "acttax", "sav"}
+_MAY_BE_NEGATIVE = {"dirtax", "saltax", "imptax", "exptax", "acttax", "vattax", "sav"}
 _NEGATIVE_CELLS = _TRANSFERS | {("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"),
-                                ("gov", "exptax"), ("gov", "acttax"), ("com", "sav"),
-                                ("act", "com")}
+                                ("gov", "exptax"), ("gov", "acttax"), ("gov", "vattax"),
+                                ("com", "sav"), ("act", "com")}
 
-TAX_ROLES = ("dirtax", "saltax", "imptax", "exptax", "acttax")
-COMMODITY_TAXES = ("saltax", "imptax", "exptax")
+TAX_ROLES = ("dirtax", "saltax", "imptax", "exptax", "acttax", "vattax")
+COMMODITY_TAXES = ("saltax", "imptax", "exptax", "vattax")
 
 
 def _territorial(values: np.ndarray, sam: "SAM", m: "Mapping") -> dict[str, float]:
@@ -187,7 +188,7 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
         raise SAMError(_PAIRING)
     direct = [t for t in TAX_ROLES if getattr(m, t) is not None and getattr(m, t) == m.government]
     if sum(t in COMMODITY_TAXES for t in direct) > 1:
-        raise SAMError("only one of saltax, imptax and exptax may name the government account")
+        raise SAMError("only one of saltax, imptax, exptax and vattax may name the government account")
 
     notes: dict[str, float] = {}
     r = sam.index(m.row)
@@ -239,6 +240,38 @@ def prepare(sam: "SAM", mapping: "Mapping") -> tuple["SAM", "Mapping", dict[str,
         values[g, n] = values[n].sum()
         setattr(m, tax, name)
         notes[tax] = float(values[n].sum())
+
+    # VAT recorded within the sales tax account (model_spec.md, 12.2): the given
+    # share of each commodity's sales tax is moved to an internal VAT account
+    if m.vat_shares is not None:
+        if m.vattax is not None:
+            raise SAMError("give either a VAT account or VAT shares of the sales tax, not both")
+        if m.saltax is None:
+            raise SAMError("VAT shares need a sales tax account")
+        if "_vatshare" in labels:
+            raise SAMError("the SAM already has an account named _vatshare")
+        shares = m.vat_shares
+        if not isinstance(shares, dict):
+            shares = {c: float(shares) for c in m.commodities}
+        unknown = [c for c in shares if c not in m.commodities]
+        if unknown:
+            raise SAMError(f"VAT shares: {unknown} are not commodities")
+        if any(not 0 <= float(x) <= 1 for x in shares.values()):
+            raise SAMError("VAT shares must lie between 0 and 1")
+        st = labels.index(m.saltax)
+        n = len(labels)
+        values = np.pad(values, ((0, 1), (0, 1)))
+        labels.append("_vatshare")
+        for c, share in shares.items():
+            ic = labels.index(c)
+            x = float(share) * values[st, ic]
+            values[n, ic] = x
+            values[st, ic] -= x
+        moved = values[n].sum()
+        values[g, n] = moved
+        values[g, st] -= moved
+        m.vattax = "_vatshare"
+        notes["vat"] = float(moved)
     return SAM(labels, values), m, notes
 
 
@@ -276,6 +309,8 @@ class Mapping:
     margin_accounts: list[str] = dataclasses.field(default_factory=list)
     stocks: list[str] = dataclasses.field(default_factory=list)
     insurance: str | None = None
+    vattax: str | None = None
+    vat_shares: dict | float | None = None
 
     def roles(self) -> dict[str, str]:
         """Role of every mapped account."""

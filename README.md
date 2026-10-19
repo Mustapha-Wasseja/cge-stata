@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.3.0 implements the standard single-country model described in
+Version 0.3.1 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -39,7 +39,13 @@ Version 0.3.0 implements the standard single-country model described in
   commodities, commodities that are imported only, separate stock-change
   accounts, and account labels that are not valid Stata names (such as `s-i`);
 - exports at least as large as domestic output, such as re-exports and exports
-  from inventories, drawn from composite supply (version 0.1.8).
+  from inventories, drawn from composite supply (version 0.1.8);
+- fiscal instruments (version 0.3.1, [Section 12](docs/model_spec.md)): VAT
+  with input credits by activity, so that exempt activities bear VAT on their
+  inputs; revenue-neutral closures in which direct, sales, import or VAT rates
+  adjust to hold government savings; and public debt, with interest separated
+  from the SAM's transfers, paid on domestic and foreign debt, and deficits
+  added to the debt in dynamic runs.
 
 Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
 derivatives for the aggregate equations with grouped central differences for
@@ -57,6 +63,14 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.3.1 adds the fiscal instruments above. `cge_map` gains `vattax()`
+and `vatshare()` (VAT recorded separately or within the sales tax);
+`cge_calibrate` gains `vatcredit()`, `debt()`, `interest()`, `debtholders()`
+and `foreignborrowing()`; `cge_closure, government(fixgsav sales)` and the
+like choose the tax that replaces lost revenue; `cge_shock` changes VAT rates,
+credit shares, interest rates and debt stocks; and `cge_report` adds VAT
+revenue and a public debt table. A model saved by an earlier version is
+upgraded when it is loaded.
 Version 0.3.0 adds tools to prepare a SAM ([docs/sam_tools.md](docs/sam_tools.md)).
 `cge_sam` reads SAMs of any size, as wide CSV files parsed directly (beyond
 the 2,048 variables of Stata/IC) or as long data with one observation per
@@ -179,8 +193,8 @@ of the same equations (`reference/`) runs in continuous integration; the Stata
 test suite compares its results with the reference (about 90 simulations, to
 about 1e-13). From version 0.1.16 an independent implementation in GAMS
 ([tools/gams](tools/gams/README.md)), written from the specification and
-calibrated from the SAM alone, reproduces every case: 84 scenarios across all
-layouts, features and several closures, to 2e-11 or better.
+calibrated from the SAM alone, reproduces every case: 100 scenarios across all
+layouts, features, fiscal instruments and several closures, to 3e-11 or better.
 
 ## Author
 

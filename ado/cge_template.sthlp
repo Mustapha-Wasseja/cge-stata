@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -47,10 +47,11 @@ mapping; otherwise they are blank. An Excel template also has a sheet
 {cmd:commodities}, {cmd:factors}, {cmd:households}, {cmd:enterprises},
 {cmd:government}, {cmd:savinv}, {cmd:row}, {cmd:dirtax}, {cmd:saltax},
 {cmd:imptax}, {cmd:exptax}, {cmd:acttax}, {cmd:margins}, {cmd:territorial},
-{cmd:marginaccounts}, {cmd:stocks} or {cmd:insurance}, in either case; the
+{cmd:marginaccounts}, {cmd:stocks}, {cmd:insurance} or {cmd:vattax}, in either case; the
 singular forms {cmd:activity}, {cmd:commodity}, {cmd:factor}, {cmd:household},
-{cmd:enterprise}, {cmd:margin}, {cmd:marginaccount} and {cmd:stock} are also
-accepted. An account may have several roles where {cmd:cge_map} allows it:
+{cmd:enterprise}, {cmd:margin}, {cmd:marginaccount}, {cmd:stock} and {cmd:vat} are
+also accepted. VAT shares of the sales tax are not a role: give them with
+{cmd:cge_map using}'s {opt vatshare()} option. An account may have several roles where {cmd:cge_map} allows it:
 {cmd:activities margins} for a margin activity, {cmd:government saltax} when
 sales taxes are paid to the government account. Leave the role blank only for
 an account without flows.

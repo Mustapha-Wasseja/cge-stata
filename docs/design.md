@@ -33,8 +33,8 @@ This document sets out how `cge-stata` is organised. The model equations are in
 | `cge_aggregate` | Merge accounts into groups, from a template or an option (sam_tools.md, Section 4) |
 | `cge_balance` | Balance the SAM by generalised RAS or cross entropy, keeping signs, zeros and fixed cells (sam_tools.md, Section 5) |
 | `cge_samexport` | Write the SAM, as read, aggregated or balanced, or after the layout rewrites, to a file or to memory |
-| `cge_map` | Assign SAM accounts to model roles, with options or from a template, and check the SAM against the supported flows (model_spec.md, Section 7.0) |
-| `cge_calibrate` | Compute base values and parameters from the mapped SAM and the elasticities; check benchmark replication |
+| `cge_map` | Assign SAM accounts to model roles, with options or from a template, including a VAT account or VAT shares of the sales tax, and check the SAM against the supported flows (model_spec.md, Section 7.0) |
+| `cge_calibrate` | Compute base values and parameters from the mapped SAM and the elasticities, VAT credit shares and public debt; check benchmark replication |
 | `cge_closure` | Choose closures for the external account, government, savings-investment, the numeraire and each factor; check that the system is square |
 | `cge_shock` | Change tax rates, world prices or productivity, or any variable fixed by the closure (factor supplies, foreign savings, and so on) |
 | `cge_solve` | Solve the model and store a named simulation |
@@ -168,7 +168,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.2.1 | Sensitivity analysis: Monte Carlo draws of elasticities (uniform or triangular, by sector or common), recalibration for each draw, and the distribution of every report measure (cge_sensitivity) (done) |
 | 0.2.2 | Top-down link to household survey data (model_spec.md, Section 11): income sources, consumption and prices by survey household, poverty (FGT) and inequality (Gini) before and after (cge_microsim) (done) |
 | 0.3.0 | SAM tools (docs/sam_tools.md): SAMs of any size, read directly from CSV or from long data; a mapping template in Excel or CSV for roles, pairs and groups (cge_template, cge_map using); aggregation (cge_aggregate); balancing by generalised RAS or cross entropy with known totals and fixed cells (cge_balance); writing the SAM (cge_samexport) (done) |
-| 0.3.1 | Policy instruments: revenue-neutral tax replacement; VAT with input credits; government debt and interest in dynamic runs |
+| 0.3.1 | Fiscal instruments (model_spec.md, Section 12): revenue-neutral closures with direct, sales, import or VAT rates adjusting (TQADJ, TMADJ, TVADJ); VAT with input credits by activity (cge_map vattax(), vatshare(); cge_calibrate vatcredit()); public debt and interest, separated from the SAM's transfers, with deficits borrowed in dynamic runs (cge_calibrate debt(), interest(), debtholders(), foreignborrowing()); a public debt report table; models saved by earlier versions upgraded on loading (done) |
 | 0.3.2 | Home consumption at producer prices; export demand that falls as export prices rise; export-only commodities; margins that differ by market |
 | 0.3.3 | Labour-market regimes: a wage curve, and a minimum wage with regime switching |
 | 0.3.4 | Health outcomes and days worked; population and mortality effects in dynamic runs |

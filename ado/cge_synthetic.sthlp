@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat}]
 
 
 {title:Options}
@@ -70,6 +70,11 @@ output: {cmd:com_fuel} re-exports 2 of its imports, and {cmd:com_agr} exports
 insurance fund ({cmd:shi}) that receives contributions of 6 on labour income, 2
 from the government and 1 from abroad, buys 8 of health services and saves 1.
 Map it with the four activities and commodities and {cmd:insurance(shi)}.
+
+{phang}
+{opt vat} loads the standard layout with a VAT account ({cmd:tax_vat}) that
+collects 18 from the commodities and passes it to the government, which
+returns it to households as transfers. Map it with {cmd:vattax(tax_vat)}.
 
 {phang}
 {opt unbalanced} loads the institutions layout made unbalanced, for the

@@ -76,14 +76,41 @@ spend(T) = sum(C, SAM(C, T));
 icm(CP, C) = sum(T$(spend(T) > tol), SAM(CP, T) / spend(T) * SAM(T, C)) / QQ0(C);
 
 * ---------------------------------------------------------------------
+* 12.2 VAT: each use of a commodity is a quantity at PQ = 1, its SAM value
+* divided by 1 + tv k, with k = 1 for final users and 1 - kappa for
+* activities. tv solves SAM(vat, c) = sum of V tv k / (1 + tv k) (Newton).
+* ---------------------------------------------------------------------
+parameters kappa(AC) "VAT credit share", vatc(AC) "net VAT by commodity", tv(AC) "VAT rate",
+     vbase(AC), vf(AC), vdf(AC), vstep(AC), qhv(AC, AC);
+kappa(A) = kappain(A);
+vatc(C) = sum(VTAXS, SAM(VTAXS, C));
+vbase(C) = sum(A, SAM(C, A) * (1 - kappa(A))) + sum(H, SAM(C, H)) + sum(GOVS, SAM(C, GOVS))
+           + sum(SAVS, SAM(C, SAVS)) + sum(SHIS, SAM(C, SHIS));
+tv(C)$(abs(vatc(C)) > tol) = vatc(C) / vbase(C);
+scalar it;
+for (it = 1 to 60,
+    vf(C)$tv(C) = sum(A, SAM(C, A) * tv(C) * (1 - kappa(A)) / (1 + tv(C) * (1 - kappa(A))))
+                  + (sum(H, SAM(C, H)) + sum(GOVS, SAM(C, GOVS)) + sum(SAVS, SAM(C, SAVS))
+                     + sum(SHIS, SAM(C, SHIS))) * tv(C) / (1 + tv(C)) - vatc(C);
+    vdf(C)$tv(C) = sum(A, SAM(C, A) * (1 - kappa(A)) / sqr(1 + tv(C) * (1 - kappa(A))))
+                   + (sum(H, SAM(C, H)) + sum(GOVS, SAM(C, GOVS)) + sum(SAVS, SAM(C, SAVS))
+                      + sum(SHIS, SAM(C, SHIS))) / sqr(1 + tv(C));
+    vstep(C)$tv(C) = vf(C) / vdf(C);
+    tv(C)$tv(C) = tv(C) - vstep(C);
+);
+abort$(smax(C, abs(vstep(C))) > 1e-13) "VAT rates did not converge";
+
+* ---------------------------------------------------------------------
 * 7.3 Production (W0 = WFDIST0 = 1: no factor quantities are supplied)
 * ---------------------------------------------------------------------
 sets FA(AC, AC) "factor used by activity", CDV(AC) "Cobb-Douglas value added",
      LT(AC) "Leontief top nest", CDA(AC) "Cobb-Douglas top nest";
 parameters QINTA0(AC), ica(AC, AC), QF0(AC, AC), QVA0(AC), iva(AC), inta(AC), rva(AC), dva(AC, AC),
      ad(AC), PINTA0(AC), rha(AC), ratioa(AC), dla(AC), dlac(AC), aa(AC), valuea(AC);
-QINTA0(A) = sum(C, SAM(C, A));
-ica(C, A)$(QINTA0(A) > 0) = SAM(C, A) / QINTA0(A);
+parameter QINT0(AC, AC) "intermediate input quantities";
+QINT0(C, A) = SAM(C, A) / (1 + tv(C) * (1 - kappa(A)));
+QINTA0(A) = sum(C, QINT0(C, A));
+ica(C, A)$(QINTA0(A) > 0) = QINT0(C, A) / QINTA0(A);
 FA(F, A) = yes$(SAM(F, A) > tol);
 QF0(F, A)$FA(F, A) = SAM(F, A);
 QVA0(A) = sum(F, SAM(F, A));
@@ -97,7 +124,7 @@ dva(F, A)$(FA(F, A) and not CDV(A)) = QF0(F, A)**(1 + rva(A))
                                        / sum(FP$FA(FP, A), QF0(FP, A)**(1 + rva(A)));
 ad(A)$(not CDV(A)) = QVA0(A) / sum(F$FA(F, A), dva(F, A) * QF0(F, A)**(-rva(A)))**(-1 / rva(A));
 * Top nest: Leontief (siga = 0, or no intermediate inputs), Cobb-Douglas (1) or CES
-PINTA0(A) = sum(C, ica(C, A));
+PINTA0(A) = sum(C, ica(C, A) * (1 + tv(C) * (1 - kappa(A))));
 LT(A) = yes$(siga(A) = 0 or QINTA0(A) <= 0);
 CDA(A) = yes$(not LT(A) and abs(siga(A) - 1) < 1e-12);
 rha(A)$(not LT(A) and not CDA(A)) = 1 / siga(A) - 1;
@@ -156,34 +183,48 @@ DY0(D) = YI0(D) - dtx(D) - dsv(D);
 safe(D) = DY0(D)$(abs(DY0(D)) > tol) + 1$(abs(DY0(D)) <= tol);
 shii(D, DP) = SAM(D, DP) / safe(DP);
 shir(D) = sum(ROWS, SAM(ROWS, D)) / safe(D);
-QH0(C, H) = SAM(C, H);
-EH0(H) = sum(C, QH0(C, H));
+QH0(C, H) = SAM(C, H) / (1 + tv(C));
+EH0(H) = sum(C, SAM(C, H));
 hc(H) = EH0(H) / safe(H);
-beta(C, H)$(EH0(H) > 0) = QH0(C, H) / EH0(H);
+beta(C, H)$(EH0(H) > 0) = SAM(C, H) / EH0(H);
 gamma(C, H) = 0;
 if (les,
 * LES: marginal shares in proportion to the income elasticities supplied
     bb(C, H) = incel(C) * beta(C, H);
     beta(C, H) = bb(C, H) / sum(CP, bb(CP, H));
-    gamma(C, H) = QH0(C, H) + beta(C, H) * EH0(H) / frisch(H);
+    gamma(C, H) = QH0(C, H) + beta(C, H) * EH0(H) / frisch(H) / (1 + tv(C));
 );
 trdg(D) = sum(GOVS, SAM(D, GOVS));
 trdr(D) = sum(ROWS, SAM(D, ROWS));
 trgr = sum((GOVS, ROWS), SAM(GOVS, ROWS));
 trrg = sum((ROWS, GOVS), SAM(ROWS, GOVS));
 trgg = sum(GOVS, SAM(GOVS, GOVS));
-qgbar(C) = sum(GOVS, SAM(C, GOVS));
-qinvbar(C) = sum(SAVS, SAM(C, SAVS));
-qshibar(C) = sum(SHIS, SAM(C, SHIS));
+qgbar(C) = sum(GOVS, SAM(C, GOVS)) / (1 + tv(C));
+qinvbar(C) = sum(SAVS, SAM(C, SAVS)) / (1 + tv(C));
+qshibar(C) = sum(SHIS, SAM(C, SHIS)) / (1 + tv(C));
 YSHI0 = sum((SHIS, AC), SAM(SHIS, AC));
 sshi = 0;
 sshi$fund = sum((SAVS, SHIS), SAM(SAVS, SHIS)) / YSHI0;
 trshi = sum((SHIS, GOVS), SAM(SHIS, GOVS));
 trshir = sum((SHIS, ROWS), SAM(SHIS, ROWS));
-cwts(C) = sum(H, QH0(C, H)) / sum((CP, H), QH0(CP, H));
+cwts(C) = sum(H, SAM(C, H)) / sum((CP, H), SAM(CP, H)) / (1 + tv(C));
 dwts(C) = QD0(C) / sum(CP, QD0(CP));
 YG0 = sum((GOVS, AC), SAM(GOVS, AC));
-EG0 = sum(C, qgbar(C)) + sum(D, trdg(D)) + trgg + trrg + trshi;
+EG0 = sum((C, GOVS), SAM(C, GOVS)) + sum(D, trdg(D)) + trgg + trrg + trshi;
+
+* 12.3 Public debt: interest on the stated debt is separated from the
+* government's transfers to domestic institutions (shares hold) and abroad
+parameters hold(AC) "share of domestic interest received";
+scalars ddebt, fdebt, rd, rf, phi;
+ddebt = ddebtin;  fdebt = fdebtin;  rd = rdin;  rf = rfin;
+hold(D) = holdin(D);
+hold(D)$(debtin and not holdgiven and sum(DP, max(trdg(DP), 0)) > 0)
+    = max(trdg(D), 0) / sum(DP, max(trdg(DP), 0));
+phi = phiin;
+phi$(debtin and not phigiven and ddebt + fdebt > 0) = fdebt / (ddebt + fdebt);
+trdg(D) = trdg(D) - hold(D) * rd * ddebt;
+trrg = trrg - rf * fdebt;
+abort$(smin(D, trdg(D)) < -tol) "transfers smaller than interest";
 GSAV0 = sum((SAVS, GOVS), SAM(SAVS, GOVS));
 FSAV0 = sum((SAVS, ROWS), SAM(SAVS, ROWS));
 
@@ -202,7 +243,7 @@ variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(
      QA(AC), QVA(AC), QINTA(AC), QF(AC, AC), QINT(AC, AC), QX(AC), QD(AC), QE(AC), QM(AC), QQ(AC),
      QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
      TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
-     SHIADJ, QSHI(AC), EFF(AC), HS;
+     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ;
 
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
@@ -212,15 +253,15 @@ equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP
      EI12, EI13(AC), EI14, ES1(AC), ES2(AC), ES3, ES4, ES5;
 
 * 5.1 Prices
-EP1(C)$CM(C)..  PM(C) =e= pwm(C) * (1 + tm(C)) * EXR;
+EP1(C)$CM(C)..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ) * EXR;
 EP2(C)$CE(C)..  PE(C) =e= pwe(C) * (1 - te(C)) * EXR;
-EP3(C)..        PQ(C) * (1 - tq(C)) * QQ(C) =e= (PD(C) * QD(C))$CX(C) + (PM(C) * QM(C))$CM(C)
+EP3(C)..        PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e= (PD(C) * QD(C))$CX(C) + (PM(C) * QM(C))$CM(C)
                 + sum(CP$CT(CP), PQ(CP) * icm(CP, C)) * QQ(C);
 EP4(C)$CX(C)..  PX(C) * QX(C) =e= PD(C) * QD(C) + (PE(C) * QE(C))$CE(C);
 EP5(A)..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * PX(C));
-EP6(A)..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * ica(C, A));
+EP6(A)..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * ica(C, A));
 EP7(A)..        PA(A) * (1 - ta(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A);
-EP8..           CPI =e= sum(C$cwts(C), cwts(C) * PQ(C));
+EP8..           CPI =e= sum(C$cwts(C), cwts(C) * PQ(C) * (1 + tv(C) * TVADJ));
 EP9..           DPI =e= sum(C$dwts(C), dwts(C) * PD(C));
 
 * 5.2 Production; factors in efficiency units af * EFF * QF
@@ -263,33 +304,38 @@ EI1(F)..  YF(F) =e= sum(A$FA(F, A), W(F) * WFDIST(F, A) * QF(F, A)) + trfr(F) * 
 EI2(INS, F)..  YIF(INS, F) =e= (shif(INS, F) * (1 - tshi(F)) * YF(F))$(not SHIS(INS))
                                + (tshi(F) * YF(F))$SHIS(INS);
 EI3(D)..  YI(D) =e= sum(F, YIF(D, F)) + sum(DP$shii(D, DP), shii(D, DP) * (1 - MPS(DP)) * (1 - TINS(DP)) * YI(DP))
-                    + trdg(D) * CPI + trdr(D) * EXR;
+                    + trdg(D) * CPI + trdr(D) * EXR + hold(D) * rd * ddebt;
 EI4(H)..  EH(H) =e= hc(H) * (1 - MPS(H)) * (1 - TINS(H)) * YI(H);
 EI5(C, H)$beta(C, H)..
-    PQ(C) * QH(C, H) =e= PQ(C) * gamma(C, H) + beta(C, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * gamma(CP, H)));
+    PQ(C) * (1 + tv(C) * TVADJ) * QH(C, H) =e= PQ(C) * (1 + tv(C) * TVADJ) * gamma(C, H)
+        + beta(C, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H)));
 EI6(C)..  QINV(C) =e= qinvbar(C) * IADJ;
 EI7(C)..  QG(C) =e= qgbar(C) * GADJ;
-EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * PQ(C) * QQ(C))
-                 + sum(C$CM(C), tm(C) * pwm(C) * QM(C)) * EXR + sum(C$CE(C), te(C) * pwe(C) * QE(C)) * EXR
-                 + sum(A, ta(A) * PA(A) * QA(A)) + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI;
-EI9..     EG =e= sum(C, PQ(C) * QG(C)) + (sum(D, trdg(D)) + trgg + trshi) * CPI + trrg * EXR;
+EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
+                 + sum(C$CM(C), tm(C) * TMADJ * pwm(C) * QM(C)) * EXR + sum(C$CE(C), te(C) * pwe(C) * QE(C)) * EXR
+                 + sum(A, ta(A) * PA(A) * QA(A))
+                 + TVADJ * sum(C$tv(C), tv(C) * PQ(C) * (sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
+                       + QSHI(C)$qshibar(C) + sum(A$ica(C, A), (1 - kappa(A)) * QINT(C, A))))
+                 + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI;
+EI9..     EG =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QG(C)) + (sum(D, trdg(D)) + trgg + trshi) * CPI
+                 + trrg * EXR + rd * ddebt + rf * fdebt * EXR;
 EI10(D).. TINS(D) =e= tins0(D) * TINSADJ;
 EI11(D).. MPS(D) =e= mps0(D) * MPSADJ;
 EI12$fund..  YSHI =e= sum((SHIS, F), YIF(SHIS, F)) + trshi * CPI + trshir * EXR;
 EI13(C)$qshibar(C)..  QSHI(C) =e= qshibar(C) * SHIADJ;
-EI14$fund..  sum(C$qshibar(C), PQ(C) * QSHI(C)) =e= (1 - sshi) * YSHI;
+EI14$fund..  sum(C$qshibar(C), PQ(C) * (1 + tv(C) * TVADJ) * QSHI(C)) =e= (1 - sshi) * YSHI;
 
 * 5.5 System constraints (S6 through the closure)
 ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F);
 ES2(C)..  QQ(C) =e= sum(A$ica(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                     + QT(C)$CT(C) + QER(C)$CR(C) + QSHI(C)$qshibar(C);
 ES3..     sum(C$CM(C), pwm(C) * QM(C)) + (sum((ROWS, F), YIF(ROWS, F))
-              + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D))) / EXR + trrg
+              + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D))) / EXR + trrg + rf * fdebt
           =e= sum(C$CE(C), pwe(C) * QE(C)) + sum(C$CR(C), PQ(C) * QER(C)) / EXR + sum(D, trdr(D))
               + sum(F, trfr(F)) + trgr + trshir + FSAV;
 ES4..     YG =e= EG + GSAV;
 ES5..     sum(D, MPS(D) * (1 - TINS(D)) * YI(D)) + GSAV + sshi * YSHI + EXR * FSAV
-          =e= sum(C, PQ(C) * QINV(C)) + WALRAS;
+          =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QINV(C)) + WALRAS;
 
 model cge / all /;
 
@@ -298,18 +344,20 @@ model cge / all /;
 * ---------------------------------------------------------------------
 PA.l(A) = 1;  PVA.l(A) = 1;  PINTA.l(A) = PINTA0(A);  PX.l(C) = 1;  PD.l(C) = 1;
 PE.l(C) = 1$CE(C);  PM.l(C) = PM0(C);  PQ.l(C) = 1;  W.l(F) = 1;  EXR.l = 1;
-CPI.l = sum(C, cwts(C));  DPI.l = sum(C, dwts(C));
+CPI.l = sum(C, cwts(C) * (1 + tv(C)));  DPI.l = sum(C, dwts(C));
 QA.l(A) = QA0(A);  QVA.l(A) = QVA0(A);  QINTA.l(A) = QINTA0(A);  QF.l(F, A) = QF0(F, A);
-QINT.l(C, A) = SAM(C, A);  QX.l(C) = QX0(C);  QD.l(C) = QD0(C);  QE.l(C) = QE0(C);
+QINT.l(C, A) = QINT0(C, A);  QX.l(C) = QX0(C);  QD.l(C) = QD0(C);  QE.l(C) = QE0(C);
 QM.l(C) = QM0(C)$CM(C);  QQ.l(C) = QQ0(C);  QH.l(C, H) = QH0(C, H);  QG.l(C) = qgbar(C);
 QINV.l(C) = qinvbar(C);  QFS.l(F) = sum(A, QF0(F, A));  YF.l(F) = YF0(F);  YIF.l(INS, F) = YIF0(INS, F);
 YI.l(D) = YI0(D);  EH.l(H) = EH0(H);  YG.l = YG0;  EG.l = EG0;  GSAV.l = GSAV0;  FSAV.l = FSAV0;
 TINS.l(D) = tins0(D);  MPS.l(D) = mps0(D);  TINSADJ.l = 1;  MPSADJ.l = 1;  IADJ.l = 1;  GADJ.l = 1;
 WFDIST.l(F, A) = 1;  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(C);  YSHI.l = YSHI0;
 SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;
+TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;
 
 * Closure (Section 6): 1 = the default of each block
-scalars clext "1 flexible exchange rate, 2 fixed", clgov "1 flexible government savings, 2 fixed",
+scalars clext "1 flexible exchange rate, 2 fixed",
+        clgov "1 flexible government savings; fixed, with 2 direct, 3 sales, 4 import or 5 VAT rates adjusting",
         clsi "1 savings-driven, 2 investment-driven", clnum "1 CPI numeraire, 2 DPI";
 parameter fclo(AC) "factor closure: 1 mobile, 2 activity-specific, 3 unemployed";
 clext = 1;  clgov = 1;  clsi = 1;  clnum = 1;  fclo(F) = 1;

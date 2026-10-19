@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.10  15oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -30,6 +30,8 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:te}}export tax rates (commodities){p_end}
 {p2col:{cmd:tq}}sales tax rates (commodities){p_end}
 {p2col:{cmd:ta}}activity tax rates (activities){p_end}
+{p2col:{cmd:tv}}VAT rates (commodities; from version 0.3.1, with a VAT account){p_end}
+{p2col:{cmd:kappa}}VAT credit shares, between 0 and 1 (activities){p_end}
 {p2col:{cmd:pwm}}world import prices (commodities){p_end}
 {p2col:{cmd:pwe}}world export prices (commodities){p_end}
 {p2col:{cmd:ad}}value-added efficiency, that is productivity (activities){p_end}
@@ -45,6 +47,8 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:qshi}}base purchases of the health insurance fund (commodities), which {cmd:SHIADJ} scales{p_end}
 {p2col:{cmd:trshi}}government transfers to the health insurance fund (real terms; no elements){p_end}
 {p2col:{cmd:trshir}}transfers from the rest of the world to the health insurance fund (foreign currency; no elements){p_end}
+{p2col:{cmd:rd}, {cmd:rf}}interest rates on domestic and foreign public debt (no elements; with debt, from version 0.3.1){p_end}
+{p2col:{cmd:ddebt}, {cmd:fdebt}}domestic debt (local currency) and foreign debt (foreign currency) at the start of the period, for example debt relief (no elements){p_end}
 {p2colreset}{...}
 
 {pstd}
@@ -59,6 +63,15 @@ factor: factor quantities and wages stay in physical units, so with mobile
 factors a 2 per cent fall in labour efficiency has the same real effects as 2
 per cent less labour. When {helpb cge_calibrate} links efficiency to health
 services, more health services also raise the efficiency variable {cmd:EFF}.
+
+{pstd}
+{cmd:tv} and {cmd:kappa} need a VAT account ({helpb cge_map}, {opt vattax()} or
+{opt vatshare()}; {cmd:vatshare(0)} creates an empty one, so that VAT can be
+introduced). {cmd:rd}, {cmd:rf}, {cmd:ddebt} and {cmd:fdebt} need public debt
+({helpb cge_calibrate}, {opt debt()} and {opt interest()}); interest is paid on
+the stocks at the rates. The tax scaling factors {cmd:TQADJ}, {cmd:TMADJ} and
+{cmd:TVADJ}, like {cmd:TINSADJ}, are variables that can be set while the
+closure fixes them.
 
 {pstd}
 or a model variable that is fixed under the current closure, such as {cmd:QFS}

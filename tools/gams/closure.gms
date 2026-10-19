@@ -27,6 +27,8 @@ QT.lo(AC) = -inf;      QT.up(AC) = inf;      QER.lo(AC) = -inf;     QER.up(AC) =
 YSHI.lo = -inf;        YSHI.up = inf;        SHIADJ.lo = -inf;      SHIADJ.up = inf;
 QSHI.lo(AC) = -inf;    QSHI.up(AC) = inf;    EFF.lo(AC) = -inf;     EFF.up(AC) = inf;
 HS.lo = -inf;          HS.up = inf;
+TQADJ.lo = -inf;       TQADJ.up = inf;       TMADJ.lo = -inf;       TMADJ.up = inf;
+TVADJ.lo = -inf;       TVADJ.up = inf;
 
 * Prices and quantities that are positive in the base stay positive
 PA.lo(A) = 1e-10;  PVA.lo(A) = 1e-10;  PQ.lo(C) = 1e-10;  W.lo(F) = 1e-10;  EXR.lo = 1e-10;
@@ -52,7 +54,12 @@ HS.fx$(not linked) = HS.l;
 * Closure
 GADJ.fx = GADJ.l;
 if (clext = 1, FSAV.fx = FSAV.l; else EXR.fx = EXR.l;);
-if (clgov = 1, TINSADJ.fx = TINSADJ.l; else GSAV.fx = GSAV.l;);
+* Government (12.1): the tax scaling factors are fixed except the instrument
+if (clgov > 1, GSAV.fx = GSAV.l;);
+if (clgov <> 2, TINSADJ.fx = TINSADJ.l;);
+if (clgov <> 3, TQADJ.fx = TQADJ.l;);
+if (clgov <> 4, TMADJ.fx = TMADJ.l;);
+if (clgov <> 5, TVADJ.fx = TVADJ.l;);
 if (clsi = 1, MPSADJ.fx = MPSADJ.l; else IADJ.fx = IADJ.l;);
 if (clnum = 1, CPI.fx = CPI.l; else DPI.fx = DPI.l;);
 QFS.fx(F)$(fclo(F) = 1) = QFS.l(F);

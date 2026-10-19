@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_closure} [{cmd:,} {opt ext:ernal(flexexr|fixexr)} {opt gov:ernment(flexgsav|fixgsav)}
+{cmd:cge_closure} [{cmd:,} {opt ext:ernal(flexexr|fixexr)} {opt gov:ernment(flexgsav|fixgsav [direct|sales|import|vat])}
 {opt sav:inv(savings|investment)} {opt num:eraire(cpi|dpi)} {opt fac:tors(spec)}]
 
 
@@ -31,8 +31,17 @@ savings; or {cmd:fixexr}, a fixed exchange rate with flexible foreign savings.
 
 {phang}
 {opt government()}: {cmd:flexgsav}, fixed tax rates with flexible government
-savings; or {cmd:fixgsav}, fixed government savings with a flexible direct tax
-scaling factor.
+savings; or {cmd:fixgsav}, fixed government savings, with one tax adjusting
+(from version 0.3.1; docs/model_spec.md, Section 12.1): direct tax rates
+({cmd:fixgsav} or {cmd:fixgsav direct}, scaled by {cmd:TINSADJ}), sales tax
+rates ({cmd:fixgsav sales}, {cmd:TQADJ}), import tariffs ({cmd:fixgsav import},
+{cmd:TMADJ}) or VAT rates ({cmd:fixgsav vat}, {cmd:TVADJ}). The adjusting tax
+must raise revenue in the base; its rates are scaled in proportion, so rates
+that are zero stay zero. With real government consumption fixed, this keeps a
+policy change revenue neutral: for example, after a tariff cut the scaling
+factor shows the rise in VAT or sales tax rates that replaces the lost
+revenue. A colon may replace the space ({cmd:fixgsav:vat}), which is how the
+closure is displayed.
 
 {phang}
 {opt savinv()}: {cmd:savings}, savings-driven investment (fixed savings rates);

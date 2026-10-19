@@ -35,4 +35,5 @@ put '%2', 'FSAV', '', '', FSAV.l /;  put '%2', 'TINSADJ', '', '', TINSADJ.l /;
 put '%2', 'MPSADJ', '', '', MPSADJ.l /;  put '%2', 'IADJ', '', '', IADJ.l /;
 put '%2', 'GADJ', '', '', GADJ.l /;  put '%2', 'WALRAS', '', '', WALRAS.l /;
 put '%2', 'YSHI', '', '', YSHI.l /;  put '%2', 'SHIADJ', '', '', SHIADJ.l /;  put '%2', 'HS', '', '', HS.l /;
+put '%2', 'TQADJ', '', '', TQADJ.l /;  put '%2', 'TMADJ', '', '', TMADJ.l /;  put '%2', 'TVADJ', '', '', TVADJ.l /;
 putclose %1;

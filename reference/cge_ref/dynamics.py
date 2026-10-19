@@ -14,7 +14,9 @@ from the previous period's solution:
    health link;
 5. government consumption and real transfers, and flows in foreign currency
    (including fixed foreign savings), grow at given rates;
-6. optional shocks are applied, and the period is solved from the previous
+6. with public debt (version 0.3.1), last period's deficit is added to the
+   debt, a share phi borrowed abroad;
+7. optional shocks are applied, and the period is solved from the previous
    period's solution.
 
 The Stata command cge_dynamic must reproduce these runs.
@@ -131,6 +133,11 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
             p[name] = p[name] * (1 + settings.foreign_growth)
         if closure.external == "flexexr":
             fx["FSAV"] = fx["FSAV"] * (1 + settings.foreign_growth)
+        # Public debt (model_spec.md, 12.3): last period's deficit is borrowed
+        if p["debt"] != 0:
+            deficit = -prev["GSAV"][0]
+            p["ddebt"] = np.array(p["ddebt"] + (1 - p["phi"]) * deficit)
+            p["fdebt"] = np.array(p["fdebt"] + p["phi"] * deficit / prev["EXR"][0])
         # 6. Shocks
         if shocks is not None:
             shocks(t, p, fx)

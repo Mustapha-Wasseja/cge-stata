@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.2.0  16oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -26,7 +26,8 @@ from the base, side by side. The tables are:
 government consumption, investment, purchases of the health insurance fund,
 exports and imports, real value added, price indexes, the exchange rate and
 the real exchange rate, private savings, investment and foreign savings{p_end}
-{p2col:{cmd:government}}revenue, spending, savings and revenue by tax{p_end}
+{p2col:{cmd:government}}revenue, spending, savings and revenue by tax, including VAT{p_end}
+{p2col:{cmd:debt}}interest paid at home and abroad, the primary balance, and public debt at the end of the period, at home, abroad (in local and foreign currency), in total and in per cent of nominal GDP, when the model has debt (from version 0.3.1){p_end}
 {p2col:{cmd:institutions}}income of households and enterprises; household consumption{p_end}
 {p2col:{cmd:factors}}wage, real wage, income and supply of each factor{p_end}
 {p2col:{cmd:activities}}output, price and value added of each activity{p_end}
@@ -37,6 +38,7 @@ the real exchange rate, private savings, investment and foreign savings{p_end}
 
 {pstd}
 Real measures are valued at base prices, and trade at base world prices.
+With VAT, final demand is valued at the prices final users pay, including VAT.
 The equivalent variation is the change in base-price spending that gives the
 new utility; the compensating variation is the change in spending at the new
 prices that would restore base utility. Both use the household's
@@ -56,7 +58,7 @@ in period order, instead of {opt sims()}.
 
 {phang}
 {opt tables(list)} lists the tables to display, or {cmd:all}. The default is
-{cmd:macro government institutions factors health welfare}. Every table is
+{cmd:macro government debt institutions factors health welfare}. Every table is
 saved.
 
 {phang}

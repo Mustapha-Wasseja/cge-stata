@@ -24,6 +24,7 @@ government,tax_sales,,30,29.5385197669927
 government,tax_import,,8,7.77036616075789
 government,tax_export,,0,0
 government,tax_activity,,0,0
+government,tax_vat,,0,0
 institutions,income,hhd,254,247.594476519581
 institutions,income,npi,9,8.86595200161268
 institutions,income,ent,104,101.826119053669

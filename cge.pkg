@@ -12,7 +12,7 @@ d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja
 d
-d Distribution-Date: 20261018
+d Distribution-Date: 20261020
 d
 f ado/cge.ado
 f ado/cge.sthlp
@@ -71,3 +71,4 @@ F data/cge_synthetic_sam_cnm.csv
 F data/cge_synthetic_sam_sut.csv
 F data/cge_synthetic_sam_health.csv
 F data/cge_synthetic_sam_unbal.csv
+F data/cge_synthetic_sam_vat.csv

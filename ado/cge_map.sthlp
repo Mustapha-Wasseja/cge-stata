@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.3.1  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -12,11 +12,11 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)}
+[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)} {opt vattax(name)} {opt vatshare(spec)}
 {opt report(filename)} {opt replace}]
 
 {p 8 12 2}
-{cmd:cge_map using} {it:template} [{cmd:,} {opt sheet(string)} {opt report(filename)} {opt replace}]
+{cmd:cge_map using} {it:template} [{cmd:,} {opt vatshare(spec)} {opt sheet(string)} {opt report(filename)} {opt replace}]
 
 {pstd}
 Options must be typed in full.
@@ -145,8 +145,24 @@ government account in the tax option, for example {cmd:saltax(gov)}: the
 government row's cells in the paying columns (households for {opt dirtax()},
 commodities for {opt saltax()}, {opt imptax()} and {opt exptax()}, activities
 for {opt acttax()}) are routed through an internal tax account. At most one of
-{opt saltax()}, {opt imptax()} and {opt exptax()} may name the government
-account.
+{opt saltax()}, {opt imptax()}, {opt exptax()} and {opt vattax()} may name the
+government account.
+
+{phang}
+{opt vattax(name)} names the account that collects value added tax (VAT) from
+the commodities, net of input credits, and pays it to the government (from
+version 0.3.1; docs/model_spec.md, Section 12.2). VAT is then a tax on final
+demand, at a rate by commodity, with credits for the VAT on inputs in the
+shares given by {helpb cge_calibrate}'s {opt vatcredit()}; exports and margin
+services are zero-rated.
+
+{phang}
+{opt vatshare(spec)} is for SAMs that record VAT within the sales tax account:
+it moves the given share of each commodity's sales tax to an internal VAT
+account {cmd:_vatshare}, as {it:commodity}{cmd::}{it:share} pairs or one share
+for every commodity, between 0 and 1. Commodities not listed have share 0.
+{cmd:vatshare(0)} creates an empty VAT account, so that a VAT can be introduced
+by a shock to {cmd:tv}. {opt vattax()} and {opt vatshare()} may not be combined.
 
 {phang}
 {opt sheet(string)} names the worksheet of an Excel template; the default is
@@ -188,12 +204,21 @@ From a template, filled in Excel:
 {phang2}{cmd:. cge_template using roles.xlsx}{p_end}
 {phang2}{cmd:. cge_map using roles.xlsx}{p_end}
 
+{pstd}
+VAT, as a separate account or as shares of the sales tax:
+
+{phang2}{cmd:. cge_synthetic, clear vat}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vattax(tax_vat)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vatshare(com_man:0.5 com_ser:1)}{p_end}
+
 
 {title:Stored results}
 
 {synoptset 22 tabbed}{...}
 {p2col 5 22 26 2: Scalars}{p_end}
 {synopt:{cmd:r(N_negative_sales)}}number of negative sales of commodities by activities{p_end}
+{synopt:{cmd:r(vat_moved)}}VAT moved out of the sales tax by {opt vatshare()}{p_end}
 {p2col 5 22 26 2: Macros}{p_end}
 {synopt:{cmd:r(command)}}with a template, the equivalent {cmd:cge_map} command{p_end}
 

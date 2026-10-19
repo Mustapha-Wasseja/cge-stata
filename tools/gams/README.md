@@ -40,7 +40,10 @@ Every case of the Python test suite, including:
 - the standard, institutions, margins, territorial, multi-product,
   non-imported and supply-use layouts;
 - mixed elasticities, the top nest and LES demand;
-- the health insurance fund and the health link.
+- the health insurance fund and the health link;
+- VAT with input credits, VAT within the sales tax and a VAT introduced where
+  the SAM has none, revenue-neutral closures (direct, sales, import and VAT
+  rates adjusting) and public debt with interest (from version 0.3.1).
 
 For each case, every scenario is compared with the expected results in
 `tests/expected`, which the Stata suite also matches. Alternative closures
@@ -49,12 +52,12 @@ are compared with the Python reference:
   DPI numeraire and capital specific to each activity;
 - unemployed labour.
 
-## Result (16 October 2026, GAMS 54.2, PATH)
+## Result (20 October 2026, GAMS 54.2, PATH)
 
-84 scenarios in 23 cases; every expected value was found and solved.
+100 scenarios; every expected value was found and solved.
 
 - Base values from GAMS's own calibration agree to 5e-15 or better.
-- Solutions agree to 2.3e-11 or better, relative to the larger of 1 and the
+- Solutions agree to 3e-11 or better, relative to the larger of 1 and the
   value.
 - WALRAS is zero in both, up to rounding.
 

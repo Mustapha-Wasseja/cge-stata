@@ -11,25 +11,32 @@ from __future__ import annotations
 
 import numpy as np
 
+from .model import final_price, vat_revenue
+
 
 def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     b, p0, S = model.base, model.params, model.sets
     exr, exr0 = v["EXR"][0], b["EXR"][0]
-    final = v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"] + v["QER"]
+    # Final demand at final-user prices, including VAT; exports from composite
+    # supply at PQ (version 0.3.1)
+    final = v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]
+    ph, ph0 = final_price(v, p), final_price(b, p0)
     rows: list[tuple[str, str, str, float]] = []
 
     def add(table: str, measure: str, element: str, value) -> None:
         rows.append((table, measure, element, float(value)))
 
-    gdp_n = v["PQ"] @ final + exr * (p["pwe"] @ v["QE"]) - exr * (p["pwm"] @ v["QM"])
-    gdp_r = b["PQ"] @ final + exr0 * (p0["pwe"] @ v["QE"]) - exr0 * (p0["pwm"] @ v["QM"])
+    gdp_n = (ph @ final + v["PQ"] @ v["QER"] + exr * (p["pwe"] @ v["QE"])
+             - exr * (p["pwm"] @ v["QM"]))
+    gdp_r = (ph0 @ final + b["PQ"] @ v["QER"] + exr0 * (p0["pwe"] @ v["QE"])
+             - exr0 * (p0["pwm"] @ v["QM"]))
     add("macro", "gdp_nominal", "", gdp_n)
     add("macro", "gdp_real", "", gdp_r)
     add("macro", "gdp_deflator", "", gdp_n / gdp_r)
-    add("macro", "consumption_real", "", b["PQ"] @ v["QH"].sum(axis=1))
-    add("macro", "government_real", "", b["PQ"] @ v["QG"])
-    add("macro", "investment_real", "", b["PQ"] @ v["QINV"])
-    add("macro", "insurance_fund_real", "", b["PQ"] @ v["QSHI"])
+    add("macro", "consumption_real", "", ph0 @ v["QH"].sum(axis=1))
+    add("macro", "government_real", "", ph0 @ v["QG"])
+    add("macro", "investment_real", "", ph0 @ v["QINV"])
+    add("macro", "insurance_fund_real", "", ph0 @ v["QSHI"])
     add("macro", "exports_real", "", exr0 * (p0["pwe"] @ v["QE"]) + b["PQ"] @ v["QER"])
     add("macro", "imports_real", "", exr0 * (p0["pwm"] @ v["QM"]))
     add("macro", "value_added_real", "", b["PVA"] @ v["QVA"])
@@ -38,17 +45,33 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     add("macro", "exchange_rate", "", exr)
     add("macro", "real_exchange_rate", "", exr / v["DPI"][0])
     add("macro", "private_savings", "", (v["MPS"] * (1 - v["TINS"])) @ v["YI"])
-    add("macro", "investment_value", "", v["PQ"] @ v["QINV"])
+    add("macro", "investment_value", "", ph @ v["QINV"])
     add("macro", "foreign_savings", "", v["FSAV"][0])
 
     add("government", "revenue", "", v["YG"][0])
     add("government", "spending", "", v["EG"][0])
     add("government", "savings", "", v["GSAV"][0])
     add("government", "tax_direct", "", v["TINS"] @ v["YI"])
-    add("government", "tax_sales", "", (p["tq"] * v["PQ"] * v["QQ"]).sum())
-    add("government", "tax_import", "", exr * (p["tm"] * p["pwm"] * v["QM"]).sum())
+    add("government", "tax_sales", "", (p["tq"] * v["TQADJ"] * v["PQ"] * v["QQ"]).sum())
+    add("government", "tax_import", "", exr * (p["tm"] * v["TMADJ"] * p["pwm"] * v["QM"]).sum())
     add("government", "tax_export", "", exr * (p["te"] * p["pwe"] * v["QE"]).sum())
     add("government", "tax_activity", "", (p["ta"] * v["PA"] * v["QA"]).sum())
+    add("government", "tax_vat", "", vat_revenue(v, p)[0])
+
+    # Public debt (model_spec.md, 12.3): stocks at the end of the period
+    if p0["debt"] != 0:
+        gsav = v["GSAV"][0]
+        int_d, int_f = p["rd"] * p["ddebt"], p["rf"] * p["fdebt"] * exr
+        end_d = p["ddebt"] + (1 - p["phi"]) * (-gsav)
+        end_f = p["fdebt"] + p["phi"] * (-gsav) / exr
+        add("debt", "interest_domestic", "", int_d)
+        add("debt", "interest_foreign", "", int_f)
+        add("debt", "primary_balance", "", gsav + int_d + int_f)
+        add("debt", "debt_domestic", "", end_d)
+        add("debt", "debt_foreign", "", end_f * exr)
+        add("debt", "debt_foreign_fc", "", end_f)
+        add("debt", "debt_total", "", end_d + end_f * exr)
+        add("debt", "debt_gdp", "", 100 * (end_d + end_f * exr) / gdp_n)
 
     for k, d in enumerate(S["D"]):
         add("institutions", "income", d, v["YI"][k])

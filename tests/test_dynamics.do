@@ -4,26 +4,7 @@
 
 version 13.0
 
-capture program drop _compare_period
-program define _compare_period
-    args sim file
-    tempfile stata
-    quietly cge_results, sim(`sim') clear nodisplay
-    quietly save `stata'
-    quietly import delimited using "expected/`file'.csv", varnames(1) case(preserve) ///
-        stringcols(1 2 3) asdouble clear
-    rename (base value) (ref_base ref_value)
-    quietly merge 1:1 variable element1 element2 using `stata'
-    assert _merge == 3
-    quietly generate double reldiff = abs(value - ref_value) / max(1, abs(ref_value)) if variable != "WALRAS"
-    quietly summarize reldiff
-    local worst = r(max)
-    quietly summarize value if variable == "WALRAS"
-    assert abs(r(mean)) < 1e-8
-    display as text "`sim' (`file'): " as result _N as text " values, largest relative difference " ///
-        as result %9.2e `worst'
-    assert `worst' < 1e-8
-end
+quietly do helpers_reference.do
 
 * Efficiency factors of a run compared with expected/dyn_<run>_tfp.csv
 capture program drop _compare_tfp

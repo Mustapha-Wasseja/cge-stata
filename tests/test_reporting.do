@@ -3,28 +3,7 @@
 
 version 13.0
 
-* Report measures of a simulation are compared with expected/report_<name>.csv
-capture program drop _compare_report
-program define _compare_report
-    args sim
-    tempfile stata
-    quietly cge_report, sims(`sim') clear nodisplay
-    keep table measure element base value
-    quietly save `stata'
-    quietly import delimited using "expected/report_`sim'.csv", varnames(1) case(preserve) ///
-        stringcols(1 2 3) asdouble clear
-    rename (base value) (ref_base ref_value)
-    quietly merge 1:1 table measure element using `stata'
-    assert _merge == 3
-    quietly generate double rel = abs(value - ref_value) / max(1, abs(ref_value))
-    quietly generate double relb = abs(base - ref_base) / max(1, abs(ref_base))
-    quietly summarize relb
-    assert r(max) < 1e-9
-    quietly summarize rel
-    display as text "report `sim': " as result _N as text " measures, largest relative difference " ///
-        as result %9.2e r(max)
-    assert r(max) < 1e-6
-end
+quietly do helpers_reference.do
 
 local stdmap activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)          ///

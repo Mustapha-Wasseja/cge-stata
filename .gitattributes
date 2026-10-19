@@ -1,3 +1,4 @@
 * text=auto
 *.dta binary
 *.mlib binary
+*.cgem binary
