@@ -116,9 +116,13 @@ def test_expected_files_are_current(tmp_path):
     for path in write_expected(tmp_path):
         with path.open(newline="") as fresh, (EXPECTED_DIR / path.name).open(newline="") as stored:
             new_rows, old_rows = list(csv.reader(fresh)), list(csv.reader(stored))
-        assert [r[:3] for r in new_rows] == [r[:3] for r in old_rows], path.name
-        new = np.array([[float(x) for x in r[3:]] for r in new_rows[1:]])
-        old = np.array([[float(x) for x in r[3:]] for r in old_rows[1:]])
+        # Label columns must match exactly and values to a tolerance; a SAM file
+        # (samtools_*) has one label column, a results file three
+        nlab = 1 if path.name.startswith("samtools_") else 3
+        assert new_rows[0] == old_rows[0], path.name
+        assert [r[:nlab] for r in new_rows] == [r[:nlab] for r in old_rows], path.name
+        new = np.array([[float(x) for x in r[nlab:]] for r in new_rows[1:]])
+        old = np.array([[float(x) for x in r[nlab:]] for r in old_rows[1:]])
         assert _close(new, old, rel=1e-10), path.name
 
 
