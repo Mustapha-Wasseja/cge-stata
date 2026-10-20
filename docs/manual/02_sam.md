@@ -105,7 +105,36 @@ cge_samexport, clear long
 
 CSV files keep every digit, so a SAM written and read again is unchanged.
 
-## 2.6 The synthetic SAMs
+## 2.6 Multiplier analysis: `cge_multiplier`
+
+Once the SAM is mapped (chapter 3), `cge_multiplier` computes its accounting
+multipliers (Pyatt and Round 1979; [sam_tools.md](../sam_tools.md), Section 6):
+the effect of a unit injection into one account on the incomes of all the
+endogenous accounts, with prices fixed. No calibration is needed.
+
+```stata
+cge_multiplier, decompose                 // every account, with the decomposition
+cge_multiplier, inject(com_hlt:10)        // 10 more spending on health services
+cge_multiplier, endogenous(gov) clear     // government spending endogenous; load the matrix
+```
+
+By default the activities, commodities and margin accounts (production), the
+factors, and the households and enterprises (institutions) are endogenous;
+government, savings-investment, the rest of the world and the taxes are
+exogenous. For each injection the command reports the total multiplier and
+its parts in gross output, value added and household income. `decompose`
+splits it into transfer effects within the injected account's block,
+open-loop effects on the other blocks, and closed-loop effects of the
+circular flow back to it.
+
+Multipliers assume fixed prices, idle capacity in every sector and average
+propensities to spend equal to marginal ones. They are upper bounds:
+`examples/multipliers.do` gives 10 more government health spending a
+multiplier effect of 25.8 on gross output, while the CGE model, with factors
+fully employed and the deficit crowding out investment, finds a fall of 3.1.
+Report the two together, with their assumptions.
+
+## 2.7 The synthetic SAMs
 
 `cge_synthetic` loads the SYNTHETIC SAMs used in the tests and examples. They
 describe no country. The standard SAM has three sectors, two factors, one
@@ -116,6 +145,9 @@ load other layouts: `national` (national-accounts conventions), `institutions`
 and an insurance fund), `unbalanced`, `vat`, `home` and `trade`.
 
 ## References
+
+Pyatt, G. and J. I. Round (1979). Accounting and fixed price multipliers in a
+social accounting matrix framework. *Economic Journal* 89(356): 850-873.
 
 Junius, T. and J. Oosterhaven (2003). The solution of updating or
 regionalizing a matrix with both positive and negative entries. *Economic

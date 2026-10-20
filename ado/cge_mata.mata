@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.4.0  2026-10-20
+*! cge_mata.mata  v0.4.1  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -133,7 +133,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.4.0")
+    return("0.4.1")
 }
 
 // =====================================================================
@@ -6601,6 +6601,219 @@ void _cge_elas_values(string matrix E, string matrix S, real colvector sel, stri
     st_global("r(ids)", invtokens(id'))
     st_global("r(parameter)", p)
     st_numscalar("r(N)", rows(id))
+}
+
+// =====================================================================
+// SAM multipliers (from version 0.4.1; docs/sam_tools.md, Section 6)
+// =====================================================================
+
+// Endogenous accounts (positions in the mapped SAM) and their blocks: 1
+// production (activities, commodities, margin accounts), 2 factors, 3
+// institutions (households, enterprises and the accounts in endogenous())
+void _cge_mult_accounts(struct cge_model scalar M, string scalar s_endo, string scalar s_exo,
+                        real colvector idx, real colvector blk)
+{
+    string rowvector tok
+    real colvector keep
+    real scalar k, a
+    idx = M.iA \ M.iC \ M.iT \ M.iF \ M.iH \ M.iE
+    blk = J(rows(M.iA) + rows(M.iC) + rows(M.iT), 1, 1) \ J(rows(M.iF), 1, 2) \ J(rows(M.iH) + rows(M.iE), 1, 3)
+    tok = tokens(s_exo)
+    for (k = 1; k <= cols(tok); k++) {
+        a = _cge_find(M.labels, tok[k])
+        if (!a) _cge_fail("exogenous(): " + tok[k] + " is not an account of the SAM", 111)
+        if (!anyof(idx, a)) _cge_fail("exogenous(): " + tok[k] + " is not an endogenous account", 198)
+        keep = (idx :!= a)
+        idx = select(idx, keep)
+        blk = select(blk, keep)
+    }
+    tok = tokens(s_endo)
+    for (k = 1; k <= cols(tok); k++) {
+        a = _cge_find(M.labels, tok[k])
+        if (!a) _cge_fail("endogenous(): " + tok[k] + " is not an account of the SAM", 111)
+        if (anyof(idx, a)) _cge_fail("endogenous(): " + tok[k] + " is already endogenous", 198)
+        idx = idx \ a
+        blk = blk \ 3
+    }
+    if (rows(idx) == 0) _cge_fail("no endogenous accounts", 198)
+}
+
+// 1 where an endogenous account is in the set of positions set
+real colvector _cge_mult_mask(real colvector idx, real colvector set)
+{
+    real colvector out
+    real scalar k
+    out = J(rows(idx), 1, 0)
+    for (k = 1; k <= rows(idx); k++) out[k] = anyof(set, idx[k])
+    return(out)
+}
+
+void _cge_mult(string scalar s_endo, string scalar s_exo, string scalar s_inj, real scalar decomp,
+               string scalar s_acc, real scalar load)
+{
+    struct cge_model scalar M
+    real colvector idx, blk, t, x, dy, mA, mF, mH, show, tot, outp, va, hh, rr, cc, vv
+    real matrix A, Ma, In, B1, B2, same, circ, off, At, As, M1, M2, M3, T, O, C
+    string colvector L, bname, names3
+    string rowvector tok
+    real scalar n, k, i, j, pos, w, nshow, nbad
+    string scalar lab
+
+    M = _cge_load()
+    _cge_need(M, "mapped")
+    _cge_mult_accounts(M, s_endo, s_exo, idx, blk)
+    n = rows(idx)
+    L = M.labels[idx]
+    names3 = ("production" \ "factors" \ "institutions")
+    bname = names3[blk]
+    t = colsum(M.S)'
+    t = t[idx]
+    // Average expenditure propensities; an account without payments has none
+    A = M.S[idx, idx] :/ (t' + (t' :== 0))
+    In = I(n)
+    Ma = luinv(In - A)
+    if (hasmissing(Ma)) {
+        _cge_fail("I - A is singular: some payments among the endogenous accounts never leak to an exogenous account; make one of them exogenous", 459)
+    }
+    if (decomp) {
+        B1 = blk * J(1, n, 1)
+        B2 = J(n, 1, 1) * blk'
+        same = (B1 :== B2)
+        circ = ((B1 :== 2) :& (B2 :== 1)) :| ((B1 :== 3) :& (B2 :== 2)) :| ((B1 :== 1) :& (B2 :== 3))
+        off = (1 :- same) :* (1 :- circ) :* (abs(A) :> 1e-12)
+        if (any(off)) {
+            errprintf("decompose: the SAM has flows outside the circular structure production -> factors -> institutions -> production:\n")
+            nbad = 0
+            for (j = 1; j <= n; j++) {
+                for (i = 1; i <= n; i++) {
+                    if (off[i, j] & nbad < 10) {
+                        errprintf("  %s (%s) pays %s (%s): %g\n", L[j], bname[j], L[i], bname[i], M.S[idx[i], idx[j]])
+                        nbad++
+                    }
+                }
+            }
+            exit(459)
+        }
+        At = A :* same
+        M1 = luinv(In - At)
+        As = M1 * (A - At)
+        M2 = In + As + As * As
+        M3 = luinv(In - As * As * As)
+        T = M1 - In
+        O = (M2 - In) * M1
+        C = (M3 - In) * M2 * M1
+    }
+    mA = _cge_mult_mask(idx, M.iA)
+    mF = _cge_mult_mask(idx, M.iF)
+    mH = _cge_mult_mask(idx, M.iH)
+    st_numscalar("r(N_endogenous)", n)
+    st_global("r(endogenous)", invtokens(L'))
+
+    // Injections
+    if (s_inj != "") {
+        x = J(n, 1, 0)
+        tok = tokens(s_inj)
+        for (k = 1; k <= cols(tok); k++) {
+            pos = strpos(tok[k], ":")
+            if (!pos) _cge_fail("inject() entries take the form account:value", 198)
+            lab = substr(tok[k], 1, pos - 1)
+            i = _cge_find(L, lab)
+            if (!i) _cge_fail("inject(): " + lab + " is not an endogenous account", 198)
+            x[i] = x[i] + strtoreal(substr(tok[k], pos + 1, .))
+            if (hasmissing(x)) _cge_fail("inject(): " + tok[k] + " needs a number", 198)
+        }
+        dy = Ma * x
+        w = max((12, max(strlen(L)))) + 1
+        printf("\n{txt}Effects of the injection (fixed prices; docs/sam_tools.md, Section 6)\n")
+        printf("{txt}%-" + strofreal(w) + "s %-13s %12s %12s %9s\n", "Account", "Block", "Base income", "Change", "% change")
+        printf("{txt}{hline " + strofreal(w + 50) + "}\n")
+        for (k = 1; k <= n; k++) {
+            printf("{txt}%-" + strofreal(w) + "s %-13s {res}%12.4g %12.4g %9.3f\n", L[k], bname[k], t[k], dy[k],
+                   (t[k] != 0 ? 100 * dy[k] / abs(t[k]) : .))
+        }
+        printf("{txt}{hline " + strofreal(w + 50) + "}\n")
+        printf("{txt}Injection {res}%g{txt}; gross output {res}%g{txt}; value added {res}%g{txt}; household income {res}%g\n",
+               sum(x), mA' * dy, mF' * dy, mH' * dy)
+        st_numscalar("r(injection)", sum(x))
+        st_numscalar("r(output)", mA' * dy)
+        st_numscalar("r(value_added)", mF' * dy)
+        st_numscalar("r(household_income)", mH' * dy)
+        st_numscalar("r(total)", sum(dy))
+        if (load) {
+            st_addobs(n)
+            (void) st_addvar("str32", "account")
+            (void) st_addvar("str12", "block")
+            (void) st_addvar("double", ("base", "change", "pct"))
+            st_sstore(., "account", L)
+            st_sstore(., "block", bname)
+            st_store(., "base", t)
+            st_store(., "change", dy)
+            st_store(., "pct", 100 :* dy :/ abs(t) :/ (t :!= 0))
+            st_varlabel("base", "Income in the SAM (column total)")
+            st_varlabel("change", "Change from the injection")
+            st_varlabel("pct", "Per cent change")
+        }
+        return
+    }
+
+    // Multipliers by injected account
+    tot = colsum(Ma)'
+    outp = (mA' * Ma)'
+    va = (mF' * Ma)'
+    hh = (mH' * Ma)'
+    show = J(n, 1, 0)
+    if (s_acc != "") {
+        tok = tokens(s_acc)
+        for (k = 1; k <= cols(tok); k++) {
+            i = _cge_find(L, tok[k])
+            if (!i) _cge_fail("accounts(): " + tok[k] + " is not an endogenous account", 198)
+            show[i] = 1
+        }
+    }
+    else if (n <= 40) show = J(n, 1, 1)
+    else show = _cge_mult_mask(idx, M.iC) :| mH
+    nshow = sum(show)
+    w = max((12, max(strlen(select(L, show))))) + 1
+    printf("\n{txt}Accounting multipliers: effects of a unit injection into each account (fixed prices)\n")
+    printf("{txt}%-" + strofreal(w) + "s %-13s %9s %9s %9s %9s", "Injection", "Block", "Total", "Output", "Value add.", "Hh income")
+    if (decomp) printf("{txt} %9s %9s %9s", "Transfer", "Open loop", "Closed")
+    printf("\n{txt}{hline " + strofreal(w + 54 + 30 * decomp) + "}\n")
+    if (decomp) {
+        rr = colsum(T)'
+        cc = colsum(O)'
+        vv = colsum(C)'
+    }
+    for (k = 1; k <= n; k++) {
+        if (!show[k]) continue
+        printf("{txt}%-" + strofreal(w) + "s %-13s {res}%9.3f %9.3f %9.3f %9.3f", L[k], bname[k], tot[k], outp[k], va[k], hh[k])
+        if (decomp) printf("{res} %9.3f %9.3f %9.3f", rr[k], cc[k], vv[k])
+        printf("\n")
+    }
+    printf("{txt}{hline " + strofreal(w + 54 + 30 * decomp) + "}\n")
+    printf("{txt}Total: all endogenous accounts; output: activities; value added: factors; household income: households\n")
+    if (decomp) printf("{txt}Total = 1 + transfer + open loop + closed loop (Pyatt and Round 1979)\n")
+    if (nshow < n) printf("{txt}%f of %f injections shown; {cmd:accounts()} chooses them and {cmd:clear} loads the matrix\n", nshow, n)
+
+    if (load) {
+        st_addobs(n * n)
+        (void) st_addvar("str32", ("row", "column"))
+        (void) st_addvar("str12", ("row_block", "column_block"))
+        (void) st_addvar("double", "multiplier")
+        st_sstore(., "row", J(n, 1, L))
+        st_sstore(., "column", colshape(J(1, n, L), 1))
+        st_sstore(., "row_block", J(n, 1, bname))
+        st_sstore(., "column_block", colshape(J(1, n, bname), 1))
+        st_store(., "multiplier", vec(Ma))
+        if (decomp) {
+            (void) st_addvar("double", ("transfer", "open_loop", "closed_loop"))
+            st_store(., "transfer", vec(T))
+            st_store(., "open_loop", vec(O))
+            st_store(., "closed_loop", vec(C))
+        }
+        st_varlabel("row", "Account whose income changes")
+        st_varlabel("column", "Account injected")
+        st_varlabel("multiplier", "Change in income of row per unit injected into column")
+    }
 }
 
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)

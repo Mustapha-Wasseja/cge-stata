@@ -405,6 +405,40 @@ def write_samtools(directory: Path = EXPECTED_DIR) -> list[Path]:
     return written
 
 
+def multiplier_cases() -> dict:
+    """SAM multipliers (version 0.4.1): name -> (model, settings); settings are
+    the arguments of cge_ref.multipliers.multipliers()."""
+    return {
+        "std": (synthetic_model(), {"decompose": True}),
+        "inst": (institutions_model(), {"decompose": True}),
+        "health": (health_model(), {"decompose": True}),
+        "sut": (sut_model(), {"decompose": True}),
+        # the government in the institutions block and the enterprise exogenous
+        "inst_gov": (institutions_model(), {"endogenous": ["gov"], "exogenous": ["ent"], "decompose": True}),
+        # without decomposition
+        "std_plain": (synthetic_model(), {}),
+    }
+
+
+def write_multipliers(directory: Path = EXPECTED_DIR) -> list[Path]:
+    """Accounting multipliers and, where defined, their decomposition: one row
+    per pair of endogenous accounts."""
+    from .multipliers import from_model
+    written = []
+    for name, (model, settings) in multiplier_cases().items():
+        r = from_model(model, **settings)
+        path = directory / f"multipliers_{name}.csv"
+        parts = ["transfer", "open_loop", "closed_loop"] if r.parts else []
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(["row", "column", "multiplier"] + parts)
+            for i, a in enumerate(r.labels):
+                for j, b in enumerate(r.labels):
+                    writer.writerow([a, b, f"{r.M[i, j]:.15g}"] + [f"{r.parts[k][i, j]:.15g}" for k in parts])
+        written.append(path)
+    return written
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -597,7 +631,7 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Labour-market regimes (0.3.3); health outcomes (0.3.4)
     solutions.update(labour_cases())
     solutions.update(outcome_cases())
-    written = write_dynamic(directory) + write_samtools(directory)
+    written = write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
     for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")

@@ -223,7 +223,80 @@ and after, and the cells with the largest changes.
 The balanced SAM is an estimate. Which totals are known, which cells are
 fixed and which method is used should be stated with any results.
 
-## 6. Testing
+## 6. Multiplier analysis (from version 0.4.1)
+
+`cge_multiplier` computes the accounting multipliers of the mapped SAM
+(Pyatt and Round 1979): the effects of an injection into one account on the
+incomes of all the accounts whose spending the SAM explains, with prices
+fixed. It uses the SAM after the layout rewrites of model_spec.md, Section 7.0,
+and needs no calibration.
+
+### 6.1 Accounting multipliers
+
+The accounts are divided into endogenous accounts $n$ and exogenous accounts
+$x$. By default the endogenous accounts are the activities, commodities and
+margin accounts (the production block, $b = 1$), the factors ($b = 2$), and the
+households and enterprises (the institutions block, $b = 3$); the government,
+savings-investment, the rest of the world, the tax accounts and the health
+insurance fund are exogenous. `endogenous()` adds exogenous accounts to the
+institutions block, and `exogenous()` removes endogenous ones.
+
+With $t_j$ the column total of account $j$, the average expenditure
+propensities among endogenous accounts are
+
+$$A_{ij} = SAM_{ij} / t_j, \qquad i, j \in n,$$
+
+(zero for an account without payments), and the incomes of the endogenous
+accounts satisfy $y = A y + x$, where $x$ is their income from exogenous
+accounts. Hence
+
+$$y = M x, \qquad M = (I - A)^{-1}.$$
+
+Column $j$ of $M$ is the change in the incomes of every endogenous account for
+a unit injection into $j$. The command reports, for each injection, the total
+multiplier $\sum_i M_{ij}$ and its parts: gross output (the rows of the
+activities), value added (the factors) and household income (the households).
+$I - A$ is invertible when every chain of payments among the endogenous
+accounts eventually leaks to an exogenous account (taxes, savings, imports);
+an activity may pay all of its income to endogenous accounts.
+
+### 6.2 Decomposition
+
+With the three blocks ordered as above, $A$ has a circular structure: factors
+are paid by production ($A_{21}$), institutions by factors ($A_{32}$), and
+production by institutions ($A_{13}$), with transfers within production
+($A_{11}$), within factors ($A_{22}$) and within institutions ($A_{33}$). With
+$\tilde A$ the block-diagonal part of $A$ and
+$A^* = (I - \tilde A)^{-1}(A - \tilde A)$, Pyatt and Round (1979) write
+
+$$M = M_3 M_2 M_1, \qquad M_1 = (I - \tilde A)^{-1}, \quad M_2 = I + A^* + A^{*2}, \quad M_3 = (I - A^{*3})^{-1},$$
+
+the transfer, open-loop and closed-loop multipliers, and additively
+
+$$M = I + (M_1 - I) + (M_2 - I) M_1 + (M_3 - I) M_2 M_1.$$
+
+The three terms after $I$ are the transfer effects within the injected
+account's block, the open-loop effects on the other blocks, and the
+closed-loop effects of the circular flow back to the injected block. The
+decomposition requires the blocks outside the circle ($A_{12}$, $A_{23}$,
+$A_{31}$) to be zero; `decompose` stops with an error, listing the largest
+flows that break the structure, if they are not.
+
+### 6.3 Injections
+
+`inject()` gives a vector $x$ of injections into endogenous accounts, for
+example more government purchases of a commodity, and reports $M x$: the
+change in gross output by activity, in factor incomes and in household
+incomes, and their totals.
+
+### 6.4 Use
+
+Accounting multipliers assume fixed prices, unused capacity in every sector
+and average propensities equal to marginal ones; they are upper bounds on
+the effects that a CGE model, with its supply constraints and price changes,
+would find. They complement the CGE model; they do not replace it.
+
+## 7. Testing
 
 The Python reference (`reference/cge_ref/samtools.py`) implements aggregation,
 GRAS and the cross-entropy method; its results for a SYNTHETIC unbalanced SAM
@@ -237,7 +310,12 @@ The Stata tests compare:
 - an aggregated SAM, mapped from a template, calibrated and solved, against
   the Python model on the same aggregated SAM;
 - the three readers against each other, and a SAM larger than `c(maxvar)`
-  written and read back.
+  written and read back;
+- the multipliers and their decomposition for five layouts and closures of the
+  accounts (`reference/cge_ref/multipliers.py`, `tests/expected/multipliers_*`),
+  injections against the expected multipliers, and the identities of the
+  decomposition; the Python tests add a SAM whose multipliers are worked by
+  hand.
 
 ## References
 
@@ -254,3 +332,6 @@ Paper 6, Center for Global Trade Analysis, Purdue University.
 Robinson, S., A. Cattaneo and M. El-Said (2001). Updating and estimating a
 social accounting matrix using cross entropy methods. *Economic Systems
 Research* 13(1): 47–64.
+
+Pyatt, G. and J. I. Round (1979). Accounting and fixed price multipliers in a
+social accounting matrix framework. *Economic Journal* 89(356): 850–873.

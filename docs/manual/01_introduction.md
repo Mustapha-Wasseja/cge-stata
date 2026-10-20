@@ -60,6 +60,7 @@ A model is built in a fixed order. Each step is a command:
 |---|---|---|
 | Read the SAM | `cge_sam` | 2 |
 | Prepare it: template, aggregation, balancing | `cge_template`, `cge_aggregate`, `cge_balance`, `cge_samexport` | 2 |
+| SAM multipliers | `cge_multiplier` | 2 |
 | Assign accounts to model roles | `cge_map` | 3 |
 | Choose elasticities | `cge_elasticities` | 3 |
 | Calibrate | `cge_calibrate` | 3 |
