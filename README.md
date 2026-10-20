@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.3.4 implements the standard single-country model described in
+Version 0.3.5 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -77,6 +77,15 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.3.5 adds a library of published elasticities
+([docs/elasticities.md](docs/elasticities.md)): aggregate Armington and CET
+elasticities for 51 African countries, income elasticities for nine
+consumption categories in 47 African countries, a Frisch parameter, an African
+capital-labour substitution elasticity, wage-curve elasticities and health
+outcome elasticities, each with its source, the table and page where it is
+printed, and the check made when it was read. `cge_elasticities` lists or
+loads entries and returns them as options for `cge_calibrate`, mapping model
+commodities to consumption categories; users can add their own entries.
 Version 0.3.4 adds the health outcomes above. `cge_calibrate` gains
 `sickdays()`, `sickelas()`, `mortality()` and `mortelas()`; `cge_shock`
 changes the share of time lost (`sick`, for example an epidemic) and the

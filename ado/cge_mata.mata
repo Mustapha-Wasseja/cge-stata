@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.3.4  2026-10-20
+*! cge_mata.mata  v0.3.5  2026-10-20
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -133,7 +133,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.3.4")
+    return("0.3.5")
 }
 
 // =====================================================================
@@ -6350,6 +6350,257 @@ void _cge_microsim(string scalar sim, string scalar touse, string scalar gvar, s
     st_numscalar("r(fgt0_sim)", T[1, 5])
     st_numscalar("r(gini_base)", T[1, 10])
     st_numscalar("r(gini_sim)", T[1, 11])
+}
+
+// =====================================================================
+// Elasticity library (from version 0.3.5; docs/elasticities.md)
+// =====================================================================
+
+string rowvector _cge_elas_fields()
+{
+    return(("id", "parameter", "country", "country_name", "category", "value", "se", "lower", "upper",
+            "published", "definition", "method", "observations", "period", "source", "location", "check",
+            "notes"))
+}
+
+string rowvector _cge_elas_srcfields()
+{
+    return(("source", "authors", "year", "title", "publication", "url", "version"))
+}
+
+// A CSV file as a string matrix with the columns cols, in that order. The
+// columns in req must be present; the others are empty when missing. Empty
+// fields, which the fast path of _cge_split() returns as ".", are empty.
+string matrix _cge_csv_table(string scalar fn, string rowvector cols, string rowvector req)
+{
+    string colvector lines
+    string rowvector head, f
+    string matrix out
+    real rowvector pos
+    real scalar i, k
+    lines = _cge_split(_cge_readfile(fn), char(10), "")'
+    lines = select(lines, strtrim(lines) :!= "")
+    if (rows(lines) == 0) _cge_fail(fn + " is empty", 459)
+    head = strlower(_cge_unquote(_cge_split(lines[1], ",", `""""')))
+    pos = J(1, cols(cols), 0)
+    for (i = 1; i <= cols(cols); i++) {
+        for (k = 1; k <= cols(head); k++) if (head[k] == cols[i]) pos[i] = k
+    }
+    for (i = 1; i <= cols(req); i++) {
+        if (!anyof(head, req[i])) _cge_fail(fn + " has no column " + req[i], 459)
+    }
+    out = J(rows(lines) - 1, cols(cols), "")
+    for (k = 2; k <= rows(lines); k++) {
+        f = _cge_unquote(_cge_split(lines[k], ",", `""""'))
+        if (cols(f) != cols(head)) {
+            _cge_fail("line " + strofreal(k) + " of " + fn + " has " + strofreal(cols(f)) + " fields; the header has " +
+                      strofreal(cols(head)), 459)
+        }
+        for (i = 1; i <= cols(cols); i++) if (pos[i]) out[k - 1, i] = (f[pos[i]] == "." ? "" : f[pos[i]])
+    }
+    return(out)
+}
+
+// The library: the package's entries and, if given, a user's file
+string matrix _cge_elas_load(string scalar libfn, string scalar userfn)
+{
+    string matrix E, U
+    string rowvector req
+    string colvector ids
+    real scalar k
+    req = ("id", "parameter", "country", "category", "value", "source")
+    E = _cge_csv_table(libfn, _cge_elas_fields(), req)
+    if (userfn != "") {
+        U = _cge_csv_table(userfn, _cge_elas_fields(), req)
+        if (rows(U) == 0) _cge_fail(userfn + " has no entries", 459)
+        E = E \ U
+    }
+    E[., 2] = strlower(E[., 2])
+    E[., 3] = strupper(E[., 3])
+    E[., 5] = strlower(E[., 5])
+    ids = sort(E[., 1], 1)
+    for (k = 2; k <= rows(ids); k++) {
+        if (ids[k] == ids[k - 1]) _cge_fail("elasticity library: entry " + ids[k] + " appears more than once", 459)
+    }
+    if (hasmissing(strtoreal(E[., 6]))) _cge_fail("elasticity library: every entry needs a numeric value", 459)
+    return(E)
+}
+
+// Entries that match every filter given (a list of values for each column)
+real colvector _cge_elas_match(string matrix E, string scalar par, string scalar ctry, string scalar cat,
+                               string scalar src, string scalar ids)
+{
+    real colvector keep
+    keep = J(rows(E), 1, 1)
+    if (par != "") keep = keep :& (E[., 2] :== strlower(par))
+    if (ctry != "") keep = keep :& _cge_elas_in(E[., 3], strupper(ctry))
+    if (cat != "") keep = keep :& _cge_elas_in(E[., 5], strlower(cat))
+    if (src != "") keep = keep :& _cge_elas_in(strupper(E[., 15]), strupper(src))
+    if (ids != "") keep = keep :& _cge_elas_in(strupper(E[., 1]), strupper(ids))
+    return(keep)
+}
+
+// Text cut to n characters (abbrev() is for names and treats periods specially)
+string scalar _cge_trunc(string scalar s, real scalar n)
+{
+    return(strlen(s) <= n ? s : substr(s, 1, n - 2) + "..")
+}
+
+real colvector _cge_elas_in(string colvector v, string scalar list)
+{
+    string rowvector tok
+    real colvector out
+    real scalar k
+    tok = tokens(list)
+    out = J(rows(v), 1, 0)
+    for (k = 1; k <= cols(tok); k++) out = out :| (v :== tok[k])
+    return(out)
+}
+
+// List, load or turn into option values the entries of the library that
+// match the filters (cge_elasticities)
+void _cge_elas(string scalar par, string scalar ctry, string scalar cat, string scalar src, string scalar ids,
+               string scalar libfn, string scalar srcfn, string scalar userfn, real scalar load,
+               real scalar values, string scalar map, string scalar others)
+{
+    string matrix E, S, D
+    real colvector keep, sel, si
+    string rowvector names, loc
+    real scalar k, n, j, w
+
+    E = _cge_elas_load(libfn, userfn)
+    S = _cge_csv_table(srcfn, _cge_elas_srcfields(), ("source", "authors", "year", "title"))
+    keep = _cge_elas_match(E, par, ctry, cat, src, ids)
+    sel = selectindex(keep)
+    if (rows(sel) == 0) _cge_fail("no entry of the elasticity library matches", 111)
+    if (values) {
+        _cge_elas_values(E, S, sel, par, map, others)
+        return
+    }
+    n = rows(sel)
+    st_numscalar("r(N)", n)
+    st_global("r(ids)", invtokens(E[sel, 1]'))
+    if (load) {
+        // Entries with the details of their sources
+        names = _cge_elas_fields(), ("authors", "year", "title", "publication", "url")
+        D = J(n, cols(names), "")
+        D[., (1..18)] = E[sel, .]
+        for (k = 1; k <= n; k++) {
+            si = selectindex(S[., 1] :== E[sel[k], 15])
+            if (rows(si)) D[k, (19..23)] = S[si[1], (2..6)]
+        }
+        st_addobs(n)
+        for (j = 1; j <= cols(names); j++) {
+            if (anyof(("value", "se", "lower", "upper"), names[j])) {
+                (void) st_addvar("double", names[j])
+                st_store(., names[j], strtoreal(D[., j]))
+            }
+            else {
+                w = max((1, max(strlen(D[., j]))))
+                (void) st_addvar((w > 244 ? "strL" : "str" + strofreal(w)), names[j])
+                st_sstore(., names[j], D[., j])
+            }
+        }
+        st_varlabel("id", "Library entry")
+        st_varlabel("parameter", "Parameter (cge_calibrate option)")
+        st_varlabel("country", "Country (ISO 3166 alpha-3) or group")
+        st_varlabel("value", "Value, in the package's convention")
+        st_varlabel("published", "Value as published")
+        st_varlabel("location", "Location in the source")
+        printf("{txt}%f entr%s of the elasticity library loaded\n", n, (n == 1 ? "y" : "ies"))
+        return
+    }
+    // Entries, with the location up to its first semicolon
+    w = min((32, max(strlen(E[sel, 1])))) + 1
+    printf("\n{txt}%-" + strofreal(w) + "s %-9s %-4s %-12s %8s %7s  %s\n", "Entry", "Parameter", "Ctry",
+           "Category", "Value", "S.e.", "Source, location")
+    printf("{txt}{hline " + strofreal(w + 92) + "}\n")
+    for (k = 1; k <= min((n, 60)); k++) {
+        j = sel[k]
+        loc = tokens(E[j, 16], ";")
+        printf("{res}%-" + strofreal(w) + "s {txt}%-9s %-4s %-12s {res}%8s %7s  {txt}%s, %s\n", E[j, 1], E[j, 2],
+               E[j, 3], _cge_trunc(E[j, 5], 12), E[j, 6], E[j, 7], E[j, 15], (cols(loc) ? _cge_trunc(loc[1], 48) : ""))
+    }
+    printf("{txt}{hline " + strofreal(w + 92) + "}\n")
+    if (n > 60) printf("{txt}The first 60 of %f entries are shown; {cmd:clear} loads them all\n", n)
+    printf("{txt}{cmd:clear} loads the entries with their definitions, notes and sources\n")
+}
+
+// Values for cge_calibrate: one per commodity (sigmaq, sigmat, incelas), one
+// per activity (sigmava), or one number (frisch, wagecurve, mortelas,
+// sickelas). Commodities and activities take the single matching entry, or
+// the entry of the category that map() or others() gives them.
+void _cge_elas_values(string matrix E, string matrix S, real colvector sel, string scalar par,
+                      string scalar map, string scalar others)
+{
+    struct cge_model scalar M
+    string colvector elem, cat, used, id
+    string rowvector tok
+    string scalar p, out, kind
+    real colvector hit, s1
+    real scalar k, pos, i, n
+
+    p = strlower(par)
+    if (p == "") _cge_fail("values needs a parameter, for example cge_elasticities sigmaq, values", 198)
+    if (anyof(("sigmaq", "sigmat", "incelas"), p)) kind = "commodities"
+    else if (p == "sigmava") kind = "activities"
+    else if (anyof(("frisch", "wagecurve", "mortelas", "sickelas"), p)) kind = ""
+    else _cge_fail(par + " is not a parameter that values can set (sigmaq sigmat incelas sigmava frisch wagecurve mortelas sickelas)", 198)
+    if (kind == "") {
+        if (map != "" | others != "") _cge_fail("map() and others() apply to sigmaq, sigmat, incelas and sigmava", 198)
+        if (rows(sel) != 1) {
+            _cge_fail(strofreal(rows(sel)) + " entries match; choose one with id(), country() or category(): " +
+                      invtokens(E[sel, 1]'), 459)
+        }
+        out = E[sel[1], 6]
+        id = E[sel[1], 1]
+    }
+    else {
+        M = _cge_load()
+        _cge_need(M, "mapped")
+        elem = (kind == "commodities" ? M.C : M.A)
+        n = rows(elem)
+        cat = J(n, 1, strlower(others))
+        tok = tokens(map)
+        for (k = 1; k <= cols(tok); k++) {
+            pos = strpos(tok[k], ":")
+            if (!pos) _cge_fail("map() entries take the form " + (kind == "commodities" ? "commodity" : "activity") + ":category", 198)
+            i = _cge_find(elem, substr(tok[k], 1, pos - 1))
+            if (!i) _cge_fail("map(): " + substr(tok[k], 1, pos - 1) + " is not one of the model's " + kind, 111)
+            cat[i] = strlower(substr(tok[k], pos + 1, .))
+        }
+        id = J(n, 1, "")
+        out = ""
+        for (k = 1; k <= n; k++) {
+            hit = sel
+            if (cat[k] != "") hit = select(sel, E[sel, 5] :== cat[k])
+            if (rows(hit) == 0) {
+                _cge_fail(elem[k] + ": no matching entry" + (cat[k] != "" ? " in category " + cat[k] : "") +
+                          (map == "" & others == "" ? "" : "; give its category in map() or others()"), 111)
+            }
+            if (rows(hit) > 1) {
+                _cge_fail(elem[k] + ": " + strofreal(rows(hit)) + " entries match (" + invtokens(E[hit, 1]') +
+                          "); narrow the choice with country(), category(), map() or others()", 459)
+            }
+            id[k] = E[hit[1], 1]
+            out = out + (k > 1 ? " " : "") + E[hit[1], 6]
+        }
+    }
+    // What was chosen, with the definitions and notes of the entries used
+    used = uniqrows(id)
+    printf("{txt}%s: {res}%s\n", p, out)
+    for (k = 1; k <= rows(used); k++) {
+        hit = selectindex(E[., 1] :== used[k])
+        i = hit[1]
+        s1 = selectindex(S[., 1] :== E[i, 15])
+        printf("{txt}  {res}%s{txt} (%s): %s\n", E[i, 1], E[i, 3], E[i, 11])
+        printf("{txt}    %s%s, %s\n", E[i, 15], (rows(s1) ? " (" + S[s1[1], 2] + " " + S[s1[1], 3] + ")" : ""), E[i, 16])
+        if (E[i, 18] != "") printf("{txt}    Note: %s\n", E[i, 18])
+    }
+    st_global("r(values)", out)
+    st_global("r(ids)", invtokens(id'))
+    st_global("r(parameter)", p)
+    st_numscalar("r(N)", rows(id))
 }
 
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)

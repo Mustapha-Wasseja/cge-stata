@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.4  20oct2026}{...}
+{* *! version 0.3.5  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -29,7 +29,8 @@ replication). It stops with an error if replication fails.
 
 {pstd}
 Elasticities have no defaults; they are part of the model specification and
-must be stated.
+must be stated. {helpb cge_elasticities} (from version 0.3.5) gives published
+values with their sources and returns them as options for this command.
 
 
 {title:Options}
