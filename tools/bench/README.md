@@ -28,6 +28,6 @@ python tools/bench/run_bench.py [--sizes 40x5,80x10,120x10,160x20,200x20,250x20]
 Times varied with other work on the machine, so they show orders of magnitude.
 Before version 0.2.0 the practical limit was about 15,000 to 20,000
 equations, set by the memory of the dense Jacobian of the full system. The
-largest model above would need about 13 GB for that Jacobian. Stata IC
-limits a SAM to about 2,040 accounts (2,048 variables when it is read);
-Stata SE and MP allow more.
+largest model above would need about 13 GB for that Jacobian. Stata IC holds
+at most 2,048 variables; from version 0.3.0, `cge_sam` reads larger SAMs
+directly from CSV files or from long data.

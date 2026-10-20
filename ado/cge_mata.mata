@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.3.5  2026-10-20
+*! cge_mata.mata  v0.4.0  2026-10-20
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -133,7 +133,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.3.5")
+    return("0.4.0")
 }
 
 // =====================================================================
@@ -1108,8 +1108,8 @@ void _cge_aggregate(string colvector group, real scalar netdiag)
     if (netdiag) _diag(X, J(m, 1, 0))
     size = J(m, 1, 0)
     for (k = 1; k <= n; k++) size[gi[k]] = size[gi[k]] + 1
-    printf("{txt}Accounts merged: {res}%f{txt} accounts into {res}%f{txt} groups; {res}%f{txt} accounts left as they are\n",
-           sum((size :> 1) :* size), sum(size :> 1), sum(size :== 1))
+    printf("{txt}Accounts merged: {res}%f{txt} accounts into {res}%f{txt} group%s; {res}%f{txt} accounts left as they are\n",
+           sum((size :> 1) :* size), sum(size :> 1), (sum(size :> 1) == 1 ? "" : "s"), sum(size :== 1))
     if (ndiag) {
         printf("{txt}Diagonal cells (flows within an account): {res}%f{txt}, total {res}%g{txt}%s\n", ndiag, sdiag,
                (netdiag ? ", removed" : ", kept"))

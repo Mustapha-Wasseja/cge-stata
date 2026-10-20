@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.3.5 implements the standard single-country model described in
+Version 0.4.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -77,6 +77,13 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.4.0 adds a user manual ([docs/manual](docs/manual/README.md)), in ten
+chapters from preparing a SAM to validation and troubleshooting, and a worked
+example that takes an unbalanced SAM through every step: a template,
+aggregation, balancing, mapping, elasticities from the library, calibration
+and checks, three policy simulations, report tables, sensitivity analysis, a
+dynamic baseline and scenario, and poverty and inequality in a household
+survey (`examples/raw_sam_to_results.do`). The test suite runs every example.
 Version 0.3.5 adds a library of published elasticities
 ([docs/elasticities.md](docs/elasticities.md)): aggregate Armington and CET
 elasticities for 51 African countries, income elasticities for nine
@@ -222,8 +229,11 @@ example, and `help cge` for the command list.
 
 ## Documentation
 
+- [docs/manual](docs/manual/README.md): the user manual, with the worked
+  examples in [examples/](examples).
 - [docs/model_spec.md](docs/model_spec.md): equations, calibration, closures
   and validation checks.
+- [docs/elasticities.md](docs/elasticities.md): the elasticity library.
 - [docs/sam_tools.md](docs/sam_tools.md): reading, writing, aggregating and
   balancing SAMs, and the mapping template.
 - [docs/design.md](docs/design.md): commands, data structures, solver, testing
@@ -236,11 +246,12 @@ Every calibration is checked for benchmark replication. `cge_check` tests SAM
 balance, closure consistency, Walras's law, the GDP identity, homogeneity and
 convergence from perturbed starting values. A Python reference implementation
 of the same equations (`reference/`) runs in continuous integration; the Stata
-test suite compares its results with the reference (about 90 simulations, to
-about 1e-13). From version 0.1.16 an independent implementation in GAMS
-([tools/gams](tools/gams/README.md)), written from the specification and
-calibrated from the SAM alone, reproduces every case: 116 scenarios across all
-layouts, features, fiscal instruments and several closures, to 3e-11 or better.
+test suite compares its results with the reference (every variable of every
+test case, to about 1e-11 or better). From version 0.1.16 an independent
+implementation in GAMS ([tools/gams](tools/gams/README.md)), written from the
+specification and calibrated from the SAM alone, reproduces every case: 139
+scenarios across all layouts, features, fiscal instruments, labour-market
+regimes, health outcomes and several closures, to 3e-11 or better.
 
 ## Author
 

@@ -137,7 +137,7 @@ Stata 13, so that one library serves Stata 13 and later.
 | Suite | Where it runs | Contents |
 |---|---|---|
 | `reference/tests` (pytest) | continuous integration and locally | synthetic SAM; calibration; validation checks; dual unit-cost checks; closures; direction of effects; SAM aggregation and balancing (signs, zeros and fixed cells kept, targets met, cross entropy with every total known equal to RAS, optimality conditions) |
-| `tests/*.do` (Stata) | locally, via `tools/run_stata_tests.ps1` | Mata solver; synthetic SAM; agreement with the Python results for about 100 simulations; validation checks; all 64 closure combinations; alternative closures; factor quantities; error handling; SAM tools against the Python balanced and aggregated SAMs, mapping from templates, the three readers and a 2,100-account SAM |
+| `tests/*.do` (Stata) | locally, via `tools/run_stata_tests.ps1` | Mata solver; synthetic SAM; agreement with the Python results for about 100 simulations; validation checks; all 64 closure combinations; alternative closures; factor quantities; error handling; SAM tools against the Python balanced and aggregated SAMs, mapping from templates, the three readers and a 2,100-account SAM; the extensions of versions 0.3.1 to 0.3.4 and the elasticity library; every worked example in examples/ |
 
 The Python suite writes its simulation results to `tests/expected/` as CSV
 files. The Stata suite compares its own results with those files, which ties the
@@ -173,7 +173,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.3.3 | Labour-market regimes (model_spec.md, Section 14): a labour force from the base unemployment rate (cge_calibrate unemployment()); a wage curve (wagecurve()); a minimum real wage with the regime found by the solver, through a smoothed Fischer-Burmeister condition (minwage(), smoothing()); factor closures wagecurve and minwage; shocks to the labour force, minimum wage and reference wage; the labour force and unemployment rate in reports, with rates in percentage points; labour-force growth in dynamic runs (done) |
 | 0.3.4 | Health outcomes and demography (model_spec.md, Section 15): working time lost to illness and a death rate responding to health services per head with constant elasticities (cge_calibrate sickdays(), sickelas(), mortality(), mortelas()); days worked as per-worker efficiency (DW, equation H3); deaths changing population and labour growth from the next period in dynamic runs (cge_dynamic deathfactors(), deathshare(), workingage()); shocks sick and mort; health report rows (done) |
 | 0.3.5 | Elasticity library (docs/elasticities.md): 531 published entries -- aggregate Armington and CET for 51 African countries, income elasticities for 47, a Frisch parameter, capital-labour substitution, wage-curve and health-outcome elasticities -- with source, location and check; built and checked from the source documents (tools/elasticities); cge_elasticities to list, load and return calibration options, with user files (done) |
-| 0.4.0 | Manual and worked examples from a raw SAM to results; a draft article for the Stata Journal |
+| 0.4.0 | User manual (docs/manual, ten chapters); a worked example from an unbalanced SAM to policy results, sensitivity, dynamics and poverty (examples/raw_sam_to_results.do); every example run by the test suite (tests/test_examples.do); a draft article for the Stata Journal, kept outside the repository until submission (done) |
 
 ## 8. First trial on a national SAM
 
