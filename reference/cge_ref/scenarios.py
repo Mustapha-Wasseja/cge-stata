@@ -280,6 +280,44 @@ def trade_cases() -> dict:
     return out
 
 
+# Labour-market regimes (version 0.3.3, model_spec.md, Section 14): 15 per
+# cent unemployment with a wage curve or a binding minimum wage; full
+# employment with a floor at 95 per cent of the base wage; 2 per cent
+# unemployment at a binding floor. Test values, not estimates.
+WAGE_CURVE = {"unemployment": {"lab": 0.15}, "wage_curve": {"lab": 0.1}}
+
+
+def labour_inputs(model: Model) -> dict[str, dict]:
+    """The standard shocks, with a larger labour force in place of more labour supply."""
+    sims = simulation_inputs(model)
+    del sims["labour_supply_up5"]
+    lab = model.sets["F"].index("lab")
+    sims["labour_force_up5"] = {"params": {"qlf": _scaled(model.params["qlf"], lab, 1.05)}}
+    return sims
+
+
+def labour_cases() -> dict:
+    """Static simulations under labour-market regimes: name -> solution."""
+    out = {}
+    wc_closure = Closure(factors={"lab": "wagecurve"})
+    mw_closure = Closure(factors={"lab": "minwage"})
+    wc = synthetic_model(**WAGE_CURVE)
+    for name, shock in labour_inputs(wc).items():
+        out["wc_" + name] = wc.solve(wc_closure, tol=1e-12, **shock)
+    out["wc_dpi_tariff_removal"] = wc.solve(Closure(numeraire="dpi", factors={"lab": "wagecurve"}), tol=1e-12,
+                                            **simulation_inputs(wc)["tariff_removal"])
+    mw = synthetic_model(unemployment={"lab": 0.15})
+    for name, shock in labour_inputs(mw).items():
+        out["mw_" + name] = mw.solve(mw_closure, tol=1e-12, **shock)
+    nb = synthetic_model(min_wage={"lab": 0.95})
+    out["mwnb_foreign_savings_down20"] = nb.solve(mw_closure, tol=1e-12,
+                                                  **simulation_inputs(nb)["foreign_savings_down20"])
+    out["mwnb_pwm_up50"] = nb.solve(mw_closure, tol=1e-12, params={"pwm": nb.params["pwm"] * 1.5})
+    lo = synthetic_model(unemployment={"lab": 0.02})
+    out["mwlo_productivity_up5"] = lo.solve(mw_closure, tol=1e-12, params={"ad": lo.params["ad"] * 1.05})
+    return out
+
+
 # SAM tools (version 0.3.0, docs/sam_tools.md): a SYNTHETIC unbalanced SAM,
 # and the institutions layout aggregated to two sectors and one household
 UNBALANCED_SAM = REPO / "data" / "cge_synthetic_sam_unbal.csv"
@@ -378,7 +416,8 @@ def write_report(solution: Solution, path: Path) -> None:
 REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_up10",
             "sut_import_price_up10", "eff_contribution_up50", "vat_rate_up20",
             "vat_tariff_removal_vat", "rep_tariff_removal_sales", "debt_rate_up", "debt_relief",
-            "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10")
+            "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10",
+            "wc_tariff_removal", "mwnb_pwm_up50")
 
 
 def dynamic_cases() -> dict:
@@ -405,6 +444,9 @@ def dynamic_cases() -> dict:
                             debt_relief),
         # Home consumption with LES demand (version 0.3.2): subsistence grows with population
         "dyn_home": (home_model(**LES_SETTINGS), Dynamics(periods=4, tfp_growth=0.01, **common), specific, None),
+        # A wage curve (version 0.3.3): the labour force grows at 2 per cent
+        "dyn_wc": (synthetic_model(**WAGE_CURVE), Dynamics(periods=4, tfp_growth=0.01, **common),
+                   Closure(factors={"cap": "specific", "lab": "wagecurve"}), None),
     }
 
 
@@ -509,6 +551,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Fiscal instruments (version 0.3.1); trade and household extensions (0.3.2)
     solutions.update(fiscal_cases())
     solutions.update(trade_cases())
+    # Labour-market regimes (0.3.3)
+    solutions.update(labour_cases())
     written = write_dynamic(directory) + write_samtools(directory)
     for name, solution in solutions.items():
         if not solution.converged:

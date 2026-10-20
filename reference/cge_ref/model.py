@@ -29,6 +29,7 @@ VARIABLES: dict[str, str] = {
     "YSHI": "", "SHIADJ": "", "QSHI": "C", "EFF": "F", "HS": "",
     "TQADJ": "", "TMADJ": "", "TVADJ": "",
     "PWE": "C", "QHA": "AH",
+    "LSW": "F", "LSM": "F",
 }
 
 # Tax scaling factors freed by each government closure (version 0.3.1)
@@ -48,7 +49,7 @@ CLOSURE_OPTIONS = {
     "savinv": ("savings", "investment"),
     "numeraire": ("cpi", "dpi"),
 }
-FACTOR_OPTIONS = ("mobile", "specific", "unemployed")
+FACTOR_OPTIONS = ("mobile", "specific", "unemployed", "wagecurve", "minwage")
 
 
 @dataclass
@@ -104,9 +105,20 @@ class Closure:
             elif option == "specific":
                 fixed["W"][k] = True
                 fixed["QF"][k, :] = True
-            else:
+            elif option == "unemployed":
                 fixed["W"][k] = True
                 fixed["WFDIST"][k, :] = True
+            else:
+                # Labour-market regimes (model_spec.md, Section 14)
+                pp = model.params
+                if not pp["inlf"][k]:
+                    raise ValueError(f"{factor}: {option} needs a labour force: give its unemployment rate")
+                if option == "wagecurve" and not pp["epsw"][k] > 0:
+                    raise ValueError(f"{factor}: the wage curve needs an elasticity")
+                if option == "minwage" and not pp["hasmin"][k]:
+                    raise ValueError(f"{factor}: give a minimum wage")
+                fixed["WFDIST"][k, :] = True
+                fixed["LSW" if option == "wagecurve" else "LSM"][k] = True
         return fixed
 
 
@@ -295,6 +307,14 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["I14"] = (np.atleast_1d(ph @ v["QSHI"]), (1 - p["sshi"]) * v["YSHI"], has_shi)
 
     # 5.5 System constraints (S6 is imposed through the closure)
+    # Labour-market regimes (Section 14): wage curve (L1) and minimum wage (L2)
+    inlf = s["inlf"]
+    unemp = 1 - v["QFS"] / p["qlf"]
+    rwage = v["W"] / v["CPI"]
+    with np.errstate(all="ignore"):
+        eq["L1"] = (rwage, p["wref"] * (unemp / p["u0"]) ** (-p["epsw"]) + v["LSW"], inlf)
+    a, b = unemp, rwage / p["wmin"] - 1
+    eq["L2"] = (a + b - np.sqrt(a ** 2 + b ** 2 + 2 * p["mu"]), v["LSM"], inlf)
     eq["S1"] = (np.where(fa, v["QF"], 0.0).sum(axis=1), v["QFS"], np.ones(v["QFS"].shape, dtype=bool))
     eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"]
                 + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0) + v["QSHI"], cq)
@@ -398,7 +418,8 @@ class Model:
                  income_elasticities=None, frisch=None, sigma_a=None,
                  health_commodities=None, health_elasticities=None, vat_credit=None,
                  debt=None, interest=None, debt_holders=None, foreign_borrowing=None,
-                 export_only=None, export_demand=None):
+                 export_only=None, export_demand=None, unemployment=None, wage_curve=None,
+                 min_wage=None, smoothing=1e-10):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -416,6 +437,7 @@ class Model:
                         factor_quantities, vat_credit, export_only, export_demand)
         self._household_demand(income_elasticities, frisch)
         self._debt(debt, interest, debt_holders, foreign_borrowing)
+        self._labour(unemployment, wage_curve, min_wage, smoothing)
         self._top_nest(sigma_a)
         self._health_link(health_commodities, health_elasticities)
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
@@ -813,6 +835,66 @@ class Model:
         b["HS"] = np.atleast_1d(hs0)
         self.exists["EFF"] = eta != 0
         self.exists["HS"] = np.atleast_1d(linked)
+
+    def _labour(self, unemployment, wage_curve, min_wage, smoothing) -> None:
+        """Labour force, wage curve and minimum wage (model_spec.md, Section 14)."""
+        F, b, p = self.sets["F"], self.base, self.params
+        nF = len(F)
+        unemployment, wage_curve, min_wage = dict(unemployment or {}), dict(wage_curve or {}), dict(min_wage or {})
+        for name, spec in (("unemployment", unemployment), ("wage_curve", wage_curve), ("min_wage", min_wage)):
+            extra = set(spec) - set(F)
+            if extra:
+                raise ValueError(f"{name}: {sorted(extra)} are not factors")
+        mu = float(smoothing)
+        if not mu > 0:
+            raise ValueError("smoothing must be positive")
+        for f in wage_curve:
+            if not float(unemployment.get(f, 0.0)) > 0:
+                raise ValueError(f"wage_curve: {f} needs unemployment in the base")
+        inlf = np.array([f in unemployment or f in min_wage for f in F], dtype=bool)
+        qfs0 = b["QFS"]
+        wref = b["W"] / b["CPI"][0]
+        u0, qlf, epsw = np.ones(nF), qfs0.copy(), np.zeros(nF)
+        wmin, hasmin = wref.copy(), np.zeros(nF, dtype=bool)
+        for k, f in enumerate(F):
+            if not inlf[k]:
+                continue
+            u = float(unemployment.get(f, 0.0))
+            if not 0 <= u < 1:
+                raise ValueError(f"unemployment: the rate of {f} must be at least 0 and below 1")
+            if f in min_wage:
+                r = float(min_wage[f])
+                hasmin[k] = True
+                if u > 0:
+                    if abs(r - 1) > 1e-12:
+                        raise ValueError(f"min_wage: with unemployment of {f} in the base, the floor is the base wage (1)")
+                    wmin[k] = wref[k] / (1 + mu / u)
+                else:
+                    if not 0 < r < 1:
+                        raise ValueError(f"min_wage: with full employment of {f} in the base, the floor must be below the base wage")
+                    wmin[k] = r * wref[k]
+                    u = mu / (1 / r - 1)
+            elif u > 0:
+                hasmin[k] = True               # by default the floor is the base wage
+                wmin[k] = wref[k] / (1 + mu / u)
+            if f in wage_curve:
+                e = float(wage_curve[f])
+                if not e > 0:
+                    raise ValueError(f"wage_curve: the elasticity of {f} must be positive")
+                epsw[k] = e
+            if u <= 0:
+                raise ValueError(f"{f}: a labour force needs unemployment in the base or a minimum wage")
+            u0[k] = u
+            qlf[k] = qfs0[k] / (1 - u)
+        p.update({"inlf": inlf.astype(float), "qlf": qlf, "u0": u0, "epsw": epsw, "wref": wref.copy(),
+                  "wmin": wmin, "hasmin": hasmin.astype(float), "mu": np.array(mu)})
+        self.struct["inlf"] = inlf
+        a = 1 - qfs0 / qlf
+        bb = (b["W"] / b["CPI"][0]) / wmin - 1
+        b["LSW"] = np.zeros(nF)
+        b["LSM"] = np.where(inlf, a + bb - np.sqrt(a ** 2 + bb ** 2 + 2 * mu), 0.0)
+        self.exists["LSW"] = inlf.copy()
+        self.exists["LSM"] = inlf.copy()
 
     def _debt(self, debt, interest, holders, foreign_borrowing) -> None:
         """Public debt and interest (model_spec.md, 12.3): base transfers from

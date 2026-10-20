@@ -80,6 +80,7 @@ and exports.
 | $CNM = C \setminus CM$ | non-imported commodities |
 | $CXE \subseteq CE$ | export-only commodities: all domestic output is exported, with no domestic sales (from version 0.3.2, when chosen; Section 13.3) |
 | $CED \subseteq CE$ | exported commodities that face a finite elasticity of export demand (from version 0.3.2; Section 13.2) |
+| $FL \subseteq F$ | factors with a labour force: a base unemployment rate, or a minimum wage, is given (from version 0.3.3; Section 14) |
 | $T^Q, T^D, T^M, T^E$ | margin accounts paid per unit of composite supply (the default), of domestic sales, of imports and of exports (from version 0.3.2; Section 13.4) |
 | $T$ | margin accounts (may be empty; from version 0.1.7) |
 | $HC \subseteq C$ | health services whose consumption raises factor efficiency (may be empty; from version 0.1.14) |
@@ -125,6 +126,7 @@ Quantities
 | $QM_c$ | imports, $c \in CM$ |
 | $QQ_c$ | composite commodity supply |
 | $QH_{ch}$ | consumption of $c$ by household $h$ |
+| $LSW_f$, $LSM_f$ | slacks of the wage curve and of the minimum-wage condition, $f \in FL$: zero, and fixed, under the regime that uses the equation; free otherwise (from version 0.3.3) |
 | $QHA_{ah}$ | home consumption by household $h$ of the output of activity $a$ (from version 0.3.2; Section 13.1) |
 | $QG_c$ | government consumption |
 | $QINV_c$ | investment demand |
@@ -173,6 +175,7 @@ Incomes, rates and adjustment variables
 | $icm_{c'c}$ | margin services of commodity $c' \in CT$ per unit of composite supply of $c$ |
 | $icd_{c'c}$, $ici_{c'c}$, $ice_{c'c}$ | margin services per unit of domestic sales, imports and exports of $c$ (from version 0.3.2) |
 | $\eta^{e}_c$, $\overline{qe}_c$ | elasticity of export demand and base exports, $c \in CED$ (from version 0.3.2) |
+| $QLF_f$, $u^0_f$, $\epsilon^{w}_f$, $\overline{w}_f$, $\underline{w}_f$, $\mu$ | labour force, base unemployment rate, wage-curve elasticity, reference real wage of the wage curve, real minimum wage, and the smoothing parameter of the minimum-wage condition, $f \in FL$ (from version 0.3.3) |
 | $\beta^{h}_{ah}$, $\gamma^{h}_{ah}$ | marginal budget share and subsistence quantity of home consumption of the output of activity $a$ by household $h$ (from version 0.3.2) |
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
 | $af_f$ | exogenous efficiency of factor $f$ in every activity (one in the base; from version 0.1.14) |
@@ -485,6 +488,8 @@ each pair and leaves the other free.
 | Factor $f$ | mobile, fully employed (default) | $QFS_f$, $WFDIST_{fa}$ | $W_f$, $QF_{fa}$ |
 | | activity-specific | $W_f$, $QF_{fa}$ | $WFDIST_{fa}$, $QFS_f$ |
 | | unemployment at a fixed wage | $W_f$, $WFDIST_{fa}$ | $QFS_f$, $QF_{fa}$ |
+| | wage curve, $f \in FL$ (from version 0.3.3) | $WFDIST_{fa}$, $LSW_f$ | $W_f$, $QFS_f$, $QF_{fa}$ |
+| | minimum wage, $f \in FL$ (from version 0.3.3) | $WFDIST_{fa}$, $LSM_f$ | $W_f$, $QFS_f$, $QF_{fa}$ |
 | Numeraire | CPI (default) | $CPI$ | $DPI$ |
 | | DPI | $DPI$ | $CPI$ |
 
@@ -786,6 +791,7 @@ $pwm^0_c$, $pwe^0_c$; nominal measures use current prices and parameters.
 | Revenue by tax | direct $\sum_d TINS_d YI_d$; sales $\sum_c tq_c TQADJ\,PQ_c QQ_c$; import $EXR \sum_c tm_c TMADJ\,pwm_c QM_c$; export $EXR\sum_c te_c pwe_c QE_c$; activity $\sum_a ta_a PA_a QA_a$; VAT (I8) |
 | Public debt (Section 12.3, when the model has debt) | interest paid at home $r^d DD$ and abroad $r^f DF\,EXR$; primary balance $GSAV + r^d DD + r^f DF\,EXR$; debt at the end of the period at home $DD + (1-\phi)(-GSAV)$ and abroad, in local currency, $\left[DF + \phi(-GSAV)/EXR\right] EXR$; their total, and the total in per cent of nominal GDP |
 | Real wage | $W_f / CPI$ |
+| Labour force, unemployment rate (Section 14, $f \in FL$) | $QLF_f$; $100\,(1 - QFS_f / QLF_f)$ |
 | Exports of a commodity | $QE_c + QER_c$ |
 
 Other measures are model variables: $CPI$, $DPI$, $EXR$, $FSAV$, $YG$, $EG$,
@@ -803,8 +809,10 @@ $$EV_h = \sum_c PQ^0_c\gamma_{ch} + \Big(EH_h - \sum_c PQ_c\gamma_{ch}\Big)\prod
 
 $$CV_h = EH_h - \sum_c PQ_c\gamma_{ch} - \Big(EH^0_h - \sum_c PQ^0_c\gamma_{ch}\Big)\prod_c \Big(\frac{PQ_c}{PQ^0_c}\Big)^{\beta_{ch}}$$
 
-Both are positive for a gain and reported in per cent of $EH^0_h$. Other
-percentage changes are $100\,(x - x^0)/|x^0|$, and missing when $x^0 = 0$.
+Both are positive for a gain and reported in per cent of $EH^0_h$. Rates in
+per cent (public debt in per cent of GDP, unemployment rates) change by
+$x - x^0$ percentage points (from version 0.3.3). Other percentage changes are
+$100\,(x - x^0)/|x^0|$, and missing when $x^0 = 0$.
 
 ## 10. Recursive dynamics (from version 0.2.0)
 
@@ -1087,6 +1095,74 @@ Composite supply $QQ^0_c$ excludes export margins. A commodity that pays
 domestic, import or export margins must have domestic sales, imports or
 exports respectively.
 
+## 14. Labour-market regimes (from version 0.3.3)
+
+### 14.1 Labour force and unemployment
+
+For a factor $f \in FL$ the user gives the base unemployment rate $u^0_f$
+(`cge_calibrate, unemployment()`), which SAMs do not record. $QFS_f$ is then
+employment, and the labour force is
+
+$$QLF_f = QFS^0_f / (1 - u^0_f),$$
+
+exogenous (it grows in dynamic runs at the factor's growth rate), so that the
+unemployment rate is $U_f = 1 - QFS_f / QLF_f$. Two regimes link the real
+wage $W_f / CPI$ to unemployment. Each has an equation for every $f \in FL$,
+whatever the closure, with a slack variable that the regime's closure fixes
+at zero; under other closures the slack is free and the equation is inert.
+The number of equations therefore does not depend on the closure.
+
+### 14.2 Wage curve
+
+Real wages fall as unemployment rises (Blanchflower and Oswald 1994):
+
+$$\frac{W_f}{CPI} = \overline{w}_f \left(\frac{U_f}{u^0_f}\right)^{-\epsilon^{w}_f} + LSW_f \tag{L1}$$
+
+with $\overline{w}_f = W^0_f / CPI^0$ and the elasticity $\epsilon^{w}_f > 0$ given
+by the user (`wagecurve()`); it needs $u^0_f > 0$. Under the closure
+`factors(f:wagecurve)` both $W_f$ and $QFS_f$ are free and $LSW_f = 0$: a fall
+in labour demand lowers both employment and the real wage. A small elasticity
+approaches unemployment at a fixed real wage; a large one, full employment.
+
+### 14.3 Minimum wage
+
+The real wage may not fall below a floor $\underline{w}_f$, and unemployment may
+not be negative; one of them binds:
+
+$$U_f \geq 0, \qquad \frac{W_f}{CPI\,\underline{w}_f} - 1 \geq 0, \qquad U_f\left(\frac{W_f}{CPI\,\underline{w}_f} - 1\right) = 0.$$
+
+This complementarity condition is solved, with the rest of the model, in the
+Fischer-Burmeister form (Fischer 1992), smoothed as in Kanzow (1996):
+
+$$a + b - \sqrt{a^2 + b^2 + 2\mu} = LSM_f, \qquad a = U_f, \quad b = \frac{W_f}{CPI\,\underline{w}_f} - 1 \tag{L2}$$
+
+which with $LSM_f = 0$ holds exactly when $a > 0$, $b > 0$ and $ab = \mu$. With
+the default $\mu = 10^{-10}$ (`smoothing()`), the wage is at the floor to
+within $\mu / U_f$ when unemployment is positive, and unemployment is at most
+$\mu / b$ when the floor does not bind: for example $7 \times 10^{-10}$ with 15 per
+cent unemployment. The regime is found by the solver, not chosen in advance.
+
+**Calibration.** With unemployment in the base, $u^0_f > 0$, the floor binds and
+is the base real wage: $\underline{w}_f = \overline{w}_f / (1 + \mu / u^0_f)$
+(`minwage(f:1)`, the default). With full employment, $u^0_f = 0$, the floor is
+given as a share $r < 1$ of the base real wage (`minwage(f:r)`), so that
+$\underline{w}_f = r\,\overline{w}_f$; the base then has the unemployment rate
+$\mu / (1/r - 1)$, which defines the labour force. Under the closure
+`factors(f:minwage)`, $W_f$ and $QFS_f$ are free and $LSM_f = 0$.
+
+The tests check the smoothed solutions against the exact regimes: with the
+floor binding, against unemployment at the fixed wage $\underline{w}_f$; without,
+against full employment of the labour force.
+
+### 14.4 Results and dynamics
+
+Reports show the labour force and the unemployment rate of each $f \in FL$. In
+dynamic runs the labour force grows at the factor's growth rate, so that
+employment is endogenous under both regimes (and under unemployment at a fixed
+wage). The reference wage $\overline{w}_f$ and the floor $\underline{w}_f$ stay
+constant in real terms; shocks may change them (`wref`, `wmin`), and the
+labour force (`qlf`).
+
 ## References
 
 Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. (2008). *The
@@ -1104,3 +1180,12 @@ PEP standard single-country, static CGE model*. Partnership for Economic Policy.
 Lofgren, H., R. L. Harris and S. Robinson (2002). *A Standard Computable General
 Equilibrium (CGE) Model in GAMS*. Microcomputers in Policy Research 5.
 International Food Policy Research Institute.
+
+Blanchflower, D. G. and A. J. Oswald (1994). *The Wage Curve*. MIT Press.
+
+Fischer, A. (1992). A special Newton-type optimization method. *Optimization*
+24(3-4): 269-284.
+
+Kanzow, C. (1996). Some noninterior continuation methods for linear
+complementarity problems. *SIAM Journal on Matrix Analysis and Applications*
+17(4): 851-868.

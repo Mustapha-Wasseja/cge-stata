@@ -46,7 +46,9 @@ Every case of the Python test suite, including:
   rates adjusting) and public debt with interest (from version 0.3.1);
 - home consumption, with Cobb-Douglas and LES demand; an export-only cash
   crop; margins on domestic sales, imports and exports; and finite export
-  demand (from version 0.3.2).
+  demand (from version 0.3.2);
+- a wage curve and a minimum wage, binding in the base or reached from full
+  employment, and left by moving to full employment (from version 0.3.3).
 
 For each case, every scenario is compared with the expected results in
 `tests/expected`, which the Stata suite also matches. Alternative closures
@@ -57,7 +59,7 @@ are compared with the Python reference:
 
 ## Result (20 October 2026, GAMS 54.2, PATH)
 
-116 scenarios; every expected value was found and solved.
+130 scenarios; every expected value was found and solved.
 
 - Base values from GAMS's own calibration agree to 5e-15 or better.
 - Solutions agree to 3e-11 or better, relative to the larger of 1 and the

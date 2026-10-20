@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.3.2 implements the standard single-country model described in
+Version 0.3.3 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -30,7 +30,8 @@ Version 0.3.2 implements the standard single-country model described in
   factor, and optionally an efficiency that rises with the volume of health
   services consumed, with an elasticity for each factor;
 - selectable closures for the external account, government, savings-investment,
-  the numeraire and each factor (mobile, activity-specific or unemployed);
+  the numeraire and each factor (mobile, activity-specific, unemployed, or,
+  from version 0.3.3, a wage curve or a minimum wage);
 - SAMs in national-accounts layout: exports recorded as sales by activities,
   taxes paid directly to the government account (version 0.1.1), trade and
   transport margins netted out of the margin activities (version 0.1.3), the
@@ -49,7 +50,12 @@ Version 0.3.2 implements the standard single-country model described in
 - trade and household extensions (version 0.3.2, [Section 13](docs/model_spec.md)):
   home consumption of own produce at producer prices; export demand that falls
   as world export prices rise; commodities whose output is all exported; and
-  margins that differ between domestic sales, imports and exports.
+  margins that differ between domestic sales, imports and exports;
+- labour-market regimes (version 0.3.3, [Section 14](docs/model_spec.md)): a
+  labour force from the base unemployment rate; a wage curve, on which real
+  wages fall as unemployment rises; and a minimum real wage, below which wages
+  cannot fall, with the regime (unemployment at the floor, or full employment
+  above it) found by the solver.
 
 Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
 derivatives for the aggregate equations with grouped central differences for
@@ -67,6 +73,15 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.3.3 adds the labour-market regimes above. `cge_calibrate` gains
+`unemployment()`, `wagecurve()`, `minwage()` and `smoothing()`; `cge_closure`
+gains the factor closures `wagecurve` and `minwage`; `cge_shock` changes the
+labour force, the minimum wage and the wage curve's reference wage; reports
+show the labour force and the unemployment rate, with rates in percentage
+points; and the labour force grows in dynamic runs. The minimum-wage condition
+is a complementarity condition, solved with the rest of the model in a
+smoothed Fischer-Burmeister form, and the tests check it against the exact
+regimes.
 Version 0.3.2 adds the trade and household extensions above: home consumption
 is read from the SAM's household payments to activities; `cge_map` gains
 `domesticmargins()`, `importmargins()` and `exportmargins()`; `cge_calibrate`

@@ -80,10 +80,14 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
             raise ValueError(f"capital: {f} is not a factor")
         if fac[f] == "unemployed":
             raise ValueError(f"capital: {f} cannot be unemployed in a dynamic run")
+    inlf = model.struct["inlf"]
+    for f in settings.capital:
+        if fac[f] in ("wagecurve", "minwage"):
+            raise ValueError(f"capital: {f} cannot have a labour-market regime in a dynamic run")
     for f, g in settings.factor_growth.items():
         if f in settings.capital:
             raise ValueError(f"factor_growth: {f} is a capital factor")
-        if g != 0 and fac[f] == "unemployed":
+        if g != 0 and fac[f] == "unemployed" and not inlf[F.index(f)]:
             raise ValueError(f"factor_growth: {f} is unemployed, so its supply is not fixed")
     targets = settings.gdp_target
     if targets is not None and not np.iterable(targets):
@@ -124,6 +128,10 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
                 fx["QF"][k] = (1 + g) * prev["QF"][k]
             elif fac[f] == "mobile":
                 fx["QFS"][k] = (1 + g) * prev["QFS"][k]
+            # the labour force grows at the same rate (Section 14.4)
+            if inlf[k]:
+                p["qlf"] = np.array(p["qlf"], dtype=float)
+                p["qlf"][k] = (1 + g) * p["qlf"][k]
         # 4. Population, 5. government and foreign flows
         p["gamma"] = p["gamma"] * (1 + settings.population_growth)
         p["gammah"] = p["gammah"] * (1 + settings.population_growth)

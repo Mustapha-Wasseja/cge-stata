@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.3  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -75,7 +75,8 @@ has a default other than zero, and none is estimated by the package.
 {phang}
 {opt capital(factors)} lists the factors that accumulate. They need
 {opt depreciation()} and {opt rental()}, one value or one per capital factor,
-and may be mobile or specific to each activity, not unemployed.
+and may be mobile or specific to each activity, not unemployed or under a
+labour-market regime.
 
 {phang}
 {opt sensitivity(#)} sets how strongly new capital moves to activities with
@@ -85,7 +86,11 @@ The default is 1.
 {phang}
 {opt growth(factor:rate ...)} sets the growth of other factors, for example
 {cmd:growth(lab_f:0.03 lab_i:0.025)}. An unemployed factor's supply is
-endogenous and cannot grow.
+endogenous and cannot grow, unless it has a labour force (from version
+0.3.3; {helpb cge_calibrate}, {opt unemployment()}): the labour force of a
+factor with one grows at the factor's rate, whatever its closure, so that
+under {cmd:unemployed}, {cmd:wagecurve} or {cmd:minwage} employment and
+unemployment follow from labour demand.
 
 {phang}
 {opt tfp(numlist)}, {opt gdpgrowth(numlist)} and {opt baseline(name)} set

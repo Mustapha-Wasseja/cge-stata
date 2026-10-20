@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.2  20oct2026}{...}
+{* *! version 0.3.3  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -14,7 +14,8 @@
 [{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)} {opt sigmaa(numlist)}
 {opt healthcom(names)} {opt healthfac(names)} {opt healthelas(numlist)}
 {opt vatc:redit(spec)} {opt debt(spec)} {opt int:erest(spec)} {opt debth:olders(spec)}
-{opt for:eignborrowing(#)} {opt exporto:nly(names)} {opt exportd:emand(spec)}]
+{opt for:eignborrowing(#)} {opt exporto:nly(names)} {opt exportd:emand(spec)}
+{opt unemp:loyment(spec)} {opt wagec:urve(spec)} {opt minw:age(spec)} {opt smooth:ing(#)}]
 
 
 {title:Description}
@@ -141,6 +142,45 @@ falls as more is exported, instead of being fixed; a shock to {cmd:pwe}
 shifts world demand. The default is a small country, with an infinite
 elasticity.
 
+{pstd}
+{it:Labour-market regimes} (from version 0.3.3; docs/model_spec.md, Section 14)
+
+{phang}
+{opt unemployment(spec)} gives base unemployment rates,
+{it:factor}{cmd::}{it:rate} pairs with rates at least 0 and below 1, for
+example {cmd:unemployment(lab:0.15)}. SAMs record employment, not
+unemployment, so the rate comes from a labour force survey. The factor's
+labour force is then base employment divided by one minus the rate; reports
+show the labour force and the unemployment rate, and the closures
+{cmd:wagecurve} and {cmd:minwage} of {helpb cge_closure} become available. A
+factor with unemployment in the base has a minimum wage at its base real
+wage.
+
+{phang}
+{opt wagecurve(spec)} gives wage-curve elasticities, {it:factor}{cmd::}{it:elasticity}
+pairs, for factors with unemployment in the base: under the closure
+{cmd:wagecurve} the real wage falls by about {it:elasticity} per cent for each
+per cent rise in the unemployment rate (Blanchflower and Oswald 1994; often
+about 0.1). A small elasticity approaches a fixed real wage, a large one full
+employment.
+
+{phang}
+{opt minwage(spec)} gives minimum real wages as shares of the base real wage,
+{it:factor}{cmd::}{it:share}. With unemployment in the base the floor is the
+base real wage (a share of 1, the default). With full employment in the base
+(no rate in {opt unemployment()}), give a share below 1, for example
+{cmd:minwage(lab:0.95)}: the floor then binds only after real wages fall by 5
+per cent.
+
+{phang}
+{opt smoothing(#)} sets the smoothing parameter mu of the minimum-wage
+condition; the default is 1e-10. Under the closure {cmd:minwage} the
+condition that either unemployment is zero or the wage is at its floor is
+solved, with the rest of the model, in the smoothed Fischer-Burmeister form,
+in which the product of the unemployment rate and the proportional excess of
+the real wage over the floor is mu. The solver finds which of the two holds;
+the calibration lists the labour force and the floor.
+
 
 {title:Example}
 
@@ -151,6 +191,8 @@ elasticity.
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) vatcredit(act_agr:0 act_ser:0.5)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) debt(domestic:100 foreign:40) interest(domestic:0.05 foreign:0.03)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) minwage(lab:0.95)}{p_end}
 
 
 {title:Stored results}
@@ -159,6 +201,19 @@ elasticity.
 {p2col 5 18 22 2: Scalars}{p_end}
 {synopt:{cmd:r(N_equations)}}number of equations{p_end}
 {synopt:{cmd:r(max_residual)}}largest scaled residual at the base{p_end}
+
+
+{title:References}
+
+{phang}
+Blanchflower, D. G. and A. J. Oswald. 1994. {it:The Wage Curve}. Cambridge, MA: MIT Press.
+
+{phang}
+Fischer, A. 1992. A special Newton-type optimization method. {it:Optimization} 24: 269-284.
+
+{phang}
+Kanzow, C. 1996. Some noninterior continuation methods for linear
+complementarity problems. {it:SIAM Journal on Matrix Analysis and Applications} 17: 851-868.
 
 
 {title:Also see}

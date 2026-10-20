@@ -1,4 +1,4 @@
-*! cge_closure.ado  v0.1.0  2026-10-12
+*! cge_closure.ado  v0.3.3  2026-10-20
 *! cge-stata: choose the model closure
 *! Sets closures for the external account, government, savings-investment,
 *! the numeraire and each factor (model_spec.md, Section 6)

@@ -87,6 +87,9 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
         add("factors", "real_wage", f, v["W"][k] / v["CPI"][0])
         add("factors", "income", f, v["YF"][k])
         add("factors", "supply", f, v["QFS"][k])
+        if model.struct["inlf"][k]:
+            add("factors", "labour_force", f, p["qlf"][k])
+            add("factors", "unemployment_rate", f, 100 * (1 - v["QFS"][k] / p["qlf"][k]))
 
     for k, a in enumerate(S["A"]):
         add("activities", "output", a, v["QA"][k])

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.3  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -55,13 +55,27 @@ producer price index for domestic sales.
 {phang}
 {opt factors(spec)} sets the closure of each factor as
 {it:factor}{cmd::}{it:type}, where {it:type} is {cmd:mobile} (fully employed and
-mobile across activities), {cmd:specific} (fixed in each activity) or
-{cmd:unemployed} (fixed wage, flexible supply). Factors not listed are mobile.
+mobile across activities), {cmd:specific} (fixed in each activity),
+{cmd:unemployed} (fixed wage, flexible supply), {cmd:wagecurve} or
+{cmd:minwage}. Factors not listed are mobile.
+
+{pmore}
+{cmd:wagecurve} and {cmd:minwage} (from version 0.3.3; docs/model_spec.md,
+Section 14) need a labour force, from {helpb cge_calibrate} with
+{opt unemployment()} or {opt minwage()}. Under both, the wage and employment
+are endogenous and the labour force is fixed. With {cmd:wagecurve}
+(and {opt wagecurve()} at calibration) the real wage falls as the
+unemployment rate rises. With {cmd:minwage} the real wage cannot fall below
+its floor: either the floor binds and unemployment absorbs the shock, or the
+wage is above the floor and the labour force is fully employed. The solver
+finds which.
 
 
 {title:Example}
 
 {phang2}{cmd:. cge_closure, external(fixexr) savinv(investment) factors(lab:unemployed cap:specific)}{p_end}
+{phang2}{cmd:. cge_closure, factors(lab:wagecurve)}{p_end}
+{phang2}{cmd:. cge_closure, factors(lab:minwage cap:specific)}{p_end}
 
 
 {title:Stored results}

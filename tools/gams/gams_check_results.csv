@@ -95,6 +95,20 @@ trade,trade_world_demand_up10,tests/expected,16,116,0,1.898e-15,5.114e-13,4.216e
 trade,trade_cash_price_down20,tests/expected,16,116,0,1.898e-15,3.370e-14,4.376e-13
 export-only,xonly_tariff_removal,tests/expected,16,114,0,1.943e-16,1.044e-14,2.443e-13
 "trade, composite margins",tradeplain_tariff_removal,tests/expected,16,117,0,1.943e-16,2.680e-14,6.381e-14
+wage curve,wc_tariff_removal,tests/expected,16,111,0,3.053e-16,2.437e-12,1.298e-12
+wage curve,wc_import_price_up10,tests/expected,16,111,0,3.053e-16,3.958e-15,2.388e-13
+wage curve,wc_foreign_savings_down20,tests/expected,16,111,0,3.053e-16,5.524e-15,3.570e-13
+wage curve,wc_agri_productivity_up5,tests/expected,16,111,0,3.053e-16,1.422e-12,2.648e-11
+wage curve,wc_labour_force_up5,tests/expected,16,111,0,3.053e-16,7.738e-14,7.022e-13
+"wage curve, DPI numeraire",wc_dpi_tariff_removal,tests/expected,16,111,0,3.053e-16,2.326e-12,1.412e-11
+minimum wage,mw_tariff_removal,tests/expected,16,111,0,3.053e-16,4.654e-15,1.132e-15
+minimum wage,mw_import_price_up10,tests/expected,16,111,0,3.053e-16,1.126e-13,1.437e-13
+minimum wage,mw_foreign_savings_down20,tests/expected,16,111,0,3.053e-16,4.050e-14,2.847e-13
+minimum wage,mw_agri_productivity_up5,tests/expected,16,111,0,3.053e-16,2.495e-12,4.648e-11
+minimum wage,mw_labour_force_up5,tests/expected,16,111,0,3.053e-16,1.540e-14,2.264e-14
+"minimum wage, full employment",mwnb_foreign_savings_down20,tests/expected,16,111,0,3.053e-16,1.377e-14,3.084e-13
+"minimum wage, full employment",mwnb_pwm_up50,tests/expected,16,111,0,3.053e-16,3.438e-12,4.831e-12
+"minimum wage, low unemployment",mwlo_productivity_up5,tests/expected,16,111,0,3.053e-16,4.461e-14,1.142e-12
 "standard, closure 1",alt1_tariff_removal,Python,16,109,0,2.776e-17,3.590e-15,6.956e-14
 "standard, closure 1",alt1_import_price_up10,Python,16,109,0,2.776e-17,3.678e-14,1.498e-13
 "standard, closure 1",alt1_agri_productivity_up5,Python,16,109,0,2.776e-17,1.072e-12,1.781e-11

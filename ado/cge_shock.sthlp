@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.2  20oct2026}{...}
+{* *! version 0.3.3  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -49,6 +49,9 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:trshir}}transfers from the rest of the world to the health insurance fund (foreign currency; no elements){p_end}
 {p2col:{cmd:rd}, {cmd:rf}}interest rates on domestic and foreign public debt (no elements; with debt, from version 0.3.1){p_end}
 {p2col:{cmd:ddebt}, {cmd:fdebt}}domestic debt (local currency) and foreign debt (foreign currency) at the start of the period, for example debt relief (no elements){p_end}
+{p2col:{cmd:qlf}}labour force (factors with a labour force; from version 0.3.3){p_end}
+{p2col:{cmd:wmin}}real minimum wage (factors with a labour force), for example a rise in the statutory minimum{p_end}
+{p2col:{cmd:wref}}reference real wage of the wage curve (factors with a labour force){p_end}
 {p2colreset}{...}
 
 {pstd}
@@ -72,6 +75,12 @@ introduced). {cmd:rd}, {cmd:rf}, {cmd:ddebt} and {cmd:fdebt} need public debt
 the stocks at the rates. The tax scaling factors {cmd:TQADJ}, {cmd:TMADJ} and
 {cmd:TVADJ}, like {cmd:TINSADJ}, are variables that can be set while the
 closure fixes them.
+
+{pstd}
+{cmd:qlf}, {cmd:wmin} and {cmd:wref} need a labour force ({helpb cge_calibrate},
+{opt unemployment()} or {opt minwage()}). Under the closure {cmd:wagecurve} or
+{cmd:minwage} of {helpb cge_closure}, a larger labour force raises unemployment
+unless demand for labour grows with it; real wages are measured with the CPI.
 
 {pstd}
 or a model variable that is fixed under the current closure, such as {cmd:QFS}

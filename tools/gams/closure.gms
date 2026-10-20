@@ -30,6 +30,7 @@ HS.lo = -inf;          HS.up = inf;
 TQADJ.lo = -inf;       TQADJ.up = inf;       TMADJ.lo = -inf;       TMADJ.up = inf;
 TVADJ.lo = -inf;       TVADJ.up = inf;
 PWEV.lo(AC) = -inf;     PWEV.up(AC) = inf;     QHA.lo(AC, ACP) = -inf; QHA.up(AC, ACP) = inf;
+LSW.lo(AC) = -inf;      LSW.up(AC) = inf;      LSM.lo(AC) = -inf;      LSM.up(AC) = inf;
 
 * Prices and quantities that are positive in the base stay positive
 PA.lo(A) = 1e-10;  PVA.lo(A) = 1e-10;  PQ.lo(C)$CQ(C) = 1e-10;  W.lo(F) = 1e-10;  EXR.lo = 1e-10;
@@ -40,6 +41,8 @@ PX.lo(C)$CX(C) = 1e-10;  PD.lo(C)$CDO(C) = 1e-10;  QX.lo(C)$CX(C) = 1e-10;  QD.l
 PE.lo(C)$CE(C) = 1e-10;  QE.lo(C)$CE(C) = 1e-10;  PM.lo(C)$CM(C) = 1e-10;  QM.lo(C)$CM(C) = 1e-10;
 QF.lo(F, A)$FA(F, A) = 1e-10;  QT.lo(C)$CT(C) = 1e-10;  QER.lo(C)$CR(C) = 1e-10;
 EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;
+* the wage curve needs positive unemployment
+QFS.up(F)$(FL(F) and epsw(F) > 0) = qlf(F) * (1 - 1e-12);
 
 * Variables that do not exist are held at their base values
 PE.fx(C)$(not CE(C)) = PE.l(C);        QE.fx(C)$(not CE(C)) = QE.l(C);
@@ -54,6 +57,7 @@ QINT.fx(C, A)$(not ica(C, A)) = 0;     QH.fx(C, H)$(not beta(C, H)) = 0;
 QSHI.fx(C)$(not qshibar(C)) = 0;       EFF.fx(F)$(not eta(F)) = EFF.l(F);
 YSHI.fx$(not fund) = YSHI.l;           SHIADJ.fx$(not fund) = SHIADJ.l;
 HS.fx$(not linked) = HS.l;
+LSW.fx(F)$(not FL(F)) = 0;             LSM.fx(F)$(not FL(F)) = 0;
 
 * Closure
 GADJ.fx = GADJ.l;
@@ -67,6 +71,9 @@ if (clgov <> 5, TVADJ.fx = TVADJ.l;);
 if (clsi = 1, MPSADJ.fx = MPSADJ.l; else IADJ.fx = IADJ.l;);
 if (clnum = 1, CPI.fx = CPI.l; else DPI.fx = DPI.l;);
 QFS.fx(F)$(fclo(F) = 1) = QFS.l(F);
-WFDIST.fx(F, A)$(fclo(F) = 1 or fclo(F) = 3) = WFDIST.l(F, A);
+WFDIST.fx(F, A)$(fclo(F) = 1 or fclo(F) >= 3) = WFDIST.l(F, A);
 W.fx(F)$(fclo(F) = 2 or fclo(F) = 3) = W.l(F);
 QF.fx(F, A)$(fclo(F) = 2) = QF.l(F, A);
+* 14: the regime's slack is fixed
+LSW.fx(F)$(fclo(F) = 4) = LSW.l(F);
+LSM.fx(F)$(fclo(F) = 5) = LSM.l(F);

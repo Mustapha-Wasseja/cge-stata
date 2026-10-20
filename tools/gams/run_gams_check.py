@@ -48,10 +48,10 @@ PARAMS = {"pwm": "pwm", "pwe": "pwe", "tm": "tm", "te": "te", "tq": "tq", "ta": 
           "qg": "qgbar", "qinv": "qinvbar", "trdg": "trdg", "trdr": "trdr", "trfr": "trfr",
           "trgr": "trgr", "trrg": "trrg", "tshi": "tshi", "qshi": "qshibar", "trshi": "trshi",
           "trshir": "trshir", "af": "af", "tv": "tv", "kappa": "kappa", "rd": "rd", "rf": "rf",
-          "ddebt": "ddebt", "fdebt": "fdebt"}
+          "ddebt": "ddebt", "fdebt": "fdebt", "qlf": "qlf", "wmin": "wmin", "wref": "wref"}
 PARAM_SETS = {"pwm": "C", "pwe": "C", "tm": "C", "te": "C", "tq": "C", "ta": "A", "ad": "A", "qg": "C",
               "qinv": "C", "trdg": "D", "trdr": "D", "trfr": "F", "tshi": "F", "qshi": "C", "af": "F",
-              "tv": "C", "kappa": "A"}
+              "tv": "C", "kappa": "A", "qlf": "F", "wmin": "F", "wref": "F"}
 FIXED_SETS = {"QFS": "F", "FSAV": "", "EXR": "", "GSAV": "", "IADJ": "", "MPSADJ": "", "TINSADJ": "",
               "CPI": "", "DPI": "", "W": "F", "GADJ": ""}
 
@@ -71,9 +71,10 @@ def gams_set(name: str, elements, domain: str = "AC") -> str:
 
 
 def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict | None = None,
-               trade: dict | None = None) -> None:
+               trade: dict | None = None, labour: dict | None = None) -> None:
     """The prepared SAM, the mapping and the settings supplied by the user (elasticities,
-    VAT credit shares, debt and interest rates) as a GAMS include file."""
+    VAT credit shares, debt and interest rates, unemployment rates, wage-curve
+    elasticities and minimum wages) as a GAMS include file."""
     m, sam, S, p = model.mapping, model.sam, model.sets, model.params
     lines = ["* data for cge_model.gms, written by run_gams_check.py",
              "set AC 'accounts' / " + ", ".join(q(a) for a in sam.labels) + " /;"]
@@ -132,6 +133,16 @@ def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict 
               f"scalar rfin / {num(rates.get('foreign', 0.0))} /;",
               "scalar holdgiven / 0 /;", "parameter holdin(AC) / /;",
               "scalar phigiven / 0 /;", "scalar phiin / 0 /;"]
+    # Labour-market regimes (Section 14)
+    labour = labour or {}
+    un, wc, mw = labour.get("unemployment", {}), labour.get("wage_curve", {}), labour.get("min_wage", {})
+    F = S["F"]
+    lines.append(param("unin", F, [un.get(f, 0.0) for f in F]))
+    lines.append(param("ungiven", F, [1.0 if f in un else 0.0 for f in F]))
+    lines.append(param("wcin", F, [wc.get(f, 0.0) for f in F]))
+    lines.append(param("mwin", F, [mw.get(f, 0.0) for f in F]))
+    lines.append(param("mwgiven", F, [1.0 if f in mw else 0.0 for f in F]))
+    lines.append(f"scalar muin / {num(labour.get('smoothing', 1e-10))} /;")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -159,7 +170,7 @@ def shock_statements(model, shock: dict, closure: Closure) -> tuple[str, str]:
         value = getattr(closure, attr)
         value = "fixgsav" if value == "fixgsav direct" else value
         par.append(f"{flag} = {options.index(value) + 1};")
-    codes = {"mobile": 1, "specific": 2, "unemployed": 3}
+    codes = {"mobile": 1, "specific": 2, "unemployed": 3, "wagecurve": 4, "minwage": 5}
     for f in model.sets["F"]:
         par.append(f"fclo({q(f)}) = {codes[closure.factors.get(f, 'mobile')]};")
     for name, new in shock.get("fixed", {}).items():
@@ -222,10 +233,10 @@ def cases() -> list[dict]:
     out = []
 
     def add(label, model, shocks, prefix="", les=None, closure=None, python=False, vat=None, debt=None,
-            trade=None):
+            trade=None, labour=None):
         out.append({"label": label, "model": model, "shocks": shocks, "prefix": prefix, "les": les,
                     "closure": closure or Closure(), "python": python, "vat": vat, "debt": debt,
-                    "trade": trade})
+                    "trade": trade, "labour": labour})
 
     add("standard", std, sc.simulation_inputs(std))
     mixed = sc.synthetic_model(**sc.MIXED_ELASTICITIES)
@@ -310,6 +321,25 @@ def cases() -> list[dict]:
     plain = sc.trade_model(by_market=False)
     add("trade, composite margins", plain, {"tariff_removal": sc.simulation_inputs(plain)["tariff_removal"]},
         "tradeplain_")
+    # Labour-market regimes (version 0.3.3, model_spec.md, Section 14)
+    wcs = sc.WAGE_CURVE
+    wc = sc.synthetic_model(**wcs)
+    add("wage curve", wc, sc.labour_inputs(wc), "wc_", closure=Closure(factors={"lab": "wagecurve"}), labour=wcs)
+    add("wage curve, DPI numeraire", wc, {"tariff_removal": sc.simulation_inputs(wc)["tariff_removal"]}, "wc_dpi_",
+        closure=Closure(numeraire="dpi", factors={"lab": "wagecurve"}), labour=wcs)
+    mwc = Closure(factors={"lab": "minwage"})
+    settings = {"unemployment": {"lab": 0.15}}
+    mw = sc.synthetic_model(**settings)
+    add("minimum wage", mw, sc.labour_inputs(mw), "mw_", closure=mwc, labour=settings)
+    settings = {"min_wage": {"lab": 0.95}}
+    nb = sc.synthetic_model(**settings)
+    add("minimum wage, full employment", nb,
+        {"foreign_savings_down20": sc.simulation_inputs(nb)["foreign_savings_down20"],
+         "pwm_up50": {"params": {"pwm": nb.params["pwm"] * 1.5}}}, "mwnb_", closure=mwc, labour=settings)
+    settings = {"unemployment": {"lab": 0.02}}
+    lo = sc.synthetic_model(**settings)
+    add("minimum wage, low unemployment", lo, {"productivity_up5": {"params": {"ad": lo.params["ad"] * 1.05}}},
+        "mwlo_", closure=mwc, labour=settings)
     # Alternative closures, compared with the Python reference
     alt1 = Closure(external="fixexr", government="fixgsav", savinv="investment", numeraire="dpi",
                    factors={"cap": "specific"})
@@ -341,7 +371,7 @@ def main() -> None:
         for f in GAMS_FILES:
             shutil.copy(HERE / f, d / f)
         model = case["model"]
-        write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"], case["trade"])
+        write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"], case["trade"], case["labour"])
         run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work"], d)
         bstatus, base = read_gams(d / "base.csv")
         for name, shock in case["shocks"].items():

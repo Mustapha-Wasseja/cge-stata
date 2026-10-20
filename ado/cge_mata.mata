@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.3.2  2026-10-20
+*! cge_mata.mata  v0.3.3  2026-10-20
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -45,6 +45,12 @@ struct cge_par {
     real matrix    icd, ici, ice
     real colvector etae, qe0
     real matrix    betah, gammah
+    // labour-market regimes (from version 0.3.3): factors with a labour force
+    // (flag), labour force, base unemployment rate, wage-curve elasticity,
+    // reference real wage, real minimum wage, factors with a floor (flag) and
+    // the smoothing parameter of the minimum-wage condition
+    real colvector inlf, qlf, u0, epsw, wref, wmin, hasmin
+    real scalar    mu
 }
 
 struct cge_model {
@@ -121,7 +127,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.3.2")
+    return("0.3.3")
 }
 
 // =====================================================================
@@ -252,12 +258,12 @@ void _cge_layout(struct cge_model scalar M)
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
                "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI","EFF","HS",
-               "TQADJ","TMADJ","TVADJ","PWE","QHA")'
+               "TQADJ","TMADJ","TVADJ","PWE","QHA","LSW","LSM")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
                "","","FA","","C","C","","","C","F","",
-               "","","","C","AH")'
+               "","","","C","AH","F","F")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -2058,9 +2064,9 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
     real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER, YSHI, SHIADJ, QSHI, EFF, HS
-    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA
+    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, LSW, LSM
     real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif, z, vint
-    real colvector oneA, oneC, oneF, oneH, oneD, DY, rs, tq, tm, tv, PH, pwe, PDD
+    real colvector oneA, oneC, oneF, oneH, oneD, DY, rs, tq, tm, tv, PH, pwe, PDD, unemp, rwage, ub
     real rowvector SN
     real scalar k, nH, nD
 
@@ -2083,6 +2089,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     HS = _cge_v(M, x, 49)
     TQADJ = _cge_v(M, x, 50); TMADJ = _cge_v(M, x, 51); TVADJ = _cge_v(M, x, 52)
     PWE = _cge_v(M, x, 53);   QHA = _cge_v(M, x, 54)
+    LSW = _cge_v(M, x, 55);   LSM = _cge_v(M, x, 56)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -2218,6 +2225,14 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "I13", QSHI, p.qshi :* SHIADJ, M.cshi)
     _cge_put(M, L, R, K, record, "I14", PH' * QSHI, (1 - p.sshi) * YSHI, (M.ishi > 0))
 
+    // Labour-market regimes (Section 14): the wage curve (L1) and the smoothed
+    // minimum-wage condition (L2), inert unless the closure fixes their slack
+    unemp = 1 :- QFS :/ p.qlf
+    rwage = W :/ CPI
+    _cge_put(M, L, R, K, record, "L1", rwage, p.wref :* ((unemp :/ p.u0) :^ (-p.epsw)) + LSW, p.inlf)
+    ub = rwage :/ p.wmin :- 1
+    _cge_put(M, L, R, K, record, "L2", unemp + ub - sqrt(unemp :^ 2 + ub :^ 2 :+ 2 * p.mu), LSM, p.inlf)
+
     // 5.5 System constraints (S6 is imposed through the closure)
     _cge_put(M, L, R, K, record, "S1", rowsum(M.fa :* QF), QFS, oneF)
     _cge_put(M, L, R, K, record, "S2", QQ,
@@ -2258,7 +2273,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
                     string scalar s_ie, string scalar s_fr, string scalar s_a, string scalar s_hc,
                     string scalar s_hf, string scalar s_he, | string scalar s_vc, string scalar s_debt,
                     string scalar s_int, string scalar s_hold, string scalar s_borrow,
-                    string scalar s_xo, string scalar s_ed)
+                    string scalar s_xo, string scalar s_ed, string scalar s_un, string scalar s_wc,
+                    string scalar s_mw, string scalar s_mu)
 {
     struct cge_model scalar M
     struct cge_par scalar p
@@ -2282,7 +2298,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     // The options of this calibration, so that cge_sensitivity can repeat it
     // with other elasticities
     M.calargs = (s_va, s_q, s_t, fqname, s_ie, s_fr, s_a, s_hc, s_hf, s_he, s_vc, s_debt, s_int,
-                 s_hold, s_borrow, s_xo, s_ed)
+                 s_hold, s_borrow, s_xo, s_ed, s_un, s_wc, s_mw, s_mu)
     S = M.S
     n = M.n
     nC = M.nC
@@ -2604,6 +2620,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.cq = cq
     // Public debt (model_spec.md, 12.3): interest separated from government transfers
     _cge_debt(M, p, s_debt, s_int, s_hold, s_borrow, tol)
+    // Labour force, wage curve and minimum wage (model_spec.md, Section 14)
+    _cge_labour(M, p, s_un, s_wc, s_mw, s_mu, W0, p.cwts' * (1 :+ tv), rowsum(QF0))
     M.ce = ce
     M.cm = cm
     M.cd = cd
@@ -2672,6 +2690,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "TVADJ", 1)
     _cge_setv(M, x0, "PWE", pwe)
     _cge_setv(M, x0, "QHA", HOME0)
+    _cge_setv(M, x0, "LSW", J(nF, 1, 0))
+    _cge_setv(M, x0, "LSM", _cge_lsm0(p, rowsum(QF0)))
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -2700,6 +2720,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, M.exists, "QSHI", M.cshi)
     _cge_setv(M, M.exists, "EFF", p.etah :!= 0)
     _cge_setv(M, M.exists, "HS", any(p.etah))
+    _cge_setv(M, M.exists, "LSW", p.inlf)
+    _cge_setv(M, M.exists, "LSM", p.inlf)
 
     M.nominal = J(total, 1, 0)
     for (k = 1; k <= rows(M.vname); k++) {
@@ -2976,6 +2998,96 @@ void _cge_debt(struct cge_model scalar M, struct cge_par scalar p, string scalar
            dd, rd, df, rf, rd * dd + rf * df)
 }
 
+// Values given as "label:value ..." for some elements of a set, and which
+// elements are given
+real colvector _cge_given(string scalar spec, string colvector set, string scalar name, real colvector given)
+{
+    real colvector out
+    out = _cge_values(spec, set, ., name)
+    given = (out :< .)
+    if (sum(given) != cols(tokens(spec))) _cge_fail(name + "() needs one number for each factor given", 198)
+    return(out)
+}
+
+// Labour force, wage curve and minimum wage (model_spec.md, Section 14): the
+// labour force from the base unemployment rate; with unemployment in the base
+// the floor binds at the base real wage, and with full employment it is a share
+// of the base real wage
+void _cge_labour(struct cge_model scalar M, struct cge_par scalar p, string scalar s_un, string scalar s_wc,
+                 string scalar s_mw, string scalar s_mu, real colvector W0, real scalar CPI0,
+                 real colvector QFS0)
+{
+    real colvector un, wc, mw, gun, gwc, gmw, inlf, wref
+    real scalar nF, k, u, r, mu
+    string scalar f
+
+    nF = M.nF
+    mu = (strtrim(s_mu) == "" ? 1e-10 : strtoreal(s_mu))
+    if (mu >= . | mu <= 0) _cge_fail("smoothing() must be positive", 198)
+    un = _cge_given(s_un, M.F, "unemployment", gun)
+    wc = _cge_given(s_wc, M.F, "wagecurve", gwc)
+    mw = _cge_given(s_mw, M.F, "minwage", gmw)
+    for (k = 1; k <= nF; k++) {
+        if (gwc[k] & !(gun[k] & un[k] > 0)) _cge_fail("wagecurve(): " + M.F[k] + " needs unemployment in the base: give it in unemployment()", 198)
+    }
+    inlf = gun :| gmw
+    wref = W0 :/ CPI0
+    p.inlf = inlf
+    p.qlf = QFS0
+    p.u0 = J(nF, 1, 1)
+    p.epsw = J(nF, 1, 0)
+    p.wref = wref
+    p.wmin = wref
+    p.hasmin = J(nF, 1, 0)
+    p.mu = mu
+    for (k = 1; k <= nF; k++) {
+        if (!inlf[k]) continue
+        f = M.F[k]
+        u = (gun[k] ? un[k] : 0)
+        if (!(u >= 0 & u < 1)) _cge_fail("unemployment(): the rate of " + f + " must be at least 0 and below 1", 198)
+        if (gmw[k]) {
+            r = mw[k]
+            p.hasmin[k] = 1
+            if (u > 0) {
+                if (abs(r - 1) > 1e-12) _cge_fail("minwage(): with unemployment of " + f + " in the base, the floor is the base wage (" + f + ":1)", 198)
+                p.wmin[k] = wref[k] / (1 + mu / u)
+            }
+            else {
+                if (!(r > 0 & r < 1)) _cge_fail("minwage(): with full employment of " + f + " in the base, the floor must be below the base wage", 198)
+                p.wmin[k] = r * wref[k]
+                u = mu / (1 / r - 1)
+            }
+        }
+        else if (u > 0) {
+            // by default the floor is the base wage
+            p.hasmin[k] = 1
+            p.wmin[k] = wref[k] / (1 + mu / u)
+        }
+        if (gwc[k]) {
+            if (!(wc[k] > 0)) _cge_fail("wagecurve(): the elasticity of " + f + " must be positive", 198)
+            p.epsw[k] = wc[k]
+        }
+        if (!(u > 0)) _cge_fail(f + ": a labour force needs unemployment in the base or a minimum wage", 198)
+        p.u0[k] = u
+        p.qlf[k] = QFS0[k] / (1 - u)
+    }
+    for (k = 1; k <= nF; k++) {
+        if (!inlf[k]) continue
+        printf("{txt}Labour force of {res}%s{txt}: {res}%g{txt}; base unemployment rate {res}%g{txt}", M.F[k], p.qlf[k], p.u0[k])
+        if (p.epsw[k] > 0) printf("{txt}; wage-curve elasticity {res}%g", p.epsw[k])
+        printf("{txt}; real minimum wage {res}%g{txt} (base real wage %g)\n", p.wmin[k], p.wref[k])
+    }
+}
+
+// Base value of the slack of the minimum-wage condition (L2)
+real colvector _cge_lsm0(struct cge_par scalar p, real colvector QFS0)
+{
+    real colvector a, b
+    a = 1 :- QFS0 :/ p.qlf
+    b = p.wref :/ p.wmin :- 1
+    return(p.inlf :* (a + b - sqrt(a :^ 2 + b :^ 2 :+ 2 * p.mu)))
+}
+
 void _cge_les(struct cge_par scalar p, real matrix QH0, real colvector EH0, string scalar s_ie,
               string scalar s_fr, real scalar nC, real scalar nH, real colvector ph0, real matrix QHA0)
 {
@@ -3076,7 +3188,15 @@ void _cge_closure_apply(struct cge_model scalar M, string scalar ext, string sca
             _cge_fix(M, fixed, "W", k)
             _cge_fix(M, fixed, "WFDIST", k)
         }
-        else _cge_fail("factor closure must be mobile, specific or unemployed", 198)
+        else if (fac[k] == "wagecurve" | fac[k] == "minwage") {
+            // Labour-market regimes (model_spec.md, Section 14)
+            if (!M.p0.inlf[k]) _cge_fail(M.F[k] + ": " + fac[k] + " needs a labour force: calibrate with unemployment() or minwage()", 459)
+            if (fac[k] == "wagecurve" & !(M.p0.epsw[k] > 0)) _cge_fail(M.F[k] + ": the wage curve needs an elasticity: calibrate with wagecurve()", 459)
+            if (fac[k] == "minwage" & !M.p0.hasmin[k]) _cge_fail(M.F[k] + ": give a minimum wage", 459)
+            _cge_fix(M, fixed, "WFDIST", k)
+            _cge_fix(M, fixed, (fac[k] == "wagecurve" ? "LSW" : "LSM"), k)
+        }
+        else _cge_fail("factor closure must be mobile, specific, unemployed, wagecurve or minwage", 198)
     }
     nfree = sum(M.exists :* (1 :- fixed))
     if (nfree != M.neq) {
@@ -3121,7 +3241,7 @@ void _cge_closure(string scalar ext, string scalar gov, string scalar si, string
         tok = tokens(facspec)
         for (k = 1; k <= cols(tok); k++) {
             pos = strpos(tok[k], ":")
-            if (pos == 0) _cge_fail("factors() entries take the form factor:mobile, factor:specific or factor:unemployed", 198)
+            if (pos == 0) _cge_fail("factors() entries take the form factor:mode, with mode mobile, specific, unemployed, wagecurve or minwage", 198)
             f = substr(tok[k], 1, pos - 1)
             mode = substr(tok[k], pos + 1, .)
             idx = _cge_find(M.F, f)
@@ -3177,6 +3297,9 @@ real colvector _cge_par_get(struct cge_par scalar p, string scalar name)
     if (name == "rf") return(p.rf)
     if (name == "ddebt") return(p.ddebt)
     if (name == "fdebt") return(p.fdebt)
+    if (name == "qlf") return(p.qlf)
+    if (name == "wmin") return(p.wmin)
+    if (name == "wref") return(p.wref)
     _cge_fail("cge internal error: unknown parameter " + name, 3498)
 }
 
@@ -3207,6 +3330,9 @@ void _cge_par_set(struct cge_par scalar p, string scalar name, real colvector v)
     else if (name == "rf") p.rf = v
     else if (name == "ddebt") p.ddebt = v
     else if (name == "fdebt") p.fdebt = v
+    else if (name == "qlf") p.qlf = v
+    else if (name == "wmin") p.wmin = v
+    else if (name == "wref") p.wref = v
 }
 
 real colvector _cge_elements(string colvector set, string scalar elems, string scalar what)
@@ -3252,7 +3378,13 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
     if (anyof(("rd", "rf", "ddebt", "fdebt"), target) & M.p0.debt != 1) {
         _cge_fail(target + " needs public debt: calibrate with debt() and interest()", 459)
     }
-    if (anyof(("tm", "te", "tq", "pwm", "pwe", "qg", "qinv", "qshi", "tv"), target)) {
+    // Labour-market regimes (from version 0.3.3)
+    if (anyof(("qlf", "wmin", "wref"), target)) {
+        idx = _cge_elements(M.F, elems, "factors")
+        if (!all(M.p0.inlf[idx])) _cge_fail(target + " needs a labour force: calibrate with unemployment() or minwage()", 459)
+        if (target != "qlf" & mode == "set" & value <= 0) _cge_fail(target + " must be positive", 198)
+    }
+    else if (anyof(("tm", "te", "tq", "pwm", "pwe", "qg", "qinv", "qshi", "tv"), target)) {
         idx = _cge_elements(M.C, elems, "commodities")
     }
     else if (anyof(("ta", "ad", "kappa"), target)) {
@@ -3282,7 +3414,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
 
     k = _cge_vidx(M, target)
     if (k == 0) {
-        _cge_fail(target + " is not a shockable parameter (tm te tq ta tv kappa pwm pwe ad af qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir rd rf ddebt fdebt) or model variable", 198)
+        _cge_fail(target + " is not a shockable parameter (tm te tq ta tv kappa pwm pwe ad af qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir rd rf ddebt fdebt qlf wmin wref) or model variable", 198)
     }
     set = M.vset[k]
     if (set == "") {
@@ -3713,6 +3845,12 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp(M, rowid, boff, pr, pc, "I14", J(nC, 1, 1), "QSHI", cC)
     _cge_sp(M, rowid, boff, pr, pc, "I14", 1, "YSHI", 1)
     _cge_sp(M, rowid, boff, pr, pc, "I14", 1, "TVADJ", 1)
+
+    // Labour-market regimes (Section 14)
+    _cge_sp_same(M, rowid, boff, pr, pc, "L1", ("W", "QFS", "LSW"))
+    _cge_sp(M, rowid, boff, pr, pc, "L1", (1::nF), "CPI", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "L2", ("W", "QFS", "LSM"))
+    _cge_sp(M, rowid, boff, pr, pc, "L2", (1::nF), "CPI", 1)
 
     // 5.5 System constraints
     // S2 has exact derivatives (_cge_dense2)
@@ -4656,6 +4794,10 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
         _cge_radd(keys, val, "factors", "real_wage", M.F[k], W[k] / CPI)
         _cge_radd(keys, val, "factors", "income", M.F[k], YF[k])
         _cge_radd(keys, val, "factors", "supply", M.F[k], QFS[k])
+        if (M.p0.inlf[k]) {
+            _cge_radd(keys, val, "factors", "labour_force", M.F[k], p.qlf[k])
+            _cge_radd(keys, val, "factors", "unemployment_rate", M.F[k], 100 * (1 - QFS[k] / p.qlf[k]))
+        }
     }
     for (k = 1; k <= M.n; k++) {
         _cge_radd(keys, val, "activities", "output", M.A[k], QA[k])
@@ -4704,16 +4846,18 @@ real colvector _cge_sim_list(struct cge_model scalar M, string scalar sims)
 // Report rows for simulations s: keys (table, measure, element), base values,
 // simulated values (one column per simulation) and percentage changes. For the
 // equivalent and compensating variations, the base is zero and the percentage
-// is of base household consumption.
+// is of base household consumption; for rates (the debt ratio and unemployment
+// rates; from version 0.3.3) the change is in percentage points.
 void _cge_report_rows(struct cge_model scalar M, real colvector s, string matrix keys,
                       real colvector base, real matrix vals, real matrix pct)
 {
     string matrix k1
-    real colvector v, ev, cv, eh0
+    real colvector v, ev, cv, eh0, rate
     real scalar j, h, nr
 
     _cge_measures(M, M.p0, M.x0, keys, base)
     nr = rows(base)
+    rate = (keys[., 2] :== "debt_gdp") :| (keys[., 2] :== "unemployment_rate")
     eh0 = _cge_vn(M, M.x0, "EH")
     for (h = 1; h <= M.nH; h++) {
         keys = keys \ ("welfare", "equivalent_variation", M.H[h]) \ ("welfare", "compensating_variation", M.H[h])
@@ -4729,6 +4873,7 @@ void _cge_report_rows(struct cge_model scalar M, real colvector s, string matrix
         vals[., j] = v
         pct[|1, j \ nr, j|] = 100 :* (v[|1 \ nr|] - base[|1 \ nr|]) :/ abs(base[|1 \ nr|])
         pct[|1, j \ nr, j|] = pct[|1, j \ nr, j|] :/ (base[|1 \ nr|] :!= 0)
+        for (h = 1; h <= nr; h++) if (rate[h]) pct[h, j] = v[h] - base[h]
         for (h = 1; h <= M.nH; h++) {
             pct[nr + 2 * h - 1, j] = 100 * ev[h] / eh0[h]
             pct[nr + 2 * h, j] = 100 * cv[h] / eh0[h]
@@ -4782,7 +4927,7 @@ void _cge_report_run(string scalar sims, string scalar tables, real scalar show,
             }
             printf("{txt}%s\n", "{hline " + strofreal(w1 + 13 + 11 * min((ns, 6))) + "}")
         }
-        printf("{txt}Percentage changes from the base")
+        printf("{txt}Percentage changes from the base (rates: percentage points)")
         if (ns > 6) printf("; the first 6 of %f simulations are shown", ns)
         printf("\n")
     }
@@ -4820,7 +4965,7 @@ void _cge_report_long(struct cge_model scalar M, real colvector s, string matrix
     st_varlabel("element", "Set element")
     st_varlabel("base", "Base value")
     st_varlabel("value", "Simulated value")
-    st_varlabel("pct", "Per cent change (welfare: per cent of base consumption)")
+    st_varlabel("pct", "Per cent change (rates: points; welfare: per cent of base consumption)")
 }
 
 void _cge_report_wide(struct cge_model scalar M, real colvector s, string matrix keys, real colvector base,
@@ -4846,7 +4991,7 @@ void _cge_report_wide(struct cge_model scalar M, real colvector s, string matrix
         st_store(., "v" + strofreal(j), vals[., j])
         st_store(., "p" + strofreal(j), pct[., j])
         st_varlabel("v" + strofreal(j), M.simname[s[j]] + ": value")
-        st_varlabel("p" + strofreal(j), M.simname[s[j]] + ": % change")
+        st_varlabel("p" + strofreal(j), M.simname[s[j]] + ": % change (rates: points)")
     }
 }
 
@@ -4917,6 +5062,10 @@ void _cge_param_data(string scalar sim, real scalar current)
     _cge_padd(keys, val, "trfr", p.trfr, M.F, none);   _cge_padd(keys, val, "tshi", p.tshi, M.F, none)
     _cge_padd(keys, val, "af", p.af, M.F, none);       _cge_padd(keys, val, "etah", p.etah, M.F, none)
     _cge_padd(keys, val, "hold", p.hold, M.D, none)
+    _cge_padd(keys, val, "inlf", p.inlf, M.F, none);   _cge_padd(keys, val, "qlf", p.qlf, M.F, none)
+    _cge_padd(keys, val, "u0", p.u0, M.F, none);       _cge_padd(keys, val, "epsw", p.epsw, M.F, none)
+    _cge_padd(keys, val, "wref", p.wref, M.F, none);   _cge_padd(keys, val, "wmin", p.wmin, M.F, none)
+    _cge_padd(keys, val, "hasmin", p.hasmin, M.F, none)
     // scalars
     _cge_padd(keys, val, "trgr", p.trgr, "", none);    _cge_padd(keys, val, "trrg", p.trrg, "", none)
     _cge_padd(keys, val, "trgg", p.trgg, "", none);    _cge_padd(keys, val, "sshi", p.sshi, "", none)
@@ -4925,6 +5074,7 @@ void _cge_param_data(string scalar sim, real scalar current)
     _cge_padd(keys, val, "debt", p.debt, "", none);    _cge_padd(keys, val, "ddebt", p.ddebt, "", none)
     _cge_padd(keys, val, "fdebt", p.fdebt, "", none);  _cge_padd(keys, val, "rd", p.rd, "", none)
     _cge_padd(keys, val, "rf", p.rf, "", none);        _cge_padd(keys, val, "phi", p.phi, "", none)
+    _cge_padd(keys, val, "mu", p.mu, "", none)
     st_addobs(rows(val))
     (void) st_addvar("str8", "parameter")
     (void) st_addvar("str32", "element1")
@@ -5006,11 +5156,23 @@ void _cge_par_fill(struct cge_par scalar p, struct cge_model scalar M)
     if (rows(p.qe0) == 0) p.qe0 = J(M.nC, 1, 0)
     if (rows(p.betah) == 0) p.betah = J(M.n, M.nH, 0)
     if (rows(p.gammah) == 0) p.gammah = J(M.n, M.nH, 0)
+    // 0.3.3: no labour force (the values only fill the masked equations)
+    if (rows(p.inlf) == 0) {
+        p.inlf = J(M.nF, 1, 0)
+        p.qlf = J(M.nF, 1, 1)
+        p.u0 = J(M.nF, 1, 1)
+        p.epsw = J(M.nF, 1, 0)
+        p.wref = J(M.nF, 1, 1)
+        p.wmin = J(M.nF, 1, 1)
+        p.hasmin = J(M.nF, 1, 0)
+    }
+    if (p.mu >= .) p.mu = 1e-10
 }
 
 // Variables added after the saved model's version are appended to the layout:
-// TQADJ, TMADJ and TVADJ (0.3.1), fixed at one; PWE and QHA (0.3.2), which do
-// not exist in older models. The Jacobian pattern is rebuilt.
+// TQADJ, TMADJ and TVADJ (0.3.1), fixed at one; PWE and QHA (0.3.2), and LSW
+// and LSM (0.3.3), which do not exist in older models. The Jacobian pattern is
+// rebuilt.
 void _cge_use_upgrade(struct cge_model scalar M)
 {
     real scalar nold, k, v, len
@@ -5025,7 +5187,7 @@ void _cge_use_upgrade(struct cge_model scalar M)
             val = M.p0.pwe
             ex = J(len, 1, 0)
         }
-        else if (M.vname[k] == "QHA") {
+        else if (anyof(("QHA", "LSW", "LSM"), M.vname[k])) {
             val = J(len, 1, 0)
             ex = J(len, 1, 0)
         }
@@ -5136,7 +5298,7 @@ void _cge_use(string scalar fn)
         if (rows(M.ced) == 0) M.ced = J(M.nC, 1, 0)
         if (rows(M.cdo) == 0) M.cdo = M.cx
         if (rows(M.cq) == 0) M.cq = (M.cx :| M.cm)
-        if (!_cge_vidx(M, "QHA")) _cge_use_upgrade(M)
+        if (!_cge_vidx(M, "LSM")) _cge_use_upgrade(M)
     }
     // Files saved before version 0.2.0 have no dynamic-run items
     if (rows(M.simrun) != rows(M.simname)) {
@@ -5229,8 +5391,8 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
         D.delta[idx] = _cge_dyn_values(depreciation, rows(idx), "depreciation()")
         D.rental[idx] = _cge_dyn_values(rental, rows(idx), "rental()")
         for (j = 1; j <= rows(idx); j++) {
-            if (M.c_fac[idx[j]] == "unemployed") {
-                _cge_fail("capital(): " + M.F[idx[j]] + " is unemployed in the closure; capital must be mobile or specific", 198)
+            if (anyof(("unemployed", "wagecurve", "minwage"), M.c_fac[idx[j]])) {
+                _cge_fail("capital(): " + M.F[idx[j]] + " is " + M.c_fac[idx[j]] + " in the closure; capital must be mobile or specific", 198)
             }
         }
     }
@@ -5247,7 +5409,7 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
         if (D.capital[f]) _cge_fail("growth(): " + pair[1] + " is a capital factor", 198)
         D.fgrowth[f] = strtoreal(pair[3])
         if (missing(D.fgrowth[f])) _cge_fail("growth(): rate for " + pair[1] + " is not a number", 198)
-        if (D.fgrowth[f] != 0 & M.c_fac[f] == "unemployed") {
+        if (D.fgrowth[f] != 0 & M.c_fac[f] == "unemployed" & !M.p0.inlf[f]) {
             _cge_fail("growth(): " + pair[1] + " is unemployed, so its supply is not fixed", 198)
         }
     }
@@ -5297,7 +5459,7 @@ void _cge_dyn_advance()
     struct cge_model scalar M
     struct cge_dyn scalar D
     real matrix QF, WFD
-    real colvector QFS, W, inv0, YF0, q, s, rent, eta
+    real colvector QFS, W, inv0, YF0, q, s, rent, eta, qlf
     real scalar f, inv, newk, avg, yk, def
 
     M = _cge_load()
@@ -5309,6 +5471,7 @@ void _cge_dyn_advance()
     inv = _cge_vn(M, M.x0, "PQ")' * _cge_vn(M, D.prev, "QINV")
     YF0 = _cge_vn(M, M.x0, "YF")
     yk = sum(D.capital :* YF0)
+    qlf = M.p.qlf
     for (f = 1; f <= M.nF; f++) {
         if (D.capital[f]) {
             // 1. Capital: depreciation plus new capital from real investment
@@ -5329,8 +5492,11 @@ void _cge_dyn_advance()
             // 2. Other factors
             if (M.c_fac[f] == "specific") QF[f, .] = (1 + D.fgrowth[f]) :* QF[f, .]
             else if (M.c_fac[f] == "mobile") QFS[f] = (1 + D.fgrowth[f]) * QFS[f]
+            // The labour force grows at the same rate (model_spec.md, 14.4)
+            if (M.p0.inlf[f]) qlf[f] = (1 + D.fgrowth[f]) * qlf[f]
         }
     }
+    M.p.qlf = qlf
     _cge_setv(M, M.xcur, "QF", QF)
     _cge_setv(M, M.xcur, "QFS", QFS)
     // 3. Population; 4. government and foreign flows
@@ -5654,12 +5820,12 @@ void _cge_sens_calibrate(real scalar d)
     G = _cge_sens_load()
     _cge_sens_values(G, d, va, q, t, a)
     // Options of the last calibration; models calibrated before version 0.3.1
-    // stored ten of them
+    // stored ten of them, and before 0.3.3 seventeen
     c = G.calargs
-    if (cols(c) < 17) c = c, J(1, 17 - cols(c), "")
+    if (cols(c) < 21) c = c, J(1, 21 - cols(c), "")
     _cge_calibrate(_cge_numlist(va), _cge_numlist(q), _cge_numlist(t), c[4], c[5], c[6],
                    (c[7] == "" & !anyof(G.vary, "a") ? "" : _cge_numlist(a)), c[8], c[9], c[10],
-                   c[11], c[12], c[13], c[14], c[15], c[16], c[17])
+                   c[11], c[12], c[13], c[14], c[15], c[16], c[17], c[18], c[19], c[20], c[21])
     M = _cge_load()
     _cge_closure_apply(M, G.ext, G.gov, G.si, G.num, G.fac)
     _cge_store(M)
@@ -5782,7 +5948,7 @@ void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
         st_varlabel("element", "Set element")
         st_varlabel("base", "Base value")
         st_varlabel("value", "Value in the draw")
-        st_varlabel("pct", "Per cent change (welfare: per cent of base consumption)")
+        st_varlabel("pct", "Per cent change (rates: points; welfare: per cent of base consumption)")
     }
 }
 
@@ -6109,6 +6275,14 @@ void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefi
     _cge_io_put(fh, prefix + "qe0", p.qe0)
     _cge_io_put(fh, prefix + "betah", p.betah)
     _cge_io_put(fh, prefix + "gammah", p.gammah)
+    _cge_io_put(fh, prefix + "inlf", p.inlf)
+    _cge_io_put(fh, prefix + "qlf", p.qlf)
+    _cge_io_put(fh, prefix + "u0", p.u0)
+    _cge_io_put(fh, prefix + "epsw", p.epsw)
+    _cge_io_put(fh, prefix + "wref", p.wref)
+    _cge_io_put(fh, prefix + "wmin", p.wmin)
+    _cge_io_put(fh, prefix + "hasmin", p.hasmin)
+    _cge_io_put(fh, prefix + "mu", p.mu)
 }
 
 real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
@@ -6186,6 +6360,14 @@ real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmo
     else if (name == "qe0") p.qe0 = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "betah") p.betah = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "gammah") p.gammah = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "inlf") p.inlf = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "qlf") p.qlf = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "u0") p.u0 = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "epsw") p.epsw = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "wref") p.wref = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "wmin") p.wmin = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "hasmin") p.hasmin = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "mu") p.mu = (rows(v) * cols(v) == 0 ? . : v)
     else return(0)
     return(1)
 }

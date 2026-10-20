@@ -268,20 +268,46 @@ hs0 = 1;
 hs0$linked = sum(C$HCOM(C), sum(H, QH0(C, H)) + qgbar(C) + qshibar(C));
 
 * ---------------------------------------------------------------------
+* 14 Labour-market regimes: the labour force from the base unemployment
+* rate given by the user; the real minimum wage is the base real wage when
+* there is unemployment in the base (so that U (W/(CPI wmin) - 1) = mu),
+* and a share of it with full employment, when the base rate is mu/(1/r - 1)
+* ---------------------------------------------------------------------
+set FL(AC) "factors with a labour force";
+parameters u0(AC) "base unemployment rate", qlf(AC) "labour force", epsw(AC) "wage-curve elasticity",
+     wref(AC) "reference real wage", wmin(AC) "real minimum wage", lsm0(AC), QFS0(AC);
+scalar mu "smoothing of the minimum-wage condition";
+mu = muin;
+FL(F) = yes$(ungiven(F) or mwgiven(F));
+QFS0(F) = sum(A, QF0(F, A));
+wref(F) = 1 / sum(C, cwts(C) * (1 + tv(C)));
+u0(F) = 1;
+u0(F)$FL(F) = unin(F);
+wmin(F) = wref(F);
+wmin(F)$(FL(F) and u0(F) > 0) = wref(F) / (1 + mu / u0(F));
+wmin(F)$(FL(F) and u0(F) = 0) = mwin(F) * wref(F);
+u0(F)$(FL(F) and u0(F) = 0) = mu / (1 / mwin(F) - 1);
+qlf(F) = QFS0(F);
+qlf(F)$FL(F) = QFS0(F) / (1 - u0(F));
+epsw(F) = wcin(F);
+lsm0(F)$FL(F) = (1 - QFS0(F) / qlf(F)) + (wref(F) / wmin(F) - 1)
+                - sqrt(sqr(1 - QFS0(F) / qlf(F)) + sqr(wref(F) / wmin(F) - 1) + 2 * mu);
+
+* ---------------------------------------------------------------------
 * Variables and equations (Section 5)
 * ---------------------------------------------------------------------
 variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(AC), EXR, CPI, DPI,
      QA(AC), QVA(AC), QINTA(AC), QF(AC, AC), QINT(AC, AC), QX(AC), QD(AC), QE(AC), QM(AC), QQ(AC),
      QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
      TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
-     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC);
+     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC);
 
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
      EQ4D(AC, AC), EQ5(AC, AC), EQ6(AC), EH1, EH2(AC),
      ET1(AC), ET2(AC), ET3(AC), ET4(AC), ET5(AC), ET6(AC), ET7(AC), ET8(AC), ET9(AC), ET3E(AC), ET10(AC),
      EI1(AC), EI2(AC, AC), EI3(AC), EI4(AC), EI5(AC, AC), EI5H(AC, AC), EI6(AC), EI7(AC), EI8, EI9, EI10(AC), EI11(AC),
-     EI12, EI13(AC), EI14, ES1(AC), ES2(AC), ES3, ES4, ES5;
+     EI12, EI13(AC), EI14, EL1(AC), EL2(AC), ES1(AC), ES2(AC), ES3, ES4, ES5;
 
 * 5.1 Prices
 EP1(C)$CM(C)..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ) * EXR + sum(CP$ici(CP, C), PQ(CP) * ici(CP, C));
@@ -368,6 +394,13 @@ EI12$fund..  YSHI =e= sum((SHIS, F), YIF(SHIS, F)) + trshi * CPI + trshir * EXR;
 EI13(C)$qshibar(C)..  QSHI(C) =e= qshibar(C) * SHIADJ;
 EI14$fund..  sum(C$qshibar(C), PQ(C) * (1 + tv(C) * TVADJ) * QSHI(C)) =e= (1 - sshi) * YSHI;
 
+* 14 Labour-market regimes: wage curve (L1) and smoothed minimum wage (L2);
+* each is inert unless the closure fixes its slack
+EL1(F)$FL(F)..  W(F) / CPI =e= (wref(F) * ((1 - QFS(F) / qlf(F)) / u0(F))**(-epsw(F)))$(epsw(F) > 0)
+                               + wref(F)$(epsw(F) = 0) + LSW(F);
+EL2(F)$FL(F)..  (1 - QFS(F) / qlf(F)) + (W(F) / (CPI * wmin(F)) - 1)
+                - sqrt(sqr(1 - QFS(F) / qlf(F)) + sqr(W(F) / (CPI * wmin(F)) - 1) + 2 * mu) =e= LSM(F);
+
 * 5.5 System constraints (S6 through the closure)
 ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F);
 ES2(C)$CQ(C)..  QQ(C) =e= sum(A$ica(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
@@ -398,13 +431,13 @@ YI.l(D) = YI0(D);  EH.l(H) = EH0(H);  YG.l = YG0;  EG.l = EG0;  GSAV.l = GSAV0; 
 TINS.l(D) = tins0(D);  MPS.l(D) = mps0(D);  TINSADJ.l = 1;  MPSADJ.l = 1;  IADJ.l = 1;  GADJ.l = 1;
 WFDIST.l(F, A) = 1;  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(C);  YSHI.l = YSHI0;
 SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;
-TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;
+TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;  LSW.l(F) = 0;  LSM.l(F) = lsm0(F);
 
 * Closure (Section 6): 1 = the default of each block
 scalars clext "1 flexible exchange rate, 2 fixed",
         clgov "1 flexible government savings; fixed, with 2 direct, 3 sales, 4 import or 5 VAT rates adjusting",
         clsi "1 savings-driven, 2 investment-driven", clnum "1 CPI numeraire, 2 DPI";
-parameter fclo(AC) "factor closure: 1 mobile, 2 activity-specific, 3 unemployed";
+parameter fclo(AC) "factor closure: 1 mobile, 2 activity-specific, 3 unemployed, 4 wage curve, 5 minimum wage";
 clext = 1;  clgov = 1;  clsi = 1;  clnum = 1;  fclo(F) = 1;
 
 $include closure.gms
