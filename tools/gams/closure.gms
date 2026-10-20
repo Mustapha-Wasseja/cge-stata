@@ -29,12 +29,14 @@ QSHI.lo(AC) = -inf;    QSHI.up(AC) = inf;    EFF.lo(AC) = -inf;     EFF.up(AC) =
 HS.lo = -inf;          HS.up = inf;
 TQADJ.lo = -inf;       TQADJ.up = inf;       TMADJ.lo = -inf;       TMADJ.up = inf;
 TVADJ.lo = -inf;       TVADJ.up = inf;
+PWEV.lo(AC) = -inf;     PWEV.up(AC) = inf;     QHA.lo(AC, ACP) = -inf; QHA.up(AC, ACP) = inf;
 
 * Prices and quantities that are positive in the base stay positive
-PA.lo(A) = 1e-10;  PVA.lo(A) = 1e-10;  PQ.lo(C) = 1e-10;  W.lo(F) = 1e-10;  EXR.lo = 1e-10;
-CPI.lo = 1e-10;  DPI.lo = 1e-10;  QA.lo(A) = 1e-10;  QVA.lo(A) = 1e-10;  QQ.lo(C) = 1e-10;
+PA.lo(A) = 1e-10;  PVA.lo(A) = 1e-10;  PQ.lo(C)$CQ(C) = 1e-10;  W.lo(F) = 1e-10;  EXR.lo = 1e-10;
+CPI.lo = 1e-10;  DPI.lo = 1e-10;  QA.lo(A) = 1e-10;  QVA.lo(A) = 1e-10;  QQ.lo(C)$CQ(C) = 1e-10;
+PWEV.lo(C)$CED(C) = 1e-10;
 PINTA.lo(A)$(PINTA0(A) > 0) = 1e-10;  QINTA.lo(A)$(QINTA0(A) > 0) = 1e-10;
-PX.lo(C)$CX(C) = 1e-10;  PD.lo(C)$CX(C) = 1e-10;  QX.lo(C)$CX(C) = 1e-10;  QD.lo(C)$CX(C) = 1e-10;
+PX.lo(C)$CX(C) = 1e-10;  PD.lo(C)$CDO(C) = 1e-10;  QX.lo(C)$CX(C) = 1e-10;  QD.lo(C)$CDO(C) = 1e-10;
 PE.lo(C)$CE(C) = 1e-10;  QE.lo(C)$CE(C) = 1e-10;  PM.lo(C)$CM(C) = 1e-10;  QM.lo(C)$CM(C) = 1e-10;
 QF.lo(F, A)$FA(F, A) = 1e-10;  QT.lo(C)$CT(C) = 1e-10;  QER.lo(C)$CR(C) = 1e-10;
 EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;
@@ -42,8 +44,10 @@ EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;
 * Variables that do not exist are held at their base values
 PE.fx(C)$(not CE(C)) = PE.l(C);        QE.fx(C)$(not CE(C)) = QE.l(C);
 PM.fx(C)$(not CM(C)) = PM.l(C);        QM.fx(C)$(not CM(C)) = QM.l(C);
-PX.fx(C)$(not CX(C)) = PX.l(C);        PD.fx(C)$(not CX(C)) = PD.l(C);
-QX.fx(C)$(not CX(C)) = QX.l(C);        QD.fx(C)$(not CX(C)) = QD.l(C);
+PX.fx(C)$(not CX(C)) = PX.l(C);        PD.fx(C)$(not CDO(C)) = PD.l(C);
+QX.fx(C)$(not CX(C)) = QX.l(C);        QD.fx(C)$(not CDO(C)) = QD.l(C);
+PQ.fx(C)$(not CQ(C)) = PQ.l(C);        QQ.fx(C)$(not CQ(C)) = QQ.l(C);
+PWEV.fx(C)$(not CED(C)) = PWEV.l(C);     QHA.fx(A, H)$(not betah(A, H)) = 0;
 QF.fx(F, A)$(not FA(F, A)) = 0;        WFDIST.fx(F, A)$(not FA(F, A)) = WFDIST.l(F, A);
 QT.fx(C)$(not CT(C)) = 0;              QER.fx(C)$(not CR(C)) = 0;
 QINT.fx(C, A)$(not ica(C, A)) = 0;     QH.fx(C, H)$(not beta(C, H)) = 0;

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.2  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)} {opt vattax(name)} {opt vatshare(spec)}
+[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)} {opt vattax(name)} {opt vatshare(spec)} {opt domesticmargins(names)} {opt importmargins(names)} {opt exportmargins(names)}
 {opt report(filename)} {opt replace}]
 
 {p 8 12 2}
@@ -96,8 +96,16 @@ columns) and spend them on margin services (commodity rows, the margin
 account's column). A margin account may have no other flows. Margins enter the
 model as a fixed quantity of services per unit of each commodity's composite
 supply, and their cost enters the commodity's price (docs/model_spec.md,
-equations P3 and T8). The SAM records one margin payment per commodity, so
-margins on domestic sales, imports and exports are not distinguished.
+equations P3 and T8).
+
+{phang}
+{opt domesticmargins()}, {opt importmargins()} and {opt exportmargins()} list
+margin accounts whose margins are paid per unit of domestic sales, of imports
+and of exports, when the SAM separates them (from version 0.3.2;
+docs/model_spec.md, Section 13.4). Domestic buyers then pay the producer price
+plus domestic margins; the import price includes import margins; exporters
+receive the world price less export taxes and export margins. A commodity
+paying such margins must have domestic sales, imports or exports respectively.
 
 {phang}
 {opt stocks()} lists stock-change accounts: accounts financed by
@@ -147,6 +155,13 @@ commodities for {opt saltax()}, {opt imptax()} and {opt exptax()}, activities
 for {opt acttax()}) are routed through an internal tax account. At most one of
 {opt saltax()}, {opt imptax()}, {opt exptax()} and {opt vattax()} may name the
 government account.
+
+{phang}
+{pstd}
+A household's payment to an activity, {it:SAM}(activity, household), is home
+consumption of own produce (from version 0.3.2; docs/model_spec.md, Section
+13.1): it is valued at the activity's price, without taxes or margins, and the
+activity's other output is sold to commodities.
 
 {phang}
 {opt vattax(name)} names the account that collects value added tax (VAT) from

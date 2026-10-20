@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.2  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -86,8 +86,10 @@ group's does.
 
 {phang}
 {opt budget(var:commodity ...)} lists spending on budget items and the
-commodities whose prices apply. A household's price index then uses its own
-budget shares; otherwise, its group's base budget shares.
+commodities whose prices apply; an item may instead name an activity, for home
+consumption of its output, at the activity's price (from version 0.3.2). A
+household's price index then uses its own budget shares; otherwise, its
+group's base budget shares, including home consumption.
 
 {phang}
 {opt line(#)} is the poverty line, per person, in the units of consumption.

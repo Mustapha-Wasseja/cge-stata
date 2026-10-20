@@ -337,6 +337,51 @@ def build_vat_layout() -> tuple[list[str], list[list[float]]]:
     return _from_flows(VAT_ACCOUNTS, {**FLOWS, **VAT_FLOWS})
 
 
+# Changes to FLOWS for the home-consumption layout (version 0.3.2): the
+# household consumes 20 of agricultural output at home, at producer prices,
+# and buys 20 less of the marketed commodity.
+HOME_FLOWS = {
+    ("act_agr", "com_agr"): 80, ("act_agr", "hhd"): 20, ("com_agr", "hhd"): 50,
+}
+
+
+def build_home_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with home consumption of own agricultural output."""
+    return _layout(ACCOUNTS, HOME_FLOWS)
+
+
+TRADE_ACCOUNTS = [
+    "act_agr", "act_man", "act_ser",
+    "com_agr", "com_man", "com_ser", "com_cash",
+    "lab", "cap",
+    "hhd", "gov",
+    "tax_dir", "tax_sal", "tax_imp",
+    "mtrd", "mtrm", "mtre",
+    "sav", "row",
+]
+
+# Changes to FLOWS for the trade layout (version 0.3.2): act_agr also grows a
+# cash crop (com_cash) that is all exported, in place of com_agr's exports; and
+# com_man pays margins on domestic sales (mtrd, 4), on imports (mtrm, 3) and on
+# exports (mtre, 2), which buy trade services from com_ser. The margins come
+# out of act_man's output and capital income, and the household buys as much
+# less of com_ser as the margin accounts buy.
+TRADE_FLOWS = {
+    ("act_agr", "com_agr"): 80, ("act_agr", "com_cash"): 20,
+    ("com_cash", "row"): 20, ("com_agr", "row"): 0,
+    ("act_man", "com_man"): 131, ("cap", "act_man"): 31, ("hhd", "cap"): 118,
+    ("com_ser", "hhd"): 71,
+    ("mtrd", "com_man"): 4, ("mtrm", "com_man"): 3, ("mtre", "com_man"): 2,
+    ("com_ser", "mtrd"): 4, ("com_ser", "mtrm"): 3, ("com_ser", "mtre"): 2,
+}
+
+
+def build_trade_layout() -> tuple[list[str], list[list[float]]]:
+    """The synthetic economy with an export-only cash crop and margins by market."""
+    flows = {k: v for k, v in {**FLOWS, **TRADE_FLOWS}.items() if v != 0}
+    return _from_flows(TRADE_ACCOUNTS, flows)
+
+
 def build_unbalanced_layout() -> tuple[list[str], list[list[float]]]:
     """The institutions layout made unbalanced, for the SAM balancing tests
     (docs/sam_tools.md, Section 6): every non-zero cell (i, j) is multiplied by
@@ -394,6 +439,8 @@ if __name__ == "__main__":
                              (build_sut_layout, "cge_synthetic_sam_sut.csv"),
                              (build_health_layout, "cge_synthetic_sam_health.csv"),
                              (build_vat_layout, "cge_synthetic_sam_vat.csv"),
+                             (build_home_layout, "cge_synthetic_sam_home.csv"),
+                             (build_trade_layout, "cge_synthetic_sam_trade.csv"),
                              (build_unbalanced_layout, "cge_synthetic_sam_unbal.csv")):
         names, matrix = layout()
         worst = max(abs(d) for d in imbalances(matrix))

@@ -70,13 +70,17 @@ def gams_set(name: str, elements, domain: str = "AC") -> str:
     return f"set {name}({domain}) / {body} /;"
 
 
-def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict | None = None) -> None:
+def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict | None = None,
+               trade: dict | None = None) -> None:
     """The prepared SAM, the mapping and the settings supplied by the user (elasticities,
     VAT credit shares, debt and interest rates) as a GAMS include file."""
     m, sam, S, p = model.mapping, model.sam, model.sets, model.params
     lines = ["* data for cge_model.gms, written by run_gams_check.py",
              "set AC 'accounts' / " + ", ".join(q(a) for a in sam.labels) + " /;"]
+    trade = trade or {}
     roles = {"A": S["A"], "C": S["C"], "F": S["F"], "H": S["H"], "E": S["E"], "T": m.margin_accounts,
+             "TD": m.domestic_margins, "TIM": m.import_margins, "TEX": m.export_margins,
+             "XO": list(trade.get("export_only", [])),
              "GOVS": [m.government], "ROWS": [m.row], "SAVS": [m.savinv],
              "SHIS": [m.insurance] if m.insurance else [], "DTAXS": [m.dirtax] if m.dirtax else [],
              "STAXS": [m.saltax] if m.saltax else [], "MTAXS": [m.imptax] if m.imptax else [],
@@ -103,8 +107,13 @@ def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict 
         frisch = [frisch] * len(S["H"]) if np.ndim(frisch) == 0 else list(frisch)
         lines.append(param("frisch", S["H"], frisch))
         lines.append("scalar les / 1 /;")
+        # home goods: the income elasticity of the activity's paired commodity
+        lines.append(param("incelh", S["A"], [les["income_elasticities"][model.paired[a]] for a in S["A"]]))
     else:
-        lines += ["parameter incel(AC) / /;", "parameter frisch(AC) / /;", "scalar les / 0 /;"]
+        lines += ["parameter incel(AC) / /;", "parameter frisch(AC) / /;", "scalar les / 0 /;",
+                  "parameter incelh(AC) / /;"]
+    demand = trade.get("export_demand", {})
+    lines.append(param("etae", S["C"], [demand.get(c, 0.0) for c in S["C"]]))
     # VAT credit shares by activity (1, full credit, unless given)
     credit = {a: 1.0 for a in S["A"]}
     if isinstance(vat_credit, dict):
@@ -212,9 +221,11 @@ def cases() -> list[dict]:
     std = sc.synthetic_model()
     out = []
 
-    def add(label, model, shocks, prefix="", les=None, closure=None, python=False, vat=None, debt=None):
+    def add(label, model, shocks, prefix="", les=None, closure=None, python=False, vat=None, debt=None,
+            trade=None):
         out.append({"label": label, "model": model, "shocks": shocks, "prefix": prefix, "les": les,
-                    "closure": closure or Closure(), "python": python, "vat": vat, "debt": debt})
+                    "closure": closure or Closure(), "python": python, "vat": vat, "debt": debt,
+                    "trade": trade})
 
     add("standard", std, sc.simulation_inputs(std))
     mixed = sc.synthetic_model(**sc.MIXED_ELASTICITIES)
@@ -278,6 +289,27 @@ def cases() -> list[dict]:
     add("public debt, DPI numeraire", debt,
         {"tariff_removal_dpi": {"params": {"tm": np.zeros_like(p["tm"])}}}, "debt_",
         closure=Closure(numeraire="dpi"), debt=sc.DEBT)
+    # Trade and household extensions (version 0.3.2, model_spec.md, Section 13)
+    home = sc.home_model()
+    shocks = sc.simulation_inputs(home)
+    agr = home.sets["C"].index("com_agr")
+    shocks["sales_tax_agr_up"] = {"params": {"tq": sc._scaled(home.params["tq"], agr, 2.0)}}
+    add("home consumption", home, shocks, "home_")
+    home_les = sc.home_model(**sc.LES_SETTINGS)
+    add("home consumption, LES", home_les, {"les_tariff_removal": sc.simulation_inputs(home_les)["tariff_removal"]},
+        "home_", les=sc.LES_SETTINGS)
+    trade = sc.trade_model(**sc.TRADE_SETTINGS)
+    C = trade.sets["C"]
+    shocks = sc.simulation_inputs(trade)
+    shocks["world_demand_up10"] = {"params": {"pwe": sc._scaled(trade.params["pwe"], C.index("com_man"), 1.1)}}
+    shocks["cash_price_down20"] = {"params": {"pwe": sc._scaled(trade.params["pwe"], C.index("com_cash"), 0.8)}}
+    add("trade", trade, shocks, "trade_", trade=sc.TRADE_SETTINGS)
+    xonly = sc.trade_model(by_market=False, export_only=["com_cash"])
+    add("export-only", xonly, {"tariff_removal": sc.simulation_inputs(xonly)["tariff_removal"]}, "xonly_",
+        trade={"export_only": ["com_cash"]})
+    plain = sc.trade_model(by_market=False)
+    add("trade, composite margins", plain, {"tariff_removal": sc.simulation_inputs(plain)["tariff_removal"]},
+        "tradeplain_")
     # Alternative closures, compared with the Python reference
     alt1 = Closure(external="fixexr", government="fixgsav", savinv="investment", numeraire="dpi",
                    factors={"cap": "specific"})
@@ -309,7 +341,7 @@ def main() -> None:
         for f in GAMS_FILES:
             shutil.copy(HERE / f, d / f)
         model = case["model"]
-        write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"])
+        write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"], case["trade"])
         run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work"], d)
         bstatus, base = read_gams(d / "base.csv")
         for name, shock in case["shocks"].items():

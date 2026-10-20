@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.2  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -39,6 +39,10 @@ the real exchange rate, private savings, investment and foreign savings{p_end}
 {pstd}
 Real measures are valued at base prices, and trade at base world prices.
 With VAT, final demand is valued at the prices final users pay, including VAT.
+Consumption and GDP include home consumption at activity prices, and the
+{cmd:macro} table then shows it separately; the {cmd:commodities} table shows
+the world export price of commodities with finite export demand (from version
+0.3.2).
 The equivalent variation is the change in base-price spending that gives the
 new utility; the compensating variation is the change in spending at the new
 prices that would restore base utility. Both use the household's

@@ -43,7 +43,10 @@ Every case of the Python test suite, including:
 - the health insurance fund and the health link;
 - VAT with input credits, VAT within the sales tax and a VAT introduced where
   the SAM has none, revenue-neutral closures (direct, sales, import and VAT
-  rates adjusting) and public debt with interest (from version 0.3.1).
+  rates adjusting) and public debt with interest (from version 0.3.1);
+- home consumption, with Cobb-Douglas and LES demand; an export-only cash
+  crop; margins on domestic sales, imports and exports; and finite export
+  demand (from version 0.3.2).
 
 For each case, every scenario is compared with the expected results in
 `tests/expected`, which the Stata suite also matches. Alternative closures
@@ -54,7 +57,7 @@ are compared with the Python reference:
 
 ## Result (20 October 2026, GAMS 54.2, PATH)
 
-100 scenarios; every expected value was found and solved.
+116 scenarios; every expected value was found and solved.
 
 - Base values from GAMS's own calibration agree to 5e-15 or better.
 - Solutions agree to 3e-11 or better, relative to the larger of 1 and the

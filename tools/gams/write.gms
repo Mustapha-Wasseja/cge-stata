@@ -19,7 +19,8 @@ loop(C, put '%2', 'PX', C.tl, '', PX.l(C) /;  put '%2', 'PD', C.tl, '', PD.l(C) 
         put '%2', 'QM', C.tl, '', QM.l(C) /;  put '%2', 'QQ', C.tl, '', QQ.l(C) /;
         put '%2', 'QG', C.tl, '', QG.l(C) /;  put '%2', 'QINV', C.tl, '', QINV.l(C) /;
         put '%2', 'QT', C.tl, '', QT.l(C) /;  put '%2', 'QER', C.tl, '', QER.l(C) /;
-        put '%2', 'QSHI', C.tl, '', QSHI.l(C) /);
+        put '%2', 'QSHI', C.tl, '', QSHI.l(C) /;  put '%2', 'PWE', C.tl, '', PWEV.l(C) /);
+loop((A, H), put '%2', 'QHA', A.tl, H.tl, QHA.l(A, H) /);
 loop(F, put '%2', 'W', F.tl, '', W.l(F) /;  put '%2', 'QFS', F.tl, '', QFS.l(F) /;
         put '%2', 'YF', F.tl, '', YF.l(F) /;  put '%2', 'EFF', F.tl, '', EFF.l(F) /);
 loop((F, A), put '%2', 'QF', F.tl, A.tl, QF.l(F, A) /;  put '%2', 'WFDIST', F.tl, A.tl, WFDIST.l(F, A) /);

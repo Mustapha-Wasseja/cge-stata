@@ -78,6 +78,9 @@ and exports.
 | $CNE = CX \setminus CE$ | produced commodities not exported from domestic output |
 | $CM \subseteq C$ | imported commodities (base imports > 0) |
 | $CNM = C \setminus CM$ | non-imported commodities |
+| $CXE \subseteq CE$ | export-only commodities: all domestic output is exported, with no domestic sales (from version 0.3.2, when chosen; Section 13.3) |
+| $CED \subseteq CE$ | exported commodities that face a finite elasticity of export demand (from version 0.3.2; Section 13.2) |
+| $T^Q, T^D, T^M, T^E$ | margin accounts paid per unit of composite supply (the default), of domestic sales, of imports and of exports (from version 0.3.2; Section 13.4) |
 | $T$ | margin accounts (may be empty; from version 0.1.7) |
 | $HC \subseteq C$ | health services whose consumption raises factor efficiency (may be empty; from version 0.1.14) |
 | $CT \subseteq C$ | margin commodities: the services that margin accounts buy |
@@ -98,7 +101,8 @@ Prices
 | $PINTA_a$ | price of aggregate intermediate input |
 | $PX_c$ | producer price of commodity output, $c \in CX$ |
 | $PD_c$ | price of domestic output sold domestically, $c \in CX$ |
-| $PE_c$ | export price in local currency, $c \in CE$ |
+| $PE_c$ | export price received by producers, in local currency, $c \in CE$ |
+| $PWE_c$ | world export price (foreign currency), $c \in CED$ (from version 0.3.2; elsewhere the parameter $pwe_c$) |
 | $PM_c$ | import price in local currency, $c \in CM$ |
 | $PQ_c$ | composite commodity price, including sales tax |
 | $W_f$ | average price of factor $f$ |
@@ -121,6 +125,7 @@ Quantities
 | $QM_c$ | imports, $c \in CM$ |
 | $QQ_c$ | composite commodity supply |
 | $QH_{ch}$ | consumption of $c$ by household $h$ |
+| $QHA_{ah}$ | home consumption by household $h$ of the output of activity $a$ (from version 0.3.2; Section 13.1) |
 | $QG_c$ | government consumption |
 | $QINV_c$ | investment demand |
 | $QT_c$ | demand for margin services, $c \in CT$ |
@@ -166,6 +171,9 @@ Incomes, rates and adjustment variables
 | $aa_a$, $\delta^{a}_a$, $\rho^{a}_a$ | efficiency, value-added share and exponent of a CES or Cobb-Douglas top nest |
 | $ica_{ca}$ | intermediate input $c$ per unit of aggregate intermediate input of $a$ |
 | $icm_{c'c}$ | margin services of commodity $c' \in CT$ per unit of composite supply of $c$ |
+| $icd_{c'c}$, $ici_{c'c}$, $ice_{c'c}$ | margin services per unit of domestic sales, imports and exports of $c$ (from version 0.3.2) |
+| $\eta^{e}_c$, $\overline{qe}_c$ | elasticity of export demand and base exports, $c \in CED$ (from version 0.3.2) |
+| $\beta^{h}_{ah}$, $\gamma^{h}_{ah}$ | marginal budget share and subsistence quantity of home consumption of the output of activity $a$ by household $h$ (from version 0.3.2) |
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
 | $af_f$ | exogenous efficiency of factor $f$ in every activity (one in the base; from version 0.1.14) |
 | $\eta_f$, $HS^0$ | elasticity of the efficiency of factor $f$ with respect to health services, and the base volume of health services |
@@ -206,11 +214,18 @@ $\sigma^{q}_c \neq 1$ is required for imported commodities.
 
 ### 5.1 Price block
 
-$$PM_c = pwm_c\,(1+tm_c\,TMADJ)\,EXR, \qquad c \in CM \tag{P1}$$
+$$PM_c = pwm_c\,(1+tm_c\,TMADJ)\,EXR + \sum_{c'} PQ_{c'}\,ici_{c'c}, \qquad c \in CM \tag{P1}$$
 
-$$PE_c = pwe_c\,(1-te_c)\,EXR, \qquad c \in CE \tag{P2}$$
+$$PE_c = PWE_c\,(1-te_c)\,EXR - \sum_{c'} PQ_{c'}\,ice_{c'c}, \qquad c \in CE \tag{P2}$$
 
-$$PQ_c\,(1-tq_c\,TQADJ)\,QQ_c = PD_c\,QD_c + PM_c\,QM_c + \sum_{c' \in CT} PQ_{c'}\,icm_{c'c}\,QQ_c \tag{P3}$$
+with $PWE_c = pwe_c$ for $c \notin CED$. The margin terms are zero without
+margins by market (Section 13.4).
+
+$$PQ_c\,(1-tq_c\,TQADJ)\,QQ_c = PDD_c\,QD_c + PM_c\,QM_c + \sum_{c' \in CT} PQ_{c'}\,icm_{c'c}\,QQ_c \tag{P3}$$
+
+where $PDD_c = PD_c + \sum_{c'} PQ_{c'}\,icd_{c'c}$ is the price that domestic
+buyers pay for domestic output, including margins on domestic sales (from
+version 0.3.2; $PDD_c = PD_c$ without them).
 
 where the domestic term applies only for $c \in CX$, the import term only for
 $c \in CM$, and the margin term only when $c$ pays margins.
@@ -285,7 +300,10 @@ Otherwise $EFF_f = 1$.
 
 $$QINT_{ca} = ica_{ca}\,QINTA_a \tag{Q5}$$
 
-$$QX_c = \sum_a \theta_{ac}\,QA_a, \qquad c \in CX \tag{Q6}$$
+$$QX_c = \sum_a \theta_{ac}\,\Big(QA_a - \sum_h QHA_{ah}\Big), \qquad c \in CX \tag{Q6}$$
+
+Output consumed at home by its producers (Section 13.1) does not reach the
+commodity market; the yields $\theta_{ac}$ apply to marketed output.
 
 Output of a commodity from different activities is a perfect substitute and
 sells at one producer price $PX_c$.
@@ -302,11 +320,24 @@ For produced, non-exported commodities, $c \in CNE$:
 
 $$QX_c = QD_c \tag{T3}$$
 
+For export-only commodities, $c \in CXE$ (from version 0.3.2), which replace
+T1 and T2:
+
+$$QX_c = QE_c \tag{T3E}$$
+
+Exports facing a finite elasticity of export demand, $c \in CED$ (from
+version 0.3.2):
+
+$$QE_c = \overline{qe}_c \left(\frac{PWE_c}{pwe_c}\right)^{-\eta^{e}_c} \tag{T10}$$
+
+where $pwe_c$ now shifts the demand curve: at the base world price the
+world buys $\overline{qe}_c$.
+
 For imported commodities with domestic output, $c \in CM \cap CX$:
 
 $$QQ_c = aq_c\left[\delta^{q}_c\,QM_c^{-\rho^{q}_c} + (1-\delta^{q}_c)\,QD_c^{-\rho^{q}_c}\right]^{-1/\rho^{q}_c} \tag{T4}$$
 
-$$\frac{QM_c}{QD_c} = \left[\frac{PD_c}{PM_c}\cdot\frac{\delta^{q}_c}{1-\delta^{q}_c}\right]^{1/(1+\rho^{q}_c)} \tag{T5}$$
+$$\frac{QM_c}{QD_c} = \left[\frac{PDD_c}{PM_c}\cdot\frac{\delta^{q}_c}{1-\delta^{q}_c}\right]^{1/(1+\rho^{q}_c)} \tag{T5}$$
 
 For non-imported commodities, $c \in CNM$ (all of which have domestic output):
 
@@ -329,7 +360,7 @@ sales tax or margins.
 
 Demand for margin services (from version 0.1.7), $c \in CT$:
 
-$$QT_c = \sum_{c'} icm_{cc'}\,QQ_{c'} \tag{T8}$$
+$$QT_c = \sum_{c'} \left(icm_{cc'}\,QQ_{c'} + icd_{cc'}\,QD_{c'} + ici_{cc'}\,QM_{c'} + ice_{cc'}\,QE_{c'}\right) \tag{T8}$$
 
 Margins are a fixed quantity of services per unit of composite supply, and their
 cost enters the composite price through P3. The SAMs this serves record one
@@ -370,7 +401,14 @@ income after direct taxes and savings is transferred. For households,
 $hc_h = 1 - \sum_d shii_{dh} - shir_h$. A transfer from an institution to itself
 (a diagonal SAM cell) is allowed; it appears on both sides of its accounts.
 
-$$PH_c\,QH_{ch} = PH_c\,\gamma_{ch} + \beta_{ch}\left(EH_h - \sum_{c'} PH_{c'}\,\gamma_{c'h}\right) \tag{I5}$$
+$$PH_c\,QH_{ch} = PH_c\,\gamma_{ch} + \beta_{ch}\,SN_h \tag{I5}$$
+
+$$PA_a\,QHA_{ah} = PA_a\,\gamma^{h}_{ah} + \beta^{h}_{ah}\,SN_h \tag{I5H}$$
+
+with supernumerary spending $SN_h = EH_h - \sum_c PH_c\,\gamma_{ch} - \sum_a PA_a\,\gamma^{h}_{ah}$.
+Home consumption (I5H, from version 0.3.2) is valued at the activity price
+$PA_a$, without taxes or margins; the marginal shares of marketed and home
+goods together sum to one.
 
 With $\gamma_{ch} = 0$ this is Cobb-Douglas demand, the default. From version
 0.1.11 the linear expenditure system (LES) is available: households first buy
@@ -384,7 +422,7 @@ $$QINV_c = \overline{qinv}_c\,IADJ \tag{I6}$$
 
 $$QG_c = \overline{qg}_c\,GADJ \tag{I7}$$
 
-$$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,TQADJ\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,TMADJ\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,pwe_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + VAT + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI \tag{I8}$$
+$$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,TQADJ\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,TMADJ\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,PWE_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + VAT + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI \tag{I8}$$
 
 with VAT revenue (zero without VAT)
 
@@ -416,7 +454,7 @@ $$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c + QER_c + QSHI
 
 where $QT_c$ applies only for $c \in CT$ and $QER_c$ only for $c \in CR$.
 
-$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} + r^f\,DF = \sum_{c \in CE} pwe_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + trnsfr_{shi,row} + FSAV \tag{S3}$$
+$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} + r^f\,DF = \sum_{c \in CE} PWE_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + trnsfr_{shi,row} + FSAV \tag{S3}$$
 
 $$YG = EG + GSAV \tag{S4}$$
 
@@ -969,6 +1007,85 @@ change in the stock of foreign debt measured in local currency is net
 foreign borrowing plus a valuation change, $DF_{t-1}\,(EXR_t - EXR_{t-1})$.
 Neither default risk nor a link from debt to interest rates is modelled; the
 rates are exogenous and can be changed by shocks.
+
+## 13. Trade and household extensions (from version 0.3.2)
+
+### 13.1 Home consumption
+
+Households in many African economies consume part of what they produce. A
+SAM records this as a payment from the household's column to the activity's
+row, $SAM(a, h)$, at producer prices. The model treats it as a separate good:
+
+- the activity's output $QA_a$ is marketed output, which yields commodities
+  through $\theta_{ac}$ (Q6), plus home consumption $\sum_h QHA_{ah}$;
+- home consumption is valued at the activity price $PA_a$, so it bears no
+  sales tax, VAT, import competition or margins;
+- it enters household demand (I5H) with its own marginal budget share
+  $\beta^{h}_{ah}$ and, with LES demand, subsistence quantity $\gamma^{h}_{ah}$;
+  consumption spending $EH_h$ (I4) includes it.
+
+**Calibration.** $QHA^0_{ah} = SAM(a, h)$ (with $PA^0_a = 1$); marketed
+output is $QA^0_a - \sum_h SAM(a, h)$, which must be positive, and
+$\theta_{ac} = SAM(a, c)$ divided by it. $EH^0_h$ includes home consumption;
+$\beta^{h}_{ah} = SAM(a, h) / EH^0_h$. With LES demand, home consumption of
+the output of activity $a$ takes the income elasticity of $a$'s paired
+commodity, and $\gamma^{h}_{ah} = QHA^0_{ah} + \beta^{h}_{ah}\,EH^0_h / (PA^0_a\,\phi_h)$.
+The CPI keeps its weights on marketed consumption; welfare measures (Section
+9) use the full expenditure function, with $PA_a$ for home goods. GDP
+includes home consumption at $PA_a$ (real: $PA^0_a$). Population growth in
+dynamic runs scales $\gamma^{h}$ as it scales $\gamma$.
+
+### 13.2 Export demand
+
+By default the country is small in world markets: it sells any quantity at
+the world price $pwe_c$. For commodities given an elasticity of export demand
+$\eta^{e}_c > 0$ (`cge_calibrate, exportdemand()`), the world price is a
+variable $PWE_c$, and exports fall as it rises (T10). The CET (T1, T2) still
+determines how much producers offer at the export price $PE_c$ (P2). A larger
+$\eta^{e}_c$ approaches the small-country case. A change in $pwe_c$ shifts
+world demand. Export revenue (S3), export taxes (I8) and nominal GDP use
+$PWE_c$; real exports remain valued at base world prices.
+
+### 13.3 Export-only commodities
+
+When a commodity's domestic output is all exported, the SAM shows exports
+equal to domestic output (net of export taxes and export margins), and no
+domestic sales from domestic output. Before version 0.3.2 such a commodity
+falls into $CR$ (exports at least domestic output, Section 7.2): its output
+goes to the domestic market and exports are drawn from composite supply at
+$PQ_c$. With `cge_calibrate, exportonly()` its output is exported directly
+instead: $QD_c$ and $PD_c$ do not exist, the CET is replaced by T3E, and the
+export price $PE_c$ is the producer price. If the commodity is also imported,
+its composite supply is imports alone (T7); otherwise it has no composite
+supply, and $PQ_c$ and $QQ_c$ do not exist. Calibration lists the
+commodities whose exports equal domestic output, so that the choice is
+explicit. An export-only commodity may pay export taxes.
+
+### 13.4 Margins by market
+
+Margins may differ between domestic sales, imports and exports, as in the
+IFPRI standard model (Lofgren, Harris and Robinson 2002). A margin account
+can be declared as paid per unit of domestic sales (`cge_map,
+domesticmargins()`), of imports (`importmargins()`) or of exports
+(`exportmargins()`); accounts in `marginaccounts()` keep the per-unit-of-supply
+treatment of Section 5.3. With $MG_{tc} = SAM(t, c)$ and the shares in which
+account $t$ buys margin services, $s_{c't} = SAM(c', t) / \sum_{c''} SAM(c'', t)$:
+
+- $icd_{c'c} = \sum_{t \in T^D} s_{c't}\,MG_{tc} / QD^0_c$: domestic buyers pay
+  $PDD_c$ (P3, T5), producers receive $PD_c$;
+- $ici_{c'c} = \sum_{t \in T^M} s_{c't}\,MG_{tc} / QM^0_c$: margins are part of
+  the import price $PM_c$ (P1);
+- $ice_{c'c} = \sum_{t \in T^E} s_{c't}\,MG_{tc} / QE^0_c$: exporters receive the
+  world price, less export taxes, less margins (P2).
+
+Export margins are part of the export value in the SAM, so
+$QE^0_c = SAM(c, row) - SAM(tax_{exp}, c) - \sum_{t \in T^E} MG_{tc}$ and
+$pwe_c = SAM(c, row) / QE^0_c$, so that $PE^0_c = 1$. Base prices are
+$PDD^0_c = 1 + \sum_{c'} icd_{c'c}$ and $PM^0_c = 1 + tm_c + \sum_{c'} ici_{c'c}$, which
+enter the Armington shares (Section 7.4) in place of $PD^0_c$ and $PM^0_c$.
+Composite supply $QQ^0_c$ excludes export margins. A commodity that pays
+domestic, import or export margins must have domestic sales, imports or
+exports respectively.
 
 ## References
 

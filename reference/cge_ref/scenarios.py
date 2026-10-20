@@ -228,6 +228,58 @@ def debt_relief(t, p, fx):
         p["fdebt"] = p["fdebt"] * 0.5
 
 
+# Trade and household extensions (version 0.3.2, model_spec.md, Section 13):
+# home consumption, an export-only cash crop, margins by market and export
+# demand elasticities. Test values, not estimates.
+HOME_SAM = REPO / "data" / "cge_synthetic_sam_home.csv"
+TRADE_SAM = REPO / "data" / "cge_synthetic_sam_trade.csv"
+TRADE_SETTINGS = {"export_only": ["com_cash"], "export_demand": {"com_man": 4.0, "com_cash": 2.0}}
+
+
+def home_model(**settings) -> Model:
+    return Model(SAM.from_csv(HOME_SAM), synthetic_mapping(), **{**TEST_ELASTICITIES, **settings})
+
+
+def trade_mapping(by_market: bool = True) -> Mapping:
+    m = synthetic_mapping()
+    m.commodities = ["com_agr", "com_man", "com_ser", "com_cash"]
+    if by_market:
+        m.domestic_margins, m.import_margins, m.export_margins = ["mtrd"], ["mtrm"], ["mtre"]
+    else:
+        m.margin_accounts = ["mtrd", "mtrm", "mtre"]
+    return m
+
+
+def trade_model(by_market: bool = True, **settings) -> Model:
+    return Model(SAM.from_csv(TRADE_SAM), trade_mapping(by_market), **{**TEST_ELASTICITIES, **settings})
+
+
+def trade_cases() -> dict:
+    """Static simulations of the trade and household extensions: name -> solution."""
+    out = {}
+    home = home_model()
+    for name, solution in run_simulations(home).items():
+        out["home_" + name] = solution
+    home_les = home_model(**LES_SETTINGS)
+    out["home_les_tariff_removal"] = home_les.solve(Closure(), tol=1e-12, **simulation_inputs(home_les)["tariff_removal"])
+    agr = home.sets["C"].index("com_agr")
+    out["home_sales_tax_agr_up"] = home.solve(Closure(), tol=1e-12,
+                                              params={"tq": _scaled(home.params["tq"], agr, 2.0)})
+    trade = trade_model(**TRADE_SETTINGS)
+    for name, solution in run_simulations(trade).items():
+        out["trade_" + name] = solution
+    C = trade.sets["C"]
+    out["trade_world_demand_up10"] = trade.solve(Closure(), tol=1e-12,
+                                                 params={"pwe": _scaled(trade.params["pwe"], C.index("com_man"), 1.1)})
+    out["trade_cash_price_down20"] = trade.solve(Closure(), tol=1e-12,
+                                                 params={"pwe": _scaled(trade.params["pwe"], C.index("com_cash"), 0.8)})
+    xonly = trade_model(by_market=False, export_only=["com_cash"])
+    out["xonly_tariff_removal"] = xonly.solve(Closure(), tol=1e-12, **simulation_inputs(xonly)["tariff_removal"])
+    plain = trade_model(by_market=False)
+    out["tradeplain_tariff_removal"] = plain.solve(Closure(), tol=1e-12, **simulation_inputs(plain)["tariff_removal"])
+    return out
+
+
 # SAM tools (version 0.3.0, docs/sam_tools.md): a SYNTHETIC unbalanced SAM,
 # and the institutions layout aggregated to two sectors and one household
 UNBALANCED_SAM = REPO / "data" / "cge_synthetic_sam_unbal.csv"
@@ -325,7 +377,8 @@ def write_report(solution: Solution, path: Path) -> None:
 # Simulations whose standard report (version 0.1.15) is also compared
 REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_up10",
             "sut_import_price_up10", "eff_contribution_up50", "vat_rate_up20",
-            "vat_tariff_removal_vat", "rep_tariff_removal_sales", "debt_rate_up", "debt_relief")
+            "vat_tariff_removal_vat", "rep_tariff_removal_sales", "debt_rate_up", "debt_relief",
+            "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10")
 
 
 def dynamic_cases() -> dict:
@@ -350,6 +403,8 @@ def dynamic_cases() -> dict:
         "dyn_debt": (debt_model(), Dynamics(periods=4, tfp_growth=0.01, **common), specific, None),
         "dyn_debt_relief": (debt_model(), Dynamics(periods=4, tfp_growth=0.01, **common), specific,
                             debt_relief),
+        # Home consumption with LES demand (version 0.3.2): subsistence grows with population
+        "dyn_home": (home_model(**LES_SETTINGS), Dynamics(periods=4, tfp_growth=0.01, **common), specific, None),
     }
 
 
@@ -451,8 +506,9 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # An aggregated SAM (version 0.3.0)
     for name, solution in run_simulations(aggregated_model()).items():
         solutions["agg_" + name] = solution
-    # Fiscal instruments (version 0.3.1)
+    # Fiscal instruments (version 0.3.1); trade and household extensions (0.3.2)
     solutions.update(fiscal_cases())
+    solutions.update(trade_cases())
     written = write_dynamic(directory) + write_samtools(directory)
     for name, solution in solutions.items():
         if not solution.converged:

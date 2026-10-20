@@ -72,3 +72,5 @@ F data/cge_synthetic_sam_sut.csv
 F data/cge_synthetic_sam_health.csv
 F data/cge_synthetic_sam_unbal.csv
 F data/cge_synthetic_sam_vat.csv
+F data/cge_synthetic_sam_home.csv
+F data/cge_synthetic_sam_trade.csv

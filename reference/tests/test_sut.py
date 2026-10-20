@@ -146,7 +146,7 @@ def test_export_tax_on_exports_from_composite_supply():
     m = sut_mapping()
     m.exptax = "tax_exp"
     with pytest.raises(SAMError, match="export tax recorded on a commodity whose exports are at least its "
-                                       "domestic output: com_agr$"):
+                                       r"domestic output \(give it as export-only .*\): com_agr$"):
         Model(SAM(labels, values), m, **TEST_ELASTICITIES)
 
 

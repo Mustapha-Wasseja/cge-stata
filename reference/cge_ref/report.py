@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .model import final_price, vat_revenue
+from .model import final_price, vat_revenue, world_export_price
 
 
 def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
@@ -21,19 +21,23 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     # supply at PQ (version 0.3.1)
     final = v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]
     ph, ph0 = final_price(v, p), final_price(b, p0)
+    pwe = world_export_price(model, v, p)
+    home = v["QHA"].sum(axis=1)
     rows: list[tuple[str, str, str, float]] = []
 
     def add(table: str, measure: str, element: str, value) -> None:
         rows.append((table, measure, element, float(value)))
 
-    gdp_n = (ph @ final + v["PQ"] @ v["QER"] + exr * (p["pwe"] @ v["QE"])
+    gdp_n = (ph @ final + v["PQ"] @ v["QER"] + v["PA"] @ home + exr * (pwe @ v["QE"])
              - exr * (p["pwm"] @ v["QM"]))
-    gdp_r = (ph0 @ final + b["PQ"] @ v["QER"] + exr0 * (p0["pwe"] @ v["QE"])
+    gdp_r = (ph0 @ final + b["PQ"] @ v["QER"] + b["PA"] @ home + exr0 * (p0["pwe"] @ v["QE"])
              - exr0 * (p0["pwm"] @ v["QM"]))
     add("macro", "gdp_nominal", "", gdp_n)
     add("macro", "gdp_real", "", gdp_r)
     add("macro", "gdp_deflator", "", gdp_n / gdp_r)
-    add("macro", "consumption_real", "", ph0 @ v["QH"].sum(axis=1))
+    add("macro", "consumption_real", "", ph0 @ v["QH"].sum(axis=1) + b["PA"] @ home)
+    if model.exists["QHA"].any():
+        add("macro", "home_consumption_real", "", b["PA"] @ home)
     add("macro", "government_real", "", ph0 @ v["QG"])
     add("macro", "investment_real", "", ph0 @ v["QINV"])
     add("macro", "insurance_fund_real", "", ph0 @ v["QSHI"])
@@ -54,7 +58,7 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     add("government", "tax_direct", "", v["TINS"] @ v["YI"])
     add("government", "tax_sales", "", (p["tq"] * v["TQADJ"] * v["PQ"] * v["QQ"]).sum())
     add("government", "tax_import", "", exr * (p["tm"] * v["TMADJ"] * p["pwm"] * v["QM"]).sum())
-    add("government", "tax_export", "", exr * (p["te"] * p["pwe"] * v["QE"]).sum())
+    add("government", "tax_export", "", exr * (p["te"] * pwe * v["QE"]).sum())
     add("government", "tax_activity", "", (p["ta"] * v["PA"] * v["QA"]).sum())
     add("government", "tax_vat", "", vat_revenue(v, p)[0])
 
@@ -96,6 +100,8 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
         add("commodities", "domestic_sales", c, v["QD"][k])
         add("commodities", "exports", c, v["QE"][k] + v["QER"][k])
         add("commodities", "imports", c, v["QM"][k])
+        if model.struct["ced"][k]:
+            add("commodities", "world_export_price", c, v["PWE"][k])
 
     if model.exists["HS"].any():
         add("health", "health_services", "", v["HS"][0])

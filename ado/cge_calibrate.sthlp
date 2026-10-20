@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.2  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -14,7 +14,7 @@
 [{opt fq:uantities(matname)} {opt inc:elas(numlist)} {opt fris:ch(numlist)} {opt sigmaa(numlist)}
 {opt healthcom(names)} {opt healthfac(names)} {opt healthelas(numlist)}
 {opt vatc:redit(spec)} {opt debt(spec)} {opt int:erest(spec)} {opt debth:olders(spec)}
-{opt for:eignborrowing(#)}]
+{opt for:eignborrowing(#)} {opt exporto:nly(names)} {opt exportd:emand(spec)}]
 
 
 {title:Description}
@@ -123,6 +123,23 @@ each.
 {phang}
 {opt foreignborrowing(#)} is the share of the deficit borrowed abroad in
 dynamic runs; by default the foreign share of the base debt.
+
+{phang}
+{opt exportonly(names)} lists commodities whose domestic output is all
+exported (from version 0.3.2; docs/model_spec.md, Section 13.3): exports, net
+of export taxes and export margins, must equal domestic output. Their output
+is then exported directly, at the export price, without domestic sales, and
+may pay export taxes. Without this option such a commodity's exports are drawn
+from composite supply, as before; calibration lists the commodities whose
+exports equal domestic output.
+
+{phang}
+{opt exportdemand(spec)} gives elasticities of export demand,
+{it:commodity}{cmd::}{it:elasticity} pairs or one value for every commodity
+exported from domestic output (Section 13.2). The world export price then
+falls as more is exported, instead of being fixed; a shock to {cmd:pwe}
+shifts world demand. The default is a small country, with an infinite
+elasticity.
 
 
 {title:Example}

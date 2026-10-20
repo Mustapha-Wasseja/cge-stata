@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.3.1 implements the standard single-country model described in
+Version 0.3.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -45,7 +45,11 @@ Version 0.3.1 implements the standard single-country model described in
   inputs; revenue-neutral closures in which direct, sales, import or VAT rates
   adjust to hold government savings; and public debt, with interest separated
   from the SAM's transfers, paid on domestic and foreign debt, and deficits
-  added to the debt in dynamic runs.
+  added to the debt in dynamic runs;
+- trade and household extensions (version 0.3.2, [Section 13](docs/model_spec.md)):
+  home consumption of own produce at producer prices; export demand that falls
+  as world export prices rise; commodities whose output is all exported; and
+  margins that differ between domestic sales, imports and exports.
 
 Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
 derivatives for the aggregate equations with grouped central differences for
@@ -63,6 +67,11 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.3.2 adds the trade and household extensions above: home consumption
+is read from the SAM's household payments to activities; `cge_map` gains
+`domesticmargins()`, `importmargins()` and `exportmargins()`; `cge_calibrate`
+gains `exportonly()` and `exportdemand()`; and `cge_microsim` prices home
+consumption at the activity price.
 Version 0.3.1 adds the fiscal instruments above. `cge_map` gains `vattax()`
 and `vatshare()` (VAT recorded separately or within the sales tax);
 `cge_calibrate` gains `vatcredit()`, `debt()`, `interest()`, `debtholders()`
@@ -193,7 +202,7 @@ of the same equations (`reference/`) runs in continuous integration; the Stata
 test suite compares its results with the reference (about 90 simulations, to
 about 1e-13). From version 0.1.16 an independent implementation in GAMS
 ([tools/gams](tools/gams/README.md)), written from the specification and
-calibrated from the SAM alone, reproduces every case: 100 scenarios across all
+calibrated from the SAM alone, reproduces every case: 116 scenarios across all
 layouts, features, fiscal instruments and several closures, to 3e-11 or better.
 
 ## Author

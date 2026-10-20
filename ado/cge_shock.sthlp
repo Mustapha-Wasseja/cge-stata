@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.2  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -33,7 +33,7 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:tv}}VAT rates (commodities; from version 0.3.1, with a VAT account){p_end}
 {p2col:{cmd:kappa}}VAT credit shares, between 0 and 1 (activities){p_end}
 {p2col:{cmd:pwm}}world import prices (commodities){p_end}
-{p2col:{cmd:pwe}}world export prices (commodities){p_end}
+{p2col:{cmd:pwe}}world export prices (commodities); with finite export demand ({helpb cge_calibrate}, {opt exportdemand()}), a shift in world demand{p_end}
 {p2col:{cmd:ad}}value-added efficiency, that is productivity (activities){p_end}
 {p2col:{cmd:af}}factor efficiency in every activity (factors; one in the base), for example lower labour productivity from illness{p_end}
 {p2col:{cmd:qg}}government consumption in real terms (commodities), for example public spending on health services{p_end}

@@ -23,6 +23,10 @@ $include "%data%"
 $offempty
 
 alias (AC, ACP), (C, CP), (F, FP), (A, AP);
+* Margin accounts (13.4): T per unit of composite supply, TD of domestic sales,
+* TIM of imports, TEX of exports
+set TALL(AC) "all margin accounts";
+TALL(T) = yes;  TALL(TD) = yes;  TALL(TIM) = yes;  TALL(TEX) = yes;
 set D(AC) "households and enterprises";
 D(H) = yes;
 D(E) = yes;
@@ -42,10 +46,12 @@ fund = 1$(card(SHIS) > 0);
 * 7.2 Taxes and trade
 * ---------------------------------------------------------------------
 sets CM(AC) "imported", CX(AC) "with domestic output", CR(AC) "exports from composite supply",
-     CE(AC) "exports from domestic output", CT(AC) "margin services";
+     CE(AC) "exports from domestic output", CT(AC) "margin services",
+     CDO(AC) "with domestic sales", CQ(AC) "with composite supply", CED(AC) "finite export demand";
 parameters QM0(AC), tm(AC), exports(AC), etax(AC), QA0(AC), ta(AC), theta(AC, AC), QX0(AC),
      te(AC), QE0(AC), QER0(AC), pwe(AC), pwm(AC), QD0(AC), PM0(AC), stax(AC), MG(AC), QQ0(AC), tq(AC),
-     QT0(AC), spend(AC), icm(AC, AC), qerbar(AC);
+     QT0(AC), spend(AC), icm(AC, AC), qerbar(AC), QAM0(AC), EM(AC), DM(AC), IMG(AC),
+     icd(AC, AC), ici(AC, AC), ice(AC, AC), PDD0(AC), qebar(AC);
 QM0(C) = sum(ROWS, SAM(ROWS, C));
 CM(C) = yes$(QM0(C) > tol);
 tm(C)$CM(C) = sum(MTAXS, SAM(MTAXS, C)) / QM0(C);
@@ -53,27 +59,44 @@ exports(C) = sum(ROWS, SAM(C, ROWS));
 etax(C) = sum(ETAXS, SAM(ETAXS, C));
 QA0(A) = sum(AC, SAM(AC, A));
 ta(A) = sum(ATAXS, SAM(ATAXS, A)) / QA0(A);
-theta(A, C) = SAM(A, C) / QA0(A);
+* Home consumption (13.1): yields per unit of marketed output
+QAM0(A) = QA0(A) - sum(H, SAM(A, H));
+theta(A, C) = SAM(A, C) / QAM0(A);
 QX0(C) = sum(A, SAM(A, C));
 CX(C) = yes$(QX0(C) > tol);
-CR(C) = yes$(exports(C) > tol and QX0(C) - (exports(C) - etax(C)) <= tol);
+* Export-only commodities XO (13.3) are chosen by the user
+CR(C) = yes$(exports(C) > tol and QX0(C) - (exports(C) - etax(C)) <= tol and not XO(C));
 CE(C) = yes$(exports(C) > tol and not CR(C));
+EM(C) = sum(TEX, SAM(TEX, C));
+DM(C) = sum(TD, SAM(TD, C));
+IMG(C) = sum(TIM, SAM(TIM, C));
 te(C)$CE(C) = etax(C) / exports(C);
-QE0(C)$CE(C) = exports(C) - etax(C);
+QE0(C)$CE(C) = exports(C) - etax(C) - EM(C);
+abort$(sum(C$(XO(C) and abs(QE0(C) - QX0(C)) > tol), 1)) "export-only commodity whose exports differ from its output";
 QER0(C)$CR(C) = exports(C);
 qerbar(C) = QER0(C);
 pwe(C) = 1 / (1 - te(C));
+pwe(C)$CE(C) = exports(C) / QE0(C);
 pwm(C) = 1;
-QD0(C)$CX(C) = QX0(C) - QE0(C);
-PM0(C)$CM(C) = 1 + tm(C);
+CDO(C) = yes$(CX(C) and not XO(C));
+QD0(C)$CDO(C) = QX0(C) - QE0(C);
+spend(TALL) = sum(C, SAM(C, TALL));
+icd(CP, C)$CDO(C) = sum(TD$(spend(TD) > tol), SAM(CP, TD) / spend(TD) * SAM(TD, C)) / QD0(C);
+ici(CP, C)$CM(C) = sum(TIM$(spend(TIM) > tol), SAM(CP, TIM) / spend(TIM) * SAM(TIM, C)) / QM0(C);
+ice(CP, C)$CE(C) = sum(TEX$(spend(TEX) > tol), SAM(CP, TEX) / spend(TEX) * SAM(TEX, C)) / QE0(C);
+PM0(C)$CM(C) = 1 + tm(C) + sum(CP, ici(CP, C));
+PDD0(C) = 1 + sum(CP, icd(CP, C));
 stax(C) = sum(STAXS, SAM(STAXS, C));
 MG(C) = sum(T, SAM(T, C));
-QQ0(C) = QD0(C) + PM0(C) * QM0(C) + stax(C) + MG(C);
-tq(C) = stax(C) / QQ0(C);
-QT0(C) = sum(T, SAM(C, T));
+QQ0(C) = PDD0(C) * QD0(C) + PM0(C) * QM0(C) + stax(C) + MG(C);
+CQ(C) = yes$(CDO(C) or CM(C));
+tq(C)$CQ(C) = stax(C) / QQ0(C);
+QT0(C) = sum(TALL, SAM(C, TALL));
 CT(C) = yes$(QT0(C) > tol);
-spend(T) = sum(C, SAM(C, T));
-icm(CP, C) = sum(T$(spend(T) > tol), SAM(CP, T) / spend(T) * SAM(T, C)) / QQ0(C);
+icm(CP, C)$CQ(C) = sum(T$(spend(T) > tol), SAM(CP, T) / spend(T) * SAM(T, C)) / QQ0(C);
+* Export demand (13.2): elasticities given by the user
+CED(C) = yes$(etae(C) > 0 and CE(C));
+qebar(C) = QE0(C);
 
 * ---------------------------------------------------------------------
 * 12.2 VAT: each use of a commodity is a quantity at PQ = 1, its SAM value
@@ -147,19 +170,19 @@ rt(C) = 1 / sigt(C) + 1;
 dt(C) = 0.5;
 dtc(C) = 0.5;
 at(C) = 1;
-ratiot(C)$CE(C) = (QE0(C) / QD0(C))**(rt(C) - 1);
-dt(C)$CE(C) = 1 / (1 + ratiot(C));
-dtc(C)$CE(C) = ratiot(C) / (1 + ratiot(C));
-at(C)$CE(C) = QX0(C) / (dt(C) * QE0(C)**rt(C) + dtc(C) * QD0(C)**rt(C))**(1 / rt(C));
+ratiot(C)$(CE(C) and not XO(C)) = (QE0(C) / QD0(C))**(rt(C) - 1);
+dt(C)$(CE(C) and not XO(C)) = 1 / (1 + ratiot(C));
+dtc(C)$(CE(C) and not XO(C)) = ratiot(C) / (1 + ratiot(C));
+at(C)$(CE(C) and not XO(C)) = QX0(C) / (dt(C) * QE0(C)**rt(C) + dtc(C) * QD0(C)**rt(C))**(1 / rt(C));
 rq(C) = 1 / sigq(C) - 1;
 dq(C) = 0.5;
 dqc(C) = 0.5;
-aq(C)$CX(C) = QQ0(C) / QD0(C);
-aq(C)$(CM(C) and not CX(C)) = QQ0(C) / QM0(C);
-ratioq(C)$(CM(C) and CX(C)) = PM0(C) * (QM0(C) / QD0(C))**(1 + rq(C));
-dq(C)$(CM(C) and CX(C)) = ratioq(C) / (1 + ratioq(C));
-dqc(C)$(CM(C) and CX(C)) = 1 / (1 + ratioq(C));
-aq(C)$(CM(C) and CX(C)) = QQ0(C) / (dq(C) * QM0(C)**(-rq(C)) + dqc(C) * QD0(C)**(-rq(C)))**(-1 / rq(C));
+aq(C)$CDO(C) = QQ0(C) / QD0(C);
+aq(C)$(CM(C) and not CDO(C)) = QQ0(C) / QM0(C);
+ratioq(C)$(CM(C) and CDO(C)) = (PM0(C) / PDD0(C)) * (QM0(C) / QD0(C))**(1 + rq(C));
+dq(C)$(CM(C) and CDO(C)) = ratioq(C) / (1 + ratioq(C));
+dqc(C)$(CM(C) and CDO(C)) = 1 / (1 + ratioq(C));
+aq(C)$(CM(C) and CDO(C)) = QQ0(C) / (dq(C) * QM0(C)**(-rq(C)) + dqc(C) * QD0(C)**(-rq(C)))**(-1 / rq(C));
 
 * ---------------------------------------------------------------------
 * 7.5 Institutions
@@ -167,6 +190,7 @@ aq(C)$(CM(C) and CX(C)) = QQ0(C) / (dq(C) * QM0(C)**(-rq(C)) + dqc(C) * QD0(C)**
 parameters YF0(AC), YIF0(AC, AC), tshi(AC), shif(AC, AC), trfr(AC), YI0(AC), dtx(AC), dsv(AC),
      tins0(AC), mps0(AC), DY0(AC), safe(AC), shii(AC, AC), shir(AC), QH0(AC, AC), EH0(AC), hc(AC),
      beta(AC, AC), gamma(AC, AC), bb(AC, AC), trdg(AC), trdr(AC), qgbar(AC), qinvbar(AC), qshibar(AC),
+     betah(AC, AC), gammah(AC, AC), bbh(AC, AC), QHA0(AC, AC),
      cwts(AC), dwts(AC);
 scalars trgr, trrg, trgg, YSHI0, sshi, trshi, trshir, YG0, EG0, GSAV0, FSAV0;
 YF0(F) = sum(AC, SAM(F, AC));
@@ -184,15 +208,22 @@ safe(D) = DY0(D)$(abs(DY0(D)) > tol) + 1$(abs(DY0(D)) <= tol);
 shii(D, DP) = SAM(D, DP) / safe(DP);
 shir(D) = sum(ROWS, SAM(ROWS, D)) / safe(D);
 QH0(C, H) = SAM(C, H) / (1 + tv(C));
-EH0(H) = sum(C, SAM(C, H));
+QHA0(A, H) = SAM(A, H);
+EH0(H) = sum(C, SAM(C, H)) + sum(A, SAM(A, H));
 hc(H) = EH0(H) / safe(H);
 beta(C, H)$(EH0(H) > 0) = SAM(C, H) / EH0(H);
+betah(A, H)$(EH0(H) > 0) = SAM(A, H) / EH0(H);
 gamma(C, H) = 0;
+gammah(A, H) = 0;
 if (les,
 * LES: marginal shares in proportion to the income elasticities supplied
     bb(C, H) = incel(C) * beta(C, H);
-    beta(C, H) = bb(C, H) / sum(CP, bb(CP, H));
+* home goods take the elasticity of the activity's paired commodity (incelh)
+    bbh(A, H) = incelh(A) * betah(A, H);
+    beta(C, H) = bb(C, H) / (sum(CP, bb(CP, H)) + sum(AP, bbh(AP, H)));
+    betah(A, H) = bbh(A, H) / (sum(CP, bb(CP, H)) + sum(AP, bbh(AP, H)));
     gamma(C, H) = QH0(C, H) + beta(C, H) * EH0(H) / frisch(H) / (1 + tv(C));
+    gammah(A, H) = QHA0(A, H) + betah(A, H) * EH0(H) / frisch(H);
 );
 trdg(D) = sum(GOVS, SAM(D, GOVS));
 trdr(D) = sum(ROWS, SAM(D, ROWS));
@@ -243,21 +274,23 @@ variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(
      QA(AC), QVA(AC), QINTA(AC), QF(AC, AC), QINT(AC, AC), QX(AC), QD(AC), QE(AC), QM(AC), QQ(AC),
      QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
      TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
-     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ;
+     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC);
 
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
      EQ4D(AC, AC), EQ5(AC, AC), EQ6(AC), EH1, EH2(AC),
-     ET1(AC), ET2(AC), ET3(AC), ET4(AC), ET5(AC), ET6(AC), ET7(AC), ET8(AC), ET9(AC),
-     EI1(AC), EI2(AC, AC), EI3(AC), EI4(AC), EI5(AC, AC), EI6(AC), EI7(AC), EI8, EI9, EI10(AC), EI11(AC),
+     ET1(AC), ET2(AC), ET3(AC), ET4(AC), ET5(AC), ET6(AC), ET7(AC), ET8(AC), ET9(AC), ET3E(AC), ET10(AC),
+     EI1(AC), EI2(AC, AC), EI3(AC), EI4(AC), EI5(AC, AC), EI5H(AC, AC), EI6(AC), EI7(AC), EI8, EI9, EI10(AC), EI11(AC),
      EI12, EI13(AC), EI14, ES1(AC), ES2(AC), ES3, ES4, ES5;
 
 * 5.1 Prices
-EP1(C)$CM(C)..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ) * EXR;
-EP2(C)$CE(C)..  PE(C) =e= pwe(C) * (1 - te(C)) * EXR;
-EP3(C)..        PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e= (PD(C) * QD(C))$CX(C) + (PM(C) * QM(C))$CM(C)
+EP1(C)$CM(C)..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ) * EXR + sum(CP$ici(CP, C), PQ(CP) * ici(CP, C));
+EP2(C)$CE(C)..  PE(C) =e= (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * (1 - te(C)) * EXR
+                          - sum(CP$ice(CP, C), PQ(CP) * ice(CP, C));
+EP3(C)$CQ(C)..  PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e=
+                ((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) * QD(C))$CDO(C) + (PM(C) * QM(C))$CM(C)
                 + sum(CP$CT(CP), PQ(CP) * icm(CP, C)) * QQ(C);
-EP4(C)$CX(C)..  PX(C) * QX(C) =e= PD(C) * QD(C) + (PE(C) * QE(C))$CE(C);
+EP4(C)$CX(C)..  PX(C) * QX(C) =e= (PD(C) * QD(C))$CDO(C) + (PE(C) * QE(C))$CE(C);
 EP5(A)..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * PX(C));
 EP6(A)..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * ica(C, A));
 EP7(A)..        PA(A) * (1 - ta(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A);
@@ -283,20 +316,24 @@ EQ4C(F, A)$(FA(F, A) and not CDV(A))..
         * dva(F, A) * (af(F) * EFF(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F);
 EQ4D(F, A)$(FA(F, A) and CDV(A))..  W(F) * WFDIST(F, A) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
 EQ5(C, A)$ica(C, A)..  QINT(C, A) =e= ica(C, A) * QINTA(A);
-EQ6(C)$CX(C)..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * QA(A));
+EQ6(C)$CX(C)..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
 EH1$linked..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C));
 EH2(F)$eta(F).. EFF(F) =e= (HS / hs0)**eta(F);
 
 * 5.3 Trade
-ET1(C)$CE(C)..  QX(C) =e= at(C) * (dt(C) * QE(C)**rt(C) + dtc(C) * QD(C)**rt(C))**(1 / rt(C));
-ET2(C)$CE(C)..  QE(C) =e= QD(C) * ((PE(C) / PD(C)) * dtc(C) / dt(C))**(1 / (rt(C) - 1));
+ET1(C)$(CE(C) and not XO(C))..  QX(C) =e= at(C) * (dt(C) * QE(C)**rt(C) + dtc(C) * QD(C)**rt(C))**(1 / rt(C));
+ET2(C)$(CE(C) and not XO(C))..  QE(C) =e= QD(C) * ((PE(C) / PD(C)) * dtc(C) / dt(C))**(1 / (rt(C) - 1));
 ET3(C)$(CX(C) and not CE(C))..  QX(C) =e= QD(C);
-ET4(C)$(CM(C) and CX(C))..
+ET3E(C)$XO(C)..  QX(C) =e= QE(C);
+ET4(C)$(CM(C) and CDO(C))..
     QQ(C) =e= aq(C) * (dq(C) * QM(C)**(-rq(C)) + dqc(C) * QD(C)**(-rq(C)))**(-1 / rq(C));
-ET5(C)$(CM(C) and CX(C))..  QM(C) =e= QD(C) * ((PD(C) / PM(C)) * dq(C) / dqc(C))**(1 / (1 + rq(C)));
-ET6(C)$(CX(C) and not CM(C))..  QQ(C) =e= aq(C) * QD(C);
-ET7(C)$(CM(C) and not CX(C))..  QQ(C) =e= aq(C) * QM(C);
-ET8(C)$CT(C)..  QT(C) =e= sum(CP$icm(C, CP), icm(C, CP) * QQ(CP));
+ET5(C)$(CM(C) and CDO(C))..  QM(C) =e= QD(C) * (((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) / PM(C))
+                                               * dq(C) / dqc(C))**(1 / (1 + rq(C)));
+ET6(C)$(CDO(C) and not CM(C))..  QQ(C) =e= aq(C) * QD(C);
+ET7(C)$(CM(C) and not CDO(C))..  QQ(C) =e= aq(C) * QM(C);
+ET8(C)$CT(C)..  QT(C) =e= sum(CP$icm(C, CP), icm(C, CP) * QQ(CP)) + sum(CP$icd(C, CP), icd(C, CP) * QD(CP))
+                          + sum(CP$ici(C, CP), ici(C, CP) * QM(CP)) + sum(CP$ice(C, CP), ice(C, CP) * QE(CP));
+ET10(C)$CED(C)..  QE(C) =e= qebar(C) * (PWEV(C) / pwe(C))**(-etae(C));
 ET9(C)$CR(C)..  QER(C) =e= qerbar(C) * (PQ(C) / (EXR * pwe(C)))**(-sigt(C));
 
 * 5.4 Institutions
@@ -308,11 +345,17 @@ EI3(D)..  YI(D) =e= sum(F, YIF(D, F)) + sum(DP$shii(D, DP), shii(D, DP) * (1 - M
 EI4(H)..  EH(H) =e= hc(H) * (1 - MPS(H)) * (1 - TINS(H)) * YI(H);
 EI5(C, H)$beta(C, H)..
     PQ(C) * (1 + tv(C) * TVADJ) * QH(C, H) =e= PQ(C) * (1 + tv(C) * TVADJ) * gamma(C, H)
-        + beta(C, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H)));
+        + beta(C, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H))
+                        - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H)));
+EI5H(A, H)$betah(A, H)..
+    PA(A) * QHA(A, H) =e= PA(A) * gammah(A, H)
+        + betah(A, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H))
+                         - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H)));
 EI6(C)..  QINV(C) =e= qinvbar(C) * IADJ;
 EI7(C)..  QG(C) =e= qgbar(C) * GADJ;
 EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
-                 + sum(C$CM(C), tm(C) * TMADJ * pwm(C) * QM(C)) * EXR + sum(C$CE(C), te(C) * pwe(C) * QE(C)) * EXR
+                 + sum(C$CM(C), tm(C) * TMADJ * pwm(C) * QM(C)) * EXR
+                 + sum(C$CE(C), te(C) * (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) * EXR
                  + sum(A, ta(A) * PA(A) * QA(A))
                  + TVADJ * sum(C$tv(C), tv(C) * PQ(C) * (sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                        + QSHI(C)$qshibar(C) + sum(A$ica(C, A), (1 - kappa(A)) * QINT(C, A))))
@@ -327,11 +370,12 @@ EI14$fund..  sum(C$qshibar(C), PQ(C) * (1 + tv(C) * TVADJ) * QSHI(C)) =e= (1 - s
 
 * 5.5 System constraints (S6 through the closure)
 ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F);
-ES2(C)..  QQ(C) =e= sum(A$ica(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
+ES2(C)$CQ(C)..  QQ(C) =e= sum(A$ica(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                     + QT(C)$CT(C) + QER(C)$CR(C) + QSHI(C)$qshibar(C);
 ES3..     sum(C$CM(C), pwm(C) * QM(C)) + (sum((ROWS, F), YIF(ROWS, F))
               + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D))) / EXR + trrg + rf * fdebt
-          =e= sum(C$CE(C), pwe(C) * QE(C)) + sum(C$CR(C), PQ(C) * QER(C)) / EXR + sum(D, trdr(D))
+          =e= sum(C$CE(C), (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) + sum(C$CR(C), PQ(C) * QER(C)) / EXR
+              + sum(D, trdr(D))
               + sum(F, trfr(F)) + trgr + trshir + FSAV;
 ES4..     YG =e= EG + GSAV;
 ES5..     sum(D, MPS(D) * (1 - TINS(D)) * YI(D)) + GSAV + sshi * YSHI + EXR * FSAV
@@ -344,6 +388,7 @@ model cge / all /;
 * ---------------------------------------------------------------------
 PA.l(A) = 1;  PVA.l(A) = 1;  PINTA.l(A) = PINTA0(A);  PX.l(C) = 1;  PD.l(C) = 1;
 PE.l(C) = 1$CE(C);  PM.l(C) = PM0(C);  PQ.l(C) = 1;  W.l(F) = 1;  EXR.l = 1;
+PWEV.l(C) = pwe(C);  QHA.l(A, H) = QHA0(A, H);
 CPI.l = sum(C, cwts(C) * (1 + tv(C)));  DPI.l = sum(C, dwts(C));
 QA.l(A) = QA0(A);  QVA.l(A) = QVA0(A);  QINTA.l(A) = QINTA0(A);  QF.l(F, A) = QF0(F, A);
 QINT.l(C, A) = QINT0(C, A);  QX.l(C) = QX0(C);  QD.l(C) = QD0(C);  QE.l(C) = QE0(C);

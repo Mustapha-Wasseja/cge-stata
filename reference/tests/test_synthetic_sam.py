@@ -1,6 +1,8 @@
 """Checks on the synthetic SAM shared by the Stata and Python test suites."""
 
 import csv
+
+import pytest
 import sys
 from pathlib import Path
 
@@ -54,6 +56,17 @@ def test_bundled_unbalanced_csv_matches_generator():
 def test_bundled_vat_csv_matches_generator():
     labels, sam = synthetic_sam.build_vat_layout()
     with (REPO / "data" / "cge_synthetic_sam_vat.csv").open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    assert rows[0] == ["account", *labels]
+    assert [[float(v) for v in r[1:]] for r in rows[1:]] == sam
+    assert max(abs(d) for d in synthetic_sam.imbalances(sam)) < 1e-12
+
+
+@pytest.mark.parametrize("builder, filename", [("build_home_layout", "cge_synthetic_sam_home.csv"),
+                                               ("build_trade_layout", "cge_synthetic_sam_trade.csv")])
+def test_bundled_layout_csv_matches_generator(builder, filename):
+    labels, sam = getattr(synthetic_sam, builder)()
+    with (REPO / "data" / filename).open(newline="", encoding="utf-8") as handle:
         rows = list(csv.reader(handle))
     assert rows[0] == ["account", *labels]
     assert [[float(v) for v in r[1:]] for r in rows[1:]] == sam

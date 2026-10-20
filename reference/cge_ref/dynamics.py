@@ -126,6 +126,7 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
                 fx["QFS"][k] = (1 + g) * prev["QFS"][k]
         # 4. Population, 5. government and foreign flows
         p["gamma"] = p["gamma"] * (1 + settings.population_growth)
+        p["gammah"] = p["gammah"] * (1 + settings.population_growth)
         p["hs0"] = p["hs0"] * (1 + settings.population_growth)
         for name in GOVERNMENT:
             p[name] = p[name] * (1 + settings.government_growth)

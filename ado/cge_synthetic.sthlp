@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.3.2  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat} {opt home} {opt trade}]
 
 
 {title:Options}
@@ -70,6 +70,18 @@ output: {cmd:com_fuel} re-exports 2 of its imports, and {cmd:com_agr} exports
 insurance fund ({cmd:shi}) that receives contributions of 6 on labour income, 2
 from the government and 1 from abroad, buys 8 of health services and saves 1.
 Map it with the four activities and commodities and {cmd:insurance(shi)}.
+
+{phang}
+{opt home} loads the standard layout with home consumption: the household
+consumes 20 of {cmd:act_agr}'s output at home and buys 20 less of {cmd:com_agr}.
+
+{phang}
+{opt trade} loads the standard layout with a cash crop, {cmd:com_cash}, that
+{cmd:act_agr} produces and the economy exports entirely, and margin accounts
+on {cmd:com_man}'s domestic sales ({cmd:mtrd}), imports ({cmd:mtrm}) and exports
+({cmd:mtre}). Map it with the four commodities and {cmd:domesticmargins(mtrd)},
+{cmd:importmargins(mtrm)} and {cmd:exportmargins(mtre)}, and calibrate with
+{cmd:exportonly(com_cash)}.
 
 {phang}
 {opt vat} loads the standard layout with a VAT account ({cmd:tax_vat}) that

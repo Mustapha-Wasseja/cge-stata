@@ -28,6 +28,7 @@ VARIABLES: dict[str, str] = {
     "GADJ": "", "WFDIST": "FA", "WALRAS": "", "QT": "C", "QER": "C",
     "YSHI": "", "SHIADJ": "", "QSHI": "C", "EFF": "F", "HS": "",
     "TQADJ": "", "TMADJ": "", "TVADJ": "",
+    "PWE": "C", "QHA": "AH",
 }
 
 # Tax scaling factors freed by each government closure (version 0.3.1)
@@ -167,6 +168,11 @@ def _vat_rate(vat: float, values: np.ndarray, liab: np.ndarray, label: str) -> f
 def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Left side, right side and existence mask of every equation block."""
     ce, cm, fa, cd, cx, ct, cr = s["ce"], s["cm"], s["fa"], s["cd"], s["cx"], s["ct"], s["cr"]
+    # Version 0.3.2: export-only commodities (cxe), domestic sales (cdo),
+    # composite supply (cq) and finite export demand (ced)
+    cxe, ced = s["cxe"], s["ced"]
+    cdo = cx & ~cxe
+    cq = cdo | cm
     every_c = np.ones_like(ce)
     every_a = np.ones_like(cd)
     nH = v["EH"].size
@@ -179,14 +185,18 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     tq, tm, tv = p["tq"] * v["TQADJ"], p["tm"] * v["TMADJ"], p["tv"] * v["TVADJ"]
     ph = v["PQ"] * (1 + tv)
     vint = np.outer(tv, 1 - p["kappa"])
+    # World export prices: a variable where export demand is finite (13.2)
+    pwe = np.where(ced, v["PWE"], p["pwe"])
+    # Price paid by domestic buyers of domestic output, with domestic margins (13.4)
+    pdd = v["PD"] + v["PQ"] @ p["icd"]
     # 5.1 Price block
-    eq["P1"] = (v["PM"], p["pwm"] * (1 + tm) * v["EXR"], cm)
-    eq["P2"] = (v["PE"], p["pwe"] * (1 - p["te"]) * v["EXR"], ce)
+    eq["P1"] = (v["PM"], p["pwm"] * (1 + tm) * v["EXR"] + v["PQ"] @ p["ici"], cm)
+    eq["P2"] = (v["PE"], pwe * (1 - p["te"]) * v["EXR"] - v["PQ"] @ p["ice"], ce)
     margin_cost = (v["PQ"] @ p["icm"]) * v["QQ"]   # sum over c' of PQ[c'] icm[c', c] QQ[c]
     eq["P3"] = (v["PQ"] * (1 - tq) * v["QQ"],
-                np.where(cx, v["PD"] * v["QD"], 0.0) + np.where(cm, v["PM"] * v["QM"], 0.0) + margin_cost,
-                every_c)
-    eq["P4"] = (v["PX"] * v["QX"], v["PD"] * v["QD"] + np.where(ce, v["PE"] * v["QE"], 0.0), cx)
+                np.where(cdo, pdd * v["QD"], 0.0) + np.where(cm, v["PM"] * v["QM"], 0.0) + margin_cost,
+                cq)
+    eq["P4"] = (v["PX"] * v["QX"], np.where(cdo, v["PD"] * v["QD"], 0.0) + np.where(ce, v["PE"] * v["QE"], 0.0), cx)
     eq["P5"] = (v["PA"], p["theta"] @ v["PX"], every_a)
     eq["P6"] = (v["PINTA"], (p["ica"] * (1 + vint)).T @ v["PQ"], every_a)
     eq["P7"] = (v["PA"] * (1 - p["ta"]) * v["QA"], v["PVA"] * v["QVA"] + v["PINTA"] * v["QINTA"], every_a)
@@ -225,22 +235,26 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["H2"] = (v["EFF"], (v["HS"] / p["hs0"]) ** eta, eta != 0)
     # Intermediate inputs and household purchases exist only where the SAM has a flow
     eq["Q5"] = (v["QINT"], p["ica"] * v["QINTA"][None, :], s["qint"])
-    eq["Q6"] = (v["QX"], p["theta"].T @ v["QA"], cx)
+    # Marketed output: home consumption does not reach the market (13.1)
+    eq["Q6"] = (v["QX"], p["theta"].T @ (v["QA"] - v["QHA"].sum(axis=1)), cx)
 
     # 5.3 Trade block
     # 1 - delta is stored (deltac_*) rather than computed: when one share is close to
     # one, the subtraction would lose most significant digits
     rt, dt, dtc = p["rho_t"], p["delta_t"], p["deltac_t"]
-    eq["T1"] = (v["QX"], p["at"] * (dt * v["QE"] ** rt + dtc * v["QD"] ** rt) ** (1 / rt), ce)
-    eq["T2"] = (v["QE"], v["QD"] * ((v["PE"] / v["PD"]) * dtc / dt) ** (1 / (rt - 1)), ce)
+    eq["T1"] = (v["QX"], p["at"] * (dt * v["QE"] ** rt + dtc * v["QD"] ** rt) ** (1 / rt), ce & ~cxe)
+    eq["T2"] = (v["QE"], v["QD"] * ((v["PE"] / v["PD"]) * dtc / dt) ** (1 / (rt - 1)), ce & ~cxe)
     eq["T3"] = (v["QX"], v["QD"], cx & ~ce)
+    eq["T3E"] = (v["QX"], v["QE"], cxe)
     rq, dq, dqc = p["rho_q"], p["delta_q"], p["deltac_q"]
-    eq["T4"] = (v["QQ"], p["aq"] * (dq * v["QM"] ** (-rq) + dqc * v["QD"] ** (-rq)) ** (-1 / rq), cm & cx)
-    eq["T5"] = (v["QM"], v["QD"] * ((v["PD"] / v["PM"]) * dq / dqc) ** (1 / (1 + rq)), cm & cx)
-    eq["T6"] = (v["QQ"], p["aq"] * v["QD"], cx & ~cm)
-    eq["T7"] = (v["QQ"], p["aq"] * v["QM"], cm & ~cx)
-    eq["T8"] = (v["QT"], p["icm"] @ v["QQ"], ct)
+    eq["T4"] = (v["QQ"], p["aq"] * (dq * v["QM"] ** (-rq) + dqc * v["QD"] ** (-rq)) ** (-1 / rq), cm & cdo)
+    eq["T5"] = (v["QM"], v["QD"] * ((pdd / v["PM"]) * dq / dqc) ** (1 / (1 + rq)), cm & cdo)
+    eq["T6"] = (v["QQ"], p["aq"] * v["QD"], cdo & ~cm)
+    eq["T7"] = (v["QQ"], p["aq"] * v["QM"], cm & ~cdo)
+    eq["T8"] = (v["QT"], p["icm"] @ v["QQ"] + p["icd"] @ v["QD"] + p["ici"] @ v["QM"] + p["ice"] @ v["QE"], ct)
     eq["T9"] = (v["QER"], p["qer"] * (v["PQ"] / (v["EXR"] * p["pwe"])) ** (-p["sigma_t"]), cr)
+    with np.errstate(all="ignore"):
+        eq["T10"] = (v["QE"], p["qe0"] * (v["PWE"] / p["pwe"]) ** (-p["eta_e"]), ced)
 
     # 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 - v["MPS"]) * (1 - v["TINS"]) * v["YI"]
@@ -255,14 +269,17 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["I3"] = (v["YI"], v["YIF"][:nD].sum(axis=1) + p["shii"] @ DY + p["trdg"] * v["CPI"]
                 + p["trdr"] * v["EXR"] + p["hold"] * p["rd"] * p["ddebt"], np.ones(nD, dtype=bool))
     eq["I4"] = (v["EH"], p["hc"] * DY[:nH], np.ones(nH, dtype=bool))
-    supernumerary = v["EH"] - ph @ p["gamma"]
+    supernumerary = v["EH"] - ph @ p["gamma"] - v["PA"] @ p["gammah"]
     eq["I5"] = (ph[:, None] * v["QH"],
                 ph[:, None] * p["gamma"] + p["beta"] * supernumerary[None, :], s["qh"])
+    # Home consumption at producer prices (13.1)
+    eq["I5H"] = (v["PA"][:, None] * v["QHA"],
+                 v["PA"][:, None] * p["gammah"] + p["betah"] * supernumerary[None, :], s["qha"])
     eq["I6"] = (v["QINV"], p["qinv"] * v["IADJ"], every_c)
     eq["I7"] = (v["QG"], p["qg"] * v["GADJ"], every_c)
     revenue = (v["TINS"] @ v["YI"] + (tq * v["PQ"] * v["QQ"]).sum()
                + (tm * p["pwm"] * v["QM"]).sum() * v["EXR"]
-               + (p["te"] * p["pwe"] * v["QE"]).sum() * v["EXR"]
+               + (p["te"] * pwe * v["QE"]).sum() * v["EXR"]
                + (p["ta"] * v["PA"] * v["QA"]).sum() + vat_revenue(v, p)
                + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"])
     eq["I8"] = (v["YG"], revenue, one)
@@ -280,16 +297,21 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     # 5.5 System constraints (S6 is imposed through the closure)
     eq["S1"] = (np.where(fa, v["QF"], 0.0).sum(axis=1), v["QFS"], np.ones(v["QFS"].shape, dtype=bool))
     eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"]
-                + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0) + v["QSHI"], every_c)
+                + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0) + v["QSHI"], cq)
     eq["S3"] = ((p["pwm"] * v["QM"]).sum() + (v["YIF"][nD + 1].sum() + p["shir"] @ DY) / v["EXR"]
                 + p["trrg"] + p["rf"] * p["fdebt"],
-                (p["pwe"] * v["QE"]).sum() + np.where(cr, v["PQ"] * v["QER"], 0.0).sum() / v["EXR"]
+                (pwe * v["QE"]).sum() + np.where(cr, v["PQ"] * v["QER"], 0.0).sum() / v["EXR"]
                 + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + p["trshir"] + v["FSAV"], one)
     eq["S4"] = (v["YG"], v["EG"] + v["GSAV"], one)
     eq["S5"] = ((v["MPS"] * (1 - v["TINS"])) @ v["YI"] + v["GSAV"] + p["sshi"] * v["YSHI"]
                 + v["EXR"] * v["FSAV"],
                 np.atleast_1d(ph @ v["QINV"]) + v["WALRAS"], one)
     return eq
+
+
+def world_export_price(model, v: dict, p: dict) -> np.ndarray:
+    """World export prices: PWE where export demand is finite, else pwe (13.2)."""
+    return np.where(model.struct["ced"], v["PWE"], p["pwe"])
 
 
 def final_price(v: dict, p: dict) -> np.ndarray:
@@ -335,11 +357,13 @@ class Solution:
         v, p = self.values, self.params
         exr = v["EXR"][0]
         ph = final_price(v, p)
+        pwe = world_export_price(self.model, v, p)
         expenditure = (ph @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]) + v["PQ"] @ v["QER"]
-                       + exr * (p["pwe"] @ v["QE"]) - exr * (p["pwm"] @ v["QM"]))
+                       + v["PA"] @ v["QHA"].sum(axis=1)
+                       + exr * (pwe @ v["QE"]) - exr * (p["pwm"] @ v["QM"]))
         income = (v["PVA"] @ v["QVA"] + (p["tq"] * v["TQADJ"] * v["PQ"] * v["QQ"]).sum()
                   + exr * (p["tm"] * v["TMADJ"] * p["pwm"] * v["QM"]).sum()
-                  + exr * (p["te"] * p["pwe"] * v["QE"]).sum() + (p["ta"] * v["PA"] * v["QA"]).sum()
+                  + exr * (p["te"] * pwe * v["QE"]).sum() + (p["ta"] * v["PA"] * v["QA"]).sum()
                   + vat_revenue(v, p)[0])
         return float(expenditure - income)
 
@@ -347,8 +371,11 @@ class Solution:
         """Household equivalent variation at base prices (Cobb-Douglas or LES demand)."""
         base, p, v = self.model.base, self.params, self.values
         ph0, ph = final_price(base, self.model.params), final_price(v, p)
-        ratio = np.prod((ph0[:, None] / ph[:, None]) ** p["beta"], axis=0)
-        return ph0 @ p["gamma"] + (v["EH"] - ph @ p["gamma"]) * ratio - base["EH"]
+        pa0, pa = base["PA"], v["PA"]
+        ratio = (np.prod((ph0[:, None] / ph[:, None]) ** p["beta"], axis=0)
+                 * np.prod((pa0[:, None] / pa[:, None]) ** p["betah"], axis=0))
+        return (ph0 @ p["gamma"] + pa0 @ p["gammah"]
+                + (v["EH"] - ph @ p["gamma"] - pa @ p["gammah"]) * ratio - base["EH"])
 
     def compensating_variation(self) -> np.ndarray:
         """Household compensating variation at simulated prices (Cobb-Douglas or LES
@@ -356,8 +383,11 @@ class Solution:
         utility at the new prices; positive for a gain."""
         base, p, v = self.model.base, self.params, self.values
         ph0, ph = final_price(base, self.model.params), final_price(v, p)
-        ratio = np.prod((ph[:, None] / ph0[:, None]) ** p["beta"], axis=0)
-        return v["EH"] - ph @ p["gamma"] - (base["EH"] - ph0 @ p["gamma"]) * ratio
+        pa0, pa = base["PA"], v["PA"]
+        ratio = (np.prod((ph[:, None] / ph0[:, None]) ** p["beta"], axis=0)
+                 * np.prod((pa[:, None] / pa0[:, None]) ** p["betah"], axis=0))
+        return (v["EH"] - ph @ p["gamma"] - pa @ p["gammah"]
+                - (base["EH"] - ph0 @ p["gamma"] - pa0 @ p["gammah"]) * ratio)
 
 
 class Model:
@@ -367,7 +397,8 @@ class Model:
                  factor_quantities: dict[tuple[str, str], float] | None = None,
                  income_elasticities=None, frisch=None, sigma_a=None,
                  health_commodities=None, health_elasticities=None, vat_credit=None,
-                 debt=None, interest=None, debt_holders=None, foreign_borrowing=None):
+                 debt=None, interest=None, debt_holders=None, foreign_borrowing=None,
+                 export_only=None, export_demand=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -382,7 +413,7 @@ class Model:
                         _per_element(sigma_va, A, "sigma_va"),
                         _per_element(sigma_q, C, "sigma_q"),
                         _per_element(sigma_t, C, "sigma_t"),
-                        factor_quantities, vat_credit)
+                        factor_quantities, vat_credit, export_only, export_demand)
         self._household_demand(income_elasticities, frisch)
         self._debt(debt, interest, debt_holders, foreign_borrowing)
         self._top_nest(sigma_a)
@@ -400,12 +431,17 @@ class Model:
     # ------------------------------------------------------------------
     # Calibration (docs/model_spec.md, Section 7)
     # ------------------------------------------------------------------
-    def _calibrate(self, sam, mapping, sigma_va, sigma_q, sigma_t, factor_quantities, vat_credit=None):
+    def _calibrate(self, sam, mapping, sigma_va, sigma_q, sigma_t, factor_quantities, vat_credit=None,
+                   export_only=None, export_demand=None):
         A, C, F, H = self.sets["A"], self.sets["C"], self.sets["F"], self.sets["H"]
         I = self.sets["I"]
         gov, sav, row = mapping.government, mapping.savinv, mapping.row
         nA, nC, nF, nH = len(A), len(C), len(F), len(H)
-        T = list(mapping.margin_accounts)
+        # Margin accounts by market (13.4): composite supply, domestic sales,
+        # imports, exports
+        TQ, TD = list(mapping.margin_accounts), list(mapping.domestic_margins)
+        TI, TE = list(mapping.import_margins), list(mapping.export_margins)
+        T = TQ + TD + TI + TE
         tol = 1e-9 * max(1.0, float(np.abs(sam.values).max()))
 
         def cell(r, c):
@@ -433,34 +469,80 @@ class Model:
         fail_if(QA0 <= tol, A, "every activity needs positive output")
         ta = vec([mapping.acttax], A)[0] / QA0
         MAKE0 = vec(A, C)                      # MAKE0[a, c]: output of c by activity a
-        if np.abs(MAKE0.sum(axis=1) - QA0).max() > tol:
-            raise SAMError("activity output does not equal its sales to commodities")
-        theta = MAKE0 / QA0[:, None]
+        HOME0 = vec(A, H)                      # HOME0[a, h]: home consumption (13.1)
+        if np.abs(MAKE0.sum(axis=1) + HOME0.sum(axis=1) - QA0).max() > tol:
+            raise SAMError("activity output does not equal its sales to commodities and home consumption")
+        fail_if(HOME0 < -tol, A, "negative home consumption of the output of")
+        QAM0 = QA0 - HOME0.sum(axis=1)
+        fail_if(QAM0 <= tol, A, "an activity needs some marketed output; all the output is consumed at home by")
+        theta = MAKE0 / QAM0[:, None]
         QX0 = MAKE0.sum(axis=0)
         cx = QX0 > tol
         fail_if(~cx & ~cm, C, "a commodity has neither domestic output nor imports")
-        # Exports at least as large as domestic output are drawn from composite
-        # supply (CR, T9); other exports come from domestic output (CE, T1-T2)
-        cr = exported & (QX0 - (exports - export_taxes) <= tol)
-        fail_if(cr & (np.abs(export_taxes) > tol), C,
-                "export tax recorded on a commodity whose exports are at least its domestic output")
-        ce = exported & ~cr
-        te = np.where(ce, export_taxes / np.where(ce, exports, 1.0), 0.0)
-        QE0 = np.where(ce, exports - export_taxes, 0.0)
-        QER0 = np.where(cr, exports, 0.0)
-        pwe = 1.0 / (1.0 - te)
-        QD0 = np.where(cx, QX0 - QE0, 0.0)
-        fail_if(cx & (QD0 <= tol), C, "a commodity with domestic output needs positive domestic sales")
-        PM0 = np.where(cm, 1.0 + tm, 0.0)
-        sales_taxes = vec([mapping.saltax], C)[0]
         MG = vec(T, C).reshape(len(T), nC)     # MG[t, c]: margins paid by c to margin account t
         SV = vec(C, T).reshape(nC, len(T))     # SV[c, t]: margin services c bought by account t
-        QQ0 = QD0 + PM0 * QM0 + sales_taxes + MG.sum(axis=0)
-        tq = sales_taxes / QQ0
+        spend = SV.sum(axis=0)
+        share = SV / np.where(spend > tol, spend, 1.0)[None, :]
+        nq, nd, ni = len(TQ), len(TD), len(TI)
+        groups = {"q": slice(0, nq), "d": slice(nq, nq + nd), "i": slice(nq + nd, nq + nd + ni),
+                  "e": slice(nq + nd + ni, len(T))}
+        margins = {k: MG[g].sum(axis=0) for k, g in groups.items()}
+        # Export-only commodities (13.3), chosen by the user
+        xo = list(export_only or [])
+        unknown = [c for c in xo if c not in C]
+        if unknown:
+            raise ValueError(f"export_only: {unknown} are not commodities")
+        cxe = np.array([c in xo for c in C], dtype=bool)
+        net_exports = exports - export_taxes - margins["e"]
+        equal = exported & cx & (np.abs(QX0 - net_exports) <= tol)
+        fail_if(cxe & ~equal, C, "export-only commodities need exports, net of export taxes and margins, "
+                                 "equal to domestic output")
+        self.export_only_candidates = [c for c, e, x in zip(C, equal, cxe) if e and not x]
+        # Exports at least as large as domestic output are drawn from composite
+        # supply (CR, T9); other exports come from domestic output (CE, T1-T2)
+        cr = exported & (QX0 - (exports - export_taxes) <= tol) & ~cxe
+        fail_if(cr & (np.abs(export_taxes) > tol), C,
+                "export tax recorded on a commodity whose exports are at least its domestic output "
+                "(give it as export-only if all its output is exported)")
+        fail_if(cr & (np.abs(margins["e"]) > tol), C,
+                "export margins recorded on a commodity whose exports are drawn from composite supply")
+        ce = exported & ~cr
+        te = np.where(ce, export_taxes / np.where(ce, exports, 1.0), 0.0)
+        QE0 = np.where(ce, net_exports, 0.0)
+        QER0 = np.where(cr, exports, 0.0)
+        pwe = np.where(ce, exports / np.where(ce, QE0, 1.0), 1.0 / (1.0 - te))
+        QD0 = np.where(cx & ~cxe, QX0 - QE0, 0.0)
+        cdo = cx & ~cxe
+        fail_if(cdo & (QD0 <= tol), C, "a commodity with domestic output needs positive domestic sales "
+                                        "(unless all its output is exported: see export-only commodities)")
+        for key, base, what in (("d", QD0, "domestic sales"), ("i", QM0, "imports"), ("e", QE0, "exports")):
+            fail_if((np.abs(margins[key]) > tol) & (base <= tol), C, f"margins on {what} recorded on a commodity without {what}")
+        def rate(key, base):
+            return share[:, groups[key]] @ MG[groups[key]] / np.where(base > tol, base, 1.0)[None, :]
+        icd, ici, ice = rate("d", QD0), rate("i", QM0), rate("e", QE0)
+        PM0 = np.where(cm, 1.0 + tm + ici.sum(axis=0), 0.0)
+        PDD0 = 1.0 + icd.sum(axis=0)
+        sales_taxes = vec([mapping.saltax], C)[0]
+        QQ0 = PDD0 * QD0 + PM0 * QM0 + sales_taxes + margins["q"]
+        cq = cdo | cm
+        tq = np.where(cq, sales_taxes / np.where(cq, QQ0, 1.0), 0.0)
         QT0 = SV.sum(axis=1)
         ct = QT0 > tol
-        spend = SV.sum(axis=0)
-        icm = (SV / np.where(spend > tol, spend, 1.0)[None, :]) @ MG / QQ0[None, :]
+        icm = share[:, groups["q"]] @ MG[groups["q"]] / np.where(cq, QQ0, 1.0)[None, :]
+        # Export demand (13.2): a finite elasticity for the commodities given
+        eta_e = np.zeros(nC)
+        if export_demand is not None:
+            spec = export_demand if isinstance(export_demand, dict) else {c: export_demand for c in np.array(C)[ce]}
+            for c, e in spec.items():
+                if c not in C:
+                    raise ValueError(f"export_demand: {c} is not a commodity")
+                k = C.index(c)
+                if not ce[k]:
+                    raise SAMError(f"export_demand: {c} has no exports from domestic output")
+                if not (np.isfinite(e) and e > 0):
+                    raise ValueError("export demand elasticities must be positive")
+                eta_e[k] = float(e)
+        ced = eta_e > 0
         # VAT (model_spec.md, 12.2): rates from the VAT account, then the
         # quantity of each use at PQ = 1
         kappa = _credit_shares(vat_credit, A)
@@ -526,22 +608,22 @@ class Model:
         delta_t = np.full(nC, 0.5)
         deltac_t = np.full(nC, 0.5)
         at = np.ones(nC)
-        for k in np.flatnonzero(ce):
+        for k in np.flatnonzero(ce & ~cxe):
             r = rho_t[k]
             ratio = (QE0[k] / QD0[k]) ** (r - 1)
             delta_t[k] = 1.0 / (1.0 + ratio)
             deltac_t[k] = ratio / (1.0 + ratio)
             at[k] = QX0[k] / (delta_t[k] * QE0[k] ** r + deltac_t[k] * QD0[k] ** r) ** (1 / r)
-        if np.any(np.abs(sigma_q[cm & cx] - 1.0) < 1e-12):
+        if np.any(np.abs(sigma_q[cm & cdo] - 1.0) < 1e-12):
             raise ValueError("version 0.1 needs sigma_q different from 1 for imported commodities")
         rho_q = 1.0 / sigma_q - 1.0
         delta_q = np.full(nC, 0.5)
         deltac_q = np.full(nC, 0.5)
         # non-imported commodities (T6) and commodities imported only (T7)
-        aq = np.where(cx, QQ0 / np.where(cx, QD0, 1.0), QQ0 / np.where(cm, QM0, 1.0))
-        for k in np.flatnonzero(cm & cx):
+        aq = np.where(cdo, QQ0 / np.where(cdo, QD0, 1.0), np.where(cm, QQ0 / np.where(cm, QM0, 1.0), 1.0))
+        for k in np.flatnonzero(cm & cdo):
             r = rho_q[k]
-            ratio = PM0[k] * (QM0[k] / QD0[k]) ** (1 + r)
+            ratio = (PM0[k] / PDD0[k]) * (QM0[k] / QD0[k]) ** (1 + r)
             delta_q[k] = ratio / (1 + ratio)
             deltac_q[k] = 1.0 / (1 + ratio)
             aq[k] = QQ0[k] / (delta_q[k] * QM0[k] ** (-r) + deltac_q[k] * QD0[k] ** (-r)) ** (-1 / r)
@@ -570,7 +652,7 @@ class Model:
         DY0 = YI0 - dtax - dsav
         TR = vec(D, D)                       # TR[d, d'] = transfer from d' to d
         TROW = vec([row], D)[0]
-        EH0 = VH.sum(axis=0)
+        EH0 = VH.sum(axis=0) + HOME0.sum(axis=0)
         uses = TR.sum(axis=0) + TROW + np.concatenate([EH0, np.zeros(len(D) - nH)])
         gross = (np.abs(TR).sum(axis=0) + np.abs(TROW)
                  + np.concatenate([np.abs(EH0), np.zeros(len(D) - nH)]))
@@ -586,6 +668,7 @@ class Model:
         if EH0.sum() <= tol:
             raise SAMError("households have no consumption")
         beta = VH / np.where(EH0 > 0, EH0, 1.0)[None, :]
+        betah = HOME0 / np.where(EH0 > 0, EH0, 1.0)[None, :]
         trdg = vec(D, [gov])[:, 0]
         trdr = vec(D, [row])[:, 0]
         trgr, trrg, trgg = cell(gov, row), cell(row, gov), cell(gov, gov)
@@ -596,9 +679,11 @@ class Model:
         trshi, trshir = cell(shi, gov), cell(shi, row)
         cwts = VH.sum(axis=1) / VH.sum() / (1 + tv)
         dwts = QD0 / QD0.sum()
+        self.paired = {a: C[k] for k, a in enumerate(A)}
 
         self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct, "cr": cr,
-                       "qint": QINT0 != 0, "qh": QH0 != 0, "shi_row": shi_row, "qshi": qshi != 0}
+                       "qint": QINT0 != 0, "qh": QH0 != 0, "shi_row": shi_row, "qshi": qshi != 0,
+                       "cxe": cxe, "ced": ced, "qha": HOME0 != 0}
         self.params = {
             "pwm": np.ones(nC), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
             "theta": theta, "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
@@ -612,6 +697,9 @@ class Model:
             "trshir": np.array(trshir),
             "sigma_va": sigma_va, "sigma_q": sigma_q, "sigma_t": sigma_t,
             "tv": tv, "kappa": kappa,
+            # version 0.3.2: margins by market, export demand, home consumption
+            "icd": icd, "ici": ici, "ice": ice, "eta_e": eta_e, "qe0": QE0.copy(),
+            "betah": betah, "gammah": np.zeros_like(betah),
             # public debt (version 0.3.1): none unless calibrated with debt
             "debt": np.array(0.0), "ddebt": np.array(0.0), "fdebt": np.array(0.0),
             "rd": np.array(0.0), "rf": np.array(0.0), "hold": np.zeros(len(D)), "phi": np.array(0.0),
@@ -633,6 +721,7 @@ class Model:
             "WFDIST": WFDIST0, "WALRAS": np.zeros(1), "QT": QT0, "QER": QER0.copy(),
             "YSHI": np.atleast_1d(YSHI0), "SHIADJ": s1.copy(), "QSHI": qshi.copy(),
             "TQADJ": s1.copy(), "TMADJ": s1.copy(), "TVADJ": s1.copy(),
+            "PWE": pwe.copy(), "QHA": HOME0.copy(),
         }
         self.exists = {name: np.ones(value.shape, dtype=bool) for name, value in self.base.items()}
         self.exists["PE"] = ce.copy()
@@ -641,8 +730,14 @@ class Model:
         self.exists["QM"] = cm.copy()
         self.exists["QF"] = fa.copy()
         self.exists["WFDIST"] = fa.copy()
-        for name in ("PX", "PD", "QX", "QD"):
+        for name in ("PX", "QX"):
             self.exists[name] = cx.copy()
+        for name in ("PD", "QD"):
+            self.exists[name] = cdo.copy()
+        for name in ("PQ", "QQ"):
+            self.exists[name] = cq.copy()
+        self.exists["PWE"] = ced.copy()
+        self.exists["QHA"] = HOME0 != 0
         self.exists["QT"] = ct.copy()
         self.exists["QER"] = cr.copy()
         self.exists["QINT"] = QINT0 != 0
@@ -779,16 +874,21 @@ class Model:
             phi = np.broadcast_to(np.asarray(frisch, dtype=float), (len(H),)).copy()
         if np.any(~np.isfinite(phi)) or np.any(phi >= -1):
             raise ValueError("Frisch parameters must be below -1, so that subsistence spending is positive")
-        QH0, EH0 = self.base["QH"], self.base["EH"]
+        QH0, EH0, QHA0 = self.base["QH"], self.base["EH"], self.base["QHA"]
         if np.any(QH0 < 0):
             raise SAMError("LES demand needs non-negative household consumption")
-        w = self.params["beta"]
+        w, wh = self.params["beta"], self.params["betah"]
+        # Home consumption takes the income elasticity of the activity's paired commodity
+        eps_h = np.array([eps[C.index(self.paired[a])] for a in self.sets["A"]])
         b = eps[:, None] * w
-        total = b.sum(axis=0)
+        bh = eps_h[:, None] * wh
+        total = b.sum(axis=0) + bh.sum(axis=0)
         b = b / np.where(total > 0, total, 1.0)[None, :]
-        self.params["beta"] = b
+        bh = bh / np.where(total > 0, total, 1.0)[None, :]
+        self.params["beta"], self.params["betah"] = b, bh
         ph0 = final_price(self.base, self.params)
         self.params["gamma"] = QH0 + b * (EH0 / phi)[None, :] / ph0[:, None]
+        self.params["gammah"] = QHA0 + bh * (EH0 / phi)[None, :] / self.base["PA"][:, None]
 
     # ------------------------------------------------------------------
     # Residuals and solution

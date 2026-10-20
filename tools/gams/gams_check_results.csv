@@ -79,6 +79,22 @@ VAT introduced,vintro_vat10,tests/expected,16,109,0,3.053e-16,6.368e-13,4.911e-1
 public debt,debt_rate_up,tests/expected,16,121,0,4.996e-16,3.595e-13,6.941e-14
 public debt,debt_relief,tests/expected,16,121,0,4.996e-16,2.899e-11,1.328e-13
 "public debt, DPI numeraire",debt_tariff_removal_dpi,tests/expected,16,121,0,4.996e-16,7.117e-13,8.303e-12
+home consumption,home_tariff_removal,tests/expected,16,110,0,3.053e-16,1.132e-13,2.148e-12
+home consumption,home_import_price_up10,tests/expected,16,110,0,3.053e-16,1.017e-12,1.051e-12
+home consumption,home_labour_supply_up5,tests/expected,16,110,0,3.053e-16,1.647e-14,6.006e-13
+home consumption,home_foreign_savings_down20,tests/expected,16,110,0,3.053e-16,2.082e-14,9.210e-14
+home consumption,home_agri_productivity_up5,tests/expected,16,110,0,3.053e-16,7.436e-13,1.367e-11
+home consumption,home_sales_tax_agr_up,tests/expected,16,110,0,3.053e-16,6.398e-13,1.666e-12
+"home consumption, LES",home_les_tariff_removal,tests/expected,16,110,0,3.053e-16,4.134e-14,3.184e-13
+trade,trade_tariff_removal,tests/expected,16,116,0,1.898e-15,1.400e-12,1.916e-11
+trade,trade_import_price_up10,tests/expected,16,116,0,1.898e-15,5.832e-13,8.956e-14
+trade,trade_labour_supply_up5,tests/expected,16,116,0,1.898e-15,2.397e-14,1.471e-12
+trade,trade_foreign_savings_down20,tests/expected,16,116,0,1.898e-15,3.440e-14,3.403e-13
+trade,trade_agri_productivity_up5,tests/expected,16,116,0,1.898e-15,2.897e-14,5.635e-13
+trade,trade_world_demand_up10,tests/expected,16,116,0,1.898e-15,5.114e-13,4.216e-13
+trade,trade_cash_price_down20,tests/expected,16,116,0,1.898e-15,3.370e-14,4.376e-13
+export-only,xonly_tariff_removal,tests/expected,16,114,0,1.943e-16,1.044e-14,2.443e-13
+"trade, composite margins",tradeplain_tariff_removal,tests/expected,16,117,0,1.943e-16,2.680e-14,6.381e-14
 "standard, closure 1",alt1_tariff_removal,Python,16,109,0,2.776e-17,3.590e-15,6.956e-14
 "standard, closure 1",alt1_import_price_up10,Python,16,109,0,2.776e-17,3.678e-14,1.498e-13
 "standard, closure 1",alt1_agri_productivity_up5,Python,16,109,0,2.776e-17,1.072e-12,1.781e-11
