@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.3.3  2026-10-20
+*! cge_mata.mata  v0.3.4  2026-10-20
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -51,6 +51,12 @@ struct cge_par {
     // the smoothing parameter of the minimum-wage condition
     real colvector inlf, qlf, u0, epsw, wref, wmin, hasmin
     real scalar    mu
+    // health outcomes (from version 0.3.4): factors with days lost to illness
+    // (flag), base and current shares of working time lost and their
+    // elasticities; base and current death rates and their elasticity, a flag
+    // for a death rate, the population index and a flag for the health link
+    real colvector ins, sick0, sick, epss
+    real scalar    mort0, mort, epsm, hasmort, pop, hlink
 }
 
 struct cge_model {
@@ -127,7 +133,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.3.3")
+    return("0.3.4")
 }
 
 // =====================================================================
@@ -258,12 +264,12 @@ void _cge_layout(struct cge_model scalar M)
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
                "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI","EFF","HS",
-               "TQADJ","TMADJ","TVADJ","PWE","QHA","LSW","LSM")'
+               "TQADJ","TMADJ","TVADJ","PWE","QHA","LSW","LSM","DW")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
                "","","FA","","C","C","","","C","F","",
-               "","","","C","AH","F","F")'
+               "","","","C","AH","F","F","F")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -2064,7 +2070,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
     real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER, YSHI, SHIADJ, QSHI, EFF, HS
-    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, LSW, LSM
+    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, LSW, LSM, DW
     real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif, z, vint
     real colvector oneA, oneC, oneF, oneH, oneD, DY, rs, tq, tm, tv, PH, pwe, PDD, unemp, rwage, ub
     real rowvector SN
@@ -2089,7 +2095,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     HS = _cge_v(M, x, 49)
     TQADJ = _cge_v(M, x, 50); TMADJ = _cge_v(M, x, 51); TVADJ = _cge_v(M, x, 52)
     PWE = _cge_v(M, x, 53);   QHA = _cge_v(M, x, 54)
-    LSW = _cge_v(M, x, 55);   LSM = _cge_v(M, x, 56)
+    LSW = _cge_v(M, x, 55);   LSM = _cge_v(M, x, 56);   DW = _cge_v(M, x, 57)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -2146,8 +2152,8 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
              M.cda :* (PINTA :* QINTA :* p.dla) +
              (1 :- M.cda) :* (QINTA :* (((PINTA :/ PVA) :* p.dla :/ p.dlac) :^ (1 :/ (1 :+ p.rha)))),
              1 :- M.lt)
-    // Factors in efficiency units (from version 0.1.14)
-    z = p.af :* EFF
+    // Factors in efficiency units (from version 0.1.14), and days worked (0.3.4)
+    z = p.af :* EFF :* DW
     qf = M.fa :* (z :* QF) + (1 :- M.fa)
     rho = (M.cd + (1 :- M.cd) :* p.rva)'
     cessum = colsum(p.dva :* (qf :^ (-rho)))
@@ -2168,8 +2174,10 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     }
     _cge_put(M, L, R, K, record, "Q4", lhs, rhs, M.fa)
     // Health services and factor efficiency (from version 0.1.14)
-    _cge_put(M, L, R, K, record, "H1", HS, sum(M.chs :* (rowsum(QH) + QG + QSHI)), any(p.etah))
+    _cge_put(M, L, R, K, record, "H1", HS, sum(M.chs :* (rowsum(QH) + QG + QSHI)), p.hlink)
     _cge_put(M, L, R, K, record, "H2", EFF, (HS / p.hs0) :^ p.etah, p.etah :!= 0)
+    // Days lost to illness (Section 15.2)
+    _cge_put(M, L, R, K, record, "H3", DW, (1 :- p.sick :* ((HS / p.hs0) :^ p.epss)) :/ (1 :- p.sick0), p.ins)
     // Intermediate inputs and household purchases exist only where the SAM has a flow
     _cge_put(M, L, R, K, record, "Q5", QINT, p.ica :* QINTA', p.ica :!= 0)
     // Marketed output: home consumption does not reach the market (13.1)
@@ -2274,7 +2282,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
                     string scalar s_hf, string scalar s_he, | string scalar s_vc, string scalar s_debt,
                     string scalar s_int, string scalar s_hold, string scalar s_borrow,
                     string scalar s_xo, string scalar s_ed, string scalar s_un, string scalar s_wc,
-                    string scalar s_mw, string scalar s_mu)
+                    string scalar s_mw, string scalar s_mu, string scalar s_sick, string scalar s_sickel,
+                    string scalar s_mort, string scalar s_mortel)
 {
     struct cge_model scalar M
     struct cge_par scalar p
@@ -2298,7 +2307,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     // The options of this calibration, so that cge_sensitivity can repeat it
     // with other elasticities
     M.calargs = (s_va, s_q, s_t, fqname, s_ie, s_fr, s_a, s_hc, s_hf, s_he, s_vc, s_debt, s_int,
-                 s_hold, s_borrow, s_xo, s_ed, s_un, s_wc, s_mw, s_mu)
+                 s_hold, s_borrow, s_xo, s_ed, s_un, s_wc, s_mw, s_mu, s_sick, s_sickel, s_mort, s_mortel)
     S = M.S
     n = M.n
     nC = M.nC
@@ -2583,7 +2592,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.trshi = (M.ishi ? S[M.ishi, M.igov] : 0)
     p.trshir = (M.ishi ? S[M.ishi, M.irow] : 0)
     M.cshi = (QSHI0 :!= 0)
-    _cge_health(M, p, QH0, QSHI0, s_hc, s_hf, s_he)
+    _cge_health(M, p, QH0, QSHI0, s_hc, s_hf, s_he, s_sick, s_sickel, s_mort, s_mortel)
     p.cwts = rowsum(VH) :/ sum(VH) :/ (1 :+ tv)
     p.dwts = QD0 :/ sum(QD0)
 
@@ -2692,6 +2701,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "QHA", HOME0)
     _cge_setv(M, x0, "LSW", J(nF, 1, 0))
     _cge_setv(M, x0, "LSM", _cge_lsm0(p, rowsum(QF0)))
+    _cge_setv(M, x0, "DW", J(nF, 1, 1))
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -2719,7 +2729,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, M.exists, "SHIADJ", (M.ishi > 0))
     _cge_setv(M, M.exists, "QSHI", M.cshi)
     _cge_setv(M, M.exists, "EFF", p.etah :!= 0)
-    _cge_setv(M, M.exists, "HS", any(p.etah))
+    _cge_setv(M, M.exists, "HS", p.hlink)
+    _cge_setv(M, M.exists, "DW", p.ins)
     _cge_setv(M, M.exists, "LSW", p.inlf)
     _cge_setv(M, M.exists, "LSM", p.inlf)
 
@@ -2784,11 +2795,12 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
 // commodities and elasticities, EFF_f = (HS / HS0)^eta_f. Elasticities are one
 // value for every factor in healthfac() (all factors by default) or one each.
 void _cge_health(struct cge_model scalar M, struct cge_par scalar p, real matrix QH0, real colvector QSHI0,
-                 string scalar s_hc, string scalar s_hf, string scalar s_he)
+                 string scalar s_hc, string scalar s_hf, string scalar s_he, | string scalar s_sick,
+                 string scalar s_sickel, string scalar s_mort, string scalar s_mortel)
 {
-    real colvector idx, f, eta
+    real colvector idx, f, eta, s0, gs, es, ge
     real rowvector v
-    real scalar hs0
+    real scalar hs0, m0, em
     M.chs = J(M.nC, 1, 0)
     if (s_hc != "") {
         idx = _cge_elements(M.C, s_hc, "commodities")
@@ -2809,13 +2821,54 @@ void _cge_health(struct cge_model scalar M, struct cge_par scalar p, real matrix
         eta[f] = v'
     }
     else if (s_hf != "") _cge_fail("healthfac() needs healthelas()", 198)
+    // Health outcomes (model_spec.md, Section 15): days lost to illness by
+    // factor, and the death rate, with elasticities with respect to health
+    // services per head
+    s0 = _cge_given(s_sick, M.F, "sickdays", gs)
+    s0 = gs :* editmissing(s0, 0)
+    if (max(gs :* ((s0 :< 0) :| (s0 :>= 1)))) _cge_fail("sickdays() shares must be at least 0 and below 1", 198)
+    es = J(M.nF, 1, 0)
+    if (s_sickel != "") {
+        if (!any(gs)) _cge_fail("sickelas() needs sickdays()", 198)
+        if (!strpos(s_sickel, ":") & cols(tokens(s_sickel)) == 1) es = gs :* strtoreal(s_sickel)
+        else {
+            es = _cge_given(s_sickel, M.F, "sickelas", ge)
+            _cge_fail_if(ge :* (1 :- gs), M.F, "sickelas(): no sickdays() given for", 198)
+            es = editmissing(es, 0)
+        }
+        if (hasmissing(es)) _cge_fail("sickelas() needs numbers", 198)
+    }
+    m0 = 0
+    em = 0
+    if (s_mort != "") {
+        m0 = strtoreal(s_mort)
+        if (!(m0 >= 0 & m0 < 1)) _cge_fail("mortality() must be at least 0 and below 1 (deaths per head per period)", 198)
+        if (s_mortel != "") em = strtoreal(s_mortel)
+        if (em >= .) _cge_fail("mortelas() needs a number", 198)
+    }
+    else if (s_mortel != "") _cge_fail("mortelas() needs mortality()", 198)
+    if ((any(es) | em != 0) & s_hc == "") {
+        _cge_fail("health outcomes with non-zero elasticities need healthcom(): name the health services", 198)
+    }
+    p.hlink = (any(eta) | any(es) | em != 0)
     hs0 = sum(M.chs :* (rowsum(QH0) + p.qg + QSHI0))
-    if (any(eta) & hs0 <= 0) {
+    if (p.hlink & hs0 <= 0) {
         _cge_fail("health services have no consumption by households, the government or the health insurance fund", 459)
     }
     p.af = J(M.nF, 1, 1)
     p.etah = eta
-    p.hs0 = (any(eta) ? hs0 : 1)
+    p.hs0 = (p.hlink ? hs0 : 1)
+    p.ins = gs
+    p.sick0 = s0
+    p.sick = s0
+    p.epss = es
+    p.hasmort = (s_mort != "")
+    p.mort0 = m0
+    p.mort = m0
+    p.epsm = em
+    p.pop = 1
+    if (any(gs)) printf("{txt}Days lost to illness: {res}%s\n", invtokens((select(M.F, gs) :+ ":" :+ strofreal(select(s0, gs)))'))
+    if (p.hasmort) printf("{txt}Death rate: {res}%g{txt} per head; elasticity {res}%g\n", m0, em)
 }
 
 // Top nest of production (model_spec.md, 5.2 and 7.3): Leontief (sigmaa 0, the
@@ -3300,6 +3353,8 @@ real colvector _cge_par_get(struct cge_par scalar p, string scalar name)
     if (name == "qlf") return(p.qlf)
     if (name == "wmin") return(p.wmin)
     if (name == "wref") return(p.wref)
+    if (name == "sick") return(p.sick)
+    if (name == "mort") return(p.mort)
     _cge_fail("cge internal error: unknown parameter " + name, 3498)
 }
 
@@ -3333,6 +3388,8 @@ void _cge_par_set(struct cge_par scalar p, string scalar name, real colvector v)
     else if (name == "qlf") p.qlf = v
     else if (name == "wmin") p.wmin = v
     else if (name == "wref") p.wref = v
+    else if (name == "sick") p.sick = v
+    else if (name == "mort") p.mort = v
 }
 
 real colvector _cge_elements(string colvector set, string scalar elems, string scalar what)
@@ -3378,11 +3435,21 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
     if (anyof(("rd", "rf", "ddebt", "fdebt"), target) & M.p0.debt != 1) {
         _cge_fail(target + " needs public debt: calibrate with debt() and interest()", 459)
     }
+    // Health outcomes (from version 0.3.4)
+    if (target == "sick") {
+        idx = _cge_elements(M.F, elems, "factors")
+        if (!all(M.p0.ins[idx])) _cge_fail("sick needs days lost to illness: calibrate with sickdays()", 459)
+    }
+    else if (target == "mort") {
+        if (M.p0.hasmort != 1) _cge_fail("mort needs a death rate: calibrate with mortality()", 459)
+        if (elems != "" & elems != "all") _cge_fail(target + " has no elements", 198)
+        idx = 1
+    }
     // Labour-market regimes (from version 0.3.3)
-    if (anyof(("qlf", "wmin", "wref"), target)) {
+    else if (anyof(("qlf", "wmin", "wref"), target)) {
         idx = _cge_elements(M.F, elems, "factors")
         if (!all(M.p0.inlf[idx])) _cge_fail(target + " needs a labour force: calibrate with unemployment() or minwage()", 459)
-        if (target != "qlf" & mode == "set" & value <= 0) _cge_fail(target + " must be positive", 198)
+        if (mode == "value" & !(value > 0)) _cge_fail(target + " must be positive", 198)
     }
     else if (anyof(("tm", "te", "tq", "pwm", "pwe", "qg", "qinv", "qshi", "tv"), target)) {
         idx = _cge_elements(M.C, elems, "commodities")
@@ -3406,6 +3473,8 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
         v = _cge_par_get(M.p, target)
         v[idx] = (mode == "scale" ? v[idx] :* value : J(rows(idx), 1, value))
         if (target == "kappa" & (min(v) < 0 | max(v) > 1)) _cge_fail("VAT credit shares (kappa) must lie between 0 and 1", 198)
+        if (target == "sick" & (min(v) < 0 | max(v) >= 1)) _cge_fail("shares of working time lost (sick) must be at least 0 and below 1", 198)
+        if (target == "mort" & (min(v) < 0 | max(v) >= 1)) _cge_fail("the death rate (mort) must be at least 0 and below 1", 198)
         _cge_par_set(M.p, target, v)
         _cge_store(M)
         printf("{txt}Parameter {res}%s{txt} changed for %f element(s)\n", target, rows(idx))
@@ -3414,7 +3483,7 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
 
     k = _cge_vidx(M, target)
     if (k == 0) {
-        _cge_fail(target + " is not a shockable parameter (tm te tq ta tv kappa pwm pwe ad af qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir rd rf ddebt fdebt qlf wmin wref) or model variable", 198)
+        _cge_fail(target + " is not a shockable parameter (tm te tq ta tv kappa pwm pwe ad af qg qinv trdg trdr trfr trgr trrg tshi qshi trshi trshir rd rf ddebt fdebt qlf wmin wref sick mort) or model variable", 198)
     }
     set = M.vset[k]
     if (set == "") {
@@ -3488,7 +3557,7 @@ struct cge_sys scalar _cge_sys_make(struct cge_model scalar M, real scalar reduc
 string matrix _cge_dcandidates()
 {
     return(("P1", "PM") \ ("P2", "PE") \ ("P6", "PINTA") \ ("Q5", "QINT") \ ("Q6", "QX") \
-           ("I5", "QH") \ ("T8", "QT") \ ("I13", "QSHI") \ ("H2", "EFF"))
+           ("I5", "QH") \ ("T8", "QT") \ ("I13", "QSHI") \ ("H2", "EFF") \ ("H3", "DW"))
 }
 
 // Compute the variables of the active explicit definitions from the others;
@@ -3520,6 +3589,10 @@ void _cge_derive(struct cge_model scalar M, struct cge_par scalar p, real colvec
     }
     if (M.dact[8]) _cge_setv(M, x, "QSHI", p.qshi :* _cge_v(M, x, 46))
     if (M.dact[9]) _cge_setv(M, x, "EFF", (_cge_v(M, x, 49) / p.hs0) :^ p.etah)
+    if (M.dact[10]) {
+        _cge_setv(M, x, "DW", p.ins :* ((1 :- p.sick :* ((_cge_v(M, x, 49) / p.hs0) :^ p.epss)) :/ (1 :- p.sick0))
+                  + (1 :- p.ins))
+    }
 }
 
 // The reduced system, set up after the full pattern (_cge_pattern): a
@@ -3734,6 +3807,7 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp(M, rowid, boff, pr, pc, "Q3", j, "QF", (i :- 1) :* nA :+ j)
     _cge_nz(M.fa, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "Q3", j, "EFF", i)
+    _cge_sp(M, rowid, boff, pr, pc, "Q3", j, "DW", i)
     _cge_sp_same(M, rowid, boff, pr, pc, "Q4", ("WFDIST", "QF"))
     for (f = 1; f <= nF; f++) {
         e = (f - 1) * nA :+ cA
@@ -3743,6 +3817,7 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
         for (g = 1; g <= nF; g++) {
             _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "QF", (g - 1) * nA :+ cA)
             _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "EFF", g)
+            _cge_sp(M, rowid, boff, pr, pc, "Q4", e, "DW", g)
         }
     }
     _cge_sp(M, rowid, boff, pr, pc, "H1", 1, "HS", 1)
@@ -3754,6 +3829,8 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     }
     _cge_sp_same(M, rowid, boff, pr, pc, "H2", "EFF")
     _cge_sp(M, rowid, boff, pr, pc, "H2", (1::nF), "HS", 1)
+    _cge_sp_same(M, rowid, boff, pr, pc, "H3", "DW")
+    _cge_sp(M, rowid, boff, pr, pc, "H3", (1::nF), "HS", 1)
     e = (1::nC * nA)
     _cge_sp(M, rowid, boff, pr, pc, "Q5", e, "QINT", e)
     _cge_sp(M, rowid, boff, pr, pc, "Q5", e, "QINTA", mod(e :- 1, nA) :+ 1)
@@ -4708,9 +4785,9 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
 {
     struct cge_par scalar p0
     real colvector PQ, PQ0, QG, QINV, QSHI, QER, QE, QM, fin, YI, TINS, MPS, W, YF, QFS, EH
-    real colvector QA, PA, QVA, PVA0, QQ, QX, QD, EFF, PH, PH0, home, PA0, pwe
+    real colvector QA, PA, QVA, PVA0, QQ, QX, QD, EFF, PH, PH0, home, PA0, pwe, DW
     real matrix QH
-    real scalar EXR, EXR0, CPI, DPI, gdpn, gdpr, k, gsav, intd, intf, endd, endf
+    real scalar EXR, EXR0, CPI, DPI, gdpn, gdpr, k, gsav, intd, intf, endd, endf, ratio
 
     p0 = M.p0
     keys = J(0, 3, "")
@@ -4813,11 +4890,25 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
         _cge_radd(keys, val, "commodities", "imports", M.C[k], QM[k])
         if (M.ced[k]) _cge_radd(keys, val, "commodities", "world_export_price", M.C[k], pwe[k])
     }
-    if (any(M.p0.etah)) {
+    ratio = _cge_vn(M, x, "HS") / p.hs0
+    if (M.p0.hlink) {
         _cge_radd(keys, val, "health", "health_services", "", _cge_vn(M, x, "HS"))
+        _cge_radd(keys, val, "health", "services_per_head", "", ratio)
         for (k = 1; k <= M.nF; k++) {
             if (M.p0.etah[k] != 0) _cge_radd(keys, val, "health", "efficiency", M.F[k], EFF[k])
         }
+    }
+    // Health outcomes (model_spec.md, 15.5)
+    DW = _cge_vn(M, x, "DW")
+    for (k = 1; k <= M.nF; k++) {
+        if (M.p0.ins[k]) {
+            _cge_radd(keys, val, "health", "sick_day_share", M.F[k], 100 * p.sick[k] * ratio ^ p.epss[k])
+            _cge_radd(keys, val, "health", "days_worked", M.F[k], DW[k])
+        }
+    }
+    if (M.p0.hasmort == 1) {
+        _cge_radd(keys, val, "health", "mortality_rate", "", 1000 * p.mort * ratio ^ p.epsm)
+        _cge_radd(keys, val, "health", "population", "", p.pop)
     }
     if (M.ishi) {
         _cge_radd(keys, val, "health", "fund_revenue", "", _cge_vn(M, x, "YSHI"))
@@ -4847,7 +4938,8 @@ real colvector _cge_sim_list(struct cge_model scalar M, string scalar sims)
 // simulated values (one column per simulation) and percentage changes. For the
 // equivalent and compensating variations, the base is zero and the percentage
 // is of base household consumption; for rates (the debt ratio and unemployment
-// rates; from version 0.3.3) the change is in percentage points.
+// rates, from version 0.3.3; shares of working time lost and the death rate,
+// from 0.3.4) the change is in points.
 void _cge_report_rows(struct cge_model scalar M, real colvector s, string matrix keys,
                       real colvector base, real matrix vals, real matrix pct)
 {
@@ -4857,7 +4949,8 @@ void _cge_report_rows(struct cge_model scalar M, real colvector s, string matrix
 
     _cge_measures(M, M.p0, M.x0, keys, base)
     nr = rows(base)
-    rate = (keys[., 2] :== "debt_gdp") :| (keys[., 2] :== "unemployment_rate")
+    rate = (keys[., 2] :== "debt_gdp") :| (keys[., 2] :== "unemployment_rate") :|
+           (keys[., 2] :== "sick_day_share") :| (keys[., 2] :== "mortality_rate")
     eh0 = _cge_vn(M, M.x0, "EH")
     for (h = 1; h <= M.nH; h++) {
         keys = keys \ ("welfare", "equivalent_variation", M.H[h]) \ ("welfare", "compensating_variation", M.H[h])
@@ -4927,7 +5020,7 @@ void _cge_report_run(string scalar sims, string scalar tables, real scalar show,
             }
             printf("{txt}%s\n", "{hline " + strofreal(w1 + 13 + 11 * min((ns, 6))) + "}")
         }
-        printf("{txt}Percentage changes from the base (rates: percentage points)")
+        printf("{txt}Percentage changes from the base (rates: changes in points)")
         if (ns > 6) printf("; the first 6 of %f simulations are shown", ns)
         printf("\n")
     }
@@ -5066,6 +5159,8 @@ void _cge_param_data(string scalar sim, real scalar current)
     _cge_padd(keys, val, "u0", p.u0, M.F, none);       _cge_padd(keys, val, "epsw", p.epsw, M.F, none)
     _cge_padd(keys, val, "wref", p.wref, M.F, none);   _cge_padd(keys, val, "wmin", p.wmin, M.F, none)
     _cge_padd(keys, val, "hasmin", p.hasmin, M.F, none)
+    _cge_padd(keys, val, "ins", p.ins, M.F, none);     _cge_padd(keys, val, "sick0", p.sick0, M.F, none)
+    _cge_padd(keys, val, "sick", p.sick, M.F, none);   _cge_padd(keys, val, "epss", p.epss, M.F, none)
     // scalars
     _cge_padd(keys, val, "trgr", p.trgr, "", none);    _cge_padd(keys, val, "trrg", p.trrg, "", none)
     _cge_padd(keys, val, "trgg", p.trgg, "", none);    _cge_padd(keys, val, "sshi", p.sshi, "", none)
@@ -5075,6 +5170,9 @@ void _cge_param_data(string scalar sim, real scalar current)
     _cge_padd(keys, val, "fdebt", p.fdebt, "", none);  _cge_padd(keys, val, "rd", p.rd, "", none)
     _cge_padd(keys, val, "rf", p.rf, "", none);        _cge_padd(keys, val, "phi", p.phi, "", none)
     _cge_padd(keys, val, "mu", p.mu, "", none)
+    _cge_padd(keys, val, "hlink", p.hlink, "", none);  _cge_padd(keys, val, "hasmort", p.hasmort, "", none)
+    _cge_padd(keys, val, "mort0", p.mort0, "", none);  _cge_padd(keys, val, "mort", p.mort, "", none)
+    _cge_padd(keys, val, "epsm", p.epsm, "", none);    _cge_padd(keys, val, "pop", p.pop, "", none)
     st_addobs(rows(val))
     (void) st_addvar("str8", "parameter")
     (void) st_addvar("str32", "element1")
@@ -5167,12 +5265,25 @@ void _cge_par_fill(struct cge_par scalar p, struct cge_model scalar M)
         p.hasmin = J(M.nF, 1, 0)
     }
     if (p.mu >= .) p.mu = 1e-10
+    // 0.3.4: no health outcomes
+    if (rows(p.ins) == 0) {
+        p.ins = J(M.nF, 1, 0)
+        p.sick0 = J(M.nF, 1, 0)
+        p.sick = J(M.nF, 1, 0)
+        p.epss = J(M.nF, 1, 0)
+    }
+    if (p.hasmort >= .) p.hasmort = 0
+    if (p.mort0 >= .) p.mort0 = 0
+    if (p.mort >= .) p.mort = 0
+    if (p.epsm >= .) p.epsm = 0
+    if (p.pop >= .) p.pop = 1
+    if (p.hlink >= .) p.hlink = any(p.etah)
 }
 
 // Variables added after the saved model's version are appended to the layout:
 // TQADJ, TMADJ and TVADJ (0.3.1), fixed at one; PWE and QHA (0.3.2), and LSW
-// and LSM (0.3.3), which do not exist in older models. The Jacobian pattern is
-// rebuilt.
+// and LSM (0.3.3), which do not exist in older models; DW (0.3.4), one where it
+// does not exist. The Jacobian pattern is rebuilt.
 void _cge_use_upgrade(struct cge_model scalar M)
 {
     real scalar nold, k, v, len
@@ -5189,6 +5300,10 @@ void _cge_use_upgrade(struct cge_model scalar M)
         }
         else if (anyof(("QHA", "LSW", "LSM"), M.vname[k])) {
             val = J(len, 1, 0)
+            ex = J(len, 1, 0)
+        }
+        else if (M.vname[k] == "DW") {
+            val = J(len, 1, 1)
             ex = J(len, 1, 0)
         }
         else {
@@ -5298,7 +5413,7 @@ void _cge_use(string scalar fn)
         if (rows(M.ced) == 0) M.ced = J(M.nC, 1, 0)
         if (rows(M.cdo) == 0) M.cdo = M.cx
         if (rows(M.cq) == 0) M.cq = (M.cx :| M.cm)
-        if (!_cge_vidx(M, "LSM")) _cge_use_upgrade(M)
+        if (!_cge_vidx(M, "DW")) _cge_use_upgrade(M)
     }
     // Files saved before version 0.2.0 have no dynamic-run items
     if (rows(M.simrun) != rows(M.simname)) {
@@ -5323,6 +5438,10 @@ struct cge_dyn {
     string scalar         name
     real colvector        periods, prev, capital, delta, rental, fgrowth, tfp, target, lampath
     real scalar           k, sens, gpop, ggov, gfor, mode, tol, maxit
+    // deaths at working ages (from version 0.3.4): factors that lose workers,
+    // the share of deaths at working ages and the working-age share
+    real colvector        dfac
+    real scalar           dshare, wage
     struct cge_par scalar psave
     real colvector        xsave
 }
@@ -5356,7 +5475,8 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
                     string scalar depreciation, string scalar rental, real scalar sens,
                     string scalar growth, string scalar tfp, string scalar gdpgrowth,
                     string scalar baseline, real scalar gpop, real scalar ggov, real scalar gfor,
-                    real scalar tol, real scalar maxit)
+                    real scalar tol, real scalar maxit, | string scalar deathfac, real scalar dshare,
+                    real scalar wage)
 {
     struct cge_model scalar M
     struct cge_dyn scalar D
@@ -5414,6 +5534,30 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
         }
     }
 
+    // Deaths at working ages (model_spec.md, 15.4)
+    if (args() < 16) deathfac = ""
+    if (args() < 17) dshare = 0
+    if (args() < 18) wage = 1
+    D.dfac = J(M.nF, 1, 0)
+    D.dshare = dshare
+    D.wage = wage
+    if (deathfac != "") {
+        if (M.p0.hasmort != 1) _cge_fail("deathfactors(): the model has no death rate; calibrate with mortality()", 198)
+        if (!(dshare >= 0 & dshare <= 1) | !(wage > 0 & wage <= 1)) {
+            _cge_fail("deathshare() must lie between 0 and 1, and workingage() above 0 and at most 1", 198)
+        }
+        idx = _cge_elements(M.F, deathfac, "factors")
+        for (j = 1; j <= rows(idx); j++) {
+            f = idx[j]
+            if (D.capital[f]) _cge_fail("deathfactors(): " + M.F[f] + " is a capital factor", 198)
+            if (M.c_fac[f] == "unemployed" & !M.p0.inlf[f]) {
+                _cge_fail("deathfactors(): " + M.F[f] + " is unemployed, so its supply is not fixed", 198)
+            }
+        }
+        D.dfac[idx] = J(rows(idx), 1, 1)
+    }
+    else if (dshare != 0 | wage != 1) _cge_fail("deathshare() and workingage() need deathfactors()", 198)
+
     // Efficiency: rates (mode 0), growth targets (1) or a baseline's path (2)
     if ((tfp != "") + (gdpgrowth != "") + (baseline != "") > 1) {
         _cge_fail("choose one of tfp(), gdpgrowth() and baseline()", 198)
@@ -5460,7 +5604,7 @@ void _cge_dyn_advance()
     struct cge_dyn scalar D
     real matrix QF, WFD
     real colvector QFS, W, inv0, YF0, q, s, rent, eta, qlf
-    real scalar f, inv, newk, avg, yk, def
+    real scalar f, inv, newk, avg, yk, def, excess, gp, g
 
     M = _cge_load()
     D = _cge_dyn_load()
@@ -5472,6 +5616,13 @@ void _cge_dyn_advance()
     YF0 = _cge_vn(M, M.x0, "YF")
     yk = sum(D.capital :* YF0)
     qlf = M.p.qlf
+    // Deaths in the previous period relative to the base death rate (15.4),
+    // with that period's parameters
+    excess = 0
+    if (M.p0.hasmort == 1) {
+        excess = M.p.mort0 - M.p.mort * (_cge_vn(M, D.prev, "HS") / M.p.hs0) ^ M.p.epsm
+    }
+    gp = D.gpop + excess
     for (f = 1; f <= M.nF; f++) {
         if (D.capital[f]) {
             // 1. Capital: depreciation plus new capital from real investment
@@ -5489,20 +5640,22 @@ void _cge_dyn_advance()
             else QFS[f] = (1 - D.delta[f]) * QFS[f] + newk
         }
         else {
-            // 2. Other factors
-            if (M.c_fac[f] == "specific") QF[f, .] = (1 + D.fgrowth[f]) :* QF[f, .]
-            else if (M.c_fac[f] == "mobile") QFS[f] = (1 + D.fgrowth[f]) * QFS[f]
+            // 2. Other factors, less deaths at working ages
+            g = D.fgrowth[f] + D.dfac[f] * D.dshare / D.wage * excess
+            if (M.c_fac[f] == "specific") QF[f, .] = (1 + g) :* QF[f, .]
+            else if (M.c_fac[f] == "mobile") QFS[f] = (1 + g) * QFS[f]
             // The labour force grows at the same rate (model_spec.md, 14.4)
-            if (M.p0.inlf[f]) qlf[f] = (1 + D.fgrowth[f]) * qlf[f]
+            if (M.p0.inlf[f]) qlf[f] = (1 + g) * qlf[f]
         }
     }
     M.p.qlf = qlf
     _cge_setv(M, M.xcur, "QF", QF)
     _cge_setv(M, M.xcur, "QFS", QFS)
     // 3. Population; 4. government and foreign flows
-    M.p.gamma = M.p.gamma :* (1 + D.gpop)
-    M.p.gammah = M.p.gammah :* (1 + D.gpop)
-    M.p.hs0 = M.p.hs0 * (1 + D.gpop)
+    M.p.gamma = M.p.gamma :* (1 + gp)
+    M.p.gammah = M.p.gammah :* (1 + gp)
+    M.p.hs0 = M.p.hs0 * (1 + gp)
+    M.p.pop = M.p.pop * (1 + gp)
     M.p.qg = M.p.qg :* (1 + D.ggov)
     M.p.trdg = M.p.trdg :* (1 + D.ggov)
     M.p.trgg = M.p.trgg * (1 + D.ggov)
@@ -5820,12 +5973,13 @@ void _cge_sens_calibrate(real scalar d)
     G = _cge_sens_load()
     _cge_sens_values(G, d, va, q, t, a)
     // Options of the last calibration; models calibrated before version 0.3.1
-    // stored ten of them, and before 0.3.3 seventeen
+    // stored ten of them, before 0.3.3 seventeen and before 0.3.4 twenty-one
     c = G.calargs
-    if (cols(c) < 21) c = c, J(1, 21 - cols(c), "")
+    if (cols(c) < 25) c = c, J(1, 25 - cols(c), "")
     _cge_calibrate(_cge_numlist(va), _cge_numlist(q), _cge_numlist(t), c[4], c[5], c[6],
                    (c[7] == "" & !anyof(G.vary, "a") ? "" : _cge_numlist(a)), c[8], c[9], c[10],
-                   c[11], c[12], c[13], c[14], c[15], c[16], c[17], c[18], c[19], c[20], c[21])
+                   c[11], c[12], c[13], c[14], c[15], c[16], c[17], c[18], c[19], c[20], c[21],
+                   c[22], c[23], c[24], c[25])
     M = _cge_load()
     _cge_closure_apply(M, G.ext, G.gov, G.si, G.num, G.fac)
     _cge_store(M)
@@ -6283,6 +6437,16 @@ void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefi
     _cge_io_put(fh, prefix + "wmin", p.wmin)
     _cge_io_put(fh, prefix + "hasmin", p.hasmin)
     _cge_io_put(fh, prefix + "mu", p.mu)
+    _cge_io_put(fh, prefix + "ins", p.ins)
+    _cge_io_put(fh, prefix + "sick0", p.sick0)
+    _cge_io_put(fh, prefix + "sick", p.sick)
+    _cge_io_put(fh, prefix + "epss", p.epss)
+    _cge_io_put(fh, prefix + "mort0", p.mort0)
+    _cge_io_put(fh, prefix + "mort", p.mort)
+    _cge_io_put(fh, prefix + "epsm", p.epsm)
+    _cge_io_put(fh, prefix + "hasmort", p.hasmort)
+    _cge_io_put(fh, prefix + "pop", p.pop)
+    _cge_io_put(fh, prefix + "hlink", p.hlink)
 }
 
 real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
@@ -6368,6 +6532,16 @@ real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmo
     else if (name == "wmin") p.wmin = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "hasmin") p.hasmin = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "mu") p.mu = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "ins") p.ins = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "sick0") p.sick0 = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "sick") p.sick = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "epss") p.epss = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "mort0") p.mort0 = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "mort") p.mort = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "epsm") p.epsm = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "hasmort") p.hasmort = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "pop") p.pop = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "hlink") p.hlink = (rows(v) * cols(v) == 0 ? . : v)
     else return(0)
     return(1)
 }

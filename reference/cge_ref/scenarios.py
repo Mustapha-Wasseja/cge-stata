@@ -318,6 +318,42 @@ def labour_cases() -> dict:
     return out
 
 
+# Health outcomes (version 0.3.4, model_spec.md, Section 15): 5 per cent of
+# labour's working time lost to illness, a death rate of 10 per 1,000, and
+# their elasticities with respect to health services per head. Test values,
+# not estimates.
+OUTCOMES = {"health_commodities": ["com_hlt"], "sick_days": {"lab": 0.05}, "sick_elasticity": {"lab": -0.4},
+            "mortality": 0.01, "mortality_elasticity": -0.3}
+DEATHS = {"death_factors": ("lab",), "death_share": 0.3, "working_age": 0.55}
+
+
+def outcome_cases() -> dict:
+    """Static simulations with health outcomes: name -> solution."""
+    out = {}
+    m = health_model(**OUTCOMES)
+    for name, solution in run_simulations(m).items():
+        out["hout_" + name] = solution
+    p = m.params
+    hlt = m.sets["C"].index("com_hlt")
+    lab = m.sets["F"].index("lab")
+    out["hout_gov_health_up20"] = m.solve(Closure(), tol=1e-12, params={"qg": _scaled(p["qg"], hlt, 1.2)})
+    out["hout_epidemic"] = m.solve(Closure(), tol=1e-12, params={"sick": _scaled(p["sick"], lab, 2.0)})
+    out["hout_mortality_up50"] = m.solve(Closure(), tol=1e-12, params={"mort": p["mort"] * 1.5})
+    out["hout_epidemic_unemployed"] = m.solve(Closure(factors={"lab": "unemployed"}), tol=1e-12,
+                                              params={"sick": _scaled(p["sick"], lab, 2.0)})
+    both = health_model(**{**OUTCOMES, **HEALTH_LINK})
+    out["hboth_gov_health_up20"] = both.solve(Closure(), tol=1e-12,
+                                              params={"qg": _scaled(both.params["qg"], hlt, 1.2)})
+    return out
+
+
+def health_spending_up(t, p, fx):
+    """Government purchases of health services 20 per cent higher from period 1."""
+    if t == 1:
+        hlt = list(health_mapping().commodities).index("com_hlt")
+        p["qg"] = _scaled(p["qg"], hlt, 1.2)
+
+
 # SAM tools (version 0.3.0, docs/sam_tools.md): a SYNTHETIC unbalanced SAM,
 # and the institutions layout aggregated to two sectors and one household
 UNBALANCED_SAM = REPO / "data" / "cge_synthetic_sam_unbal.csv"
@@ -417,7 +453,8 @@ REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_
             "sut_import_price_up10", "eff_contribution_up50", "vat_rate_up20",
             "vat_tariff_removal_vat", "rep_tariff_removal_sales", "debt_rate_up", "debt_relief",
             "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10",
-            "wc_tariff_removal", "mwnb_pwm_up50")
+            "wc_tariff_removal", "mwnb_pwm_up50", "hout_gov_health_up20", "hout_epidemic",
+            "hout_mortality_up50", "hboth_gov_health_up20")
 
 
 def dynamic_cases() -> dict:
@@ -447,6 +484,12 @@ def dynamic_cases() -> dict:
         # A wage curve (version 0.3.3): the labour force grows at 2 per cent
         "dyn_wc": (synthetic_model(**WAGE_CURVE), Dynamics(periods=4, tfp_growth=0.01, **common),
                    Closure(factors={"cap": "specific", "lab": "wagecurve"}), None),
+        # Health outcomes and deaths (version 0.3.4): a baseline, and more
+        # government health services from period 1
+        "dyn_hout": (health_model(**OUTCOMES), Dynamics(periods=4, tfp_growth=0.01, **common, **DEATHS),
+                     specific, None),
+        "dyn_hout_health": (health_model(**OUTCOMES), Dynamics(periods=4, tfp_growth=0.01, **common, **DEATHS),
+                            specific, health_spending_up),
     }
 
 
@@ -472,7 +515,7 @@ def write_dynamic(directory: Path = EXPECTED_DIR) -> list[Path]:
             path = directory / f"{name}_p{t}.csv"
             write_results(sol, path)
             written.append(path)
-            if name.startswith("dyn_debt"):
+            if name.startswith("dyn_debt") or name.startswith("dyn_hout"):
                 path = directory / f"report_{name}_p{t}.csv"
                 write_report(sol, path)
                 written.append(path)
@@ -551,8 +594,9 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Fiscal instruments (version 0.3.1); trade and household extensions (0.3.2)
     solutions.update(fiscal_cases())
     solutions.update(trade_cases())
-    # Labour-market regimes (0.3.3)
+    # Labour-market regimes (0.3.3); health outcomes (0.3.4)
     solutions.update(labour_cases())
+    solutions.update(outcome_cases())
     written = write_dynamic(directory) + write_samtools(directory)
     for name, solution in solutions.items():
         if not solution.converged:

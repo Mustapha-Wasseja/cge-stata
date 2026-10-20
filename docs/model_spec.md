@@ -80,6 +80,7 @@ and exports.
 | $CNM = C \setminus CM$ | non-imported commodities |
 | $CXE \subseteq CE$ | export-only commodities: all domestic output is exported, with no domestic sales (from version 0.3.2, when chosen; Section 13.3) |
 | $CED \subseteq CE$ | exported commodities that face a finite elasticity of export demand (from version 0.3.2; Section 13.2) |
+| $FS \subseteq F$ | factors with days lost to illness: a base share of working time lost is given (from version 0.3.4; Section 15) |
 | $FL \subseteq F$ | factors with a labour force: a base unemployment rate, or a minimum wage, is given (from version 0.3.3; Section 14) |
 | $T^Q, T^D, T^M, T^E$ | margin accounts paid per unit of composite supply (the default), of domestic sales, of imports and of exports (from version 0.3.2; Section 13.4) |
 | $T$ | margin accounts (may be empty; from version 0.1.7) |
@@ -157,6 +158,7 @@ Incomes, rates and adjustment variables
 | $GADJ$ | government consumption scaling factor |
 | $WFDIST_{fa}$ | wage distortion factor for factor $f$ in activity $a$ |
 | $EFF_f$ | efficiency of factor $f$ from health services (from version 0.1.14; one for a factor with $\eta_f = 0$) |
+| $DW_f$ | days worked per worker of factor $f$, relative to the base (from version 0.3.4; one for $f \notin FS$) |
 | $HS$ | volume of health services consumed by households, the government and the health insurance fund |
 | $WALRAS$ | slack in the savings-investment balance; zero at a solution |
 
@@ -180,6 +182,8 @@ Incomes, rates and adjustment variables
 | $ad_a$, $\delta^{va}_{fa}$, $\rho^{va}_a$ | value-added CES efficiency, share and exponent parameters |
 | $af_f$ | exogenous efficiency of factor $f$ in every activity (one in the base; from version 0.1.14) |
 | $\eta_f$, $HS^0$ | elasticity of the efficiency of factor $f$ with respect to health services, and the base volume of health services |
+| $s^0_f$, $\sigma_f$, $\epsilon^{s}_f$ | base share of working time lost to illness, its current value (shocks), and its elasticity with respect to health services per head, $f \in FS$ (from version 0.3.4) |
+| $m^0$, $\mu^{m}$, $\epsilon^{m}$, $POP$ | base crude death rate, its current value (shocks), its elasticity with respect to health services per head, and the population index (one in the base; from version 0.3.4) |
 | $at_c$, $\delta^{t}_c$, $\rho^{t}_c$ | CET efficiency, share and exponent parameters |
 | $aq_c$, $\delta^{q}_c$, $\rho^{q}_c$ | Armington efficiency, share and exponent parameters |
 | $shif_{if}$ | share of factor $f$ income, after health insurance contributions, going to institution $i$ |
@@ -274,15 +278,15 @@ substitute for each other as their prices change; P7 still sets the activity
 price. An activity without intermediate inputs keeps the Leontief top nest.
 
 From version 0.1.14 factors enter value added in efficiency units,
-$\widetilde{QF}_{fa} = af_f\,EFF_f\,QF_{fa}$. Factor quantities $QF_{fa}$,
+$\widetilde{QF}_{fa} = af_f\,EFF_f\,QF_{fa}$ (from version 0.3.4, $af_f\,EFF_f\,DW_f\,QF_{fa}$, Section 15.2). Factor quantities $QF_{fa}$,
 supplies $QFS_f$ and wages $W_f$ remain in physical units, so a more efficient
-factor earns more per unit. In the base $af_f = EFF_f = 1$.
+factor earns more per unit. In the base $af_f = EFF_f = DW_f = 1$.
 
 Value added, CES case ($\sigma^{va}_a \neq 1$):
 
 $$QVA_a = ad_a\left[\sum_f \delta^{va}_{fa}\,\widetilde{QF}_{fa}^{-\rho^{va}_a}\right]^{-1/\rho^{va}_a} \tag{Q3}$$
 
-$$W_f\,WFDIST_{fa} = PVA_a\,QVA_a\left[\sum_{f'} \delta^{va}_{f'a}\,\widetilde{QF}_{f'a}^{-\rho^{va}_a}\right]^{-1}\delta^{va}_{fa}\,\widetilde{QF}_{fa}^{-\rho^{va}_a-1}\,af_f\,EFF_f \tag{Q4}$$
+$$W_f\,WFDIST_{fa} = PVA_a\,QVA_a\left[\sum_{f'} \delta^{va}_{f'a}\,\widetilde{QF}_{f'a}^{-\rho^{va}_a}\right]^{-1}\delta^{va}_{fa}\,\widetilde{QF}_{fa}^{-\rho^{va}_a-1}\,af_f\,EFF_f\,DW_f \tag{Q4}$$
 
 Value added, Cobb-Douglas case ($\sigma^{va}_a = 1$):
 
@@ -291,7 +295,8 @@ $$QVA_a = ad_a \prod_f \widetilde{QF}_{fa}^{\delta^{va}_{fa}}, \qquad \sum_f \de
 $$W_f\,WFDIST_{fa}\,QF_{fa} = \delta^{va}_{fa}\,PVA_a\,QVA_a \tag{Q4'}$$
 
 Health services and factor efficiency (from version 0.1.14), when $HC$ is not
-empty and some $\eta_f > 0$:
+empty and some $\eta_f > 0$, or, from version 0.3.4, a health outcome of
+Section 15 has a non-zero elasticity:
 
 $$HS = \sum_{c \in HC} \Big(\sum_h QH_{ch} + QG_c + QSHI_c\Big) \tag{H1}$$
 
@@ -846,7 +851,9 @@ Before period $t \geq 1$, in this order:
    supply of an unemployed factor is endogenous, so $g_f$ must be zero.
 3. **Population.** $\gamma_{ch,t} = (1+g_P)\,\gamma_{ch,t-1}$ and
    $HS^0_t = (1+g_P)\,HS^0_{t-1}$: subsistence consumption grows with the
-   population, and the health link compares health services per head.
+   population, and the health link compares health services per head. With
+   a mortality rate (from version 0.3.4), $g_P$ becomes $g_{P,t}$ of Section
+   15.4, and factors that lose workers to deaths grow at $g_{f,t}$.
 4. **Government and foreign flows.** $\overline{qg}_c$,
    $trnsfr_{d,gov}$, $trnsfr_{gov,gov}$ and $trnsfr_{shi,gov}$ grow at $g_G$;
    flows in foreign currency ($trnsfr_{d,row}$, $trnsfr_{f,row}$,
@@ -1163,6 +1170,91 @@ wage). The reference wage $\overline{w}_f$ and the floor $\underline{w}_f$ stay
 constant in real terms; shocks may change them (`wref`, `wmin`), and the
 labour force (`qlf`).
 
+## 15. Health outcomes, days worked and demography (from version 0.3.4)
+
+### 15.1 Health services per head
+
+Health outcomes respond to health services per head relative to the base,
+
+$$R = HS / HS^0,$$
+
+where $HS$ is the volume of health services bought by households, the
+government and the health insurance fund (H1), and $HS^0$ its base value,
+which grows with the population in dynamic runs (Section 10, step 3). Each
+outcome has a constant elasticity with respect to $R$. These elasticities
+are hypotheses about how services become health, to be taken from studies
+of the country or region (for example, Bokhari, Gai and Gottret 2007;
+Anyanwu and Erhijakpor 2009); the package supplies none. An outcome whose
+elasticity is zero is constant unless shocked, and needs no health
+commodities.
+
+### 15.2 Days lost to illness
+
+For a factor $f \in FS$ the user gives the base share of working time lost
+to illness, $0 \leq s^0_f < 1$ (`cge_calibrate, sickdays()`), for example
+from a labour force or household survey, and its elasticity $\epsilon^{s}_f$
+with respect to $R$ (`sickelas()`; negative when more services mean fewer
+days lost). The share lost is $S_f = \sigma_f R^{\epsilon^{s}_f}$, with
+$\sigma_f = s^0_f$ unless shocked (`cge_shock sick`, for example an
+epidemic), and days worked per worker, relative to the base, are
+
+$$DW_f = \frac{1 - \sigma_f R^{\epsilon^{s}_f}}{1 - s^0_f}, \qquad f \in FS \tag{H3}$$
+
+and $DW_f = 1$ otherwise. Days worked scale the factor's effective input in
+production, $\widetilde{QF}_{fa} = af_f\,EFF_f\,DW_f\,QF_{fa}$ (Q3, Q4).
+Factor quantities $QF_{fa}$ and $QFS_f$, the wage $W_f$ and unemployment
+(Section 14) stay per worker. In real terms fewer days per worker are the
+same as less labour measured in days: with $L$ workers and $D$ days each, a
+wage $w$ per effective unit pays $w\,D\,L$ whether the factor is counted in
+workers or in days. $EFF_f$ (5.2) measures output per day worked; $DW_f$
+the days worked. $S_f$ must stay below one.
+
+### 15.3 Mortality
+
+The user may give the base crude death rate $m^0$, deaths per head per
+period (`mortality()`), and its elasticity $\epsilon^{m}$ with respect to $R$
+(`mortelas()`). The death rate is
+
+$$MR = \mu^{m} R^{\epsilon^{m}},$$
+
+with $\mu^{m} = m^0$ unless shocked (`cge_shock mort`). It is reported, and
+does not enter the equations of a period: deaths in period $t$ change the
+population and labour from period $t+1$ (15.4), so each period is solved
+with its population given.
+
+### 15.4 Population and labour in dynamic runs
+
+The population growth rate $g_P$ given for a run (`population()`) is taken
+to hold at the base death rate. With a death rate, population grows from
+$t-1$ to $t$ at
+
+$$g_{P,t} = g_P + \left(m^0 - MR_{t-1}\right),$$
+
+which scales the subsistence quantities, $HS^0$ and the population index
+$POP$ (step 3 of Section 10). For the factors named in `deathfactors()`
+(labour, not capital), deaths at working ages change the supply:
+
+$$g_{f,t} = g_f + \frac{\theta^{D}}{\alpha^{W}}\left(m^0 - MR_{t-1}\right),$$
+
+where $\theta^{D}$ is the share of deaths at working ages (`deathshare()`)
+and $\alpha^{W}$ the working-age share of the population (`workingage()`):
+excess deaths per head of the population, $MR - m^0$, remove a share
+$\theta^{D} (MR - m^0) / \alpha^{W}$ of the working-age population, and the
+factor's workers in the same proportion. The labour force of such a factor
+(Section 14) grows at the same rate. $MR_{t-1}$ uses the parameters and
+health services of period $t-1$, including its shocks.
+
+In a baseline, rising health services per head lower the death rate and
+raise population growth above $g_P$; scenarios are therefore compared with a
+baseline run with the same settings.
+
+### 15.5 Reporting
+
+The health table shows, when the model has them: health services per head
+$R$; the share of working time lost, $100\,S_f$ (per cent), and days worked
+$DW_f$ for $f \in FS$; the death rate per 1,000, $1000\,MR$; and the
+population index $POP$. Shares and rates change in points.
+
 ## References
 
 Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. (2008). *The
@@ -1189,3 +1281,9 @@ Fischer, A. (1992). A special Newton-type optimization method. *Optimization*
 Kanzow, C. (1996). Some noninterior continuation methods for linear
 complementarity problems. *SIAM Journal on Matrix Analysis and Applications*
 17(4): 851-868.
+
+Anyanwu, J. C. and A. E. O. Erhijakpor (2009). Health expenditures and health
+outcomes in Africa. *African Development Review* 21(2): 400-433.
+
+Bokhari, F. A. S., Y. Gai and P. Gottret (2007). Government health
+expenditures and health outcomes. *Health Economics* 16(3): 257-273.

@@ -48,7 +48,10 @@ Every case of the Python test suite, including:
   crop; margins on domestic sales, imports and exports; and finite export
   demand (from version 0.3.2);
 - a wage curve and a minimum wage, binding in the base or reached from full
-  employment, and left by moving to full employment (from version 0.3.3).
+  employment, and left by moving to full employment (from version 0.3.3);
+- days lost to illness responding to health services, alone and with the
+  efficiency link, an epidemic, and unemployed labour (from version 0.3.4;
+  the death rate enters only dynamic runs, which are not checked in GAMS).
 
 For each case, every scenario is compared with the expected results in
 `tests/expected`, which the Stata suite also matches. Alternative closures
@@ -59,7 +62,7 @@ are compared with the Python reference:
 
 ## Result (20 October 2026, GAMS 54.2, PATH)
 
-130 scenarios; every expected value was found and solved.
+139 scenarios; every expected value was found and solved.
 
 - Base values from GAMS's own calibration agree to 5e-15 or better.
 - Solutions agree to 3e-11 or better, relative to the larger of 1 and the

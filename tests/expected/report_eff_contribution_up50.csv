@@ -72,6 +72,7 @@ commodities,domestic_sales,com_hlt,30,32.9279111222982
 commodities,exports,com_hlt,0,0
 commodities,imports,com_hlt,0,0
 health,health_services,,30,32.9279111222982
+health,services_per_head,,1,1.09759703740994
 health,efficiency,lab,1,1.02833088072083
 health,fund_revenue,,9,12.136893508284
 health,fund_volume,,1,1.35532622447312

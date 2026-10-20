@@ -1,4 +1,4 @@
-*! cge_dynamic.ado  v0.2.0  2026-10-16
+*! cge_dynamic.ado  v0.3.4  2026-10-20
 *! cge-stata: solve a recursive dynamic run (model_spec.md, Section 10)
 *! Each period is stored as the simulation <name><period>
 *!
@@ -11,7 +11,8 @@ program define cge_dynamic, rclass
         DEPreciation(numlist >=0 <1) RENTal(numlist >0) SENSitivity(real 1)             ///
         GROWth(string) TFP(numlist) GDPgrowth(numlist) BASEline(name)                   ///
         POPulation(real 0) GOVgrowth(real 0) FOReigngrowth(real 0) SHOCKs(name)         ///
-        TOLerance(real 1e-12) ITERate(integer 100)]
+        TOLerance(real 1e-12) ITERate(integer 100)                                      ///
+        DEATHFactors(namelist) DEATHShare(real 0) WORKingage(real 1)]
 
     * Simulation names must be valid Stata names
     foreach t of numlist `periods' {
@@ -28,7 +29,8 @@ program define cge_dynamic, rclass
     _cge_load
     mata: _cge_dyn_start("`name'", "`periods'", "`capital'", "`depreciation'", "`rental'", ///
         `sensitivity', `"`growth'"', "`tfp'", "`gdpgrowth'", "`baseline'", `population',   ///
-        `govgrowth', `foreigngrowth', `tolerance', `iterate')
+        `govgrowth', `foreigngrowth', `tolerance', `iterate', "`deathfactors'", `deathshare', ///
+        `workingage')
     local first 1
     foreach t of numlist `periods' {
         if !`first' {

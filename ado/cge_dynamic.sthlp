@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.3  20oct2026}{...}
+{* *! version 0.3.4  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -14,6 +14,7 @@
 [{opt cap:ital(factors)} {opt dep:reciation(numlist)} {opt rent:al(numlist)} {opt sens:itivity(#)}
 {opt grow:th(factor:rate ...)} {opt tfp(numlist)} {opt gdp:growth(numlist)} {opt base:line(name)}
 {opt pop:ulation(#)} {opt gov:growth(#)} {opt for:eigngrowth(#)} {opt shock:s(program)}
+{opt deathf:actors(factors)} {opt deaths:hare(#)} {opt work:ingage(#)}
 {opt tol:erance(#)} {opt iter:ate(#)}]
 
 
@@ -41,7 +42,11 @@ specific to each activity, it is allocated by relative rental rates, with
 sensitivity {opt sensitivity()}.{p_end}
 {phang2}2. Other factors grow at the rates in {opt growth()}.{p_end}
 {phang2}3. Subsistence consumption (LES) and the base of the health link grow
-with {opt population()}.{p_end}
+with {opt population()}. With a death rate ({helpb cge_calibrate},
+{opt mortality()}; from version 0.3.4), population growth is
+{opt population()} plus the base death rate less the previous period's death
+rate, and the factors in {opt deathfactors()} lose workers to deaths at
+working ages.{p_end}
 {phang2}4. Government consumption and real transfers grow at
 {opt govgrowth()}; flows in foreign currency, and fixed foreign savings, at
 {opt foreigngrowth()}.{p_end}
@@ -102,7 +107,21 @@ policy scenario does not change efficiency.
 
 {phang}
 {opt population(#)}, {opt govgrowth(#)} and {opt foreigngrowth(#)} set the
-growth of population, government flows and foreign flows.
+growth of population, government flows and foreign flows. The population
+growth rate is taken to hold at the base death rate.
+
+{phang}
+{opt deathfactors(factors)}, {opt deathshare(#)} and {opt workingage(#)}
+(from version 0.3.4; docs/model_spec.md, Section 15.4) make labour respond to
+deaths. {opt deathfactors()} lists the labour factors, which may not be
+capital; {opt deathshare()} is the share of deaths at working ages and
+{opt workingage()} the working-age share of the population (default 1). Each
+listed factor then grows at its {opt growth()} rate plus
+{it:deathshare/workingage} times the base death rate less the previous
+period's death rate; a factor's labour force grows at the same rate. They
+need a death rate. In a baseline, rising health services per head lower the
+death rate and raise population growth above {opt population()}, so compare
+scenarios with a baseline run with the same settings.
 
 {phang}
 {opt shocks(program)} names a program called as {it:program period} before

@@ -67,7 +67,8 @@ local xl "`xl'.xlsx"
 cge_report, sims(_all) nodisplay saving("`xl'", replace)
 preserve
 quietly import excel using "`xl'", sheet("health") firstrow clear
-assert _N == 4
+* health services and services per head (from version 0.3.4), efficiency and the fund
+assert _N == 5
 quietly import excel using "`xl'", sheet("macro") firstrow clear
 assert _N == 17
 restore

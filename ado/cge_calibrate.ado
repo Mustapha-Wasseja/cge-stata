@@ -1,4 +1,4 @@
-*! cge_calibrate.ado  v0.3.3  2026-10-20
+*! cge_calibrate.ado  v0.3.4  2026-10-20
 *! cge-stata: calibrate the model to the mapped SAM
 *! Computes base values and parameters and checks benchmark replication
 *!
@@ -12,7 +12,8 @@ program define cge_calibrate, rclass
         healthcom(namelist) healthfac(namelist) healthelas(numlist >=0)          ///
         VATCredit(string) DEBT(string) INTerest(string) DEBTHolders(string)     ///
         FOReignborrowing(string) EXPORTOnly(namelist) EXPORTDemand(string)      ///
-        UNEMPloyment(string) WAGECurve(string) MINWage(string) SMOOTHing(string)]
+        UNEMPloyment(string) WAGECurve(string) MINWage(string) SMOOTHing(string)        ///
+        SICKDays(string) SICKElas(string) MORTality(string) MORTElas(string)]
 
     if "`fquantities'" != "" confirm matrix `fquantities'
 
@@ -22,6 +23,8 @@ program define cge_calibrate, rclass
         strtrim(st_local("vatcredit")), strtrim(st_local("debt")), strtrim(st_local("interest")), ///
         strtrim(st_local("debtholders")), strtrim(st_local("foreignborrowing")), "`exportonly'", ///
         strtrim(st_local("exportdemand")), strtrim(st_local("unemployment")),                 ///
-        strtrim(st_local("wagecurve")), strtrim(st_local("minwage")), strtrim(st_local("smoothing")))
+        strtrim(st_local("wagecurve")), strtrim(st_local("minwage")), strtrim(st_local("smoothing")), ///
+        strtrim(st_local("sickdays")), strtrim(st_local("sickelas")), strtrim(st_local("mortality")),  ///
+        strtrim(st_local("mortelas")))
     return add
 end

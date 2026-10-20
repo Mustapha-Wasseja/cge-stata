@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.3.3 implements the standard single-country model described in
+Version 0.3.4 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -55,7 +55,11 @@ Version 0.3.3 implements the standard single-country model described in
   labour force from the base unemployment rate; a wage curve, on which real
   wages fall as unemployment rises; and a minimum real wage, below which wages
   cannot fall, with the regime (unemployment at the floor, or full employment
-  above it) found by the solver.
+  above it) found by the solver;
+- health outcomes and demography (version 0.3.4, [Section 15](docs/model_spec.md)):
+  working time lost to illness and a death rate that respond to health
+  services per head; days worked scale labour input, and in dynamic runs
+  deaths change the growth of the population and of labour.
 
 Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
 derivatives for the aggregate equations with grouped central differences for
@@ -73,6 +77,15 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.3.4 adds the health outcomes above. `cge_calibrate` gains
+`sickdays()`, `sickelas()`, `mortality()` and `mortelas()`; `cge_shock`
+changes the share of time lost (`sick`, for example an epidemic) and the
+death rate (`mort`); the health report shows services per head, the share of
+time lost, days worked, the death rate and the population; and
+`cge_dynamic` gains `deathfactors()`, `deathshare()` and `workingage()`.
+Deaths respond to health services within a period and change population and
+labour from the next one. The elasticities are the user's, from studies of
+the country; the package supplies none.
 Version 0.3.3 adds the labour-market regimes above. `cge_calibrate` gains
 `unemployment()`, `wagecurve()`, `minwage()` and `smoothing()`; `cge_closure`
 gains the factor closures `wagecurve` and `minwage`; `cge_shock` changes the

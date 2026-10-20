@@ -48,10 +48,11 @@ PARAMS = {"pwm": "pwm", "pwe": "pwe", "tm": "tm", "te": "te", "tq": "tq", "ta": 
           "qg": "qgbar", "qinv": "qinvbar", "trdg": "trdg", "trdr": "trdr", "trfr": "trfr",
           "trgr": "trgr", "trrg": "trrg", "tshi": "tshi", "qshi": "qshibar", "trshi": "trshi",
           "trshir": "trshir", "af": "af", "tv": "tv", "kappa": "kappa", "rd": "rd", "rf": "rf",
-          "ddebt": "ddebt", "fdebt": "fdebt", "qlf": "qlf", "wmin": "wmin", "wref": "wref"}
+          "ddebt": "ddebt", "fdebt": "fdebt", "qlf": "qlf", "wmin": "wmin", "wref": "wref",
+          "sick": "sick"}
 PARAM_SETS = {"pwm": "C", "pwe": "C", "tm": "C", "te": "C", "tq": "C", "ta": "A", "ad": "A", "qg": "C",
               "qinv": "C", "trdg": "D", "trdr": "D", "trfr": "F", "tshi": "F", "qshi": "C", "af": "F",
-              "tv": "C", "kappa": "A", "qlf": "F", "wmin": "F", "wref": "F"}
+              "tv": "C", "kappa": "A", "qlf": "F", "wmin": "F", "wref": "F", "sick": "F"}
 FIXED_SETS = {"QFS": "F", "FSAV": "", "EXR": "", "GSAV": "", "IADJ": "", "MPSADJ": "", "TINSADJ": "",
               "CPI": "", "DPI": "", "W": "F", "GADJ": ""}
 
@@ -71,10 +72,11 @@ def gams_set(name: str, elements, domain: str = "AC") -> str:
 
 
 def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict | None = None,
-               trade: dict | None = None, labour: dict | None = None) -> None:
+               trade: dict | None = None, labour: dict | None = None, outcomes: dict | None = None) -> None:
     """The prepared SAM, the mapping and the settings supplied by the user (elasticities,
     VAT credit shares, debt and interest rates, unemployment rates, wage-curve
-    elasticities and minimum wages) as a GAMS include file."""
+    elasticities and minimum wages, and the shares of working time lost to
+    illness and their elasticities) as a GAMS include file."""
     m, sam, S, p = model.mapping, model.sam, model.sets, model.params
     lines = ["* data for cge_model.gms, written by run_gams_check.py",
              "set AC 'accounts' / " + ", ".join(q(a) for a in sam.labels) + " /;"]
@@ -143,6 +145,13 @@ def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict 
     lines.append(param("mwin", F, [mw.get(f, 0.0) for f in F]))
     lines.append(param("mwgiven", F, [1.0 if f in mw else 0.0 for f in F]))
     lines.append(f"scalar muin / {num(labour.get('smoothing', 1e-10))} /;")
+    # Health outcomes (Section 15): the death rate does not enter the equations
+    outcomes = outcomes or {}
+    sick, sickel = outcomes.get("sick_days", {}), outcomes.get("sick_elasticity", {})
+    lines.append(param("sickin", F, [sick.get(f, 0.0) for f in F]))
+    lines.append(param("sickgiven", F, [1.0 if f in sick else 0.0 for f in F]))
+    lines.append(param("sickelin", F, [sickel.get(f, 0.0) for f in F]))
+    lines.append(f"scalar mortelin / {num(outcomes.get('mortality_elasticity') or 0.0)} /;")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -233,10 +242,10 @@ def cases() -> list[dict]:
     out = []
 
     def add(label, model, shocks, prefix="", les=None, closure=None, python=False, vat=None, debt=None,
-            trade=None, labour=None):
+            trade=None, labour=None, outcomes=None):
         out.append({"label": label, "model": model, "shocks": shocks, "prefix": prefix, "les": les,
                     "closure": closure or Closure(), "python": python, "vat": vat, "debt": debt,
-                    "trade": trade, "labour": labour})
+                    "trade": trade, "labour": labour, "outcomes": outcomes})
 
     add("standard", std, sc.simulation_inputs(std))
     mixed = sc.synthetic_model(**sc.MIXED_ELASTICITIES)
@@ -340,6 +349,21 @@ def cases() -> list[dict]:
     lo = sc.synthetic_model(**settings)
     add("minimum wage, low unemployment", lo, {"productivity_up5": {"params": {"ad": lo.params["ad"] * 1.05}}},
         "mwlo_", closure=mwc, labour=settings)
+    # Health outcomes (version 0.3.4, model_spec.md, Section 15)
+    out_settings = sc.OUTCOMES
+    hout = sc.health_model(**out_settings)
+    hlt, lab = hout.sets["C"].index("com_hlt"), hout.sets["F"].index("lab")
+    shocks = sc.simulation_inputs(hout)
+    shocks["gov_health_up20"] = {"params": {"qg": sc._scaled(hout.params["qg"], hlt, 1.2)}}
+    shocks["epidemic"] = {"params": {"sick": sc._scaled(hout.params["sick"], lab, 2.0)}}
+    add("health outcomes", hout, shocks, "hout_", outcomes=out_settings)
+    add("health outcomes, unemployed labour", hout,
+        {"epidemic_unemployed": {"params": {"sick": sc._scaled(hout.params["sick"], lab, 2.0)}}}, "hout_",
+        closure=Closure(factors={"lab": "unemployed"}), outcomes=out_settings)
+    both = sc.health_model(**{**out_settings, **sc.HEALTH_LINK})
+    add("health outcomes and efficiency", both,
+        {"gov_health_up20": {"params": {"qg": sc._scaled(both.params["qg"], hlt, 1.2)}}}, "hboth_",
+        outcomes=out_settings)
     # Alternative closures, compared with the Python reference
     alt1 = Closure(external="fixexr", government="fixgsav", savinv="investment", numeraire="dpi",
                    factors={"cap": "specific"})
@@ -371,7 +395,8 @@ def main() -> None:
         for f in GAMS_FILES:
             shutil.copy(HERE / f, d / f)
         model = case["model"]
-        write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"], case["trade"], case["labour"])
+        write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"], case["trade"], case["labour"],
+                   case["outcomes"])
         run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work"], d)
         bstatus, base = read_gams(d / "base.csv")
         for name, shock in case["shocks"].items():

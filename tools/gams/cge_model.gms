@@ -263,7 +263,16 @@ FSAV0 = sum((SAVS, ROWS), SAM(SAVS, ROWS));
 parameters af(AC);
 scalars linked, hs0;
 af(F) = 1;
-linked = 1$(sum(F$(eta(F) <> 0), 1) > 0);
+* 15.2 Days lost to illness: base shares and elasticities given by the user;
+* a death rate with a non-zero elasticity also needs health services
+set FS(AC) "factors with days lost to illness";
+parameters sick0(AC) "base share of working time lost", sick(AC) "share lost before the response to services",
+     epss(AC) "elasticity of the share lost";
+FS(F) = yes$sickgiven(F);
+sick0(F) = sickin(F);
+sick(F) = sick0(F);
+epss(F) = sickelin(F);
+linked = 1$(sum(F$(eta(F) <> 0), 1) + sum(F$(epss(F) <> 0), 1) + 1$(mortelin <> 0) > 0);
 hs0 = 1;
 hs0$linked = sum(C$HCOM(C), sum(H, QH0(C, H)) + qgbar(C) + qshibar(C));
 
@@ -300,11 +309,11 @@ variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(
      QA(AC), QVA(AC), QINTA(AC), QF(AC, AC), QINT(AC, AC), QX(AC), QD(AC), QE(AC), QM(AC), QQ(AC),
      QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
      TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
-     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC);
+     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC), DW(AC);
 
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
-     EQ4D(AC, AC), EQ5(AC, AC), EQ6(AC), EH1, EH2(AC),
+     EQ4D(AC, AC), EQ5(AC, AC), EQ6(AC), EH1, EH2(AC), EH3(AC),
      ET1(AC), ET2(AC), ET3(AC), ET4(AC), ET5(AC), ET6(AC), ET7(AC), ET8(AC), ET9(AC), ET3E(AC), ET10(AC),
      EI1(AC), EI2(AC, AC), EI3(AC), EI4(AC), EI5(AC, AC), EI5H(AC, AC), EI6(AC), EI7(AC), EI8, EI9, EI10(AC), EI11(AC),
      EI12, EI13(AC), EI14, EL1(AC), EL2(AC), ES1(AC), ES2(AC), ES3, ES4, ES5;
@@ -333,18 +342,19 @@ EQ2C(A)$(not LT(A) and not CDA(A))..
 EQ1D(A)$CDA(A)..  QA(A) =e= aa(A) * QVA(A)**dla(A) * QINTA(A)**dlac(A);
 EQ2D(A)$CDA(A)..  PVA(A) * QVA(A) * dlac(A) =e= PINTA(A) * QINTA(A) * dla(A);
 EQ3C(A)$(not CDV(A))..
-    QVA(A) =e= ad(A) * sum(F$FA(F, A), dva(F, A) * (af(F) * EFF(F) * QF(F, A))**(-rva(A)))**(-1 / rva(A));
+    QVA(A) =e= ad(A) * sum(F$FA(F, A), dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A)))**(-1 / rva(A));
 EQ3D(A)$CDV(A)..
-    QVA(A) =e= ad(A) * prod(F$FA(F, A), (af(F) * EFF(F) * QF(F, A))**dva(F, A));
+    QVA(A) =e= ad(A) * prod(F$FA(F, A), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A));
 EQ4C(F, A)$(FA(F, A) and not CDV(A))..
     W(F) * WFDIST(F, A) =e= PVA(A) * QVA(A)
-        / sum(FP$FA(FP, A), dva(FP, A) * (af(FP) * EFF(FP) * QF(FP, A))**(-rva(A)))
-        * dva(F, A) * (af(F) * EFF(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F);
+        / sum(FP$FA(FP, A), dva(FP, A) * (af(FP) * EFF(FP) * DW(FP) * QF(FP, A))**(-rva(A)))
+        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F) * DW(F);
 EQ4D(F, A)$(FA(F, A) and CDV(A))..  W(F) * WFDIST(F, A) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
 EQ5(C, A)$ica(C, A)..  QINT(C, A) =e= ica(C, A) * QINTA(A);
 EQ6(C)$CX(C)..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
 EH1$linked..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C));
 EH2(F)$eta(F).. EFF(F) =e= (HS / hs0)**eta(F);
+EH3(F)$FS(F)..  DW(F) =e= (1 - sick(F) * (HS / hs0)**epss(F)) / (1 - sick0(F));
 
 * 5.3 Trade
 ET1(C)$(CE(C) and not XO(C))..  QX(C) =e= at(C) * (dt(C) * QE(C)**rt(C) + dtc(C) * QD(C)**rt(C))**(1 / rt(C));
@@ -430,7 +440,7 @@ QINV.l(C) = qinvbar(C);  QFS.l(F) = sum(A, QF0(F, A));  YF.l(F) = YF0(F);  YIF.l
 YI.l(D) = YI0(D);  EH.l(H) = EH0(H);  YG.l = YG0;  EG.l = EG0;  GSAV.l = GSAV0;  FSAV.l = FSAV0;
 TINS.l(D) = tins0(D);  MPS.l(D) = mps0(D);  TINSADJ.l = 1;  MPSADJ.l = 1;  IADJ.l = 1;  GADJ.l = 1;
 WFDIST.l(F, A) = 1;  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(C);  YSHI.l = YSHI0;
-SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;
+SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;  DW.l(F) = 1;
 TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;  LSW.l(F) = 0;  LSM.l(F) = lsm0(F);
 
 * Closure (Section 6): 1 = the default of each block

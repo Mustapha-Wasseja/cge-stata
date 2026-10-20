@@ -49,6 +49,12 @@ class Dynamics:
     foreign_growth: float = 0.0
     gdp_target: float | list | None = None
     tfp_path: list | None = None
+    # Deaths at working ages (model_spec.md, 15.4): the factors that lose
+    # workers, the share of deaths at working ages and the working-age share
+    # of the population
+    death_factors: tuple = ()
+    death_share: float = 0.0
+    working_age: float = 1.0
 
 
 @dataclasses.dataclass
@@ -89,6 +95,18 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
             raise ValueError(f"factor_growth: {f} is a capital factor")
         if g != 0 and fac[f] == "unemployed" and not inlf[F.index(f)]:
             raise ValueError(f"factor_growth: {f} is unemployed, so its supply is not fixed")
+    if settings.death_factors:
+        if not model.struct["hasmort"]:
+            raise ValueError("death_factors: the model has no death rate (give mortality)")
+        if not 0 <= settings.death_share <= 1 or not 0 < settings.working_age <= 1:
+            raise ValueError("death_share must lie between 0 and 1, and working_age above 0 and at most 1")
+        for f in settings.death_factors:
+            if f not in F:
+                raise ValueError(f"death_factors: {f} is not a factor")
+            if f in settings.capital:
+                raise ValueError(f"death_factors: {f} is a capital factor")
+            if fac[f] == "unemployed" and not inlf[F.index(f)]:
+                raise ValueError(f"death_factors: {f} is unemployed, so its supply is not fixed")
     targets = settings.gdp_target
     if targets is not None and not np.iterable(targets):
         targets = [targets] * settings.periods
@@ -101,6 +119,13 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
     base_income = {f: model.base["YF"][F.index(f)] for f in settings.capital}
     total_income = sum(base_income.values())
     for t in range(1, settings.periods + 1):
+        # Deaths in t-1 relative to the base death rate (model_spec.md, 15.4)
+        excess = 0.0
+        if model.struct["hasmort"]:
+            pp = prev.params
+            ratio = prev["HS"][0] / pp["hs0"]
+            excess = float(pp["mort0"] - pp["mort"] * ratio ** pp["eps_m"])
+        gpop = settings.population_growth + excess
         # 1. Capital accumulation from last period's real investment
         inv = float(model.base["PQ"] @ prev["QINV"])
         for f, (delta, rental) in settings.capital.items():
@@ -124,6 +149,8 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
                 continue
             k = F.index(f)
             g = settings.factor_growth.get(f, 0.0)
+            if f in settings.death_factors:
+                g = g + settings.death_share / settings.working_age * excess
             if fac[f] == "specific":
                 fx["QF"][k] = (1 + g) * prev["QF"][k]
             elif fac[f] == "mobile":
@@ -133,9 +160,10 @@ def run(model: Model, settings: Dynamics, closure: Closure | None = None,
                 p["qlf"] = np.array(p["qlf"], dtype=float)
                 p["qlf"][k] = (1 + g) * p["qlf"][k]
         # 4. Population, 5. government and foreign flows
-        p["gamma"] = p["gamma"] * (1 + settings.population_growth)
-        p["gammah"] = p["gammah"] * (1 + settings.population_growth)
-        p["hs0"] = p["hs0"] * (1 + settings.population_growth)
+        p["gamma"] = p["gamma"] * (1 + gpop)
+        p["gammah"] = p["gammah"] * (1 + gpop)
+        p["hs0"] = p["hs0"] * (1 + gpop)
+        p["pop"] = p["pop"] * (1 + gpop)
         for name in GOVERNMENT:
             p[name] = p[name] * (1 + settings.government_growth)
         for name in FOREIGN:

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.3  20oct2026}{...}
+{* *! version 0.3.4  20oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -15,7 +15,8 @@
 {opt healthcom(names)} {opt healthfac(names)} {opt healthelas(numlist)}
 {opt vatc:redit(spec)} {opt debt(spec)} {opt int:erest(spec)} {opt debth:olders(spec)}
 {opt for:eignborrowing(#)} {opt exporto:nly(names)} {opt exportd:emand(spec)}
-{opt unemp:loyment(spec)} {opt wagec:urve(spec)} {opt minw:age(spec)} {opt smooth:ing(#)}]
+{opt unemp:loyment(spec)} {opt wagec:urve(spec)} {opt minw:age(spec)} {opt smooth:ing(#)}
+{opt sickd:ays(spec)} {opt sicke:las(spec)} {opt mort:ality(#)} {opt morte:las(#)}]
 
 
 {title:Description}
@@ -181,6 +182,36 @@ in which the product of the unemployment rate and the proportional excess of
 the real wage over the floor is mu. The solver finds which of the two holds;
 the calibration lists the labour force and the floor.
 
+{pstd}
+{it:Health outcomes} (from version 0.3.4; docs/model_spec.md, Section 15).
+Outcomes respond to health services per head relative to the base, {it:R} =
+{it:HS/HS0}, with constant elasticities. The elasticities are hypotheses
+about how services become health and should come from studies of the
+country or region; the package supplies none. An outcome with a zero
+elasticity changes only when shocked and needs no {opt healthcom()}.
+
+{phang}
+{opt sickdays(spec)} gives the base share of working time lost to illness,
+{it:factor}{cmd::}{it:share} pairs with shares at least 0 and below 1, for
+example {cmd:sickdays(lab:0.05)} from a labour force or household survey.
+Days worked per worker then scale the factor's effective input in
+production; employment, wages and unemployment stay per worker. In real
+terms this is the same as less labour measured in days.
+
+{phang}
+{opt sickelas(spec)} gives the elasticity of the share of time lost with
+respect to health services per head, one value for every factor in
+{opt sickdays()} or {it:factor}{cmd::}{it:elasticity} pairs; usually
+negative. The share lost is {it:share x R^elasticity}.
+
+{phang}
+{opt mortality(#)} gives the base crude death rate, deaths per head per
+period (for example 0.008 for 8 per 1,000 a year), and {opt mortelas(#)} its
+elasticity with respect to health services per head. The death rate is
+reported; it does not change the solution of a period, but in dynamic runs
+it changes the growth of the population and, with {opt deathfactors()} of
+{helpb cge_dynamic}, of labour from the next period.
+
 
 {title:Example}
 
@@ -193,6 +224,7 @@ the calibration lists the labour force and the floor.
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) debt(domestic:100 foreign:40) interest(domestic:0.05 foreign:0.03)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) minwage(lab:0.95)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) sickdays(lab:0.05) sickelas(-0.4) mortality(0.01) mortelas(-0.3)}{p_end}
 
 
 {title:Stored results}
@@ -206,7 +238,15 @@ the calibration lists the labour force and the floor.
 {title:References}
 
 {phang}
+Anyanwu, J. C. and A. E. O. Erhijakpor. 2009. Health expenditures and health
+outcomes in Africa. {it:African Development Review} 21: 400-433.
+
+{phang}
 Blanchflower, D. G. and A. J. Oswald. 1994. {it:The Wage Curve}. Cambridge, MA: MIT Press.
+
+{phang}
+Bokhari, F. A. S., Y. Gai and P. Gottret. 2007. Government health
+expenditures and health outcomes. {it:Health Economics} 16: 257-273.
 
 {phang}
 Fischer, A. 1992. A special Newton-type optimization method. {it:Optimization} 24: 269-284.

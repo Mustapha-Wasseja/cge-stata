@@ -30,6 +30,7 @@ VARIABLES: dict[str, str] = {
     "TQADJ": "", "TMADJ": "", "TVADJ": "",
     "PWE": "C", "QHA": "AH",
     "LSW": "F", "LSM": "F",
+    "DW": "F",
 }
 
 # Tax scaling factors freed by each government closure (version 0.3.1)
@@ -227,8 +228,8 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["Q2C"] = (np.where(cda, v["PVA"] * v["QVA"] * dac, v["QVA"]),
                  np.where(cda, v["PINTA"] * v["QINTA"] * da,
                           v["QINTA"] * ((v["PINTA"] / v["PVA"]) * da / dac) ** (1 / (1 + ra))), ~lt)
-    # Factors in efficiency units (version 0.1.14)
-    z = (p["af"] * v["EFF"])[:, None]
+    # Factors in efficiency units (version 0.1.14), and days worked (0.3.4)
+    z = (p["af"] * v["EFF"] * v["DW"])[:, None]
     qf = np.where(fa, z * v["QF"], 1.0)
     rho = np.where(cd, 1.0, p["rho_va"])
     ces_sum = (p["delta_va"] * qf ** (-rho)).sum(axis=0)
@@ -243,8 +244,11 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     # Health services and factor efficiency (version 0.1.14)
     eta = p["eta_h"]
     hs = np.where(s["hc"], v["QH"].sum(axis=1) + v["QG"] + v["QSHI"], 0.0).sum()
-    eq["H1"] = (v["HS"], np.atleast_1d(hs), np.atleast_1d(np.any(eta != 0)))
+    eq["H1"] = (v["HS"], np.atleast_1d(hs), np.atleast_1d(s["hlink"]))
     eq["H2"] = (v["EFF"], (v["HS"] / p["hs0"]) ** eta, eta != 0)
+    # Days lost to illness (Section 15.2)
+    ratio = v["HS"][0] / p["hs0"]
+    eq["H3"] = (v["DW"], (1 - p["sick"] * ratio ** p["eps_s"]) / (1 - p["sick0"]), s["ins"])
     # Intermediate inputs and household purchases exist only where the SAM has a flow
     eq["Q5"] = (v["QINT"], p["ica"] * v["QINTA"][None, :], s["qint"])
     # Marketed output: home consumption does not reach the market (13.1)
@@ -419,7 +423,8 @@ class Model:
                  health_commodities=None, health_elasticities=None, vat_credit=None,
                  debt=None, interest=None, debt_holders=None, foreign_borrowing=None,
                  export_only=None, export_demand=None, unemployment=None, wage_curve=None,
-                 min_wage=None, smoothing=1e-10):
+                 min_wage=None, smoothing=1e-10, sick_days=None, sick_elasticity=None,
+                 mortality=None, mortality_elasticity=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -439,7 +444,8 @@ class Model:
         self._debt(debt, interest, debt_holders, foreign_borrowing)
         self._labour(unemployment, wage_curve, min_wage, smoothing)
         self._top_nest(sigma_a)
-        self._health_link(health_commodities, health_elasticities)
+        self._health_link(health_commodities, health_elasticities, sick_days, sick_elasticity,
+                          mortality, mortality_elasticity)
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
         with np.errstate(all="ignore"):      # masked elements may divide by zero
             eqs = _equations(self.base, self.params, self.struct)
@@ -800,9 +806,11 @@ class Model:
         self.struct["lt"], self.struct["cda"] = lt, cda
         self.params.update({"sigma_a": sa, "rho_a": rho, "delta_a": delta, "deltac_a": deltac, "aa": aa})
 
-    def _health_link(self, health_commodities, health_elasticities) -> None:
+    def _health_link(self, health_commodities, health_elasticities, sick_days=None, sick_elasticity=None,
+                     mortality=None, mortality_elasticity=None) -> None:
         """Factor efficiency (model_spec.md, 5.2 and 7.3): af = 1 and, given health
-        commodities and elasticities by factor, EFF = (HS / HS0)^eta."""
+        commodities and elasticities by factor, EFF = (HS / HS0)^eta. Health
+        outcomes (Section 15): days lost to illness and the death rate."""
         C, F, b = self.sets["C"], self.sets["F"], self.base
         nF = len(F)
         hcom = list(health_commodities or [])
@@ -822,19 +830,58 @@ class Model:
             raise ValueError("health elasticities must be zero or positive")
         if np.any(eta != 0) and not hcom:
             raise ValueError("health elasticities need health_commodities")
+        # Days lost to illness: base shares and elasticities by factor
+        sick_days = dict(sick_days or {})
+        extra = [f for f in sick_days if f not in F]
+        if extra:
+            raise ValueError(f"sick_days: {extra} are not factors of the model")
+        ins = np.array([f in sick_days for f in F], dtype=bool)
+        s0 = np.array([float(sick_days.get(f, 0.0)) for f in F])
+        if np.any(~np.isfinite(s0)) or np.any((s0 < 0) | (s0 >= 1)):
+            raise ValueError("sick_days: shares must be at least 0 and below 1")
+        if sick_elasticity is None:
+            eps_s = np.zeros(nF)
+        elif isinstance(sick_elasticity, dict):
+            extra = [f for f in sick_elasticity if f not in sick_days]
+            if extra:
+                raise ValueError(f"sick_elasticity: {extra} have no sick days")
+            eps_s = np.array([float(sick_elasticity.get(f, 0.0)) for f in F])
+        else:
+            eps_s = np.where(ins, float(sick_elasticity), 0.0)
+        if np.any(~np.isfinite(eps_s)):
+            raise ValueError("sick_elasticity must be finite")
+        # The death rate
+        if mortality is None:
+            if mortality_elasticity is not None:
+                raise ValueError("mortality_elasticity needs mortality")
+            has_mort, m0, eps_m = False, 0.0, 0.0
+        else:
+            has_mort, m0 = True, float(mortality)
+            eps_m = float(mortality_elasticity or 0.0)
+            if not 0 <= m0 < 1 or not np.isfinite(eps_m):
+                raise ValueError("mortality must be at least 0 and below 1, with a finite elasticity")
+        if (np.any(eps_s != 0) or eps_m != 0) and not hcom:
+            raise ValueError("health outcomes with non-zero elasticities need health_commodities")
         hc = np.array([c in hcom for c in C], dtype=bool)
-        linked = bool(np.any(eta != 0))
+        linked = bool(np.any(eta != 0) or np.any(eps_s != 0) or eps_m != 0)
         hs0 = float(np.where(hc, b["QH"].sum(axis=1) + b["QG"] + b["QSHI"], 0.0).sum())
         if linked and hs0 <= 0:
             raise SAMError("health services have no consumption by households, the government "
                            "or the health insurance fund")
         hs0 = hs0 if linked else 1.0
         self.struct["hc"] = hc
-        self.params.update({"af": np.ones(nF), "eta_h": eta, "hs0": np.array(hs0)})
+        self.struct["hlink"] = linked
+        self.struct["ins"] = ins
+        self.struct["hasmort"] = has_mort
+        self.params.update({"af": np.ones(nF), "eta_h": eta, "hs0": np.array(hs0),
+                            "sick0": s0, "sick": s0.copy(), "eps_s": eps_s, "mort0": np.array(m0),
+                            "mort": np.array(m0), "eps_m": np.array(eps_m), "pop": np.array(1.0)})
         b["EFF"] = np.ones(nF)
         b["HS"] = np.atleast_1d(hs0)
+        b["DW"] = np.ones(nF)
         self.exists["EFF"] = eta != 0
         self.exists["HS"] = np.atleast_1d(linked)
+        self.exists["DW"] = ins.copy()
 
     def _labour(self, unemployment, wage_curve, min_wage, smoothing) -> None:
         """Labour force, wage curve and minimum wage (model_spec.md, Section 14)."""

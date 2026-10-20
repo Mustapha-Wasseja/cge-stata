@@ -31,6 +31,7 @@ TQADJ.lo = -inf;       TQADJ.up = inf;       TMADJ.lo = -inf;       TMADJ.up = i
 TVADJ.lo = -inf;       TVADJ.up = inf;
 PWEV.lo(AC) = -inf;     PWEV.up(AC) = inf;     QHA.lo(AC, ACP) = -inf; QHA.up(AC, ACP) = inf;
 LSW.lo(AC) = -inf;      LSW.up(AC) = inf;      LSM.lo(AC) = -inf;      LSM.up(AC) = inf;
+DW.lo(AC) = -inf;       DW.up(AC) = inf;
 
 * Prices and quantities that are positive in the base stay positive
 PA.lo(A) = 1e-10;  PVA.lo(A) = 1e-10;  PQ.lo(C)$CQ(C) = 1e-10;  W.lo(F) = 1e-10;  EXR.lo = 1e-10;
@@ -40,7 +41,7 @@ PINTA.lo(A)$(PINTA0(A) > 0) = 1e-10;  QINTA.lo(A)$(QINTA0(A) > 0) = 1e-10;
 PX.lo(C)$CX(C) = 1e-10;  PD.lo(C)$CDO(C) = 1e-10;  QX.lo(C)$CX(C) = 1e-10;  QD.lo(C)$CDO(C) = 1e-10;
 PE.lo(C)$CE(C) = 1e-10;  QE.lo(C)$CE(C) = 1e-10;  PM.lo(C)$CM(C) = 1e-10;  QM.lo(C)$CM(C) = 1e-10;
 QF.lo(F, A)$FA(F, A) = 1e-10;  QT.lo(C)$CT(C) = 1e-10;  QER.lo(C)$CR(C) = 1e-10;
-EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;
+EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;  DW.lo(F)$FS(F) = 1e-10;
 * the wage curve needs positive unemployment
 QFS.up(F)$(FL(F) and epsw(F) > 0) = qlf(F) * (1 - 1e-12);
 
@@ -58,6 +59,7 @@ QSHI.fx(C)$(not qshibar(C)) = 0;       EFF.fx(F)$(not eta(F)) = EFF.l(F);
 YSHI.fx$(not fund) = YSHI.l;           SHIADJ.fx$(not fund) = SHIADJ.l;
 HS.fx$(not linked) = HS.l;
 LSW.fx(F)$(not FL(F)) = 0;             LSM.fx(F)$(not FL(F)) = 0;
+DW.fx(F)$(not FS(F)) = 1;
 
 * Closure
 GADJ.fx = GADJ.l;

@@ -106,11 +106,21 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
         if model.struct["ced"][k]:
             add("commodities", "world_export_price", c, v["PWE"][k])
 
+    ratio = v["HS"][0] / p["hs0"]
     if model.exists["HS"].any():
         add("health", "health_services", "", v["HS"][0])
+        add("health", "services_per_head", "", ratio)
         for k, f in enumerate(S["F"]):
             if model.exists["EFF"][k]:
                 add("health", "efficiency", f, v["EFF"][k])
+    # Health outcomes (Section 15.5)
+    for k, f in enumerate(S["F"]):
+        if model.struct["ins"][k]:
+            add("health", "sick_day_share", f, 100 * p["sick"][k] * ratio ** p["eps_s"][k])
+            add("health", "days_worked", f, v["DW"][k])
+    if model.struct["hasmort"]:
+        add("health", "mortality_rate", "", 1000 * float(p["mort"]) * ratio ** float(p["eps_m"]))
+        add("health", "population", "", float(p["pop"]))
     if model.exists["YSHI"].any():
         add("health", "fund_revenue", "", v["YSHI"][0])
         add("health", "fund_volume", "", v["SHIADJ"][0])
