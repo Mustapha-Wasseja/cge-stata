@@ -258,7 +258,7 @@ Mata file format differs; later versions read those saved in Stata 13.
 
 ## Installation
 
-Install directly from GitHub:
+Install directly from GitHub (tested with StataNow 19.5):
 
 ```stata
 net install cge, from("https://raw.githubusercontent.com/Mustapha-Wasseja/cge-stata/main/") replace
