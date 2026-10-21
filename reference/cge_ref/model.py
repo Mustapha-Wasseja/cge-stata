@@ -261,9 +261,11 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     q3_cd = p["ad"] * np.prod(qf ** p["delta_va"], axis=0)
     eq["Q3"] = (v["QVA"], np.where(cd, q3_cd, q3_ces), every_a)
     wage = v["W"][:, None] * v["WFDIST"]
+    # Factor cost to the activity, with taxes on factor use (version 0.5.0)
+    cost = wage * (1 + p["tf"])
     pvaqva = v["PVA"] * v["QVA"]
     q4_ces = pvaqva / ces_sum * p["delta_va"] * qf ** (-rho - 1) * z
-    eq["Q4"] = (np.where(cd, wage * v["QF"], wage),
+    eq["Q4"] = (np.where(cd, cost * v["QF"], cost),
                 np.where(cd, p["delta_va"] * pvaqva, q4_ces), fa)
     # Health services and factor efficiency (version 0.1.14)
     eta = p["eta_h"]
@@ -306,7 +308,8 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
                 np.ones(v["YF"].shape, dtype=bool))
     # Health insurance contributions are taken before factor income is distributed
     shi = s["shi_row"]
-    yif = p["shif"] * ((1 - p["tshi"]) * v["YF"])[None, :]
+    # contributions and taxes on factor income are taken first (version 0.5.0)
+    yif = p["shif"] * ((1 - p["tshi"] - p["tfy"]) * v["YF"])[None, :]
     if shi >= 0:
         yif[shi] = p["tshi"] * v["YF"]
     eq["I2"] = (v["YIF"], yif, np.ones(v["YIF"].shape, dtype=bool))
@@ -326,7 +329,8 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
                + (tm * p["pwm"] * v["QM"]).sum() * v["EXR"]
                + (p["te"] * pwe * v["QE"]).sum() * v["EXR"]
                + (p["ta"] * v["PA"] * v["QA"]).sum() + vat_revenue(v, p)
-               + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"] + rent[nF + nD])
+               + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"] + rent[nF + nD]
+               + factor_taxes(v, p).sum())
     eq["I8"] = (v["YG"], revenue, one)
     eq["I9"] = (v["EG"], np.atleast_1d(ph @ v["QG"]) + (p["trdg"].sum() + p["trgg"] + p["trshi"]) * v["CPI"]
                 + p["trrg"] * v["EXR"] + p["rd"] * p["ddebt"] + p["rf"] * p["fdebt"] * v["EXR"], one)
@@ -378,6 +382,12 @@ def vat_revenue(v: dict, p: dict) -> np.ndarray:
     base = (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]
             + (v["QINT"] * (1 - p["kappa"])[None, :]).sum(axis=1))
     return np.atleast_1d((tv * v["PQ"] * base).sum())
+
+
+def factor_taxes(v: dict, p: dict) -> np.ndarray:
+    """Taxes on factor use and on factor income (version 0.5.0), by factor."""
+    wage = v["W"][:, None] * v["WFDIST"]
+    return (p["tf"] * wage * v["QF"]).sum(axis=1) + p["tfy"] * v["YF"]
 
 
 def rents(v: dict, p: dict, pwe: np.ndarray) -> np.ndarray:
@@ -679,7 +689,15 @@ class Model:
             W0 = VA.sum(axis=1) / QFq.sum(axis=1)
             WFDIST0 = np.where(fa, VA / (W0[:, None] * np.where(fa, QFq, 1.0)), 1.0)
             QF0 = QFq
-        QVA0 = VA.sum(axis=0)
+        # Taxes on factor use by activities (version 0.5.0, model_spec.md,
+        # Section 17.1): rates on factor payments; value added at factor cost
+        # includes them
+        TF = np.zeros((nF, nA))
+        for account, factor in mapping.factor_taxes.items():
+            TF[F.index(factor)] += vec([account], A)[0]
+        fail_if(((np.abs(TF) > tol) & ~fa).any(axis=1), F, "a tax on factor use is recorded where the factor is not used")
+        tf = np.where(fa, TF / np.where(fa, VA, 1.0), 0.0)
+        QVA0 = (VA + TF).sum(axis=0)
         fail_if(QVA0 <= tol, A, "every activity needs positive value added")
         iva = QVA0 / QA0
         inta = QINTA0 / QA0
@@ -692,12 +710,12 @@ class Model:
         for k in range(nA):
             m = fa[:, k]
             if cd[k]:
-                d = VA[m, k] / QVA0[k]
+                d = (VA[m, k] + TF[m, k]) / QVA0[k]
                 delta_va[m, k] = d
                 ad[k] = QVA0[k] / np.prod(QF0[m, k] ** d)
             else:
                 r = rho_va[k]
-                num = w[m, k] * QF0[m, k] ** (1 + r)
+                num = w[m, k] * (1 + tf[m, k]) * QF0[m, k] ** (1 + r)
                 d = num / num.sum()
                 delta_va[m, k] = d
                 ad[k] = QVA0[k] / (d * QF0[m, k] ** (-r)).sum() ** (-1 / r)
@@ -731,15 +749,18 @@ class Model:
         D = self.sets["D"]
         YF0 = np.array([sam.row_total(f) for f in F])
         YIF0 = vec(I, F)
-        if np.abs(YIF0.sum(axis=0) - YF0).max() > tol:
+        # Taxes on factor income (version 0.5.0), taken before distribution
+        TFY = vec([mapping.factor_income_tax], F)[0] if mapping.factor_income_tax is not None else np.zeros(nF)
+        tfy = TFY / YF0
+        if np.abs(YIF0.sum(axis=0) + TFY - YF0).max() > tol:
             raise SAMError("factor income paid out does not equal factor income received")
         # Health insurance contributions as a rate on factor income (model_spec.md, 7.5)
         shi = mapping.insurance
         shi_row = I.index(shi) if shi is not None else -1
         tshi = YIF0[shi_row] / YF0 if shi is not None else np.zeros(nF)
-        if np.any(tshi >= 1):
-            raise SAMError("health insurance contributions take all the income of a factor")
-        shif = YIF0 / ((1 - tshi) * YF0)[None, :]
+        if np.any(tshi + tfy >= 1):
+            raise SAMError("health insurance contributions and taxes take all the income of a factor")
+        shif = YIF0 / ((1 - tshi - tfy) * YF0)[None, :]
         if shi is not None:
             shif[shi_row] = 0.0
         trfr = vec(F, [row])[:, 0]
@@ -796,6 +817,8 @@ class Model:
             "trshir": np.array(trshir),
             "sigma_va": sigma_va, "sigma_q": sigma_q, "sigma_t": sigma_t,
             "tv": tv, "kappa": kappa,
+            # taxes on factor use and income (version 0.5.0)
+            "tf": tf, "tfy": tfy,
             # version 0.3.2: margins by market, export demand, home consumption
             "icd": icd, "ici": ici, "ice": ice, "eta_e": eta_e, "qe0": QE0.copy(),
             "betah": betah, "gammah": np.zeros_like(betah),

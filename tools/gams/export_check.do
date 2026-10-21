@@ -33,7 +33,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
-    trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps
+    trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax
 local ncase : word count `cases'
 
 tempname post
@@ -234,6 +234,16 @@ foreach case of local cases {
         quietly cge_closure, swap(GSAV GADJ W(lab) QFS(lab))
         cge_shock tm, value(0)
         cge_shock GSAV, scale(1.5)
+    }
+    * Taxes on factor use and income (version 0.5.0)
+    else if "`case'" == "ftax" {
+        quietly cge_synthetic, clear factortax
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap' factortax(tax_pay:lab) factorincometax(tax_fy)
+        quietly cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)
+        cge_shock tf, elements(lab) scale(0.5)
+        cge_shock tf, elements(cap) value(0.05)
+        cge_shock tfy, elements(cap) scale(2)
     }
     quietly cge_solve, name(`case') tolerance(1e-12)
     assert r(converged) == 1

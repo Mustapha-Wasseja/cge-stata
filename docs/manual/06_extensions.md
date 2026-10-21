@@ -135,6 +135,30 @@ The Python reference finds the regimes by another method, and GAMS solves
 them as a mixed complementarity problem with PATH (chapter 11). The three
 agree on every test case to 4e-12 or better.
 
+## 6.6 Taxes on factor use and income (Section 17.1)
+
+Payroll taxes and taxes on capital, paid by activities, raise the cost of a
+factor above the income it receives. Taxes on factor income are taken before
+the income is distributed. Both are mapped with `cge_map` (chapter 3) and
+changed with the shocks `tf` and `tfy`:
+
+```stata
+cge_synthetic, clear factortax
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab) factorincometax(tax_fy)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tf, elements(lab) scale(0.5)        // halve the payroll tax on labour
+cge_solve, name(payroll_cut)
+```
+
+With a fixed supply of labour, workers bear the payroll tax: halving it
+raises the net wage by about 5 per cent, and the cost of labour to employers
+barely moves. `cge_shock tf, elements(cap) value(0.1)` introduces a tax on the
+use of capital where the SAM has none. The government report shows the
+revenue from each tax.
+
 ## References
 
 Blanchflower, D. G. and A. J. Oswald (1995). An introduction to the wage curve.

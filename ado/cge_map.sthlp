@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.2  20oct2026}{...}
+{* *! version 0.5.0  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -13,6 +13,7 @@
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
 [{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)} {opt vattax(name)} {opt vatshare(spec)} {opt domesticmargins(names)} {opt importmargins(names)} {opt exportmargins(names)}
+{opt factortax(account:factor ...)} {opt factorincometax(name)}
 {opt report(filename)} {opt replace}]
 
 {p 8 12 2}
@@ -178,6 +179,21 @@ account {cmd:_vatshare}, as {it:commodity}{cmd::}{it:share} pairs or one share
 for every commodity, between 0 and 1. Commodities not listed have share 0.
 {cmd:vatshare(0)} creates an empty VAT account, so that a VAT can be introduced
 by a shock to {cmd:tv}. {opt vattax()} and {opt vatshare()} may not be combined.
+
+{phang}
+{opt factortax(account:factor ...)} (from version 0.5.0; docs/model_spec.md,
+Section 17.1) names accounts of taxes on the use of factors, such as payroll
+taxes on labour or taxes on capital, which activities pay and which pass the
+revenue to the government. Each account is followed by the factor whose use
+it taxes. The rate on each factor in each activity is the tax over the
+factor payment; it raises the cost of the factor to the activity, and value
+added at factor cost includes it.
+
+{phang}
+{opt factorincometax(name)} names the account of taxes on factor income,
+which factors pay and which passes the revenue to the government. The rate
+on each factor's income is taken before the income is distributed to
+institutions, as the contributions to a health insurance fund are.
 
 {phang}
 {opt sheet(string)} names the worksheet of an Excel template; the default is

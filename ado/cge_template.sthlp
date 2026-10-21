@@ -48,14 +48,16 @@ mapping; otherwise they are blank. An Excel template also has a sheet
 {cmd:government}, {cmd:savinv}, {cmd:row}, {cmd:dirtax}, {cmd:saltax},
 {cmd:imptax}, {cmd:exptax}, {cmd:acttax}, {cmd:margins}, {cmd:territorial},
 {cmd:marginaccounts}, {cmd:stocks}, {cmd:insurance}, {cmd:vattax}, {cmd:domesticmargins},
-{cmd:importmargins} or {cmd:exportmargins}, in either case; the
+{cmd:importmargins}, {cmd:exportmargins}, {cmd:factortax} or {cmd:factorincometax}
+(from version 0.5.0), in either case; the
 singular forms {cmd:activity}, {cmd:commodity}, {cmd:factor}, {cmd:household},
 {cmd:enterprise}, {cmd:margin}, {cmd:marginaccount}, {cmd:stock} and {cmd:vat} are
 also accepted. VAT shares of the sales tax are not a role: give them with
 {cmd:cge_map using}'s {opt vatshare()} option. An account may have several roles where {cmd:cge_map} allows it:
 {cmd:activities margins} for a margin activity, {cmd:government saltax} when
 sales taxes are paid to the government account. Leave the role blank only for
-an account without flows.
+an account without flows. For an account with the role {cmd:factortax}, the
+pair column names the factor whose use it taxes.
 
 {pstd}
 {bf:Pairs.} A blank {cmd:pair} pairs an activity with the commodity whose column

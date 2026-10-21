@@ -21,6 +21,18 @@ imported are listed after the paired ones. Households may include non-profit
 institutions; `enterprises()` lists corporations, which receive factor income
 and transfers, pay direct taxes and save but do not consume.
 
+**Factor taxes** (from version 0.5.0). A SAM may record payroll taxes or taxes
+on capital paid by activities, and taxes on factor income paid by the factor
+accounts. Map each tax-on-use account with the factor it taxes, and the
+account of taxes on factor income:
+
+```stata
+cge_map, ... factortax(tax_pay:lab) factorincometax(tax_fy)
+```
+
+The rates are calibrated from the SAM: each tax over the factor payment, or
+over the factor's income (chapter 6.6).
+
 **The mapping report.** `cge_map` collects every problem before stopping:
 unbalanced accounts, accounts with flows but no role, cells the model cannot
 represent, and negative cells where values must be non-negative. Problems are

@@ -56,10 +56,10 @@ PARAMS = {"pwm": "pwm", "pwe": "pwe", "tm": "tm", "te": "te", "tq": "tq", "ta": 
           "trgr": "trgr", "trrg": "trrg", "tshi": "tshi", "qshi": "qshibar", "trshi": "trshi",
           "trshir": "trshir", "af": "af", "tv": "tv", "kappa": "kappa", "rd": "rd", "rf": "rf",
           "ddebt": "ddebt", "fdebt": "fdebt", "qlf": "qlf", "wmin": "wmin", "wref": "wref",
-          "sick": "sick"}
+          "sick": "sick", "tfy": "tfy"}
 PARAM_SETS = {"pwm": "C", "pwe": "C", "tm": "C", "te": "C", "tq": "C", "ta": "A", "ad": "A", "qg": "C",
               "qinv": "C", "trdg": "D", "trdr": "D", "trfr": "F", "tshi": "F", "qshi": "C", "af": "F",
-              "tv": "C", "kappa": "A", "qlf": "F", "wmin": "F", "wref": "F", "sick": "F"}
+              "tv": "C", "kappa": "A", "qlf": "F", "wmin": "F", "wref": "F", "sick": "F", "tfy": "F"}
 FIXED_SETS = {"QFS": "F", "FSAV": "", "EXR": "", "GSAV": "", "IADJ": "", "MPSADJ": "", "TINSADJ": "",
               "CPI": "", "DPI": "", "W": "F", "GADJ": ""}
 
@@ -97,11 +97,16 @@ def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict 
              "STAXS": [m.saltax] if m.saltax else [], "MTAXS": [m.imptax] if m.imptax else [],
              "ETAXS": [m.exptax] if m.exptax else [], "ATAXS": [m.acttax] if m.acttax else [],
              "VTAXS": [m.vattax] if m.vattax else [],
-             "HCOM": [c for c, h in zip(S["C"], model.struct["hc"]) if h]}
+             "HCOM": [c for c, h in zip(S["C"], model.struct["hc"]) if h],
+             # taxes on factor use and income (version 0.5.0)
+             "FTAXS": list(m.factor_taxes),
+             "FYTAXS": [m.factor_income_tax] if m.factor_income_tax else []}
     lines += [gams_set(k, v) for k, v in roles.items()]
     cells = [f"{q(r)}.{q(c)} {num(sam.values[i, j])}" for i, r in enumerate(sam.labels)
              for j, c in enumerate(sam.labels) if sam.values[i, j] != 0]
     lines.append("parameter SAM(AC, AC) /\n" + ",\n".join(cells) + "\n/;")
+    pairs = [f"{q(acc)}.{q(f)} 1" for acc, f in m.factor_taxes.items()]
+    lines.append("parameter ftfac(AC, AC) /" + (" " + ", ".join(pairs) if pairs else "") + " /;")
 
     def param(name, labels, values):
         body = ", ".join(f"{q(e)} {num(v)}" for e, v in zip(labels, values) if v != 0)
@@ -176,6 +181,15 @@ def shock_statements(model, shock: dict, closure: Closure) -> tuple[str, str]:
     S = {**model.sets, "": [""]}
     par, var = ["* parameter changes and closure"], ["* fixed-variable changes"]
     for name, new in shock.get("params", {}).items():
+        if name == "tf":
+            # taxes on factor use, by factor and activity (version 0.5.0)
+            for i, f in enumerate(model.sets["F"]):
+                for k, a in enumerate(model.sets["A"]):
+                    b0, b1 = model.params["tf"][i, k], np.asarray(new)[i, k]
+                    if b1 != b0:
+                        target = f"tf({q(f)}, {q(a)})"
+                        par.append(f"{target} = {num(b1 / b0)} * {target};" if b0 != 0 else f"{target} = {num(b1)};")
+            continue
         base = np.atleast_1d(model.params[name])
         new = np.atleast_1d(new)
         labels = S[PARAM_SETS.get(name, "")]
@@ -437,6 +451,18 @@ def cases() -> list[dict]:
     add("factor quantities, minimum wage", fqu,
         {"import_price_up10": sc.simulation_inputs(fqu)["import_price_up10"]}, "fqmw_", python=True,
         closure=Closure(factors={"lab": "minwage"}), labour={"unemployment": {"lab": 0.1}}, fq=workers)
+    # Taxes on factor use and income (version 0.5.0, model_spec.md, Section 17.1)
+    ftm = sc.factor_tax_model()
+    lab = ftm.sets["F"].index("lab")
+    tf = ftm.params["tf"].copy()
+    tf[lab] *= 0.5
+    shocks = {**sc.simulation_inputs(ftm), "payroll_cut": {"params": {"tf": tf}},
+              "income_tax_up": {"params": {"tfy": ftm.params["tfy"] * 2}}}
+    add("factor taxes", ftm, shocks, "ftax_")
+    ftmix = sc.factor_tax_model(**sc.MIXED_ELASTICITIES)
+    tf = ftmix.params["tf"].copy()
+    tf[lab] *= 0.5
+    add("factor taxes, mixed", ftmix, {"mixed_payroll_cut": {"params": {"tf": tf}}}, "ftax_")
     # Closure swaps (version 0.4.5, model_spec.md, Section 6)
     notariff = {"params": {"tm": np.zeros_like(std.params["tm"])}}
     add("swaps", std, {"swap_gsav_gadj": notariff}, closure=Closure(swaps=(("GSAV", "GADJ"),)))

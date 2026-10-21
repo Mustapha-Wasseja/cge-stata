@@ -95,7 +95,7 @@ are compared with the Python reference:
 
 ## Result (21 October 2026, GAMS 54.2, PATH)
 
-161 scenarios; every expected value was found and solved.
+169 scenarios; every expected value was found and solved.
 
 - Base values from GAMS's own calibration agree to 4.9e-15 or better.
 - Solutions agree to 2.9e-11 or better, relative to the larger of 1 and the

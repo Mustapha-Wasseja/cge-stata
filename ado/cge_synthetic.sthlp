@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat} {opt home} {opt trade}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat} {opt home} {opt trade} {opt factort:ax}]
 
 
 {title:Options}
@@ -82,6 +82,13 @@ on {cmd:com_man}'s domestic sales ({cmd:mtrd}), imports ({cmd:mtrm}) and exports
 ({cmd:mtre}). Map it with the four commodities and {cmd:domesticmargins(mtrd)},
 {cmd:importmargins(mtrm)} and {cmd:exportmargins(mtre)}, and calibrate with
 {cmd:exportonly(com_cash)}.
+
+{phang}
+{opt factortax} (from version 0.5.0) loads the standard layout with a payroll
+tax on labour of 4, 3 and 6 paid by the three activities ({cmd:tax_pay}) and a
+tax of 7 on capital income ({cmd:tax_fy}); direct taxes are 20 lower, so
+government revenue is unchanged. Map it with {cmd:factortax(tax_pay:lab)} and
+{cmd:factorincometax(tax_fy)}.
 
 {phang}
 {opt vat} loads the standard layout with a VAT account ({cmd:tax_vat}) that

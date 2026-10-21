@@ -155,15 +155,22 @@ W0(F) = 1;
 W0(F)$fqgiven = sum(A, SAM(F, A)) / sum(A, QF0(F, A));
 WFD0(F, A) = 1;
 WFD0(F, A)$(fqgiven and FA(F, A)) = SAM(F, A) / (W0(F) * QF0(F, A));
-QVA0(A) = sum(F, SAM(F, A));
+* 17.1 Taxes on factor use (from version 0.5.0): accounts FTAXS, each taxing
+* the factor given in ftfac; rates on factor payments; value added at factor
+* cost includes them
+parameters TFA0(AC, AC) "taxes on factor use", tf(AC, AC) "tax rate on factor use";
+TFA0(F, A) = sum(FTAXS$ftfac(FTAXS, F), SAM(FTAXS, A));
+abort$(sum((F, A)$(not FA(F, A) and abs(TFA0(F, A)) > tol), 1)) "a tax on factor use where the factor is not used";
+tf(F, A)$FA(F, A) = TFA0(F, A) / SAM(F, A);
+QVA0(A) = sum(F, SAM(F, A) + TFA0(F, A));
 iva(A) = QVA0(A) / QA0(A);
 inta(A) = QINTA0(A) / QA0(A);
 CDV(A) = yes$(abs(sigva(A) - 1) < 1e-12);
 rva(A)$(not CDV(A)) = 1 / sigva(A) - 1;
-dva(F, A)$(FA(F, A) and CDV(A)) = SAM(F, A) / QVA0(A);
+dva(F, A)$(FA(F, A) and CDV(A)) = (SAM(F, A) + TFA0(F, A)) / QVA0(A);
 ad(A)$CDV(A) = QVA0(A) / prod(F$FA(F, A), QF0(F, A)**dva(F, A));
-dva(F, A)$(FA(F, A) and not CDV(A)) = W0(F) * WFD0(F, A) * QF0(F, A)**(1 + rva(A))
-                                       / sum(FP$FA(FP, A), W0(FP) * WFD0(FP, A) * QF0(FP, A)**(1 + rva(A)));
+dva(F, A)$(FA(F, A) and not CDV(A)) = W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rva(A))
+                                       / sum(FP$FA(FP, A), W0(FP) * WFD0(FP, A) * (1 + tf(FP, A)) * QF0(FP, A)**(1 + rva(A)));
 ad(A)$(not CDV(A)) = QVA0(A) / sum(F$FA(F, A), dva(F, A) * QF0(F, A)**(-rva(A)))**(-1 / rva(A));
 * Top nest: Leontief (siga = 0, or no intermediate inputs), Cobb-Douglas (1) or CES
 PINTA0(A) = sum(C, ica(C, A) * (1 + tv(C) * (1 - kappa(A))));
@@ -215,7 +222,10 @@ scalars trgr, trrg, trgg, YSHI0, sshi, trshi, trshir, YG0, EG0, GSAV0, FSAV0;
 YF0(F) = sum(AC, SAM(F, AC));
 YIF0(INS, F) = SAM(INS, F);
 tshi(F) = sum(SHIS, SAM(SHIS, F)) / YF0(F);
-shif(INS, F)$(not SHIS(INS)) = YIF0(INS, F) / ((1 - tshi(F)) * YF0(F));
+* Taxes on factor income (from version 0.5.0), taken before distribution
+parameter tfy(AC) "tax rate on factor income";
+tfy(F) = sum(FYTAXS, SAM(FYTAXS, F)) / YF0(F);
+shif(INS, F)$(not SHIS(INS)) = YIF0(INS, F) / ((1 - tshi(F) - tfy(F)) * YF0(F));
 trfr(F) = sum(ROWS, SAM(F, ROWS));
 YI0(D) = sum(AC, SAM(D, AC));
 dtx(D) = sum(DTAXS, SAM(DTAXS, D));
@@ -377,10 +387,10 @@ EQ3C(A)$(not CDV(A))..
 EQ3D(A)$CDV(A)..
     QVA(A) =e= ad(A) * prod(F$FA(F, A), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A));
 EQ4C(F, A)$(FA(F, A) and not CDV(A))..
-    W(F) * WFDIST(F, A) =e= PVA(A) * QVA(A)
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PVA(A) * QVA(A)
         / sum(FP$FA(FP, A), dva(FP, A) * (af(FP) * EFF(FP) * DW(FP) * QF(FP, A))**(-rva(A)))
         * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F) * DW(F);
-EQ4D(F, A)$(FA(F, A) and CDV(A))..  W(F) * WFDIST(F, A) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
+EQ4D(F, A)$(FA(F, A) and CDV(A))..  W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
 EQ5(C, A)$ica(C, A)..  QINT(C, A) =e= ica(C, A) * QINTA(A);
 EQ6(C)$CX(C)..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
 EH1$linked..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C));
@@ -405,7 +415,7 @@ ET9(C)$CR(C)..  QER(C) =e= qerbar(C) * (PQ(C) / (EXR * pwe(C)))**(-sigt(C));
 
 * 5.4 Institutions
 EI1(F)..  YF(F) =e= sum(A$FA(F, A), W(F) * WFDIST(F, A) * QF(F, A)) + trfr(F) * EXR + RENTTO(F);
-EI2(INS, F)..  YIF(INS, F) =e= (shif(INS, F) * (1 - tshi(F)) * YF(F))$(not SHIS(INS))
+EI2(INS, F)..  YIF(INS, F) =e= (shif(INS, F) * (1 - tshi(F) - tfy(F)) * YF(F))$(not SHIS(INS))
                                + (tshi(F) * YF(F))$SHIS(INS);
 EI3(D)..  YI(D) =e= sum(F, YIF(D, F)) + sum(DP$shii(D, DP), shii(D, DP) * (1 - MPS(DP)) * (1 - TINS(DP)) * YI(DP))
                     + trdg(D) * CPI + trdr(D) * EXR + hold(D) * rd * ddebt + RENTTO(D);
@@ -426,7 +436,8 @@ EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
                  + sum(A, ta(A) * PA(A) * QA(A))
                  + TVADJ * sum(C$tv(C), tv(C) * PQ(C) * (sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                        + QSHI(C)$qshibar(C) + sum(A$ica(C, A), (1 - kappa(A)) * QINT(C, A))))
-                 + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI + sum(GOVS, RENTTO(GOVS));
+                 + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI + sum(GOVS, RENTTO(GOVS))
+                 + sum((F, A)$FA(F, A), tf(F, A) * W(F) * WFDIST(F, A) * QF(F, A)) + sum(F, tfy(F) * YF(F));
 EI9..     EG =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QG(C)) + (sum(D, trdg(D)) + trgg + trshi) * CPI
                  + trrg * EXR + rd * ddebt + rf * fdebt * EXR;
 EI10(D).. TINS(D) =e= tins0(D) * TINSADJ;

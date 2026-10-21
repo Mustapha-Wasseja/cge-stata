@@ -1,4 +1,4 @@
-*! cge_map.ado  v0.3.2  2026-10-20
+*! cge_map.ado  v0.5.0  2026-10-21
 *! cge-stata: assign SAM accounts to model roles
 *! Checks the SAM against the flows the model represents (model_spec.md, 7.0);
 *! the roles may be read from a template (docs/sam_tools.md, Section 3)
@@ -14,13 +14,13 @@ program define cge_map, rclass
         marginaccounts(namelist) stocks(namelist) insurance(name)                  ///
         dirtax(name) saltax(name) imptax(name) exptax(name) acttax(name)           ///
         vattax(name) VATShare(string) DOMESTICmargins(namelist) IMPORTmargins(namelist) ///
-        EXPORTmargins(namelist) SHEET(string) report(string) replace]
+        EXPORTmargins(namelist) FACTORTax(string) FACTORINCometax(name) SHEET(string) report(string) replace]
 
     _cge_load
     local roles `activities'`commodities'`factors'`households'`government'`savinv'`row'
     local roles `roles'`enterprises'`margins'`territorial'`marginaccounts'`stocks'`insurance'
     local roles `roles'`dirtax'`saltax'`imptax'`exptax'`acttax'`vattax'
-    local roles `roles'`domesticmargins'`importmargins'`exportmargins'
+    local roles `roles'`domesticmargins'`importmargins'`exportmargins'`factortax'`factorincometax'
     if `"`using'"' != "" {
         if "`roles'" != "" {
             display as error "with a template, give no role options"
@@ -46,6 +46,6 @@ program define cge_map, rclass
         "`saltax'", "`imptax'", "`exptax'", "`acttax'", "`margins'",                ///
         "`territorial'", "`marginaccounts'", "`stocks'", "`insurance'",             ///
         `"`report'"', ("`replace'" != ""), "`vattax'", strtrim(st_local("vatshare")),     ///
-        "`domesticmargins'", "`importmargins'", "`exportmargins'")
+        "`domesticmargins'", "`importmargins'", "`exportmargins'", st_local("factortax"), "`factorincometax'")
     return add
 end

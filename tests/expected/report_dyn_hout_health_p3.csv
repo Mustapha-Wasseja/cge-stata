@@ -25,6 +25,8 @@ government,tax_import,,8,8.43098058928219
 government,tax_export,,0,0
 government,tax_activity,,0,0
 government,tax_vat,,0,0
+government,tax_factor_use,,0,0
+government,tax_factor_income,,0,0
 institutions,income,hhd,281,302.025770794257
 institutions,consumption,hhd,222,238.611107175534
 factors,wage,lab,1,1.01309648389796

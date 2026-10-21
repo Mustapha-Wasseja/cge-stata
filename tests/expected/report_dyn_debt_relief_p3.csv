@@ -25,6 +25,8 @@ government,tax_import,,8,8.52686058184826
 government,tax_export,,0,0
 government,tax_activity,,0,0
 government,tax_vat,,0,0
+government,tax_factor_use,,0,0
+government,tax_factor_income,,0,0
 debt,interest_domestic,,5,5.23505455909395
 debt,interest_foreign,,1.2,0.63919339745737
 debt,primary_balance,,4.2,3.27458899714291

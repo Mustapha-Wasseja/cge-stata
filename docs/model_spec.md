@@ -1385,6 +1385,37 @@ calibration.
 the simulation. The rent variables appear in the results like other
 variables.
 
+## 17. Production and tax extensions (from version 0.5.0)
+
+### 17.1 Taxes on factor use and on factor income
+
+Two taxes of the IFPRI standard model (Lofgren, Harris and Robinson 2002) and
+of the PEP models (Decaluwé et al. 2013) bear on factors:
+
+- **Taxes on factor use**, such as payroll taxes on labour or taxes on
+  capital, paid by activities to accounts mapped with
+  `cge_map, factortax(account:factor)`. The rate on factor $f$ in activity
+  $a$ is the tax over the factor payment,
+  $tf_{fa} = SAM_{acc,a} / SAM_{fa}$. It raises the cost of the factor to the
+  activity: the first-order conditions of Q4 hold with
+  $W_f\,WFDIST_{fa}\,(1 + tf_{fa})$ in place of $W_f\,WFDIST_{fa}$, and value
+  added at factor cost, $PVA_a\,QVA_a$, includes the tax. The shares of the
+  value-added function are calibrated on the tax-inclusive factor costs.
+- **Taxes on factor income**, paid by factors to the account mapped with
+  `factorincometax(account)`. The rate $tfy_f$ is the tax over factor income
+  $YF_f$, taken before the income is distributed, like the contributions to
+  a health insurance fund:
+  $YIF_{if} = shif_{if}\,(1 - tshi_f - tfy_f)\,YF_f$ (I2).
+
+Both are government revenue (I8):
+
+$$\ldots + \sum_{f,a} tf_{fa}\,W_f\,WFDIST_{fa}\,QF_{fa} + \sum_f tfy_f\,YF_f$$
+
+Factor income $YF_f$ is net of taxes on use (I1 is unchanged). Shocks `tf`
+(by factor, in every activity that uses it) and `tfy` change the rates; a
+value introduces a tax where the SAM has none. Reports add the rows
+`tax_factor_use` and `tax_factor_income` to the government table.
+
 ## References
 
 Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. (2008). *The

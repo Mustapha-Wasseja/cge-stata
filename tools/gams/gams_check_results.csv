@@ -125,6 +125,14 @@ factor quantities,fq_agri_productivity_up5,Python,16,118,0,4.276e-16,2.081e-13,3
 "factor quantities, mixed",fqmix_labour_supply_up5,Python,16,118,0,4.276e-16,4.079e-14,5.404e-12
 "factor quantities, mixed",fqmix_agri_productivity_up5,Python,16,118,0,4.276e-16,4.151e-12,8.130e-11
 "factor quantities, minimum wage",fqmw_import_price_up10,Python,16,120,0,4.276e-16,1.530e-13,7.556e-13
+factor taxes,ftax_tariff_removal,tests/expected,16,118,0,3.053e-16,3.988e-14,1.474e-12
+factor taxes,ftax_import_price_up10,tests/expected,16,118,0,3.053e-16,2.509e-13,5.986e-13
+factor taxes,ftax_labour_supply_up5,tests/expected,16,118,0,3.053e-16,1.105e-14,3.351e-13
+factor taxes,ftax_foreign_savings_down20,tests/expected,16,118,0,3.053e-16,6.974e-15,2.601e-13
+factor taxes,ftax_agri_productivity_up5,tests/expected,16,118,0,3.053e-16,3.219e-14,4.760e-13
+factor taxes,ftax_payroll_cut,tests/expected,16,118,0,3.053e-16,3.381e-14,1.096e-14
+factor taxes,ftax_income_tax_up,tests/expected,16,118,0,3.053e-16,8.525e-15,5.768e-14
+"factor taxes, mixed",ftax_mixed_payroll_cut,tests/expected,16,118,0,3.053e-16,4.930e-14,1.349e-12
 swaps,swap_gsav_gadj,tests/expected,16,118,0,3.053e-16,3.669e-13,3.045e-13
 swaps,swap_exr_numeraire,tests/expected,16,118,0,3.053e-16,1.705e-12,2.123e-11
 constraints,con_quota,tests/expected,1,118,0,3.053e-16,2.400e-12,2.140e-13

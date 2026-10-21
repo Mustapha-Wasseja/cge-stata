@@ -78,6 +78,9 @@ _ALLOWED = {
     ("shi", "fac"), ("shi", "gov"), ("shi", "row"), ("com", "shi"), ("sav", "shi"),
     ("vattax", "com"), ("gov", "vattax"),    # VAT account (version 0.3.1)
     ("act", "hh"),                            # home consumption (version 0.3.2)
+    # taxes on factor use, paid by activities, and on factor income, paid by
+    # factors (version 0.5.0)
+    ("factax", "act"), ("gov", "factax"), ("facytax", "fac"), ("gov", "facytax"),
 }
 # Transfers (they may be negative)
 _TRANSFERS = {
@@ -90,9 +93,10 @@ _ALLOWED |= _TRANSFERS
 
 # Row roles whose cells may be negative (taxes, subsidies, savings), and other
 # cells that may be negative (transfers and tax-account payments).
-_MAY_BE_NEGATIVE = {"dirtax", "saltax", "imptax", "exptax", "acttax", "vattax", "sav"}
+_MAY_BE_NEGATIVE = {"dirtax", "saltax", "imptax", "exptax", "acttax", "vattax", "sav", "factax", "facytax"}
 _NEGATIVE_CELLS = _TRANSFERS | {("gov", "dirtax"), ("gov", "saltax"), ("gov", "imptax"),
                                 ("gov", "exptax"), ("gov", "acttax"), ("gov", "vattax"),
+                                ("gov", "factax"), ("gov", "facytax"),
                                 ("com", "sav"), ("act", "com")}
 
 TAX_ROLES = ("dirtax", "saltax", "imptax", "exptax", "acttax", "vattax")
@@ -147,6 +151,9 @@ def _mapped_accounts(m: "Mapping") -> set[str]:
               m.government, m.savinv, m.row}
     if m.insurance is not None:
         mapped.add(m.insurance)
+    mapped |= set(m.factor_taxes)
+    if m.factor_income_tax is not None:
+        mapped.add(m.factor_income_tax)
     return mapped | {getattr(m, t) for t in TAX_ROLES if getattr(m, t) is not None}
 
 
@@ -318,6 +325,10 @@ class Mapping:
     domestic_margins: list[str] = dataclasses.field(default_factory=list)
     import_margins: list[str] = dataclasses.field(default_factory=list)
     export_margins: list[str] = dataclasses.field(default_factory=list)
+    # taxes on factor use paid by activities, as {account: factor}, and on
+    # factor income paid by factors (version 0.5.0)
+    factor_taxes: dict = dataclasses.field(default_factory=dict)
+    factor_income_tax: str | None = None
 
     def roles(self) -> dict[str, str]:
         """Role of every mapped account."""
@@ -349,6 +360,12 @@ class Mapping:
             account = getattr(self, role)
             if account is not None:
                 assign(account, role)
+        for account, factor in self.factor_taxes.items():
+            if factor not in self.factors:
+                raise SAMError(f"factor tax {account}: {factor} is not a factor")
+            assign(account, "factax")
+        if self.factor_income_tax is not None:
+            assign(self.factor_income_tax, "facytax")
         return assigned
 
     def validate(self, sam: SAM, tol: float = 1e-8) -> dict[str, str]:

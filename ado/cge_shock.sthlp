@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.4  21oct2026}{...}
+{* *! version 0.5.0  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -54,6 +54,8 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:wref}}reference real wage of the wage curve (factors with a labour force){p_end}
 {p2col:{cmd:sick}}share of working time lost to illness before the response to health services (factors with {opt sickdays()}; from version 0.3.4), for example an epidemic{p_end}
 {p2col:{cmd:mort}}crude death rate before the response to health services (no elements; with {opt mortality()}){p_end}
+{p2col:{cmd:tf}}rates of tax on the use of factors (factors; from version 0.5.0), in every activity that uses them: {cmd:scale()} changes each rate, {cmd:value()} sets one rate for every activity, which introduces a tax where the SAM has none{p_end}
+{p2col:{cmd:tfy}}rates of tax on factor income (factors){p_end}
 {p2colreset}{...}
 
 {pstd}

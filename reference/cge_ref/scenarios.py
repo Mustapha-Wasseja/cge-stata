@@ -59,6 +59,40 @@ def synthetic_model(**elasticities) -> Model:
     return Model(SAM.from_csv(SYNTHETIC_SAM), synthetic_mapping(), **settings)
 
 
+# Taxes on factor use and income (version 0.5.0): a SYNTHETIC SAM with a
+# payroll tax on labour (tax_pay) and a tax on capital income (tax_fy)
+FACTOR_TAX_SAM = REPO / "data" / "cge_synthetic_sam_ftax.csv"
+
+
+def factor_tax_mapping() -> Mapping:
+    m = synthetic_mapping()
+    m.factor_taxes = {"tax_pay": "lab"}
+    m.factor_income_tax = "tax_fy"
+    return m
+
+
+def factor_tax_model(**elasticities) -> Model:
+    settings = {**TEST_ELASTICITIES, **elasticities}
+    return Model(SAM.from_csv(FACTOR_TAX_SAM), factor_tax_mapping(), **settings)
+
+
+def factor_tax_cases() -> dict:
+    """name -> solution: the standard simulations, a payroll tax halved and
+    the tax on capital income doubled (version 0.5.0)."""
+    m = factor_tax_model()
+    out = {"ftax_" + k: s for k, s in run_simulations(m).items()}
+    lab = m.sets["F"].index("lab")
+    tf = m.params["tf"].copy()
+    tf[lab] *= 0.5
+    out["ftax_payroll_cut"] = m.solve(Closure(), tol=1e-12, params={"tf": tf})
+    out["ftax_income_tax_up"] = m.solve(Closure(), tol=1e-12, params={"tfy": m.params["tfy"] * 2})
+    mixed = factor_tax_model(**MIXED_ELASTICITIES)
+    tf = mixed.params["tf"].copy()
+    tf[lab] *= 0.5
+    out["ftax_mixed_payroll_cut"] = mixed.solve(Closure(), tol=1e-12, params={"tf": tf})
+    return out
+
+
 INSTITUTIONS_SAM = REPO / "data" / "cge_synthetic_sam_inst.csv"
 
 
@@ -594,7 +628,7 @@ REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_
             "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10",
             "wc_tariff_removal", "mwnb_pwm_up50", "hout_gov_health_up20", "hout_epidemic",
             "hout_mortality_up50", "hboth_gov_health_up20", "con_quota_row", "con_capacity",
-            "con_export_quota")
+            "con_export_quota", "ftax_payroll_cut")
 
 
 def dynamic_cases() -> dict:
@@ -740,6 +774,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Bounds and complementarity (0.4.4); closure swaps (0.4.5)
     solutions.update(constraint_solutions())
     solutions.update(swap_cases())
+    # Taxes on factor use and income (0.5.0)
+    solutions.update(factor_tax_cases())
     written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
                + write_spa(directory) + write_regimes(solutions, directory))
     for name, solution in solutions.items():

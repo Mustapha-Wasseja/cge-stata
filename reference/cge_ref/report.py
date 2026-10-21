@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .model import final_price, rents_abroad, vat_revenue, world_export_price
+from .model import factor_taxes, final_price, rents_abroad, vat_revenue, world_export_price
 
 
 def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
@@ -63,6 +63,10 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     add("government", "tax_export", "", exr * (p["te"] * pwe * v["QE"]).sum())
     add("government", "tax_activity", "", (p["ta"] * v["PA"] * v["QA"]).sum())
     add("government", "tax_vat", "", vat_revenue(v, p)[0])
+    # taxes on factor use and on factor income (version 0.5.0)
+    wage = v["W"][:, None] * v["WFDIST"]
+    add("government", "tax_factor_use", "", (p["tf"] * wage * v["QF"]).sum())
+    add("government", "tax_factor_income", "", (p["tfy"] * v["YF"]).sum())
 
     # Public debt (model_spec.md, 12.3): stocks at the end of the period
     if p0["debt"] != 0:
