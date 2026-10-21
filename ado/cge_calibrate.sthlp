@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.5.1  21oct2026}{...}
+{* *! version 0.5.2  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -17,7 +17,7 @@
 {opt for:eignborrowing(#)} {opt exporto:nly(names)} {opt exportd:emand(spec)}
 {opt unemp:loyment(spec)} {opt wagec:urve(spec)} {opt minw:age(spec)} {opt smooth:ing(#)}
 {opt sickd:ays(spec)} {opt sicke:las(spec)} {opt mort:ality(#)} {opt morte:las(#)}
-{opt nest:s(spec)} {opt sigman:est(spec)}]
+{opt nest:s(spec)} {opt sigman:est(spec)} {opt sigmaac(spec)}]
 
 
 {title:Description}
@@ -84,6 +84,15 @@ quantity ({cmd:QNA}) and price ({cmd:PNA}) of each nest in each activity.
 {opt sigmanest(spec)} gives the elasticity of substitution within the nests:
 one value for every nest, or {it:nest}{cmd::}{it:value} pairs. A value of 1
 selects the Cobb-Douglas form.
+
+{phang}
+{opt sigmaac(spec)} (from version 0.5.2; docs/model_spec.md, Section 17.3)
+combines the outputs of a commodity from several activities by a CES
+function, as in the IFPRI standard model, instead of treating them as perfect
+substitutes: each activity is then paid its own price for the commodity
+({cmd:PXAC}). Give {it:commodity}{cmd::}{it:elasticity} pairs, for example
+{cmd:sigmaac(com_man:2)}, or one value for every commodity produced by more
+than one activity. A value of 1 selects the Cobb-Douglas form.
 
 {phang}
 {opt incelas(numlist)} and {opt frisch(numlist)} select linear expenditure

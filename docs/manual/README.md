@@ -1,6 +1,6 @@
 # cge-stata user manual
 
-Version 0.5.1. This manual explains how to build, calibrate and solve a
+Version 0.5.2. This manual explains how to build, calibrate and solve a
 computable general equilibrium (CGE) model from a social accounting matrix
 (SAM) with `cge-stata`, and how to use the results. It is written for
 economists who know Stata and the basics of SAM-based modelling. The model's

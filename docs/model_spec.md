@@ -163,6 +163,7 @@ Incomes, rates and adjustment variables
 | $WALRAS$ | slack in the savings-investment balance; zero at a solution |
 | $RM_c$, $RE_c$, $RA_a$ | premiums on imports and exports, per unit of the world price, and rents on activity output, per unit of the activity price (from version 0.4.4, Section 16.1); zero and fixed unless a constraint frees them |
 | $QNA_{na}$, $PNA_{na}$ | quantity and price of nest $n$ of value added in activity $a$ (from version 0.5.1, Section 17.2) |
+| $QXAC_{ac}$, $PXAC_{ac}$ | output of commodity $c$ by activity $a$ and its price, for commodities whose output is aggregated (from version 0.5.2, Section 17.3) |
 
 ## 4. Parameters
 
@@ -1491,6 +1492,40 @@ $an_{na}$ (`an`), $\delta_{ca}$ (`dce`), $\sigma_n$ (`sgn`) and $\rho_n$
 (`rhn`); within a nest, the shares of factors are kept in `dva`. Results
 list $QNA$ and $PNA$. Sensitivity analysis keeps the nests' elasticities at
 the values given.
+
+### 17.3 Output of a commodity from several activities (from version 0.5.2)
+
+When several activities produce a commodity, Q6 adds their outputs: the
+outputs are perfect substitutes, sold at one price $PX_c$. The IFPRI standard
+model (Lofgren, Harris and Robinson 2002) instead combines them by a CES
+function, so that the output of different producers, such as public and
+private health services, can be priced differently. `cge_calibrate,
+sigmaac(com_man:2)` gives the elasticity of substitution for a commodity
+($c \in CAC$), or one value for every commodity with more than one producing
+activity; the others keep Q6. With $XAC_c$ the activities producing $c$ and
+$\rho^{ac}_c = 1/\sigma^{ac}_c - 1$:
+
+$$QXAC_{ac} = \theta_{ac}\,\Big(QA_a - \sum_h QHA_{ah}\Big), \qquad a \in XAC_c \tag{Q6B}$$
+
+$$QX_c = aac_c\,\Big(\sum_{a \in XAC_c} \delta^{ac}_{ac}\,QXAC_{ac}^{-\rho^{ac}_c}\Big)^{-1/\rho^{ac}_c} \tag{Q6A}$$
+
+$$PXAC_{ac} = \frac{PX_c\,QX_c}{\sum_{a'} \delta^{ac}_{a'c}\,QXAC_{a'c}^{-\rho^{ac}_c}}\,\delta^{ac}_{ac}\,QXAC_{ac}^{-\rho^{ac}_c - 1} \tag{P5A}$$
+
+and each activity is paid its own price in P5,
+$PA_a = \sum_c \theta_{ac}\,PXAC_{ac}$ for $c \in CAC$ and $\theta_{ac}\,PX_c$
+otherwise. With $\sigma^{ac}_c = 1$ the aggregate is Cobb-Douglas,
+$QX_c = aac_c \prod_a QXAC_{ac}^{\delta^{ac}_{ac}}$ and
+$PXAC_{ac}\,QXAC_{ac} = \delta^{ac}_{ac}\,PX_c\,QX_c$. The value of commodity
+output is the value of the activities' outputs, $PX_c\,QX_c = \sum_a
+PXAC_{ac}\,QXAC_{ac}$, so GDP and the reports are unchanged.
+
+**Calibration.** $PXAC^0_{ac} = 1$ and $QXAC^0_{ac} = SAM(a, c)$; the shares
+are $\delta^{ac}_{ac} \propto (QXAC^0_{ac})^{1 + \rho^{ac}_c}$ (value shares
+for Cobb-Douglas), and $aac_c$ makes Q6A hold. As $\sigma^{ac}_c$ grows the
+aggregate tends to the sum of Q6: with $\sigma^{ac} = 10^8$ the solution
+agrees with the model without aggregation to $10^{-6}$ in the test suites.
+The parameters are $\sigma^{ac}_c$ (`sac`), $\rho^{ac}_c$ (`rac`), $aac_c$
+(`aac`) and $\delta^{ac}_{ac}$ (`dac`).
 
 ## References
 

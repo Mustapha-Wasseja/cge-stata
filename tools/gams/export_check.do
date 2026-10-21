@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat
+    nests nestvat outces
 local ncase : word count `cases'
 
 tempname post
@@ -258,6 +258,16 @@ foreach case of local cases {
             sigmanest(labour:1 ke:0.25)
         cge_shock pwm, elements(com_ene) scale(1.5)
         cge_shock tf, elements(lab_hi) scale(0.5)
+    }
+    * Output of manufactures from two activities, combined by a CES function
+    * (version 0.5.2), with mixed elasticities
+    else if "`case'" == "outces" {
+        quietly cge_synthetic, clear multiproduct
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1) sigmaac(com_man:2)
+        cge_shock ad, elements(act_agr) scale(1.05)
+        cge_shock pwm, scale(1.1)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers
     else if "`case'" == "nestvat" {

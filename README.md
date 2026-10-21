@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.5.1 implements the standard single-country model described in
+Version 0.5.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,10 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.5.2 combines the output of a commodity from several activities by a
+CES function, as in the IFPRI standard model (`cge_calibrate, sigmaac(com_man:2)`;
+Section 17.3): each activity is paid its own price, instead of the outputs
+being perfect substitutes.
 Version 0.5.1 adds nests of value added (Section 17.2): labour as a
 combination of skill types, or capital with energy, each nest with its own
 elasticity (`cge_calibrate, nests(labour: lab_hi lab_lo, ke: cap com_ene)

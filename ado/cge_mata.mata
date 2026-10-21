@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.5.1  2026-10-21
+*! cge_mata.mata  v0.5.2  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -75,6 +75,11 @@ struct cge_par {
     // elasticities and exponents of the nests
     real matrix    dvn, an, dce
     real colvector sgn, rhn
+    // output of a commodity from several activities (from version 0.5.2):
+    // elasticities (0 for perfect substitutes), exponents and efficiency of
+    // the aggregates by commodity, and the shares of the activities
+    real colvector sac, rac, aac
+    real matrix    dac
 }
 
 struct cge_model {
@@ -158,6 +163,11 @@ struct cge_model {
     real scalar      nN
     real colvector   nestf, nestc, cdn
     real matrix      nn, ecell
+    // output of a commodity from several activities (from version 0.5.2):
+    // commodities aggregated, Cobb-Douglas aggregates, and the activities'
+    // outputs aggregated (activity x commodity)
+    real colvector   cac, cdac
+    real matrix      xac
 }
 
 // Columns of the Jacobian for one solve (free variables), grouped so that the
@@ -172,7 +182,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.5.1")
+    return("0.5.2")
 }
 
 // =====================================================================
@@ -312,12 +322,13 @@ void _cge_layout(struct cge_model scalar M)
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
                "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI","EFF","HS",
-               "TQADJ","TMADJ","TVADJ","PWE","QHA","LSW","LSM","DW","RM","RE","RA","QNA","PNA")'
+               "TQADJ","TMADJ","TVADJ","PWE","QHA","LSW","LSM","DW","RM","RE","RA","QNA","PNA",
+               "PXAC","QXAC")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
                "","","FA","","C","C","","","C","F","",
-               "","","","C","AH","F","F","F","C","C","A","NA","NA")'
+               "","","","C","AH","F","F","F","C","C","A","NA","NA","AC","AC")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -380,7 +391,7 @@ void _cge_vlabels(struct cge_model scalar M, real scalar k, string colvector e1,
         e2 = J(rows(s1), 1, "")
         return
     }
-    s2 = (substr(set, 2, 1) == "A" ? M.A : (substr(set, 2, 1) == "F" ? M.F : M.H))
+    s2 = _cge_setlab(M, substr(set, 2, 1))
     e1 = J(rows(s1) * rows(s2), 1, "")
     e2 = e1
     for (i = 1; i <= rows(s1); i++) {
@@ -2179,7 +2190,9 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
     real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER, YSHI, SHIADJ, QSHI, EFF, HS
-    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, LSW, LSM, DW, RM, RE, RA, QNA, PNA
+    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, LSW, LSM, DW, RM, RE, RA, QNA, PNA, PXAC, QXAC
+    real matrix qxac, pxqx
+    real rowvector sxac, lxac, rsac
     real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif, z, vint
     real matrix top, nested, qna, MF, MC, qint, nsum, nlog, pnqn, pnf, nsf, pnc, nsc, pe
     real colvector rns, rf, rc, cdf, cdc
@@ -2209,6 +2222,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     LSW = _cge_v(M, x, 55);   LSM = _cge_v(M, x, 56);   DW = _cge_v(M, x, 57)
     RM = _cge_v(M, x, 58);    RE = _cge_v(M, x, 59);    RA = _cge_v(M, x, 60)
     QNA = _cge_v(M, x, 61);   PNA = _cge_v(M, x, 62)
+    PXAC = _cge_v(M, x, 63);  QXAC = _cge_v(M, x, 64)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -2245,7 +2259,12 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "P3", PQ :* (1 :- tq) :* QQ,
              M.cdo :* PDD :* QD + M.cm :* PM :* QM + (p.icm' * PQ) :* QQ, M.cq)
     _cge_put(M, L, R, K, record, "P4", PX :* QX, M.cdo :* PD :* QD + M.ce :* PE :* QE, M.cx)
-    _cge_put(M, L, R, K, record, "P5", PA, p.theta * PX, oneA)
+    // Output aggregated from several activities (from version 0.5.2, Section
+    // 17.3): each activity is paid its own price PXAC
+    if (any(M.cac)) {
+        _cge_put(M, L, R, K, record, "P5", PA, p.theta * PX + rowsum(p.theta :* M.xac :* (PXAC :- PX')), oneA)
+    }
+    else _cge_put(M, L, R, K, record, "P5", PA, p.theta * PX, oneA)
     _cge_put(M, L, R, K, record, "P6", PINTA, (p.ica :* (1 :+ vint))' * PQ, oneA)
     _cge_put(M, L, R, K, record, "P7", PA :* (1 :- p.ta :- RA) :* QA, PVA :* QVA + PINTA :* QINTA, oneA)
     _cge_put(M, L, R, K, record, "P8", CPI, p.cwts' * PH, 1)
@@ -2361,7 +2380,29 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     // Intermediate inputs and household purchases exist only where the SAM has a flow
     _cge_put(M, L, R, K, record, "Q5", QINT, p.ica :* QINTA', p.ica :!= 0)
     // Marketed output: home consumption does not reach the market (13.1)
-    _cge_put(M, L, R, K, record, "Q6", QX, p.theta' * (QA - rowsum(QHA)), M.cx)
+    _cge_put(M, L, R, K, record, "Q6", QX, p.theta' * (QA - rowsum(QHA)), M.cx :* (1 :- M.cac))
+    // Q6A: commodity output, a CES or Cobb-Douglas aggregate of the outputs of
+    // its activities; Q6B: each activity's output of the commodity; P5A: each
+    // activity's price (Section 17.3). Mata gives 0 * missing = missing, so
+    // the CES branch uses an exponent of 1 for the other commodities.
+    if (any(M.cac)) {
+        rsac = (M.cac :* (1 :- M.cdac) :* p.rac + (1 :- M.cac :* (1 :- M.cdac)))'
+        qxac = M.xac :* QXAC + (1 :- M.xac)
+        sxac = colsum(M.xac :* p.dac :* (qxac :^ (-rsac)))
+        lxac = colsum(M.xac :* p.dac :* ln(qxac))
+        _cge_put(M, L, R, K, record, "Q6A", QX,
+                 p.aac :* (M.cdac :* exp(lxac') + (1 :- M.cdac) :* ((sxac + (sxac :== 0)) :^ (-1 :/ rsac))'), M.cac)
+        _cge_put(M, L, R, K, record, "Q6B", QXAC, p.theta :* (QA - rowsum(QHA)), M.xac)
+        pxqx = (PX :* QX)'
+        _cge_put(M, L, R, K, record, "P5A", M.cdac' :* (PXAC :* QXAC) + (1 :- M.cdac') :* PXAC,
+                 M.cdac' :* (p.dac :* pxqx) +
+                 (1 :- M.cdac') :* ((pxqx :/ (sxac + (sxac :== 0))) :* p.dac :* (qxac :^ (-rsac :- 1))), M.xac)
+    }
+    else {
+        _cge_put(M, L, R, K, record, "Q6A", J(M.nC, 1, 0), J(M.nC, 1, 0), J(M.nC, 1, 0))
+        _cge_put(M, L, R, K, record, "Q6B", J(M.n, M.nC, 0), J(M.n, M.nC, 0), J(M.n, M.nC, 0))
+        _cge_put(M, L, R, K, record, "P5A", J(M.n, M.nC, 0), J(M.n, M.nC, 0), J(M.n, M.nC, 0))
+    }
 
     // 5.3 Trade block
     _cge_put(M, L, R, K, record, "T1", QX,
@@ -2506,7 +2547,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
                     string scalar s_int, string scalar s_hold, string scalar s_borrow,
                     string scalar s_xo, string scalar s_ed, string scalar s_un, string scalar s_wc,
                     string scalar s_mw, string scalar s_mu, string scalar s_sick, string scalar s_sickel,
-                    string scalar s_mort, string scalar s_mortel, string scalar s_nest, string scalar s_nsig)
+                    string scalar s_mort, string scalar s_mortel, string scalar s_nest, string scalar s_nsig,
+                    string scalar s_ac)
 {
     struct cge_model scalar M
     struct cge_par scalar p
@@ -2534,7 +2576,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     // with other elasticities
     M.calargs = (s_va, s_q, s_t, fqname, s_ie, s_fr, s_a, s_hc, s_hf, s_he, s_vc, s_debt, s_int,
                  s_hold, s_borrow, s_xo, s_ed, s_un, s_wc, s_mw, s_mu, s_sick, s_sickel, s_mort, s_mortel,
-                 s_nest, s_nsig)
+                 s_nest, s_nsig, s_ac)
     S = M.S
     n = M.n
     nC = M.nC
@@ -2722,6 +2764,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.iva = QVA0 :/ QA0
     p.inta = QINTA0 :/ QA0
     _cge_topnest(M, p, s_a, QA0, QVA0, QINTA0, PINTA0)
+    _cge_outnest(M, p, s_ac, MAKE0, QX0, tol)
 
     cd = abs(sva :- 1) :< 1e-12
     rva = (1 :- cd) :* (1 :/ sva :- 1)
@@ -2982,6 +3025,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "RA", J(n, 1, 0))
     _cge_setv(M, x0, "QNA", M.nn :* VN0)
     _cge_setv(M, x0, "PNA", M.nn)
+    _cge_setv(M, x0, "PXAC", M.xac)
+    _cge_setv(M, x0, "QXAC", M.xac :* MAKE0)
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -3017,18 +3062,20 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, M.exists, "RE", ce)
     _cge_setv(M, M.exists, "QNA", M.nn)
     _cge_setv(M, M.exists, "PNA", M.nn)
+    _cge_setv(M, M.exists, "PXAC", M.xac)
+    _cge_setv(M, M.exists, "QXAC", M.xac)
 
     M.nominal = J(total, 1, 0)
     for (k = 1; k <= rows(M.vname); k++) {
         if (anyof(("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
-                   "YF","YIF","YI","EH","YG","EG","GSAV","WALRAS","YSHI","PNA"), M.vname[k])) {
+                   "YF","YIF","YI","EH","YG","EG","GSAV","WALRAS","YSHI","PNA","PXAC"), M.vname[k])) {
             M.nominal[_cge_vpos(M, k)] = J(M.vrows[k] * M.vcols[k], 1, 1)
         }
     }
     M.positive = J(0, 1, .)
     for (k = 1; k <= rows(M.vname); k++) {
         if (anyof(("PA","PVA","PINTA","PX","PD","PE","PM","PQ","W","EXR","CPI","DPI",
-                   "QA","QVA","QINTA","QF","QX","QD","QE","QM","QQ","QT","QER","QNA","PNA"), M.vname[k])) {
+                   "QA","QVA","QINTA","QF","QX","QD","QE","QM","QQ","QT","QER","QNA","PNA","PXAC","QXAC"), M.vname[k])) {
             m = _cge_vpos(M, k)
             M.positive = M.positive \ select(m, M.exists[m] :* (x0[m] :> 0))
         }
@@ -3130,6 +3177,46 @@ void _cge_nests(struct cge_model scalar M, struct cge_par scalar p, string scala
     if (hasmissing(p.sgn) | min(p.sgn) <= 0) _cge_fail("sigmanest(): give a positive elasticity for each nest", 198)
     M.cdn = abs(p.sgn :- 1) :< 1e-12
     p.rhn = (1 :- M.cdn) :* (1 :/ p.sgn :- 1)
+}
+
+// Output of a commodity from several activities (model_spec.md, 17.3; from
+// version 0.5.2): sigmaac() gives commodity:elasticity pairs, or one value
+// for every commodity with more than one producing activity; the activities'
+// outputs are combined by a CES or Cobb-Douglas function instead of being
+// perfect substitutes
+void _cge_outnest(struct cge_model scalar M, struct cge_par scalar p, string scalar spec, real matrix MAKE0,
+                  real colvector QX0, real scalar tol)
+{
+    real colvector prod, m, d, v
+    real scalar k, eff
+    prod = colsum(MAKE0 :> tol)'
+    p.sac = J(M.nC, 1, 0)
+    if (strtrim(spec) != "") {
+        if (!strpos(spec, ":") & cols(tokens(spec)) == 1) {
+            p.sac = (prod :>= 2) :* strtoreal(spec)
+            if (strtoreal(spec) >= . | strtoreal(spec) <= 0) _cge_fail("sigmaac(): elasticities must be positive", 198)
+        }
+        else {
+            // commodities not listed are missing, then perfect substitutes
+            v = _cge_values(spec, M.C, ., "sigmaac")
+            if (any((v :< .) :* (v :<= 0))) _cge_fail("sigmaac(): elasticities must be positive", 198)
+            p.sac = editmissing(v, 0)
+            _cge_fail_if((p.sac :> 0) :* (prod :< 2), M.labels[M.iC], "sigmaac(): produced by one activity only", 459)
+        }
+    }
+    M.cac = (p.sac :> 0)
+    M.cdac = M.cac :* (abs(p.sac :- 1) :< 1e-12)
+    p.rac = M.cac :* (1 :- M.cdac) :* (1 :/ (p.sac + (p.sac :== 0)) :- 1)
+    M.xac = (MAKE0 :> tol) :* M.cac'
+    p.dac = J(M.n, M.nC, 0)
+    p.aac = J(M.nC, 1, 1)
+    for (k = 1; k <= M.nC; k++) {
+        if (!M.cac[k]) continue
+        m = _cge_which(M.xac[., k])
+        _cge_ces_shares(J(rows(m), 1, 1), MAKE0[m, k], MAKE0[m, k], QX0[k], p.rac[k], M.cdac[k], d, eff)
+        p.dac[m, k] = d
+        p.aac[k] = eff
+    }
 }
 
 // Shares d and efficiency eff of a CES aggregate (exponent r) or a
@@ -4245,7 +4332,7 @@ void _cge_sp_same(struct cge_model scalar M, real colvector rowid, real colvecto
 
 void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
 {
-    real colvector rowid, boff, pr, pc, cA, cC, cD, e, i, j, keep, ce
+    real colvector rowid, boff, pr, pc, cA, cC, cD, e, i, j, keep, ce, gp
     real matrix P
     real scalar nA, nC, nF, nH, nD, nI, f, g, k, bb, nr
     string rowvector dense, blks
@@ -4285,6 +4372,22 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp_same(M, rowid, boff, pr, pc, "P5", "PA")
     _cge_nz(p.theta, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "P5", i, "PX", j)
+    // Output from several activities (Section 17.3)
+    _cge_nz(M.xac, i, j)
+    _cge_sp(M, rowid, boff, pr, pc, "P5", i, "PXAC", (i :- 1) :* nC :+ j)
+    _cge_sp(M, rowid, boff, pr, pc, "Q6A", j, "QX", j)
+    _cge_sp(M, rowid, boff, pr, pc, "Q6A", j, "QXAC", (i :- 1) :* nC :+ j)
+    e = (i :- 1) :* nC :+ j
+    _cge_sp(M, rowid, boff, pr, pc, "Q6B", e, "QXAC", e)
+    _cge_sp(M, rowid, boff, pr, pc, "Q6B", e, "QA", i)
+    for (k = 1; k <= nH; k++) _cge_sp(M, rowid, boff, pr, pc, "Q6B", e, "QHA", (i :- 1) :* nH :+ k)
+    _cge_sp(M, rowid, boff, pr, pc, "P5A", e, "PXAC", e)
+    _cge_sp(M, rowid, boff, pr, pc, "P5A", e, "PX", j)
+    _cge_sp(M, rowid, boff, pr, pc, "P5A", e, "QX", j)
+    for (k = 1; k <= rows(i); k++) {
+        gp = _cge_which(M.xac[., j[k]])
+        _cge_sp(M, rowid, boff, pr, pc, "P5A", J(rows(gp), 1, e[k]), "QXAC", (gp :- 1) :* nC :+ j[k])
+    }
     _cge_sp_same(M, rowid, boff, pr, pc, "P6", "PINTA")
     _cge_nz(p.ica, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "P6", j, "PQ", i)
@@ -5910,6 +6013,11 @@ void _cge_param_data(string scalar sim, real scalar current)
         _cge_padd(keys, val, "dce", p.dce, M.C, M.A); _cge_padd(keys, val, "sgn", p.sgn, M.N, none)
         _cge_padd(keys, val, "rhn", p.rhn, M.N, none)
     }
+    // output from several activities (from version 0.5.2)
+    if (any(M.cac)) {
+        _cge_padd(keys, val, "sac", p.sac, M.C, none); _cge_padd(keys, val, "rac", p.rac, M.C, none)
+        _cge_padd(keys, val, "aac", p.aac, M.C, none); _cge_padd(keys, val, "dac", p.dac, M.A, M.C)
+    }
     // institutions and factors
     _cge_padd(keys, val, "tins0", p.tins0, M.D, none); _cge_padd(keys, val, "mps0", p.mps0, M.D, none)
     _cge_padd(keys, val, "shir", p.shir, M.D, none);   _cge_padd(keys, val, "trdg", p.trdg, M.D, none)
@@ -6051,6 +6159,13 @@ void _cge_par_fill(struct cge_par scalar p, struct cge_model scalar M)
     if (rows(p.an) == 0) p.an = J(0, M.n, 1)
     if (rows(p.sgn) == 0) p.sgn = J(0, 1, .)
     if (rows(p.rhn) == 0) p.rhn = J(0, 1, .)
+    // 0.5.2: output of each commodity from its activities as perfect substitutes
+    if (rows(p.sac) == 0) {
+        p.sac = J(M.nC, 1, 0)
+        p.rac = J(M.nC, 1, 0)
+        p.aac = J(M.nC, 1, 1)
+        p.dac = J(M.n, M.nC, 0)
+    }
     // 0.4.4: rents to the government, no constraints
     if (rows(p.rrm) == 0) {
         p.rrm = J(M.nC, 1, M.nF + M.nD + 1)
@@ -6064,7 +6179,8 @@ void _cge_par_fill(struct cge_par scalar p, struct cge_model scalar M)
 // TQADJ, TMADJ and TVADJ (0.3.1), fixed at one; PWE and QHA (0.3.2), and LSW
 // and LSM (0.3.3), which do not exist in older models; DW (0.3.4), one where it
 // does not exist; the rents RM, RE and RA (0.4.4), zero; QNA and PNA (0.5.1),
-// with no elements without nests. The Jacobian pattern is rebuilt.
+// with no elements without nests; PXAC and QXAC (0.5.2), which do not exist
+// in older models. The Jacobian pattern is rebuilt.
 void _cge_use_upgrade(struct cge_model scalar M)
 {
     real scalar nold, k, v, len
@@ -6079,7 +6195,7 @@ void _cge_use_upgrade(struct cge_model scalar M)
             val = M.p0.pwe
             ex = J(len, 1, 0)
         }
-        else if (anyof(("QHA", "LSW", "LSM"), M.vname[k])) {
+        else if (anyof(("QHA", "LSW", "LSM", "PXAC", "QXAC"), M.vname[k])) {
             val = J(len, 1, 0)
             ex = J(len, 1, 0)
         }
@@ -6208,7 +6324,13 @@ void _cge_use(string scalar fn)
             M.ecell = J(M.nC, M.n, 0)
         }
         if (rows(M.nn) == 0) M.nn = J(0, M.n, 0)
-        if (!_cge_vidx(M, "PNA")) _cge_use_upgrade(M)
+        // Files saved before version 0.5.2: no aggregation of output
+        if (rows(M.cac) == 0) {
+            M.cac = J(M.nC, 1, 0)
+            M.cdac = J(M.nC, 1, 0)
+            M.xac = J(M.n, M.nC, 0)
+        }
+        if (!_cge_vidx(M, "QXAC")) _cge_use_upgrade(M)
     }
     // Files saved before version 0.2.0 have no dynamic-run items
     if (rows(M.simrun) != rows(M.simname)) {
@@ -6773,14 +6895,14 @@ void _cge_sens_calibrate(real scalar d)
     Mold = _cge_load()
     _cge_sens_values(G, d, va, q, t, a)
     // Options of the last calibration; models calibrated before version 0.3.1
-    // stored ten of them, before 0.3.3 seventeen, before 0.3.4 twenty-one and
-    // before 0.5.1 twenty-five
+    // stored ten of them, before 0.3.3 seventeen, before 0.3.4 twenty-one,
+    // before 0.5.1 twenty-five and before 0.5.2 twenty-seven
     c = G.calargs
-    if (cols(c) < 27) c = c, J(1, 27 - cols(c), "")
+    if (cols(c) < 28) c = c, J(1, 28 - cols(c), "")
     _cge_calibrate(_cge_numlist(va), _cge_numlist(q), _cge_numlist(t), c[4], c[5], c[6],
                    (c[7] == "" & !anyof(G.vary, "a") ? "" : _cge_numlist(a)), c[8], c[9], c[10],
                    c[11], c[12], c[13], c[14], c[15], c[16], c[17], c[18], c[19], c[20], c[21],
-                   c[22], c[23], c[24], c[25], c[26], c[27])
+                   c[22], c[23], c[24], c[25], c[26], c[27], c[28])
     M = _cge_load()
     // Swaps (version 0.4.5) are kept
     M.swfix = Mold.swfix
@@ -8080,7 +8202,9 @@ void _cge_eqinfo(string scalar blk, string scalar set, string scalar desc)
         ("N2", "NA", "price of a nest") \ ("N3", "CA", "demand for a commodity in a nest") \
         ("H1", "", "health services") \
         ("H2", "F", "factor efficiency") \ ("H3", "F", "days worked") \ ("Q5", "CA", "intermediate demand") \
-        ("Q6", "C", "commodity output") \ ("T1", "C", "CET transformation") \ ("T2", "C", "export supply") \
+        ("Q6", "C", "commodity output") \ ("Q6A", "C", "output aggregated from activities") \
+        ("Q6B", "AC", "output of a commodity by an activity") \ ("P5A", "AC", "price of an activity's output") \
+        ("T1", "C", "CET transformation") \ ("T2", "C", "export supply") \
         ("T3", "C", "output without exports") \ ("T3E", "C", "export-only output") \
         ("T4", "C", "Armington aggregation") \ ("T5", "C", "import demand") \ ("T6", "C", "supply without imports") \
         ("T7", "C", "supply from imports only") \ ("T8", "C", "margin demand") \
@@ -8439,6 +8563,8 @@ void _cge_gams_data(struct cge_model scalar M, string scalar fn)
     _cge_gpar(fh, "sigq", M.C, p.sq)
     _cge_gpar(fh, "sigt", M.C, p.st)
     _cge_gpar(fh, "siga", M.A, p.sa)
+    // output from several activities (from version 0.5.2): 0 for perfect substitutes
+    _cge_gpar(fh, "sigac", M.C, p.sac)
     _cge_gpar(fh, "eta", M.F, p.etah)
     // LES: income elasticities by commodity, Frisch parameters by household;
     // home goods take the elasticity of the activity's paired commodity
@@ -8995,6 +9121,10 @@ void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefi
     _cge_io_put(fh, prefix + "dce", p.dce)
     _cge_io_put(fh, prefix + "sgn", p.sgn)
     _cge_io_put(fh, prefix + "rhn", p.rhn)
+    _cge_io_put(fh, prefix + "sac", p.sac)
+    _cge_io_put(fh, prefix + "rac", p.rac)
+    _cge_io_put(fh, prefix + "aac", p.aac)
+    _cge_io_put(fh, prefix + "dac", p.dac)
 }
 
 real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
@@ -9104,6 +9234,10 @@ real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmo
     else if (name == "dce") p.dce = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "sgn") p.sgn = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "rhn") p.rhn = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "sac") p.sac = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "rac") p.rac = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "aac") p.aac = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "dac") p.dac = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else return(0)
     return(1)
 }
@@ -9232,6 +9366,9 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "cdn", M.cdn)
     _cge_io_put(fh, "nn", M.nn)
     _cge_io_put(fh, "ecell", M.ecell)
+    _cge_io_put(fh, "cac", M.cac)
+    _cge_io_put(fh, "cdac", M.cdac)
+    _cge_io_put(fh, "xac", M.xac)
 }
 
 real scalar _cge_model_member(struct cge_model scalar M, string scalar name, transmorphic matrix v)
@@ -9353,6 +9490,9 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "cdn") M.cdn = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "nn") M.nn = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ecell") M.ecell = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "cac") M.cac = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "cdac") M.cdac = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "xac") M.xac = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else return(0)
     return(1)
 }

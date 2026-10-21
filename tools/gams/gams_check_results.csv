@@ -143,6 +143,13 @@ nests,vnest_payroll_cut,tests/expected,16,174,0,2.720e-15,2.853e-14,8.425e-13
 "nests, mixed",vnest_mixed_skilled_supply_up10,tests/expected,16,174,0,2.720e-15,1.845e-13,1.037e-12
 "nests, specific capital",vnest_specific_energy_price_up50,tests/expected,16,174,0,2.720e-15,4.241e-14,7.641e-13
 "nests, VAT",vnest_vat_rate_up20,tests/expected,16,124,0,5.004e-15,2.444e-13,1.395e-11
+output from activities,xac_tariff_removal,tests/expected,16,122,0,3.053e-16,2.420e-14,6.518e-15
+output from activities,xac_import_price_up10,tests/expected,16,122,0,3.053e-16,1.120e-12,2.421e-13
+output from activities,xac_labour_supply_up5,tests/expected,16,122,0,3.053e-16,6.806e-14,2.994e-13
+output from activities,xac_foreign_savings_down20,tests/expected,16,122,0,3.053e-16,1.311e-13,1.965e-12
+output from activities,xac_agri_productivity_up5,tests/expected,16,122,0,3.053e-16,1.154e-12,1.262e-11
+"output from activities, Cobb-Douglas",xac_cd_agri_productivity_up5,tests/expected,16,122,0,3.053e-16,1.198e-13,2.431e-13
+"output from activities, mixed",xac_mixed_agri_productivity_up5,tests/expected,16,122,0,3.053e-16,4.340e-13,4.167e-12
 swaps,swap_gsav_gadj,tests/expected,16,118,0,3.053e-16,3.669e-13,3.045e-13
 swaps,swap_exr_numeraire,tests/expected,16,118,0,3.053e-16,1.705e-12,2.123e-11
 constraints,con_quota,tests/expected,1,118,0,3.053e-16,2.400e-12,2.140e-13

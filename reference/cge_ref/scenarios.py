@@ -211,6 +211,25 @@ def multiproduct_model(**elasticities) -> Model:
     return Model(SAM.from_csv(MULTIPRODUCT_SAM), synthetic_mapping(), **settings)
 
 
+# Output of a commodity from several activities (version 0.5.2): on the
+# multi-product layout, act_agr and act_man both produce com_man
+OUTPUT_CES = {"sigma_ac": {"com_man": 2.0}}
+
+
+def output_cases() -> dict:
+    """name -> solution: the standard simulations with manufactures from two
+    activities combined by a CES function; Cobb-Douglas; mixed elasticities."""
+    m = multiproduct_model(**OUTPUT_CES)
+    out = {"xac_" + k: s for k, s in run_simulations(m).items()}
+    cd = multiproduct_model(sigma_ac={"com_man": 1.0})
+    out["xac_cd_agri_productivity_up5"] = cd.solve(Closure(), tol=1e-12,
+                                                   **simulation_inputs(cd)["agri_productivity_up5"])
+    mixed = multiproduct_model(**MIXED_ELASTICITIES, **OUTPUT_CES)
+    out["xac_mixed_agri_productivity_up5"] = mixed.solve(Closure(), tol=1e-12,
+                                                         **simulation_inputs(mixed)["agri_productivity_up5"])
+    return out
+
+
 NONIMPORTED_SAM = REPO / "data" / "cge_synthetic_sam_cnm.csv"
 
 
@@ -693,7 +712,7 @@ REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_
             "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10",
             "wc_tariff_removal", "mwnb_pwm_up50", "hout_gov_health_up20", "hout_epidemic",
             "hout_mortality_up50", "hboth_gov_health_up20", "con_quota_row", "con_capacity",
-            "con_export_quota", "ftax_payroll_cut", "vnest_energy_price_up50")
+            "con_export_quota", "ftax_payroll_cut", "vnest_energy_price_up50", "xac_agri_productivity_up5")
 
 
 def dynamic_cases() -> dict:
@@ -842,6 +861,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Taxes on factor use and income (0.5.0)
     solutions.update(factor_tax_cases())
     solutions.update(nest_cases())
+    # Output from several activities (0.5.2)
+    solutions.update(output_cases())
     written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
                + write_spa(directory) + write_regimes(solutions, directory))
     for name, solution in solutions.items():

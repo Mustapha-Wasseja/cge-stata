@@ -229,6 +229,22 @@ aa(A) = 1;
 aa(A)$CDA(A) = QA0(A) / (QVA0(A)**dla(A) * QINTA0(A)**dlac(A));
 aa(A)$(not LT(A) and not CDA(A)) = QA0(A) / (dla(A) * QVA0(A)**(-rha(A))
                                       + dlac(A) * QINTA0(A)**(-rha(A)))**(-1 / rha(A));
+* 17.3 Output of a commodity from several activities (from version 0.5.2): a
+* CES or Cobb-Douglas aggregate of the activities' outputs for the commodities
+* with an elasticity sigac (0, perfect substitutes, otherwise)
+sets CAC(AC) "commodities aggregated from several activities", CDAC(AC) "Cobb-Douglas aggregates",
+     XAC(AC, AC) "output of a commodity by an activity, aggregated";
+parameters rac(AC) "exponent of the aggregate", dac(AC, AC) "share of an activity", aac(AC) "efficiency";
+CAC(C) = yes$(sigac(C) > 0);
+abort$(sum(C$(CAC(C) and sum(A$(SAM(A, C) > tol), 1) < 2), 1)) "sigac: a commodity produced by one activity only";
+CDAC(C) = yes$(CAC(C) and abs(sigac(C) - 1) < 1e-12);
+XAC(A, C) = yes$(CAC(C) and SAM(A, C) > tol);
+rac(C)$(CAC(C) and not CDAC(C)) = 1 / sigac(C) - 1;
+dac(A, C)$(XAC(A, C) and CDAC(C)) = SAM(A, C) / QX0(C);
+dac(A, C)$(XAC(A, C) and not CDAC(C)) = SAM(A, C)**(1 + rac(C)) / sum(AP$XAC(AP, C), SAM(AP, C)**(1 + rac(C)));
+aac(C) = 1;
+aac(C)$CDAC(C) = QX0(C) / prod(A$XAC(A, C), SAM(A, C)**dac(A, C));
+aac(C)$(CAC(C) and not CDAC(C)) = QX0(C) / sum(A$XAC(A, C), dac(A, C) * SAM(A, C)**(-rac(C)))**(-1 / rac(C));
 
 * ---------------------------------------------------------------------
 * 7.4 CET and Armington functions (complements of the shares stored)
@@ -381,7 +397,7 @@ variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(
      QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
      TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
      SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC), DW(AC),
-     RM(AC), RE(AC), RA(AC), QNA(NST, AC), PNA(NST, AC);
+     RM(AC), RE(AC), RA(AC), QNA(NST, AC), PNA(NST, AC), PXAC(AC, AC), QXAC(AC, AC);
 
 * 16.1 Rents (from version 0.4.4): premiums on imports and exports, per unit
 * of the world price, and rents on activity output, per unit of the activity
@@ -400,7 +416,8 @@ $macro RENTTO(rr) (sum(C, rmto(rr, C) * RM(C) * pwm(C) * QM(C)) * EXR + sum(C, r
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
      EQ4D(AC, AC), EQ4N(NST, AC, AC), EQ4M(NST, AC, AC), EN1C(NST, AC), EN1D(NST, AC), EN2C(NST, AC),
-     EN2D(NST, AC), EN3C(NST, AC, AC), EN3D(NST, AC, AC), EQ5(AC, AC), EQ6(AC), EH1, EH2(AC), EH3(AC),
+     EN2D(NST, AC), EN3C(NST, AC, AC), EN3D(NST, AC, AC), EQ5(AC, AC), EQ6(AC), EQ6A(AC), EQ6D(AC),
+     EQ6B(AC, AC), EP5A(AC, AC), EP5D(AC, AC), EH1, EH2(AC), EH3(AC),
      ET1(AC), ET2(AC), ET3(AC), ET4(AC), ET5(AC), ET6(AC), ET7(AC), ET8(AC), ET9(AC), ET3E(AC), ET10(AC),
      EI1(AC), EI2(AC, AC), EI3(AC), EI4(AC), EI5(AC, AC), EI5H(AC, AC), EI6(AC), EI7(AC), EI8, EI9, EI10(AC), EI11(AC),
      EI12, EI13(AC), EI14, EL1(AC), EL2(AC), ES1(AC), ES2(AC), ES3, ES4, ES5;
@@ -413,7 +430,7 @@ EP3(C)$CQ(C)..  PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e=
                 ((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) * QD(C))$CDO(C) + (PM(C) * QM(C))$CM(C)
                 + sum(CP$CT(CP), PQ(CP) * icm(CP, C)) * QQ(C);
 EP4(C)$CX(C)..  PX(C) * QX(C) =e= (PD(C) * QD(C))$CDO(C) + (PE(C) * QE(C))$CE(C);
-EP5(A)..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * PX(C));
+EP5(A)..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * (PXAC(A, C)$XAC(A, C) + PX(C)$(not XAC(A, C))));
 EP6(A)..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * ica(C, A));
 EP7(A)..        PA(A) * (1 - ta(A) - RA(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A);
 EP8..           CPI =e= sum(C$cwts(C), cwts(C) * PQ(C) * (1 + tv(C) * TVADJ));
@@ -458,7 +475,17 @@ EN3C(NST, C, A)$(NSTF(NST, C) and NE(C, A) and not CDN(NST))..
 EN3D(NST, C, A)$(NSTF(NST, C) and NE(C, A) and CDN(NST))..
     PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * QINT(C, A) =e= dce(C, A) * PNA(NST, A) * QNA(NST, A);
 EQ5(C, A)$ica(C, A)..  QINT(C, A) =e= ica(C, A) * QINTA(A);
-EQ6(C)$CX(C)..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
+EQ6(C)$(CX(C) and not CAC(C))..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
+* 17.3 Output from several activities: commodity output (EQ6A, EQ6D), each
+* activity's output (EQ6B) and price (EP5A, EP5D)
+EQ6A(C)$(CAC(C) and not CDAC(C))..
+    QX(C) =e= aac(C) * sum(A$XAC(A, C), dac(A, C) * QXAC(A, C)**(-rac(C)))**(-1 / rac(C));
+EQ6D(C)$CDAC(C)..  QX(C) =e= aac(C) * prod(A$XAC(A, C), QXAC(A, C)**dac(A, C));
+EQ6B(A, C)$XAC(A, C)..  QXAC(A, C) =e= theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H)));
+EP5A(A, C)$(XAC(A, C) and not CDAC(C))..
+    PXAC(A, C) =e= PX(C) * QX(C) / sum(AP$XAC(AP, C), dac(AP, C) * QXAC(AP, C)**(-rac(C)))
+                   * dac(A, C) * QXAC(A, C)**(-rac(C) - 1);
+EP5D(A, C)$(XAC(A, C) and CDAC(C))..  PXAC(A, C) * QXAC(A, C) =e= dac(A, C) * PX(C) * QX(C);
 EH1$linked..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C));
 EH2(F)$eta(F).. EFF(F) =e= (HS / hs0)**eta(F);
 EH3(F)$FS(F)..  DW(F) =e= (1 - sick(F) * (HS / hs0)**epss(F)) / (1 - sick0(F));
@@ -565,6 +592,7 @@ SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;  DW.l(F) = 1;
 TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;  LSW.l(F) = 0;  LSM.l(F) = lsm0(F);
 RM.l(C) = 0;  RE.l(C) = 0;  RA.l(A) = 0;
 QNA.l(NST, A) = VNA0(NST, A);  PNA.l(NST, A) = 1$NNA(NST, A);
+PXAC.l(A, C) = 1$XAC(A, C);  QXAC.l(A, C) = SAM(A, C)$XAC(A, C);
 
 * Closure (Section 6): 1 = the default of each block
 scalars clext "1 flexible exchange rate, 2 fixed",

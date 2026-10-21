@@ -186,6 +186,29 @@ added, leave out the energy bought, which is an intermediate input. A nest of
 factors with the same elasticity as value added gives the same results as no
 nest. Nests do not contain other nests.
 
+## 6.8 Output of a commodity from several activities (Section 17.3)
+
+When several activities produce one commodity, their outputs are by default
+perfect substitutes, sold at one price. With `sigmaac()` they are combined by
+a CES function, as in the IFPRI standard model, and each activity is paid its
+own price (`PXAC`). In the multi-product layout, agriculture and manufacturing
+both produce manufactures:
+
+```stata
+cge_synthetic, clear multiproduct
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) sigmaac(com_man:2)
+cge_shock ad, elements(act_agr) scale(1.05)
+cge_solve, name(agri_up)
+```
+
+After the rise in agricultural productivity, the manufactures of agriculture
+become cheaper than those of the manufacturing activity. The same device can
+separate the output of public and private health providers in a health SAM.
+
 ## References
 
 Blanchflower, D. G. and A. J. Oswald (1995). An introduction to the wage curve.

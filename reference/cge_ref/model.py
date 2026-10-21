@@ -37,6 +37,9 @@ VARIABLES: dict[str, str] = {
     # Nests of value added (version 0.5.1, model_spec.md, Section 17.2): the
     # quantity and price of each nest in each activity
     "QNA": "NA", "PNA": "NA",
+    # Output of a commodity from several activities (version 0.5.2, Section
+    # 17.3): the price and quantity of each activity's output of a commodity
+    "PXAC": "AC", "QXAC": "AC",
 }
 
 # Rent variable of a quantity limited by a constraint (Section 16.2)
@@ -48,7 +51,7 @@ INSTRUMENTS = {"direct": ("TINSADJ", "tins0"), "sales": ("TQADJ", "tq"), "import
 
 # Variables measured in local currency: they scale with the numeraire.
 NOMINAL = ("PA", "PVA", "PINTA", "PX", "PD", "PE", "PM", "PQ", "W", "EXR", "CPI", "DPI",
-           "YF", "YIF", "YI", "EH", "YG", "EG", "GSAV", "WALRAS", "YSHI", "PNA")
+           "YF", "YIF", "YI", "EH", "YG", "EG", "GSAV", "WALRAS", "YSHI", "PNA", "PXAC")
 
 CLOSURE_OPTIONS = {
     "external": ("flexexr", "fixexr"),
@@ -236,7 +239,11 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
                 np.where(cdo, pdd * v["QD"], 0.0) + np.where(cm, v["PM"] * v["QM"], 0.0) + margin_cost,
                 cq)
     eq["P4"] = (v["PX"] * v["QX"], np.where(cdo, v["PD"] * v["QD"], 0.0) + np.where(ce, v["PE"] * v["QE"], 0.0), cx)
-    eq["P5"] = (v["PA"], p["theta"] @ v["PX"], every_a)
+    # Output aggregated from several activities (version 0.5.2, Section 17.3):
+    # each activity is paid its own price PXAC (zero adjustment otherwise)
+    xac, cac, cdac = s["xac"], s["cac"], s["cdac"]
+    eq["P5"] = (v["PA"], p["theta"] @ v["PX"]
+                + (p["theta"] * np.where(xac, v["PXAC"] - v["PX"][None, :], 0.0)).sum(axis=1), every_a)
     eq["P6"] = (v["PINTA"], (p["ica"] * (1 + vint)).T @ v["PQ"], every_a)
     eq["P7"] = (v["PA"] * (1 - p["ta"] - v["RA"]) * v["QA"], v["PVA"] * v["QVA"] + v["PINTA"] * v["QINTA"],
                 every_a)
@@ -321,7 +328,19 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     # Intermediate inputs and household purchases exist only where the SAM has a flow
     eq["Q5"] = (v["QINT"], p["ica"] * v["QINTA"][None, :], s["qint"])
     # Marketed output: home consumption does not reach the market (13.1)
-    eq["Q6"] = (v["QX"], p["theta"].T @ (v["QA"] - v["QHA"].sum(axis=1)), cx)
+    eq["Q6"] = (v["QX"], p["theta"].T @ (v["QA"] - v["QHA"].sum(axis=1)), cx & ~cac)
+    # Q6A: commodity output, a CES or Cobb-Douglas aggregate of the outputs
+    # of its activities; Q6B: each activity's output of the commodity; P5A:
+    # each activity's price (Section 17.3)
+    rs = np.where(cac & ~cdac, p["rho_ac"], 1.0)
+    qxac = np.where(xac, v["QXAC"], 1.0)
+    sac = np.where(xac, p["delta_ac"] * qxac ** (-rs), 0.0).sum(axis=0)
+    lac = np.where(xac, p["delta_ac"] * np.log(qxac), 0.0).sum(axis=0)
+    eq["Q6A"] = (v["QX"], p["aac"] * np.where(cdac, np.exp(lac), sac ** (-1.0 / rs)), cac)
+    eq["Q6B"] = (v["QXAC"], p["theta"] * (v["QA"] - v["QHA"].sum(axis=1))[:, None], xac)
+    pxqx = v["PX"] * v["QX"]
+    eq["P5A"] = (np.where(cdac, v["PXAC"] * v["QXAC"], v["PXAC"]),
+                 np.where(cdac, p["delta_ac"] * pxqx, pxqx / sac * p["delta_ac"] * qxac ** (-rs - 1)), xac)
 
     # 5.3 Trade block
     # 1 - delta is stored (deltac_*) rather than computed: when one share is close to
@@ -564,7 +583,7 @@ class Model:
                  debt=None, interest=None, debt_holders=None, foreign_borrowing=None,
                  export_only=None, export_demand=None, unemployment=None, wage_curve=None,
                  min_wage=None, smoothing=1e-10, sick_days=None, sick_elasticity=None,
-                 mortality=None, mortality_elasticity=None, nests=None, sigma_nest=None):
+                 mortality=None, mortality_elasticity=None, nests=None, sigma_nest=None, sigma_ac=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -585,6 +604,7 @@ class Model:
         self._debt(debt, interest, debt_holders, foreign_borrowing)
         self._labour(unemployment, wage_curve, min_wage, smoothing)
         self._top_nest(sigma_a)
+        self._output_nest(sigma_ac)
         self._health_link(health_commodities, health_elasticities, sick_days, sick_elasticity,
                           mortality, mortality_elasticity)
         self._rents()
@@ -1015,6 +1035,56 @@ class Model:
         self.sets["N"] = N
         self.struct = {"nest_f": nest_f, "nest_c": nest_c, "cdn": cdn}
         self.params = {"sigma_n": sn, "rho_n": np.where(cdn, 0.0, 1.0 / sn - 1.0)}
+
+    def _output_nest(self, sigma_ac) -> None:
+        """Output of a commodity from several activities (version 0.5.2,
+        model_spec.md, Section 17.3): for the commodities given, a CES or
+        Cobb-Douglas aggregate of the activities' outputs instead of perfect
+        substitutes. sigma_ac is commodity -> elasticity, or one value for
+        every commodity with more than one producing activity."""
+        A, C, b, p = self.sets["A"], self.sets["C"], self.base, self.params
+        nA, nC = len(A), len(C)
+        MAKE0 = np.array([[self.sam.cell(a, c) for c in C] for a in A]).reshape(nA, nC)
+        tol = 1e-9 * max(1.0, float(np.abs(self.sam.values).max()))
+        producers = (MAKE0 > tol).sum(axis=0)
+        sac = np.zeros(nC)
+        if isinstance(sigma_ac, dict):
+            for c, value in sigma_ac.items():
+                if c not in C:
+                    raise ValueError(f"sigma_ac: {c} is not a commodity")
+                if producers[C.index(c)] < 2:
+                    raise SAMError(f"sigma_ac: {c} is produced by one activity only")
+                sac[C.index(c)] = float(value)
+            if np.any(~np.isfinite(sac)) or any(float(v) <= 0 for v in sigma_ac.values()):
+                raise ValueError("sigma_ac: elasticities must be positive")
+        elif sigma_ac is not None:
+            if not (np.isfinite(sigma_ac) and sigma_ac > 0):
+                raise ValueError("sigma_ac: elasticities must be positive")
+            sac = np.where(producers >= 2, float(sigma_ac), 0.0)
+        cac = sac > 0
+        cdac = cac & (np.abs(sac - 1.0) < 1e-12)
+        rho = np.where(cac & ~cdac, 1.0 / np.where(cac, sac, 1.0) - 1.0, 0.0)
+        xac = (MAKE0 > tol) & cac[None, :]
+        delta, aac = np.zeros((nA, nC)), np.ones(nC)
+        QX0 = b["QX"]
+        for k in np.flatnonzero(cac):
+            m = xac[:, k]
+            q = MAKE0[m, k]
+            if cdac[k]:
+                d = q / QX0[k]
+                aac[k] = QX0[k] / np.prod(q ** d)
+            else:
+                r = rho[k]
+                num = q ** (1 + r)
+                d = num / num.sum()
+                aac[k] = QX0[k] / (d * q ** (-r)).sum() ** (-1 / r)
+            delta[m, k] = d
+        self.struct.update({"cac": cac, "cdac": cdac, "xac": xac})
+        p.update({"sigma_ac": sac, "rho_ac": rho, "delta_ac": delta, "aac": aac})
+        b["PXAC"] = xac.astype(float)
+        b["QXAC"] = np.where(xac, MAKE0, 0.0)
+        self.exists["PXAC"] = xac.copy()
+        self.exists["QXAC"] = xac.copy()
 
     def _top_nest(self, sigma_a) -> None:
         """Top nest of production (model_spec.md, 5.2 and 7.3): Leontief (sigma_a = 0,

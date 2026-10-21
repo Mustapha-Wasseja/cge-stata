@@ -123,6 +123,8 @@ def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict 
     lines.append(param("sigq", S["C"], p["sigma_q"]))
     lines.append(param("sigt", S["C"], p["sigma_t"]))
     lines.append(param("siga", S["A"], p["sigma_a"]))
+    # output from several activities (version 0.5.2): 0 for perfect substitutes
+    lines.append(param("sigac", S["C"], p["sigma_ac"]))
     lines.append(param("eta", S["F"], p["eta_h"]))
     if les:
         lines.append(param("incel", S["C"], [les["income_elasticities"][c] for c in S["C"]]))
@@ -482,6 +484,15 @@ def cases() -> list[dict]:
     vnvat = sc.vat_model(**sc.NEST_VAT)
     add("nests, VAT", vnvat, {"vat_rate_up20": {"params": {"tv": vnvat.params["tv"] * 1.2}}}, "vnest_",
         vat=sc.VAT_CREDIT)
+    # Output of a commodity from several activities (version 0.5.2, Section 17.3)
+    xm = sc.multiproduct_model(**sc.OUTPUT_CES)
+    add("output from activities", xm, sc.simulation_inputs(xm), "xac_")
+    xcd = sc.multiproduct_model(sigma_ac={"com_man": 1.0})
+    add("output from activities, Cobb-Douglas", xcd,
+        {"cd_agri_productivity_up5": sc.simulation_inputs(xcd)["agri_productivity_up5"]}, "xac_")
+    xmix = sc.multiproduct_model(**sc.MIXED_ELASTICITIES, **sc.OUTPUT_CES)
+    add("output from activities, mixed", xmix,
+        {"mixed_agri_productivity_up5": sc.simulation_inputs(xmix)["agri_productivity_up5"]}, "xac_")
     # Closure swaps (version 0.4.5, model_spec.md, Section 6)
     notariff = {"params": {"tm": np.zeros_like(std.params["tm"])}}
     add("swaps", std, {"swap_gsav_gadj": notariff}, closure=Closure(swaps=(("GSAV", "GADJ"),)))

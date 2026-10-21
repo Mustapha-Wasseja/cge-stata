@@ -1,4 +1,4 @@
-*! cge_calibrate.ado  v0.5.1  2026-10-21
+*! cge_calibrate.ado  v0.5.2  2026-10-21
 *! cge-stata: calibrate the model to the mapped SAM
 *! Computes base values and parameters and checks benchmark replication
 *!
@@ -14,7 +14,7 @@ program define cge_calibrate, rclass
         FOReignborrowing(string) EXPORTOnly(namelist) EXPORTDemand(string)      ///
         UNEMPloyment(string) WAGECurve(string) MINWage(string) SMOOTHing(string)        ///
         SICKDays(string) SICKElas(string) MORTality(string) MORTElas(string)           ///
-        NESTs(string) SIGMANest(string)]
+        NESTs(string) SIGMANest(string) SIGMAAC(string)]
 
     if "`fquantities'" != "" confirm matrix `fquantities'
 
@@ -26,6 +26,7 @@ program define cge_calibrate, rclass
         strtrim(st_local("exportdemand")), strtrim(st_local("unemployment")),                 ///
         strtrim(st_local("wagecurve")), strtrim(st_local("minwage")), strtrim(st_local("smoothing")), ///
         strtrim(st_local("sickdays")), strtrim(st_local("sickelas")), strtrim(st_local("mortality")),  ///
-        strtrim(st_local("mortelas")), strtrim(st_local("nests")), strtrim(st_local("sigmanest")))
+        strtrim(st_local("mortelas")), strtrim(st_local("nests")), strtrim(st_local("sigmanest")),     ///
+        strtrim(st_local("sigmaac")))
     return add
 end
