@@ -70,6 +70,11 @@ capacity,path,mcp,1,144,0.000e+00,1.431e-13
 peglimit,path,mcp,1,117,2.776e-17,6.215e-15
 nodeficit,path,mcp,1,129,1.388e-17,2.402e-12
 wagefloor,path,mcp,1,117,2.776e-17,1.607e-12
+quota,path,mcp,1,117,2.776e-17,1.833e-13
+capacity,path,mcp,1,144,0.000e+00,1.431e-13
+peglimit,path,mcp,1,117,2.776e-17,6.215e-15
+nodeficit,path,mcp,1,129,1.388e-17,2.402e-12
+wagefloor,path,mcp,1,117,2.776e-17,1.607e-12
 std,path,cns,16,117,2.776e-17,2.728e-13
 closures,path,cns,16,117,2.776e-17,3.866e-13
 unemployed,path,cns,16,117,2.776e-17,1.149e-12
@@ -97,3 +102,6 @@ ftax,path,cns,16,117,2.776e-17,8.536e-14
 nests,path,cns,16,173,1.943e-16,7.163e-14
 nestvat,path,cns,16,123,2.456e-16,3.457e-14
 outces,path,cns,16,121,2.776e-17,1.788e-12
+dyninst,path,cns,16,516,1.388e-17,9.214e-14
+dynhealth,path,cns,16,584,0.000e+00,1.585e-13
+dyndebt,path,cns,16,516,1.388e-17,2.046e-13

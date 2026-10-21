@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.5.2  2026-10-21
+*! cge_mata.mata  v0.5.3  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -182,7 +182,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.5.2")
+    return("0.5.3")
 }
 
 // =====================================================================
@@ -3912,6 +3912,9 @@ real matrix _cge_par_get(struct cge_par scalar p, string scalar name)
     if (name == "mort") return(p.mort)
     if (name == "tf") return(p.tf)
     if (name == "tfy") return(p.tfy)
+    // from version 0.5.3, for the periods of dynamic runs
+    if (name == "trgg") return(p.trgg)
+    if (name == "hs0") return(p.hs0)
     _cge_fail("cge internal error: unknown parameter " + name, 3498)
 }
 
@@ -8628,7 +8631,7 @@ string matrix _cge_gams_params()
            ("trrg", "trrg", "") \ ("tshi", "tshi", "F") \ ("qshi", "qshibar", "C") \ ("trshi", "trshi", "") \
            ("trshir", "trshir", "") \ ("rd", "rd", "") \ ("rf", "rf", "") \ ("ddebt", "ddebt", "") \
            ("fdebt", "fdebt", "") \ ("qlf", "qlf", "F") \ ("wmin", "wmin", "F") \ ("wref", "wref", "F") \
-           ("sick", "sick", "F") \ ("tfy", "tfy", "F"))
+           ("sick", "sick", "F") \ ("tfy", "tfy", "F") \ ("trgg", "trgg", "") \ ("hs0", "hs0", ""))
 }
 
 string colvector _cge_gams_setlabels(struct cge_model scalar M, string scalar s)
@@ -8658,20 +8661,25 @@ string scalar _cge_gams_elem(string scalar e1, string scalar e2)
 // the base is not zero, so that GAMS applies them to its own calibrated values.
 // Returns the number of changes.
 real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar p, real colvector x,
-                               real colvector fixed, string rowvector cl, string scalar fpar, string scalar fvar)
+                               real colvector fixed, string rowvector cl, string scalar fpar, string scalar fvar,
+                               struct cge_par scalar p0, real colvector x0)
 {
     string matrix P
     string colvector lab, e1, e2
     string scalar target, g, mode, gov, idx
     real colvector v0, v1, pos, fx, fr
-    real scalar fh, k, i, n, code
+    real matrix G0, G1
+    string colvector rl, cl2
+    real scalar fh, k, i, j, n, code, m
 
+    // Changes are relative to p0 and x0: the base for a static scenario, the
+    // previous period for a period of a dynamic run (from version 0.5.3)
     P = _cge_gams_params()
     n = 0
     fh = _cge_gopen(fpar)
     fput(fh, "* Parameter changes and the closure, written by cge_gams")
     for (k = 1; k <= rows(P); k++) {
-        v0 = _cge_par_get(M.p0, P[k, 1])
+        v0 = _cge_par_get(p0, P[k, 1])
         v1 = _cge_par_get(p, P[k, 1])
         lab = _cge_gams_setlabels(M, P[k, 3])
         for (i = 1; i <= rows(v0); i++) {
@@ -8681,15 +8689,40 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
             n++
         }
     }
-    if (p.mort != M.p0.mort) printf("{txt}Note: the death rate (mort) enters only dynamic runs; its change is not exported\n")
-    // taxes on factor use, by factor and activity (from version 0.5.0)
-    for (i = 1; i <= M.nF; i++) {
-        for (k = 1; k <= M.n; k++) {
-            if (p.tf[i, k] == M.p0.tf[i, k]) continue
-            target = "tf('" + M.F[i] + "', '" + M.A[k] + "')"
-            fput(fh, target + " = " + (M.p0.tf[i, k] != 0 ? _cge_gnum(p.tf[i, k] / M.p0.tf[i, k]) + " * " + target :
-                 _cge_gnum(p.tf[i, k])) + ";")
-            n++
+    if (p.mort != p0.mort & x0 == M.x0) printf("{txt}Note: the death rate (mort) enters only dynamic runs; its change is not exported\n")
+    // Parameters by pair of elements: taxes on factor use (from version 0.5.0),
+    // and subsistence quantities, which grow with population in dynamic runs
+    // (from version 0.5.3)
+    for (m = 1; m <= 3; m++) {
+        if (m == 1) {
+            G0 = p0.tf
+            G1 = p.tf
+            rl = M.F
+            cl2 = M.A
+            g = "tf"
+        }
+        else if (m == 2) {
+            G0 = p0.gamma
+            G1 = p.gamma
+            rl = M.C
+            cl2 = M.H
+            g = "gamma"
+        }
+        else {
+            G0 = p0.gammah
+            G1 = p.gammah
+            rl = M.A
+            cl2 = M.H
+            g = "gammah"
+        }
+        for (i = 1; i <= rows(G0); i++) {
+            for (j = 1; j <= cols(G0); j++) {
+                if (G1[i, j] == G0[i, j]) continue
+                target = g + "('" + rl[i] + "', '" + cl2[j] + "')"
+                fput(fh, target + " = " + (G0[i, j] != 0 ? _cge_gnum(G1[i, j] / G0[i, j]) + " * " + target :
+                     _cge_gnum(G1[i, j])) + ";")
+                n++
+            }
         }
     }
     // Closure: 1 is the default of each block (cge_model.gms)
@@ -8723,13 +8756,13 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
     fput(fh, "* Changes to fixed variables, written by cge_gams")
     for (k = 1; k <= rows(M.vname); k++) {
         pos = _cge_vpos(M, k)
-        if (!any(M.exists[pos] :* fixed[pos] :* (x[pos] :!= M.x0[pos]))) continue
+        if (!any(M.exists[pos] :* fixed[pos] :* (x[pos] :!= x0[pos]))) continue
         _cge_vlabels(M, k, e1, e2)
         g = _cge_gams_vname(M.vname[k])
         for (i = 1; i <= rows(pos); i++) {
-            if (!M.exists[pos[i]] | !fixed[pos[i]] | x[pos[i]] == M.x0[pos[i]]) continue
+            if (!M.exists[pos[i]] | !fixed[pos[i]] | x[pos[i]] == x0[pos[i]]) continue
             target = g + ".fx" + _cge_gams_elem(e1[i], e2[i])
-            fput(fh, target + " = " + (M.x0[pos[i]] != 0 ? _cge_gnum(x[pos[i]] / M.x0[pos[i]]) + " * " + g + ".l" +
+            fput(fh, target + " = " + (x0[pos[i]] != 0 ? _cge_gnum(x[pos[i]] / x0[pos[i]]) + " * " + g + ".l" +
                  _cge_gams_elem(e1[i], e2[i]) : _cge_gnum(x[pos[i]])) + ";")
             n++
         }
@@ -8864,7 +8897,7 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
     else {
         k = _cge_sim_index(M, sim)
         if (M.simrun[k] != "") _cge_fail("simulation " + sim + " is a period of dynamic run " + M.simrun[k] +
-                                         "; cge_gams exports static simulations", 198)
+                                         "; export the run with cge_gams ..., dynamic(" + M.simrun[k] + ")", 198)
         name = sim
         p = M.simp[k]
         x = M.simx[., k]
@@ -8882,7 +8915,7 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
     nc = (rows(M.bY) ? sum(p.bmode :> 0) : 0)
     if (nc & type != "mcp") _cge_fail("the scenario has constraints: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
     _cge_gams_data(M, dir + "/cge_data.inc")
-    n = _cge_gams_scenario(M, p, x, fixed, cl, dir + "/cge_shock_par.inc", dir + "/cge_shock_var.inc")
+    n = _cge_gams_scenario(M, p, x, fixed, cl, dir + "/cge_shock_par.inc", dir + "/cge_shock_var.inc", M.p0, M.x0)
     (void) _cge_gams_cons(M, p, dir + "/cge_constraints.inc")
     _cge_gams_driver(dir + "/cge_run.gms", name, solver, type)
     st_numscalar("r(N_constraints)", nc)
@@ -8892,6 +8925,165 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
     st_numscalar("r(N_accounts)", rows(M.labels))
     printf("{txt}Wrote the model ({res}%f{txt} accounts) and scenario {res}%s{txt} ({res}%f{txt} change(s) from the base) to {res}%s\n",
            rows(M.labels), name, n, dir)
+}
+
+// The periods of dynamic run run, in order (from version 0.5.3)
+real colvector _cge_gams_periods(struct cge_model scalar M, string scalar run)
+{
+    real colvector s
+    s = _cge_which(M.simrun :== run)
+    if (!rows(s)) _cge_fail("dynamic run " + run + " not found", 111)
+    return(s[order(M.simper[s], 1)])
+}
+
+// A dynamic run (from version 0.5.3): the data, then for each period its
+// changes from the period before, which GAMS solves in order, each period
+// from the solution of the one before
+void _cge_gams_export_dyn(string scalar dir, string scalar run, string scalar solver, string scalar type)
+{
+    struct cge_model scalar M, M2
+    struct cge_par scalar p, pprev
+    real colvector s, x, xprev, fixed, fx, fr
+    string rowvector cl
+    string colvector sims
+    real scalar k, n, j
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    s = _cge_gams_periods(M, run)
+    cl = tokens(M.simclosure[s[1]])
+    for (j = 1; j <= rows(s); j++) {
+        if (M.simclosure[s[j]] != M.simclosure[s[1]]) _cge_fail("the periods of " + run + " have different closures", 459)
+        p = M.simp[s[j]]
+        if (rows(M.bY) & rows(p.bmode) == rows(M.bY)) {
+            if (any(p.bmode :> 0)) _cge_fail("dynamic run " + run + " has constraints; cge_gams exports dynamic runs without them", 198)
+        }
+    }
+    M2 = M
+    _cge_swap_parse(M2, _cge_swap_tokens(cl), fx, fr)
+    M2.swfix = fx
+    M2.swfree = fr
+    _cge_closure_apply(M2, cl[1], subinstr(cl[2], ":", " "), cl[3], cl[4],
+                       substr(cl[|5 \ 4 + M.nF|]', strpos(cl[|5 \ 4 + M.nF|]', ":") :+ 1, .))
+    fixed = M2.fixed
+    _cge_gams_data(M, dir + "/cge_data.inc")
+    // no constraints: the scenario model is the base model
+    (void) _cge_gams_cons(M, M.simp[s[1]], dir + "/cge_constraints.inc")
+    pprev = M.p0
+    xprev = M.x0
+    n = 0
+    sims = M.simname[s]
+    for (j = 1; j <= rows(s); j++) {
+        p = M.simp[s[j]]
+        x = M.simx[., s[j]]
+        n = n + _cge_gams_scenario(M, p, x, fixed, cl, dir + "/cge_" + sims[j] + "_par.inc",
+                                   dir + "/cge_" + sims[j] + "_var.inc", pprev, xprev)
+        pprev = p
+        xprev = x
+    }
+    _cge_gams_driver_dyn(dir + "/cge_run.gms", run, sims, solver, type)
+    st_numscalar("r(N_constraints)", 0)
+    st_global("r(name)", run)
+    st_global("r(sims)", invtokens(sims'))
+    st_global("r(closure)", invtokens(cl))
+    st_numscalar("r(N_changes)", n)
+    st_numscalar("r(N_periods)", rows(s))
+    st_numscalar("r(N_accounts)", rows(M.labels))
+    printf("{txt}Wrote the model ({res}%f{txt} accounts) and the {res}%f{txt} periods of dynamic run {res}%s{txt} ({res}%f{txt} change(s) in all) to {res}%s\n",
+           rows(M.labels), rows(s), run, n, dir)
+}
+
+// The driver of a dynamic run: the base, then each period in order; GAMS
+// starts each period from the solution of the one before
+void _cge_gams_driver_dyn(string scalar fn, string scalar run, string colvector sims, string scalar solver,
+                          string scalar type)
+{
+    real scalar fh, j
+    fh = _cge_gopen(fn)
+    fput(fh, char(36) + "title cge-stata dynamic run exported by cge_gams: " + run)
+    fput(fh, char(36) + "ontext")
+    fput(fh, "Written by cge_gams (cge-stata " + _cge_version() + "). GAMS calibrates the model from the")
+    fput(fh, "SAM and settings in cge_data.inc and solves the base, then the " + strofreal(rows(sims)) + " periods of")
+    fput(fh, "dynamic run " + run + " in order. The changes of each period from the one before,")
+    fput(fh, "parameters and closure then fixed variables, are in cge_<period>_par.inc and")
+    fput(fh, "cge_<period>_var.inc; each period is solved from the solution of the one")
+    fput(fh, "before. The equations are in cge_model.gms (docs/model_spec.md). To run it:")
+    fput(fh, "  gams cge_run.gms                                    " + solver + ", as " +
+         (type == "nlp" ? "a nonlinear programme" : (type == "mcp" ? "a mixed complementarity problem" :
+         "a constrained nonlinear system")))
+    fput(fh, "Results: cge_base.csv and cge_<period>.csv for each period, as scenario,")
+    fput(fh, "variable, element1, element2, value; the first row holds the model status.")
+    fput(fh, char(36) + "offtext")
+    fput(fh, char(36) + "if not set cgesolver " + char(36) + "setglobal cgesolver " + solver)
+    fput(fh, char(36) + "if not set cgetype " + char(36) + "setglobal cgetype " + type)
+    fput(fh, char(36) + "setglobal data cge_data.inc")
+    fput(fh, char(36) + "setglobal out cge_base.csv")
+    fput(fh, char(36) + "include cge_model.gms")
+    fput(fh, char(36) + "include cge_constraints.inc")
+    for (j = 1; j <= rows(sims); j++) {
+        fput(fh, "")
+        fput(fh, "* Period " + sims[j] + ": changes from the period before, then the closure and fixed variables")
+        fput(fh, char(36) + "include cge_" + sims[j] + "_par.inc")
+        fput(fh, char(36) + "include cge_closure.gms")
+        fput(fh, char(36) + "include cge_" + sims[j] + "_var.inc")
+        fput(fh, char(36) + "batinclude cge_solve.gms cgecon")
+        fput(fh, "file res" + strofreal(j) + " / 'cge_" + sims[j] + ".csv' /;")
+        fput(fh, char(36) + "batinclude cge_write.gms res" + strofreal(j) + " " + sims[j])
+    }
+    fclose(fh)
+}
+
+// Compares every period of dynamic run run with the GAMS results in dir
+void _cge_gams_compare_dyn(string scalar dir, string scalar run)
+{
+    struct cge_model scalar M
+    transmorphic A
+    string colvector key, e1, e2
+    real colvector val, pos, s
+    string scalar vb, vs, worstp
+    real scalar k, i, j, status, bstatus, db, ds, nb, ns, worst, worststat, nall, walras, wmax
+
+    M = _cge_load()
+    A = asarray_create()
+    for (k = 1; k <= rows(M.vname); k++) {
+        _cge_vlabels(M, k, e1, e2)
+        pos = _cge_vpos(M, k)
+        for (i = 1; i <= rows(pos); i++) asarray(A, M.vname[k] + "|" + e1[i] + "|" + e2[i], pos[i])
+    }
+    s = _cge_gams_periods(M, run)
+    _cge_gams_read(dir + "/cge_base.csv", key, val, bstatus)
+    db = _cge_gams_diff(M, A, key, val, M.x0, vb, nb)
+    printf("{txt}GAMS model status: base {res}%g{txt}; base: {res}%f{txt} values compared, largest relative difference {res}%9.2e\n",
+           bstatus, nb, db)
+    worst = 0
+    worststat = 1
+    worstp = ""
+    nall = 0
+    wmax = 0
+    for (j = 1; j <= rows(s); j++) {
+        _cge_gams_read(dir + "/cge_" + M.simname[s[j]] + ".csv", key, val, status)
+        ds = _cge_gams_diff(M, A, key, val, M.simx[., s[j]], vs, ns)
+        walras = .
+        for (i = 1; i <= rows(key); i++) if (key[i] == "WALRAS||") walras = val[i]
+        printf("{txt}Period {res}%s{txt}: model status {res}%g{txt}, {res}%f{txt} values compared, largest relative difference {res}%9.2e{txt}%s\n",
+               M.simname[s[j]], status, ns, ds, (vs != "" ? " (" + vs + ")" : ""))
+        if (ds >= . | ds > worst) {
+            worst = ds
+            worstp = M.simname[s[j]]
+        }
+        if (!anyof((1, 2, 15, 16), status)) worststat = status
+        if (abs(walras) > wmax | walras >= .) wmax = abs(walras)
+        nall = nall + ns
+    }
+    st_numscalar("r(modelstat)", (worststat == 1 ? status : worststat))
+    st_numscalar("r(base_modelstat)", bstatus)
+    st_numscalar("r(base_maxdiff)", db)
+    st_numscalar("r(maxdiff)", worst)
+    st_numscalar("r(N_compared)", nall)
+    st_numscalar("r(N_periods)", rows(s))
+    st_numscalar("r(walras)", wmax)
+    st_global("r(worst_period)", worstp)
+    st_global("r(compared_with)", run)
 }
 
 // 1 if the scenario (current, or stored simulation sim) has constraints

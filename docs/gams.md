@@ -51,11 +51,34 @@ GAMS writes `cge_base.csv` and `cge_<name>.csv`. Each has one row per
 variable and element (scenario, variable, element1, element2, value), with
 the model status in the first row.
 
+**Dynamic runs** (from version 0.5.3). `cge_gams using dir, dynamic(run)`
+exports every period of a run of `cge_dynamic`. Each period's changes from
+the period before are written as ratios, to parameters
+(`cge_<period>_par.inc`, for example capital accumulation, population growth
+of subsistence quantities and the base of the health link, and growth of
+government and foreign flows) and to fixed variables (`cge_<period>_var.inc`).
+The driver solves the base and then the periods in order, each from the
+solution of the period before, and writes `cge_<period>.csv` for each:
+
+```
+$include cge_model.gms
+$include cge_constraints.inc
+* Period dn1: changes from the period before, then the closure and fixed variables
+$include cge_dn1_par.inc
+$include cge_closure.gms
+$include cge_dn1_var.inc
+$batinclude cge_solve.gms cgecon
+...
+```
+
+`compare` then compares every period with Stata's. Runs with constraints are
+not exported.
+
 **Not exported:**
 
-- periods of dynamic runs;
 - microsimulation and sensitivity runs;
-- the death rate, which enters only dynamic runs.
+- the death rate, which enters dynamic runs only through the labour supply of
+  the next period, which is exported.
 
 ## 2. Running GAMS
 
@@ -163,7 +186,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 27 cases. Together they cover:
+There are 30 cases. Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -188,13 +211,16 @@ There are 27 cases. Together they cover:
   capital and energy, with Cobb-Douglas forms, and a nest of capital and a
   commodity that bears VAT;
 - output of a commodity from several activities (from version 0.5.2),
-  combined by a CES function.
+  combined by a CES function;
+- dynamic runs (from version 0.5.3), with every period solved in order:
+  LES demand with population growth, the health link with a growth target and
+  a donor exit, and public debt with debt relief.
 
 Results (21 October 2026, GAMS 54.2; `tools/gams/export_check_results.csv`):
 
 | Solver | Type | Cases solved | Base, largest relative difference | Scenario, largest relative difference |
 |---|---|---|---|---|
-| PATH | CNS | 22 of 22 | 4.3e-16 | 1.6e-11 |
+| PATH | CNS | 25 of 25 | 4.3e-16 | 1.6e-11 |
 | PATH | MCP, with constraints | 5 of 5 | 2.8e-17 | 2.4e-12 |
 | CONOPT | CNS | 17 of 17 | 4.3e-16 | 3.6e-9 |
 | KNITRO | CNS | 17 of 17 | 4.3e-16 | 1.6e-11 |

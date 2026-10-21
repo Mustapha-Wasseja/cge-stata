@@ -76,8 +76,10 @@ test cases only to about 1e-4 with its default settings.
 
 ## 11.4 Limits
 
-- Static simulations are exported. Dynamic runs, microsimulation and
-  sensitivity analysis stay in Stata.
+- Static simulations and dynamic runs are exported (dynamic runs from
+  version 0.5.3, with `dynamic(run)`: GAMS solves the periods in order, each
+  from the solution of the one before). Microsimulation and sensitivity
+  analysis stay in Stata, as do dynamic runs with constraints.
 - GAMS and a solver licence are needed. GAMS runs solvers outside the licence
   only for small models.
 - Listing files (`.lst`) name the licence holder; keep them out of shared

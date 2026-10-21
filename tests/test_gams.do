@@ -141,3 +141,33 @@ cge_gams using "`dir'_q", sim(free) replace
 assert r(N_constraints) == 0
 mata: st_numscalar("okc", sum(cat(st_local("dir") + "_q/cge_constraints.inc") :== "model cgecon / cge /;"))
 assert scalar(okc) == 1
+
+* ---------------------------------------------------------------------
+* 5. Dynamic runs (version 0.5.3): every period, in order, each with its
+*    changes from the period before
+* ---------------------------------------------------------------------
+cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd npi) enterprises(ent) government(gov) savinv(sav) row(row) ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2 -3)
+quietly cge_dynamic, name(dn) periods(0/2) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02) ///
+    population(0.02) govgrowth(0.03)
+cge_gams using "`dir'_d", dynamic(dn) replace
+assert r(N_periods) == 3 & "`r(sims)'" == "dn0 dn1 dn2"
+mata:
+d = cat(st_local("dir") + "_d/cge_run.gms")
+p2 = cat(st_local("dir") + "_d/cge_dn2_par.inc")
+v2 = cat(st_local("dir") + "_d/cge_dn2_var.inc")
+st_numscalar("okd", (sum(d :== char(36) + "include cge_dn1_par.inc") == 1) +
+             (selectindex(d :== char(36) + "include cge_dn1_par.inc") < selectindex(d :== char(36) + "include cge_dn2_par.inc")) +
+             (sum(d :== "file res3 / 'cge_dn2.csv' /;") == 1) +
+             (sum(substr(p2, 1, 6) :== "gamma(") > 0) + (sum(substr(p2, 1, 6) :== "qgbar(") > 0) +
+             (sum(substr(v2, 1, 7) :== "QFS.fx(") > 0))
+end
+assert scalar(okd) == 6
+capture noisily cge_gams using "`dir'_d", dynamic(nosuchrun) replace
+assert _rc == 111
+capture noisily cge_gams using "`dir'_d", dynamic(dn) sim(dn1) replace
+assert _rc == 198

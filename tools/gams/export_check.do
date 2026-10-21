@@ -292,6 +292,64 @@ foreach case of local cases {
             (r(walras)) (r(N_compared))
     }
 }
+* Dynamic runs (version 0.5.3): every period exported, and solved by GAMS in
+* order, each from the solution of the period before
+local dyncommon capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02) population(0.02) ///
+    govgrowth(0.03) foreigngrowth(0.01)
+capture program drop _donor_exit _debt_relief
+program define _donor_exit
+    args t
+    if `t' >= 2 cge_shock trshir, value(0)
+end
+program define _debt_relief
+    args t
+    if `t' == 2 cge_shock fdebt, scale(0.5)
+end
+foreach case in dyninst dynhealth dyndebt {
+    display as text _n "{hline 60}" _n "Case " as result "`case'"
+    if "`case'" == "dyninst" {
+        * LES demand, whose subsistence quantities grow with population
+        quietly cge_synthetic, clear institutions
+        quietly cge_sam, labels(account)
+        quietly cge_map, `instmap'
+        quietly cge_calibrate, `sigmas' incelas(0.6 1 1.4) frisch(-2 -3)
+        quietly cge_dynamic, name(dyninst) periods(0/3) capital(cap) depreciation(0.06) rental(0.12) ///
+            growth(lab:0.025) population(0.025) govgrowth(0.03) foreigngrowth(0.02) tfp(0.02 0.01 0)
+    }
+    else if "`case'" == "dynhealth" {
+        * the health link, capital specific to each activity, efficiency
+        * calibrated to a growth target, and a donor exit from the insurance fund
+        quietly cge_synthetic, clear health
+        quietly cge_sam, labels(account)
+        quietly cge_map, `hltmap'
+        quietly cge_calibrate, `sigmas' healthcom(com_hlt) healthfac(lab) healthelas(0.3)
+        quietly cge_closure, factors(cap:specific)
+        quietly cge_dynamic, name(health) periods(0/3) `dyncommon' gdpgrowth(0.03)
+        quietly cge_dynamic, name(dynhealth) periods(0/3) `dyncommon' baseline(health) shocks(_donor_exit)
+    }
+    else if "`case'" == "dyndebt" {
+        * public debt, which grows with each period's deficit, and debt relief
+        * in period 2
+        quietly cge_synthetic, clear institutions
+        quietly cge_sam, labels(account)
+        quietly cge_map, `instmap'
+        quietly cge_calibrate, `sigmas' debt(domestic:100 foreign:40) interest(domestic:0.05 foreign:0.03)
+        quietly cge_closure, factors(cap:specific)
+        quietly cge_dynamic, name(dyndebt) periods(0/3) `dyncommon' tfp(0.01) shocks(_debt_relief)
+    }
+    if "`phase'" == "export" {
+        cge_gams using `"`dir'/`case'"', dynamic(`case') replace
+    }
+    else {
+        capture confirm file `"`dir'/`case'/cge_`case'3.csv"'
+        if _rc continue
+        cge_gams using `"`dir'/`case'"', dynamic(`case') compare noexport
+        post `post' ("`case'") ("`case'") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+program drop _donor_exit _debt_relief
+
 if "`phase'" == "compare" {
     postclose `post'
     use `"`dir'/export_check.dta"', clear

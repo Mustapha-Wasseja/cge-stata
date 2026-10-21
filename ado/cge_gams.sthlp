@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_gams} {helpb using} {it:folder}
-[{cmd:,} {opt sim(name)} {opt replace} {opt run} {opt compare} {opt noexport}
+[{cmd:,} {opt sim(name)} {opt dyn:amic(name)} {opt replace} {opt run} {opt compare} {opt noexport}
 {opt gams(path)} {opt solver(name)} {opt type(cns|nlp|mcp)}]
 
 
@@ -61,16 +61,26 @@ linked to the slack. It is solved with PATH or another MCP solver.
 {pstd}
 GAMS writes {cmd:cge_base.csv} and {cmd:cge_}{it:name}{cmd:.csv}, one row per
 variable and element, with the model status in the first row; {it:name} is
-{opt sim()}, or {cmd:current}. Static models are exported; a period of a
-dynamic run is not, and the death rate, which enters only dynamic runs, is
-left out.
+{opt sim()}, or {cmd:current}. With {opt dynamic()} (from version 0.5.3),
+GAMS solves every period of a dynamic run in order and writes
+{cmd:cge_}{it:period}{cmd:.csv} for each. The death rate, which enters only
+dynamic runs through their labour supply, is not a GAMS parameter.
 
 
 {title:Options}
 
 {phang}
 {opt sim(name)} exports the shocks and closure of a stored simulation;
-{opt compare} needs it.
+{opt compare} needs it or {opt dynamic()}.
+
+{phang}
+{opt dynamic(name)} (from version 0.5.3) exports every period of a dynamic run
+of {helpb cge_dynamic}. Each period's changes from the period before, to
+parameters and to fixed variables, are written to
+{cmd:cge_}{it:period}{cmd:_par.inc} and {cmd:cge_}{it:period}{cmd:_var.inc}, and
+the driver solves the periods in order, each from the solution of the one
+before. With {opt compare}, every period is compared with Stata's. Runs with
+constraints are not exported.
 
 {phang}
 {opt replace} allows the files of an earlier export in {it:folder} to be
@@ -147,11 +157,14 @@ solver and type can also be set when GAMS is run, for example
 {synopt:{cmd:r(maxdiff)}}largest relative difference from the simulation{p_end}
 {synopt:{cmd:r(base_maxdiff)}}largest relative difference from the Stata base{p_end}
 {synopt:{cmd:r(N_compared)}}values compared{p_end}
-{synopt:{cmd:r(walras)}}value of the WALRAS variable in GAMS{p_end}
+{synopt:{cmd:r(walras)}}value of the WALRAS variable in GAMS (largest over periods with {opt dynamic()}){p_end}
+{synopt:{cmd:r(N_periods)}}periods exported or compared ({opt dynamic()}){p_end}
 {p2col 5 22 26 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}name of the exported scenario{p_end}
 {synopt:{cmd:r(closure)}}its closure{p_end}
-{synopt:{cmd:r(compared_with)}}the simulation compared ({opt compare}){p_end}
+{synopt:{cmd:r(compared_with)}}the simulation or dynamic run compared ({opt compare}){p_end}
+{synopt:{cmd:r(sims)}}the periods of the dynamic run ({opt dynamic()}){p_end}
+{synopt:{cmd:r(worst_period)}}the period with the largest difference ({opt dynamic()} and {opt compare}){p_end}
 {synopt:{cmd:r(script)}}the script that ran GAMS ({opt run}){p_end}
 
 
