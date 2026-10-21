@@ -119,12 +119,14 @@ def test_expected_files_are_current(tmp_path):
         # Label columns must match exactly and values to a tolerance; a SAM file
         # (samtools_*) and a path file (spa_*) have one label column, a
         # multiplier file two, a results file three
-        nlab = 1 if path.name.startswith(("samtools_", "spa_")) else 2 if path.name.startswith("multipliers_") else 3
+        nlab = (1 if path.name.startswith(("samtools_", "spa_")) else
+                2 if path.name.startswith("multipliers_") or path.name == "opt_instruments.csv" else 3)
         assert new_rows[0] == old_rows[0], path.name
         assert [r[:nlab] for r in new_rows] == [r[:nlab] for r in old_rows], path.name
         new = np.array([[float(x) for x in r[nlab:]] for r in new_rows[1:]])
         old = np.array([[float(x) for x in r[nlab:]] for r in old_rows[1:]])
-        assert _close(new, old, rel=1e-10), path.name
+        # an optimum (version 0.6.0) is located to about 1e-6: a flat objective
+        assert _close(new, old, rel=1e-5 if path.name.startswith("opt_") else 1e-10), path.name
 
 
 # Direction of effects in the standard simulations (default closure)

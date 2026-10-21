@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.5.3  2026-10-21
+*! cge_mata.mata  v0.6.0  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -182,7 +182,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.5.3")
+    return("0.6.0")
 }
 
 // =====================================================================
@@ -9202,6 +9202,540 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     st_numscalar("r(N_compared)", ns)
     st_numscalar("r(walras)", walras)
     st_global("r(compared_with)", sim)
+}
+
+// =====================================================================
+// Policy optimisation (model_spec.md, Section 18; from version 0.6.0)
+// =====================================================================
+
+// Position of the last occurrence of character ch in s, 0 if none (Stata 13
+// has no strrpos())
+real scalar _cge_lastpos(string scalar s, string scalar ch)
+{
+    real scalar i
+    for (i = strlen(s); i >= 1; i--) if (substr(s, i, 1) == ch) return(i)
+    return(0)
+}
+
+// State of an optimisation while cge_optimize runs, kept outside the model:
+// the instruments (kind 1 an element of a parameter, 2 a fixed variable),
+// their positions, bounds, starting values and scales; the objective and
+// targets (report keys); and the last solution, from which the next trial
+// starts
+struct cge_opt {
+    real colvector   kind, pidx, lo, hi, start, scale
+    string colvector pname, label
+    string rowvector okey
+    real scalar      sense, oscale, hasobj
+    string matrix    tkeys
+    real colvector   tval, tscale, lam
+    real scalar      rho
+    real colvector   xlast
+    real scalar      nevals, nfail, tol, maxit
+}
+
+struct cge_opt scalar _cge_opt_load()
+{
+    pointer() scalar q
+    q = findexternal("cge__opt")
+    if (q == NULL) _cge_fail("cge internal error: no optimisation in progress", 3498)
+    return(*q)
+}
+
+void _cge_opt_store(struct cge_opt scalar O)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__opt")) == NULL) q = crexternal("cge__opt")
+    *q = O
+}
+
+// The report measures of a point, with the welfare rows
+void _cge_opt_rows(struct cge_model scalar M, struct cge_par scalar p, real colvector x, string matrix keys,
+                   real colvector val)
+{
+    real colvector ev, cv
+    real scalar h
+    _cge_measures(M, p, x, keys, val)
+    ev = _cge_ev(M, p, x)
+    cv = _cge_cv(M, p, x)
+    for (h = 1; h <= M.nH; h++) {
+        keys = keys \ ("welfare", "equivalent_variation", M.H[h]) \ ("welfare", "compensating_variation", M.H[h])
+        val = val \ ev[h] \ cv[h]
+    }
+}
+
+// The value of report measure key (table, measure, element)
+real scalar _cge_opt_lookup(string matrix keys, real colvector val, string rowvector key, real scalar fail)
+{
+    real colvector k
+    k = selectindex((keys[., 1] :== key[1]) :& (keys[., 2] :== key[2]) :& (keys[., 3] :== key[3]))
+    if (!length(k)) {
+        if (fail) _cge_fail("no report measure " + invtokens(key) + "; see cge_report for the measures", 111)
+        return(.)
+    }
+    return(val[k[1]])
+}
+
+// Parameters and fixed values with the instruments at the given values
+void _cge_opt_apply(struct cge_model scalar M, struct cge_opt scalar O, real colvector values,
+                    struct cge_par scalar p, real colvector xfix)
+{
+    real matrix v
+    real scalar k
+    p = M.p
+    xfix = M.xcur
+    for (k = 1; k <= rows(values); k++) {
+        if (O.kind[k] == 1) {
+            v = _cge_par_get(p, O.pname[k])
+            v[O.pidx[k]] = values[k]
+            _cge_par_set(p, O.pname[k], v)
+        }
+        else xfix[O.pidx[k]] = values[k]
+    }
+}
+
+// Instruments from the scaled parameters z of the optimiser: start + scale z
+real colvector _cge_opt_values(struct cge_opt scalar O, real colvector z)
+{
+    return(O.start + O.scale :* z)
+}
+
+real colvector _cge_opt_z(struct cge_opt scalar O, real colvector v)
+{
+    return((v - O.start) :/ O.scale)
+}
+
+// The bounds of the scaled parameters (+-1e300 where none is given)
+void _cge_opt_box(struct cge_opt scalar O, real colvector lo, real colvector hi)
+{
+    real scalar k
+    // element by element: in Mata 0 * missing is missing
+    lo = J(rows(O.start), 1, -1e300)
+    hi = J(rows(O.start), 1, 1e300)
+    for (k = 1; k <= rows(O.start); k++) {
+        if (O.lo[k] < .) lo[k] = (O.lo[k] - O.start[k]) / O.scale[k]
+        if (O.hi[k] < .) hi[k] = (O.hi[k] - O.start[k]) / O.scale[k]
+    }
+}
+
+// Solves the model at instrument values v; returns the objective (scaled,
+// missing without one) and the target residuals r (scaled)
+real scalar _cge_opt_solve(real colvector v, real colvector r, real colvector x)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    struct cge_par scalar p
+    pointer() scalar q
+    real colvector xfix, val
+    string matrix keys
+    real scalar conv, iter, err, f, k
+    string scalar method
+    q = findexternal("cge__model")
+    O = _cge_opt_load()
+    _cge_opt_apply(*q, O, v, p, xfix)
+    x = _cge_solve_point(*q, p, xfix, O.xlast, O.tol, O.maxit, 0, conv, iter, err, method)
+    O.nevals = O.nevals + 1
+    if (!conv) {
+        // a failed trial starts the next one from the last solution
+        O.nfail = O.nfail + 1
+        _cge_opt_store(O)
+        r = J(rows(O.tval), 1, .)
+        return(.)
+    }
+    O.xlast = x
+    _cge_opt_store(O)
+    _cge_opt_rows(*q, p, x, keys, val)
+    r = J(rows(O.tval), 1, .)
+    for (k = 1; k <= rows(O.tval); k++) r[k] = (_cge_opt_lookup(keys, val, O.tkeys[k, .], 0) - O.tval[k]) / O.tscale[k]
+    f = (O.hasobj ? O.sense * _cge_opt_lookup(keys, val, O.okey, 0) / O.oscale : .)
+    return(f)
+}
+
+// Targets alone (Section 18): Newton's method on the scaled residuals, with a
+// Jacobian from central differences and steps halved until the residuals fall
+real colvector _cge_opt_newton(struct cge_opt scalar O, real colvector z0, real scalar trace, real scalar conv,
+                               real scalar iter)
+{
+    real colvector z, r, rp, rm, rt, zt, dz, x, lo, hi
+    real matrix Jm
+    real scalar n, it, k, h, nr, lam, ls
+    _cge_opt_box(O, lo, hi)
+    z = z0
+    n = rows(z)
+    conv = 0
+    iter = 0
+    (void) _cge_opt_solve(_cge_opt_values(O, z), r, x)
+    for (it = 1; it <= 50; it++) {
+        if (hasmissing(r)) return(z)
+        nr = max(abs(r))
+        if (trace) printf("{txt}Newton iteration %f: largest scaled target gap {res}%9.3e\n", it - 1, nr)
+        if (nr < 1e-11) {
+            conv = 1
+            return(z)
+        }
+        iter = it
+        Jm = J(n, n, .)
+        for (k = 1; k <= n; k++) {
+            h = 1e-5 * max((1, abs(z[k])))
+            zt = z
+            zt[k] = z[k] + h
+            (void) _cge_opt_solve(_cge_opt_values(O, zt), rp, x)
+            zt[k] = z[k] - h
+            (void) _cge_opt_solve(_cge_opt_values(O, zt), rm, x)
+            if (hasmissing(rp) | hasmissing(rm)) return(z)
+            Jm[., k] = (rp - rm) / (2 * h)
+        }
+        dz = -lusolve(Jm, r)
+        if (hasmissing(dz)) return(z)
+        lam = 1
+        for (ls = 1; ls <= 30; ls++) {
+            zt = rowmax((rowmin((z + lam * dz, hi)), lo))
+            (void) _cge_opt_solve(_cge_opt_values(O, zt), rt, x)
+            if (!hasmissing(rt)) {
+                if (max(abs(rt)) < nr) break
+            }
+            lam = lam / 2
+        }
+        if (ls > 30) return(z)
+        z = zt
+        r = rt
+    }
+    return(z)
+}
+
+// The augmented objective at z (instruments start + scale z): the objective
+// less lam'r + rho/2 r'r for the targets; missing if the model does not solve
+real scalar _cge_opt_aug(struct cge_opt scalar O, real colvector z)
+{
+    struct cge_opt scalar Q
+    real colvector r, x
+    real scalar f
+    f = _cge_opt_solve(O.start + O.scale :* z, r, x)
+    if (f >= . | hasmissing(r)) return(.)
+    Q = _cge_opt_load()
+    return(f - (rows(r) ? Q.lam' * r + 0.5 * Q.rho * (r' * r) : 0))
+}
+
+// Maximises the augmented objective within the bounds by Newton's method:
+// gradient and Hessian from central differences, coordinates held at a bound
+// whose gradient points outwards, and steps projected on the bounds and
+// halved until the objective rises
+real colvector _cge_opt_max(struct cge_opt scalar O, real colvector z0, real scalar trace, real scalar conv,
+                            real scalar iter)
+{
+    real colvector z, zt, g, d, lo, hi, fr, fi, e
+    real matrix H, Hf
+    real scalar n, it, i, j, f, ft, hg, hh, lam, ls, gn, a, b, c, dd
+    n = rows(z0)
+    _cge_opt_box(O, lo, hi)
+    z = z0
+    conv = 0
+    iter = 0
+    f = _cge_opt_aug(O, z)
+    if (f >= .) return(z)
+    hg = 1e-5
+    hh = 1e-3
+    for (it = 1; it <= 100; it++) {
+        // gradient: central differences, one-sided at a bound
+        g = J(n, 1, .)
+        for (i = 1; i <= n; i++) {
+            e = J(n, 1, 0)
+            e[i] = hg
+            a = (z[i] + hg <= hi[i] ? _cge_opt_aug(O, z + e) : .)
+            b = (z[i] - hg >= lo[i] ? _cge_opt_aug(O, z - e) : .)
+            if (a < . & b < .) g[i] = (a - b) / (2 * hg)
+            else if (a < .) g[i] = (a - f) / hg
+            else if (b < .) g[i] = (f - b) / hg
+            else return(z)
+        }
+        // coordinates at a bound whose gradient points outwards are held
+        fr = !((z :<= lo :+ 1e-12) :& (g :< 0)) :& !((z :>= hi :- 1e-12) :& (g :> 0))
+        gn = max(abs(fr :* g))
+        if (trace) printf("{txt}Iteration %f: objective {res}%14.10g{txt}, largest free gradient {res}%9.3e\n", it - 1, f, gn)
+        if (gn < 1e-8) {
+            conv = 1
+            return(z)
+        }
+        iter = it
+        fi = _cge_which(fr)
+        // Hessian of the free coordinates, from central second differences
+        H = J(rows(fi), rows(fi), 0)
+        for (i = 1; i <= rows(fi); i++) {
+            for (j = i; j <= rows(fi); j++) {
+                e = J(n, 1, 0)
+                if (i == j) {
+                    e[fi[i]] = hh
+                    a = _cge_opt_aug(O, z + e)
+                    b = _cge_opt_aug(O, z - e)
+                    H[i, i] = (a - 2 * f + b) / hh^2
+                }
+                else {
+                    e[fi[i]] = hh
+                    e[fi[j]] = hh
+                    a = _cge_opt_aug(O, z + e)
+                    b = _cge_opt_aug(O, z - e)
+                    e[fi[j]] = -hh
+                    c = _cge_opt_aug(O, z + e)
+                    dd = _cge_opt_aug(O, z - e)
+                    H[i, j] = (a + b - c - dd) / (4 * hh^2)
+                    H[j, i] = H[i, j]
+                }
+            }
+        }
+        // Newton step where the Hessian is negative definite; otherwise a
+        // step along the gradient
+        d = J(n, 1, 0)
+        Hf = H
+        if (hasmissing(Hf) | max(symeigenvalues(Hf)) >= 0) d[fi] = g[fi] / max((1, max(abs(g[fi]))))
+        else d[fi] = -lusolve(Hf, g[fi])
+        lam = 1
+        for (ls = 1; ls <= 40; ls++) {
+            zt = z + lam * d
+            zt = rowmax((rowmin((zt, hi)), lo))
+            ft = _cge_opt_aug(O, zt)
+            if (ft < . & ft > f) break
+            lam = lam / 2
+        }
+        if (ls > 40) {
+            // no rise along the step: the point is as good as differences allow
+            conv = (gn < 1e-6)
+            return(z)
+        }
+        if (max(abs(zt - z)) < 1e-12) {
+            conv = 1
+            return(zt)
+        }
+        z = zt
+        f = ft
+    }
+    return(z)
+}
+
+// An instrument: a parameter that cge_shock changes (one element), or an
+// element of a variable the closure fixes, as name or name(element)
+void _cge_opt_instrument(struct cge_model scalar M, string scalar spec, real scalar kind, string scalar pname,
+                         real scalar pidx, real scalar start)
+{
+    string matrix P
+    string colvector lab
+    string scalar nm, el
+    real matrix v
+    real scalar k, i
+    nm = spec
+    el = ""
+    if (strpos(spec, "(")) {
+        nm = substr(spec, 1, strpos(spec, "(") - 1)
+        el = subinstr(substr(spec, strpos(spec, "(") + 1, .), ")", "")
+    }
+    if (_cge_vidx(M, nm)) {
+        kind = 2
+        pname = nm
+        pidx = _cge_specpos(M, spec, "instrument")
+        if (!M.fixed[pidx]) _cge_fail("instrument " + spec + " is not fixed under the closure: swap it in with cge_closure, swap()", 459)
+        start = M.xcur[pidx]
+        return
+    }
+    P = _cge_gams_params()
+    k = _cge_find(P[., 1], nm)
+    if (!k) _cge_fail("instrument " + spec + ": not a parameter that cge_shock changes or a model variable", 198)
+    kind = 1
+    pname = nm
+    v = _cge_par_get(M.p, nm)
+    if (P[k, 3] == "") {
+        if (el != "") _cge_fail("instrument " + spec + ": " + nm + " has no elements", 198)
+        pidx = 1
+    }
+    else {
+        lab = _cge_gams_setlabels(M, P[k, 3])
+        if (el == "") {
+            if (rows(lab) != 1) _cge_fail("instrument " + spec + ": give one element, as " + nm + "(" + lab[1] + ")", 198)
+            pidx = 1
+        }
+        else {
+            i = _cge_find(lab, el)
+            if (!i) _cge_fail("instrument " + spec + ": " + el + " is not an element of " + nm, 111)
+            pidx = i
+        }
+    }
+    start = v[pidx]
+}
+
+// A report key from "table measure [element]"
+string rowvector _cge_opt_key(string scalar spec, string scalar what)
+{
+    string rowvector t
+    t = tokens(spec)
+    if (cols(t) < 2 | cols(t) > 3) _cge_fail(what + "(): give a report measure as table measure [element], for example welfare equivalent_variation hhd", 198)
+    return(cols(t) == 2 ? (t, "") : t)
+}
+
+void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min, string scalar s_tar,
+                   string scalar s_lo, string scalar s_up, string scalar name, real scalar tol, real scalar maxit,
+                   real scalar trace)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    string rowvector ins, parts, tok
+    string matrix keys
+    string scalar spec
+    real colvector z, v, r, x, val, v0, r0
+    real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2
+    string scalar pn
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    ins = tokens(s_ins)
+    n = cols(ins)
+    if (!n) _cge_fail("give the instruments in instruments()", 198)
+    O.kind = J(n, 1, .)
+    O.pidx = J(n, 1, .)
+    O.start = J(n, 1, .)
+    O.pname = J(n, 1, "")
+    O.label = ins'
+    for (k = 1; k <= n; k++) {
+        // outputs into scalars: Mata passes a subscripted element as a copy
+        _cge_opt_instrument(M, ins[k], kd, pn, pi, st)
+        O.kind[k] = kd
+        O.pname[k] = pn
+        O.pidx[k] = pi
+        O.start[k] = st
+        for (j = 1; j < k; j++) if (O.kind[j] == O.kind[k] & O.pname[j] == O.pname[k] & O.pidx[j] == O.pidx[k]) {
+            _cge_fail("instrument " + ins[k] + " is given twice", 198)
+        }
+    }
+    O.scale = abs(O.start) :* (abs(O.start) :> 1e-12) + (abs(O.start) :<= 1e-12)
+    // Bounds: instrument:value pairs
+    O.lo = J(n, 1, .)
+    O.hi = J(n, 1, .)
+    for (i = 1; i <= 2; i++) {
+        tok = tokens(i == 1 ? s_lo : s_up)
+        for (k = 1; k <= cols(tok); k++) {
+            j = _cge_lastpos(tok[k], ":")
+            if (!j) _cge_fail((i == 1 ? "lower" : "upper") + "(): give instrument:value pairs", 198)
+            spec = substr(tok[k], 1, j - 1)
+            f = strtoreal(substr(tok[k], j + 1, .))
+            j = _cge_find(O.label, spec)
+            if (!j | f >= .) _cge_fail((i == 1 ? "lower" : "upper") + "(): " + tok[k] + " does not name an instrument and a value", 198)
+            if (i == 1) O.lo[j] = f
+            else O.hi[j] = f
+        }
+    }
+    if (any((O.lo :< .) :& (O.hi :< .) :& (O.lo :>= O.hi))) _cge_fail("an instrument's lower bound is not below its upper bound", 198)
+    if (any(((O.lo :< .) :& (O.start :<= O.lo)) :| ((O.hi :< .) :& (O.start :>= O.hi)))) {
+        _cge_fail("the starting value of each instrument, its current value, must lie strictly within its bounds", 459)
+    }
+    // Objective and targets
+    if (s_max != "" & s_min != "") _cge_fail("give maximize() or minimize(), not both", 198)
+    O.hasobj = (s_max != "" | s_min != "")
+    O.sense = (s_min != "" ? -1 : 1)
+    O.okey = (O.hasobj ? _cge_opt_key((s_max != "" ? s_max : s_min), (s_max != "" ? "maximize" : "minimize")) : J(1, 3, ""))
+    O.tkeys = J(0, 3, "")
+    O.tval = J(0, 1, .)
+    parts = (strtrim(s_tar) == "" ? J(1, 0, "") : _cge_split(s_tar, ",", ""))
+    for (k = 1; k <= cols(parts); k++) {
+        if (strtrim(parts[k]) == "") continue
+        j = strpos(parts[k], "=")
+        if (!j) _cge_fail("targets(): give table measure [element] = value, separated by commas", 198)
+        f = strtoreal(substr(parts[k], j + 1, .))
+        if (f >= .) _cge_fail("targets(): " + strtrim(parts[k]) + " has no value", 198)
+        O.tkeys = O.tkeys \ _cge_opt_key(substr(parts[k], 1, j - 1), "targets")
+        O.tval = O.tval \ f
+    }
+    if (!O.hasobj & rows(O.tval) != n) _cge_fail("without an objective, give one target for each instrument", 198)
+    if (!O.hasobj & rows(O.tval) == 0) _cge_fail("give maximize(), minimize() or targets()", 198)
+    O.tscale = abs(O.tval) :* (abs(O.tval) :> 1e-12) + (abs(O.tval) :<= 1e-12)
+    O.lam = J(rows(O.tval), 1, 0)
+    O.rho = 0
+    O.tol = tol
+    O.maxit = maxit
+    O.nevals = 0
+    O.nfail = 0
+    O.oscale = 1
+    O.xlast = M.x0
+    _cge_opt_store(O)
+    // The model solves at the instruments' current values, and the measures exist
+    f0 = _cge_opt_solve(O.start, r0, x)
+    O = _cge_opt_load()
+    if (O.nfail) _cge_fail("the model does not solve at the instruments' current values", 430)
+    _cge_opt_rows(M, M.p, x, keys, val)
+    if (O.hasobj) O.oscale = max((1, abs(_cge_opt_lookup(keys, val, O.okey, 1))))
+    for (k = 1; k <= rows(O.tval); k++) (void) _cge_opt_lookup(keys, val, O.tkeys[k, .], 1)
+    _cge_opt_store(O)
+
+    z = _cge_opt_z(O, O.start)
+    conv = 0
+    iter = 0
+    if (!O.hasobj) {
+        // Targets alone: as many equations as instruments, solved by Newton's
+        // method with a numerical Jacobian
+        O = _cge_opt_load()
+        z = _cge_opt_newton(O, z, trace, conv, iter)
+    }
+    else {
+        // An objective, with any targets as equality constraints by the
+        // augmented Lagrangian method: the maximiser takes the objective less
+        // lam'r + rho/2 r'r, and lam moves by rho r after each round
+        O = _cge_opt_load()
+        O.rho = (rows(O.tval) ? 100 : 0)
+        _cge_opt_store(O)
+        rprev = .
+        for (outer = 1; outer <= (rows(O.tval) ? 40 : 1); outer++) {
+            O = _cge_opt_load()
+            z = _cge_opt_max(O, z, trace, conv2, it2)
+            iter = iter + it2
+            O = _cge_opt_load()
+            f = _cge_opt_solve(_cge_opt_values(O, z), r, x)
+            if (!rows(O.tval)) {
+                conv = conv2
+                break
+            }
+            if (hasmissing(r)) break
+            if (max(abs(r)) < 1e-10) {
+                conv = conv2
+                break
+            }
+            O.lam = O.lam + O.rho * r
+            if (rprev < . & max(abs(r)) > 0.25 * rprev) O.rho = 10 * O.rho
+            rprev = max(abs(r))
+            _cge_opt_store(O)
+        }
+    }
+    O = _cge_opt_load()
+    v = _cge_opt_values(O, z)
+    f = _cge_opt_solve(v, r, x)
+    // The optimum becomes the current shocks and is stored as a simulation
+    _cge_opt_apply(M, O, v, M.p, M.xcur)
+    k = _cge_store_sim(M, name, x, (conv & !hasmissing(x)), O.nevals, _cge_maxres(M, M.p, x), "newton")
+    _cge_store(M)
+    _cge_opt_rows(M, M.p, x, keys, val)
+    v0 = O.start
+    printf("\n{txt}Optimisation {res}%s{txt}: %s after {res}%f{txt} solve(s) of the model\n", name,
+           (conv ? "converged" : "{err}did not converge{txt}"), O.nevals)
+    printf("{txt}{hline 64}\n%-30s %16s %16s\n{hline 64}\n", "Instrument", "start", "optimum")
+    for (k = 1; k <= n; k++) {
+        printf("{txt}%-30s {res}%16.10g %16.10g{txt}%s\n", O.label[k], v0[k], v[k],
+               ((O.lo[k] < . & abs(v[k] - O.lo[k]) <= 1e-6 * O.scale[k]) | (O.hi[k] < . & abs(v[k] - O.hi[k]) <= 1e-6 * O.scale[k]) ?
+                " (at its bound)" : ""))
+    }
+    printf("{txt}{hline 64}\n")
+    if (O.hasobj) printf("{txt}%s %s: {res}%16.10g\n", (O.sense == 1 ? "Maximised" : "Minimised"), invtokens(O.okey),
+                         _cge_opt_lookup(keys, val, O.okey, 1))
+    for (k = 1; k <= rows(O.tval); k++) {
+        printf("{txt}Target %s = %g: {res}%16.10g\n", invtokens(O.tkeys[k, .]), O.tval[k], _cge_opt_lookup(keys, val, O.tkeys[k, .], 1))
+    }
+    st_numscalar("r(converged)", conv)
+    st_numscalar("r(N_evaluations)", O.nevals)
+    st_numscalar("r(N_failed)", O.nfail)
+    st_numscalar("r(iterations)", iter)
+    if (O.hasobj) st_numscalar("r(objective)", _cge_opt_lookup(keys, val, O.okey, 1))
+    st_matrix("r(instruments)", v')
+    st_matrixcolstripe("r(instruments)", (J(n, 1, ""), strtoname(subinstr(O.label, ")", ""))))
+    st_matrix("r(start)", v0')
+    st_matrixcolstripe("r(start)", (J(n, 1, ""), strtoname(subinstr(O.label, ")", ""))))
+    if (rows(O.tval)) st_matrix("r(targets)", r' :* O.tscale' + O.tval')
+    st_global("r(name)", name)
+    st_global("r(instruments_list)", invtokens(O.label'))
+    rmexternal("cge__opt")
 }
 
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)

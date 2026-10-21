@@ -158,6 +158,54 @@ def nest_cases() -> dict:
     return out
 
 
+# Policy optimisation (version 0.6.0): household welfare (equivalent
+# variation) on the standard layout, revenue-neutral (government savings
+# fixed, direct taxes adjusting)
+WELFARE = ("welfare", "equivalent_variation", "hhd")
+
+
+def optimize_cases() -> dict:
+    """name -> Optimum: the welfare-maximising tariff on manufactures; both
+    tariffs; the tariff with a bound that binds; both tariffs keeping tariff
+    revenue at its base value; and the direct tax rate that keeps government
+    savings at the base after tariffs are removed (a target)."""
+    from .optimize import Instrument, optimize
+    m = synthetic_model()
+    fix = Closure(government="fixgsav")
+    man = Instrument("tm", ("com_man",), lower=-0.5, upper=1.0)
+    agr = Instrument("tm", ("com_agr",))
+    out = {"opt_tariff_man": optimize(m, [man], objective=WELFARE, closure=fix),
+           "opt_two_tariffs": optimize(m, [agr, Instrument("tm", ("com_man",))], objective=WELFARE, closure=fix),
+           "opt_bound": optimize(m, [Instrument("tm", ("com_man",), lower=0.0, upper=0.2)], objective=WELFARE,
+                                 closure=fix),
+           "opt_revenue": optimize(m, [agr, Instrument("tm", ("com_man",))], objective=WELFARE, closure=fix,
+                                   targets=[(("government", "tax_import", ""), 8.0)])}
+    notariff = {"tm": np.zeros_like(m.params["tm"])}
+    out["opt_target_gsav"] = optimize(m, [Instrument("TINSADJ")], params=notariff,
+                                      targets=[(("government", "savings", ""), float(m.base["GSAV"][0]))])
+    return out
+
+
+def write_optimize(directory: Path = EXPECTED_DIR) -> list[Path]:
+    """The solution at each optimum, and the instruments and objective."""
+    written = []
+    path = directory / "opt_instruments.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["case", "item", "value"])
+        for name, o in optimize_cases().items():
+            if not o.converged:
+                raise RuntimeError(f"optimisation {name} did not converge")
+            write_results(o.solution, directory / f"{name}.csv")
+            written.append(directory / f"{name}.csv")
+            for k, v in enumerate(o.values):
+                writer.writerow([name, f"instrument{k + 1}", f"{v:.15g}"])
+            if o.objective is not None:
+                writer.writerow([name, "objective", f"{o.objective:.15g}"])
+    written.append(path)
+    return written
+
+
 INSTITUTIONS_SAM = REPO / "data" / "cge_synthetic_sam_inst.csv"
 
 
@@ -864,7 +912,7 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Output from several activities (0.5.2)
     solutions.update(output_cases())
     written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
-               + write_spa(directory) + write_regimes(solutions, directory))
+               + write_spa(directory) + write_regimes(solutions, directory) + write_optimize(directory))
     for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")

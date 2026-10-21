@@ -106,7 +106,37 @@ The solution is accepted when the largest scaled residual, over every
 equation, is below the tolerance (1e-10 by default). The residual and the
 Walras slack (zero at a solution) are displayed with each solve.
 
-## 4.4 Reading a simulation
+## 4.4 Choosing instruments: `cge_optimize`
+
+`cge_optimize` (from version 0.6.0) chooses a few instruments to maximise or
+minimise a report measure, or to reach targets, solving the model at every
+trial (model_spec.md, Section 18). Under a revenue-neutral closure, the
+tariff on manufactures that maximises household welfare is:
+
+```stata
+cge_closure, government(fixgsav)
+cge_optimize, instruments(tm(com_man)) maximize(welfare equivalent_variation hhd) ///
+    lower(tm(com_man):-0.5) upper(tm(com_man):1)
+```
+
+On the synthetic SAM it is 30 per cent: the sales taxes and the tariff on
+agriculture already distort demand, so free trade in manufactures alone is not
+best. Targets are written `table measure [element] = value`, for example
+`targets(government tax_import = 8)` to keep tariff revenue, and with no
+objective there must be one target per instrument:
+
+```stata
+cge_closure, government(flexgsav)
+cge_shock tm, value(0)
+cge_optimize, instruments(TINSADJ) targets(government savings = 3)
+```
+
+finds the direct tax rate that keeps government savings at the base, which
+is what the closure `fixgsav` does. The optimum is stored as a simulation
+(`name()`, default `optimum`) and left as the current shock. The optimum may
+be local; try other starting values.
+
+## 4.5 Reading a simulation
 
 A simulation is a counterfactual equilibrium compared with the base: the
 model has no time in a static run, so a result is the change once the economy

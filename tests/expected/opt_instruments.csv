@@ -1,0 +1,12 @@
+case,item,value
+opt_tariff_man,instrument1,0.303223916332702
+opt_tariff_man,objective,0.767936121583574
+opt_two_tariffs,instrument1,0.0739169994532726
+opt_two_tariffs,instrument2,0.296864315717421
+opt_two_tariffs,objective,0.776584306984034
+opt_bound,instrument1,0.2
+opt_bound,objective,0.589240523553343
+opt_revenue,instrument1,-0.0335061121573451
+opt_revenue,instrument2,0.157723515945689
+opt_revenue,objective,0.37753701663695
+opt_target_gsav,instrument1,1.314441344092

@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.5.3 implements the standard single-country model described in
+Version 0.6.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,13 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.6.0 adds policy optimisation (`cge_optimize`; Section 18): a few
+instruments, such as a tax rate or a public service, chosen to maximise or
+minimise a report measure, such as household welfare, or to reach targets,
+with the model solved at every trial. It agrees with scipy's SLSQP to about
+1e-6 in the instruments, the precision to which a flat optimum can be
+located, and a target for government savings reached by the direct tax rate
+reproduces the closure `fixgsav` to 1e-10.
 Version 0.5.3 exports dynamic runs to GAMS (`cge_gams using dir, dynamic(run)`):
 GAMS solves the periods in order, each from the solution of the one before.
 Version 0.5.2 combines the output of a commodity from several activities by a

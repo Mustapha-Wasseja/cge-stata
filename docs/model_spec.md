@@ -1527,6 +1527,41 @@ agrees with the model without aggregation to $10^{-6}$ in the test suites.
 The parameters are $\sigma^{ac}_c$ (`sac`), $\rho^{ac}_c$ (`rac`), $aac_c$
 (`aac`) and $\delta^{ac}_{ac}$ (`dac`).
 
+## 18. Policy optimisation (from version 0.6.0)
+
+`cge_optimize` chooses the values $u$ of a few instruments to maximise or
+minimise a report measure $f$ (Section 9), or to reach targets $g_j(u) =
+\bar g_j$ for report measures, with the model solved at every trial value:
+
+$$\max_u\; f\big(x(u), u\big) \quad \text{subject to} \quad g_j\big(x(u), u\big) = \bar g_j, \qquad
+  \underline u \le u \le \overline u,$$
+
+where $x(u)$ solves the model (Section 5) under the current closure. An
+instrument is one element of a parameter that `cge_shock` changes, or of a
+variable the closure fixes.
+
+**Algorithm.** Each trial solves the model by Newton's method from the
+solution of the trial before. Instruments are measured as $u = u^0 + s\,z$,
+with $s$ the scale of each instrument. With targets alone, as many as
+instruments, the residuals $r_j = (g_j - \bar g_j)/|\bar g_j|$ are solved by
+Newton's method, with a Jacobian from central differences (step $10^{-5}$ in
+$z$) and steps halved until the residuals fall. With an objective, a
+projected Newton method maximises $f/\max(1, |f^0|)$: the gradient and
+Hessian come from central differences, an instrument at a bound whose
+gradient points outwards is held there, steps are projected on the bounds
+and halved until the objective rises, and the iterations stop when the
+gradient of the free instruments is below $10^{-8}$. Targets with an
+objective are equality constraints, met by the augmented Lagrangian method:
+the maximiser takes $f - \lambda' r - \tfrac{\rho}{2} r'r$, and $\lambda$
+moves by $\rho\, r$ after each round, until $\max |r_j| < 10^{-10}$.
+
+**Results.** The optimum is stored as a simulation and left as the current
+shocks. The Python reference solves the same problems with scipy's SLSQP and
+least squares; the test suites compare the instruments (to $10^{-5}$), the
+objective (to $10^{-9}$) and the solution, and check that a target for
+government savings reached by the direct tax rate reproduces the closure
+`fixgsav` (to $10^{-10}$).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

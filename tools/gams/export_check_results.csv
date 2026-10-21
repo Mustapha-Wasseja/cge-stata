@@ -75,6 +75,11 @@ capacity,path,mcp,1,144,0.000e+00,1.431e-13
 peglimit,path,mcp,1,117,2.776e-17,6.215e-15
 nodeficit,path,mcp,1,129,1.388e-17,2.402e-12
 wagefloor,path,mcp,1,117,2.776e-17,1.607e-12
+quota,path,mcp,1,117,2.776e-17,1.833e-13
+capacity,path,mcp,1,144,0.000e+00,1.431e-13
+peglimit,path,mcp,1,117,2.776e-17,6.215e-15
+nodeficit,path,mcp,1,129,1.388e-17,2.402e-12
+wagefloor,path,mcp,1,117,2.776e-17,1.607e-12
 std,path,cns,16,117,2.776e-17,2.728e-13
 closures,path,cns,16,117,2.776e-17,3.866e-13
 unemployed,path,cns,16,117,2.776e-17,1.149e-12
