@@ -38,28 +38,36 @@ runs.
 | 200 | 20 | 430 | 26,858 | 3,418 | 4 | 53.9 | 53.3 | 4.0 | 8e-13 | 5e-12 |
 | 250 | 20 | 530 | 40,190 | 4,254 | 6 | 143.0 | 126.9 | 4.1 | 2e-09 | 3e-09 |
 
-Times vary from run to run with other work on the machine. In a second run
-of the 200-activity model, with timers added around the parts of the solver
-in a copy of the package, the solve took 66.0 seconds in Stata 13.1/IC and
-44.9 in StataNow/MP 19.5:
+Times vary from run to run with other work on the machine, by as much as
+40 per cent. To see where the time goes, the 200-activity model was solved again,
+with timers added around the parts of the solver in a copy of the package,
+in three runs one after the other: in Stata 13.1/IC, in StataNow/MP 19.5
+limited to one core (`set processors 1`), and in StataNow/MP 19.5 on four
+cores.
 
-| Part of the solve (200 activities, 3,418 equations in the reduced system) | Calls | Stata 13.1/IC (s) | StataNow/MP 19.5, 4 cores (s) |
-|---|---|---|---|
-| Evaluations of the equations for the finite-difference Jacobian (67 groups of columns, two evaluations each, four Jacobians) | 536 | 53.0 | 33.9 |
-| Analytic rows of the Jacobian | 4 | 2.7 | 1.8 |
-| LU factorisation of the Jacobian (`_lud()`) | 4 | 5.2 | 4.4 |
-| Triangular solves | 16 | 2.2 | 2.8 |
-| Other evaluations of the equations (Newton steps and line search) | 21 | 2.0 | 1.4 |
-| Whole solve | | 66.0 | 44.9 |
+| Part of the solve (200 activities, 3,418 equations in the reduced system) | Calls | Stata 13.1/IC (s) | StataNow/MP 19.5, 1 core (s) | StataNow/MP 19.5, 4 cores (s) |
+|---|---|---|---|---|
+| Evaluations of the equations for the finite-difference Jacobian (67 groups of columns, two evaluations each, four Jacobians) | 536 | 40.8 | 38.3 | 28.5 |
+| Analytic rows of the Jacobian | 4 | 2.3 | 1.9 | 2.4 |
+| LU factorisation of the Jacobian (`_lud()`) | 4 | 4.5 | 15.6 | 4.2 |
+| Triangular solves | 16 | 1.8 | 2.6 | 2.0 |
+| Other evaluations of the equations (Newton steps and line search) | 21 | 1.6 | 1.4 | 0.7 |
+| Whole solve | | 51.7 | 60.4 | 38.3 |
 
-Most of Stata's time goes into evaluating the model's equations to build the
-Jacobian, about 0.1 second for each evaluation in Stata 13.1/IC and 0.06 in
-StataNow/MP, so the time follows the number of Jacobians and of groups of
-columns. The LU factorisation takes less than a tenth, and four cores
-shorten it little. GAMS, with analytic derivatives and a sparse solver,
-barely slows over this range. Beyond about 2,000 equations in the reduced
-system, GAMS with PATH is the faster route, and its solution can be used in
-Stata through `import()`.
+Most of the time goes into evaluating the model's equations to build the
+Jacobian, so the time follows the number of Jacobians and of groups of
+columns. These evaluations are long sequences of operations on vectors of a
+few thousand elements, which four cores shortened by a quarter. StataNow's
+LU factorisation is much faster than Stata 13's on a full matrix (1.5 against
+19.0 seconds for a random 3,418 x 3,418 matrix, on one core), but on the
+Jacobian, which is mostly zeros, Stata 13's took 1.1 seconds per
+factorisation and StataNow's 3.9 on one core and 1.1 on four. On this model,
+four cores made StataNow's solve 1.6 times faster than one core, and 1.4
+times faster than Stata 13.1/IC.
+
+GAMS, with analytic derivatives and a sparse solver, barely slows over this
+range. Beyond about 2,000 equations in the reduced system, GAMS with PATH is
+the faster route, and its solution can be used in Stata through `import()`.
 
 ## Result (version 0.2.0, 16 October 2026; Stata 13.1 IC, Windows laptop)
 

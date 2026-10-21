@@ -38,8 +38,10 @@ on four cores, and in GAMS with PATH (`tools/bench`, version 0.6.2):
 
 Most of Stata's time goes into evaluating the model's equations to build the
 Jacobian by finite differences: about four fifths of the solve for the
-200-activity model, against less than a tenth for the LU factorisation of
-the dense Jacobian, so the extra cores of Stata/MP shorten the solve little
+200-activity model in Stata 13.1/IC. In runs one after the other, four cores
+of StataNow/MP made that solve about 1.6 times faster than one core, and 1.4
+times faster than Stata 13.1/IC. StataNow is about ten to thirty times faster
+than Stata 13 at large dense matrix operations, which the solver uses little
 (`tools/bench/README.md`). GAMS uses analytic derivatives and a sparse
 solver, and its time, which includes calibration and the base solve, barely
 grows over this range.
