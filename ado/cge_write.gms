@@ -29,6 +29,7 @@ loop(F, put '%2', 'W', F.tl, '', W.l(F) /;  put '%2', 'QFS', F.tl, '', QFS.l(F) 
         put '%2', 'DW', F.tl, '', DW.l(F) /);
 loop((F, A), put '%2', 'QF', F.tl, A.tl, QF.l(F, A) /;  put '%2', 'WFDIST', F.tl, A.tl, WFDIST.l(F, A) /);
 loop((C, A), put '%2', 'QINT', C.tl, A.tl, QINT.l(C, A) /);
+loop((NST, A), put '%2', 'QNA', NST.tl, A.tl, QNA.l(NST, A) /;  put '%2', 'PNA', NST.tl, A.tl, PNA.l(NST, A) /);
 loop((C, H), put '%2', 'QH', C.tl, H.tl, QH.l(C, H) /);
 loop((INS, F), put '%2', 'YIF', INS.tl, F.tl, YIF.l(INS, F) /);
 loop(D, put '%2', 'YI', D.tl, '', YI.l(D) /;  put '%2', 'TINS', D.tl, '', TINS.l(D) /;

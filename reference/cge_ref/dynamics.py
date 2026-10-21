@@ -29,7 +29,7 @@ from typing import Callable
 
 import numpy as np
 
-from .model import Closure, Model, Solution
+from .model import Closure, Model, Solution, value_added_real
 
 GOVERNMENT = ("qg", "trdg", "trgg", "trshi")
 FOREIGN = ("trdr", "trfr", "trgr", "trrg", "trshir")
@@ -64,7 +64,7 @@ class Run:
 
 
 def real_value_added(model: Model, values: dict) -> float:
-    return float(model.base["PVA"] @ values["QVA"])
+    return float(value_added_real(model, values).sum())
 
 
 def _per_activity(model: Model, value) -> np.ndarray:

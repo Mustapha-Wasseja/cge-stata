@@ -35,6 +35,7 @@ LSW.lo(AC) = -inf;      LSW.up(AC) = inf;      LSM.lo(AC) = -inf;      LSM.up(AC
 DW.lo(AC) = -inf;       DW.up(AC) = inf;
 RM.lo(AC) = -inf;       RM.up(AC) = inf;       RE.lo(AC) = -inf;       RE.up(AC) = inf;
 RA.lo(AC) = -inf;       RA.up(AC) = inf;
+QNA.lo(NST, AC) = -inf; QNA.up(NST, AC) = inf; PNA.lo(NST, AC) = -inf; PNA.up(NST, AC) = inf;
 
 * Prices and quantities that are positive in the base stay positive; as a
 * mixed complementarity problem (from version 0.4.4) every variable without a
@@ -48,6 +49,7 @@ PX.lo(C)$CX(C) = 1e-10;  PD.lo(C)$CDO(C) = 1e-10;  QX.lo(C)$CX(C) = 1e-10;  QD.l
 PE.lo(C)$CE(C) = 1e-10;  QE.lo(C)$CE(C) = 1e-10;  PM.lo(C)$CM(C) = 1e-10;  QM.lo(C)$CM(C) = 1e-10;
 QF.lo(F, A)$FA(F, A) = 1e-10;  QT.lo(C)$CT(C) = 1e-10;  QER.lo(C)$CR(C) = 1e-10;
 EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;  DW.lo(F)$FS(F) = 1e-10;
+QNA.lo(NST, A)$NNA(NST, A) = 1e-10;  PNA.lo(NST, A)$NNA(NST, A) = 1e-10;  QINT.lo(C, A)$NE(C, A) = 1e-10;
 * the wage curve needs positive unemployment
 QFS.up(F)$(FL(F) and epsw(F) > 0) = qlf(F) * (1 - 1e-12);
 );
@@ -61,7 +63,7 @@ PQ.fx(C)$(not CQ(C)) = PQ.l(C);        QQ.fx(C)$(not CQ(C)) = QQ.l(C);
 PWEV.fx(C)$(not CED(C)) = PWEV.l(C);     QHA.fx(A, H)$(not betah(A, H)) = 0;
 QF.fx(F, A)$(not FA(F, A)) = 0;        WFDIST.fx(F, A)$(not FA(F, A)) = WFDIST.l(F, A);
 QT.fx(C)$(not CT(C)) = 0;              QER.fx(C)$(not CR(C)) = 0;
-QINT.fx(C, A)$(not ica(C, A)) = 0;     QH.fx(C, H)$(not beta(C, H)) = 0;
+QINT.fx(C, A)$(not QIX(C, A)) = 0;     QH.fx(C, H)$(not beta(C, H)) = 0;
 QSHI.fx(C)$(not qshibar(C)) = 0;       EFF.fx(F)$(not eta(F)) = EFF.l(F);
 YSHI.fx$(not fund) = YSHI.l;           SHIADJ.fx$(not fund) = SHIADJ.l;
 HS.fx$(not linked) = HS.l;
@@ -70,6 +72,8 @@ DW.fx(F)$(not FS(F)) = 1;
 * Rents (16.1) are fixed unless a constraint frees them
 RM.fx(C) = RM.l(C);                     RE.fx(C) = RE.l(C);
 RA.fx(A) = RA.l(A);
+* Nests of value added (17.2) exist only where an activity uses them
+QNA.fx(NST, A)$(not NNA(NST, A)) = 0;   PNA.fx(NST, A)$(not NNA(NST, A)) = 0;
 
 * Closure
 GADJ.fx = GADJ.l;

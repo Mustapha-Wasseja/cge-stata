@@ -34,6 +34,9 @@ VARIABLES: dict[str, str] = {
     # Rents (version 0.4.4, model_spec.md, Section 16.1): premiums on imports
     # and exports, and rents on the output of activities
     "RM": "C", "RE": "C", "RA": "A",
+    # Nests of value added (version 0.5.1, model_spec.md, Section 17.2): the
+    # quantity and price of each nest in each activity
+    "QNA": "NA", "PNA": "NA",
 }
 
 # Rent variable of a quantity limited by a constraint (Section 16.2)
@@ -45,7 +48,7 @@ INSTRUMENTS = {"direct": ("TINSADJ", "tins0"), "sales": ("TQADJ", "tq"), "import
 
 # Variables measured in local currency: they scale with the numeraire.
 NOMINAL = ("PA", "PVA", "PINTA", "PX", "PD", "PE", "PM", "PQ", "W", "EXR", "CPI", "DPI",
-           "YF", "YIF", "YI", "EH", "YG", "EG", "GSAV", "WALRAS", "YSHI")
+           "YF", "YIF", "YI", "EH", "YG", "EG", "GSAV", "WALRAS", "YSHI", "PNA")
 
 CLOSURE_OPTIONS = {
     "external": ("flexexr", "fixexr"),
@@ -256,17 +259,57 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     z = (p["af"] * v["EFF"] * v["DW"])[:, None]
     qf = np.where(fa, z * v["QF"], 1.0)
     rho = np.where(cd, 1.0, p["rho_va"])
-    ces_sum = (p["delta_va"] * qf ** (-rho)).sum(axis=0)
+    # Nests of value added (version 0.5.1, Section 17.2): the top of value
+    # added combines the factors in no nest and the nests; a nest combines its
+    # factors and the commodities that leave intermediate input for it
+    nest_f, nest_c, nn, ec = s["nest_f"], s["nest_c"], s["nn"], s["ecell"]
+    top = fa & (nest_f < 0)[:, None]
+    nested = fa & (nest_f >= 0)[:, None]
+    qna = np.where(nn, v["QNA"], 1.0)
+    ces_sum = (np.where(top, p["delta_va"] * qf ** (-rho), 0.0).sum(axis=0)
+               + np.where(nn, p["delta_vn"] * qna ** (-rho), 0.0).sum(axis=0))
     q3_ces = p["ad"] * ces_sum ** (-1.0 / rho)
-    q3_cd = p["ad"] * np.prod(qf ** p["delta_va"], axis=0)
+    q3_cd = (p["ad"] * np.prod(np.where(top, qf ** p["delta_va"], 1.0), axis=0)
+             * np.prod(np.where(nn, qna ** p["delta_vn"], 1.0), axis=0))
     eq["Q3"] = (v["QVA"], np.where(cd, q3_cd, q3_ces), every_a)
     wage = v["W"][:, None] * v["WFDIST"]
     # Factor cost to the activity, with taxes on factor use (version 0.5.0)
     cost = wage * (1 + p["tf"])
     pvaqva = v["PVA"] * v["QVA"]
     q4_ces = pvaqva / ces_sum * p["delta_va"] * qf ** (-rho - 1) * z
-    eq["Q4"] = (np.where(cd, cost * v["QF"], cost),
-                np.where(cd, p["delta_va"] * pvaqva, q4_ces), fa)
+    # Within the nests: exponents, Cobb-Douglas nests, and the CES sums of
+    # the members (factors in efficiency units, commodities in quantities)
+    MF, MC, rho_n, cdn = s["MF"], s["MC"], p["rho_n"], s["cdn"]
+    jf, jc = np.maximum(nest_f, 0), np.maximum(nest_c, 0)
+    has_n = rho_n.size > 0
+    rf = np.where(nest_f >= 0, rho_n[jf], 1.0) if has_n else np.ones(nest_f.size)
+    rc = np.where(nest_c >= 0, rho_n[jc], 1.0) if has_n else np.ones(nest_c.size)
+    cdf = cdn[jf] & (nest_f >= 0) if has_n else np.zeros(nest_f.size, dtype=bool)
+    cdc = cdn[jc] & (nest_c >= 0) if has_n else np.zeros(nest_c.size, dtype=bool)
+    qint = np.where(ec, v["QINT"], 1.0)
+    nsum = (MF @ np.where(nested, p["delta_va"] * qf ** (-rf[:, None]), 0.0)
+            + MC @ np.where(ec, p["delta_ce"] * qint ** (-rc[:, None]), 0.0))
+    nlog = (MF @ np.where(nested, p["delta_va"] * np.log(qf), 0.0)
+            + MC @ np.where(ec, p["delta_ce"] * np.log(qint), 0.0))
+    pnqn = v["PNA"] * v["QNA"]
+    pnf, nsf = (pnqn[jf], nsum[jf]) if has_n else (np.ones(fa.shape), np.ones(fa.shape))
+    q4_nest = pnf / nsf * p["delta_va"] * qf ** (-rf[:, None] - 1) * z
+    lhs4 = np.where(nested, np.where(cdf[:, None], cost * v["QF"], cost),
+                    np.where(cd, cost * v["QF"], cost))
+    rhs4 = np.where(nested, np.where(cdf[:, None], p["delta_va"] * pnf, q4_nest),
+                    np.where(cd, p["delta_va"] * pvaqva, q4_ces))
+    eq["Q4"] = (lhs4, rhs4, fa)
+    # N1: the quantity of each nest; N2: its price, from the top of value
+    # added; N3: the demand for each commodity in a nest
+    cdn_c = cdn[:, None] if has_n else np.zeros((0, 1), dtype=bool)
+    rn = rho_n[:, None] if has_n else np.ones((0, 1))
+    eq["N1"] = (v["QNA"], p["an"] * np.where(cdn_c, np.exp(nlog), nsum ** (-1.0 / np.where(cdn_c, 1.0, rn))), nn)
+    eq["N2"] = (np.where(cd, pnqn, v["PNA"]),
+                np.where(cd, p["delta_vn"] * pvaqva, pvaqva / ces_sum * p["delta_vn"] * qna ** (-rho - 1)), nn)
+    pe = v["PQ"][:, None] * (1 + vint)
+    pnc, nsc = (pnqn[jc], nsum[jc]) if has_n else (np.ones(ec.shape), np.ones(ec.shape))
+    eq["N3"] = (np.where(cdc[:, None], pe * v["QINT"], pe),
+                np.where(cdc[:, None], p["delta_ce"] * pnc, pnc / nsc * p["delta_ce"] * qint ** (-rc[:, None] - 1)), ec)
     # Health services and factor efficiency (version 0.1.14)
     eta = p["eta_h"]
     hs = np.where(s["hc"], v["QH"].sum(axis=1) + v["QG"] + v["QSHI"], 0.0).sum()
@@ -384,6 +427,21 @@ def vat_revenue(v: dict, p: dict) -> np.ndarray:
     return np.atleast_1d((tv * v["PQ"] * base).sum())
 
 
+def nest_inputs(model, v: dict, p: dict) -> np.ndarray:
+    """Spending of each activity on the commodities in its nests of value
+    added, at the prices it pays, with the VAT it cannot recover (version
+    0.5.1, Section 17.2): part of PVA QVA, but not of value added."""
+    vint = np.outer(p["tv"] * v["TVADJ"], 1 - p["kappa"])
+    return np.where(model.struct["ecell"], v["PQ"][:, None] * (1 + vint) * v["QINT"], 0.0).sum(axis=0)
+
+
+def value_added_real(model, v: dict) -> np.ndarray:
+    """Real value added of each activity, at base prices: PVA0 QVA less the
+    commodities in its nests at base prices (version 0.5.1)."""
+    b = model.base
+    return b["PVA"] * v["QVA"] - nest_inputs(model, {**b, "QINT": v["QINT"]}, model.params)
+
+
 def factor_taxes(v: dict, p: dict) -> np.ndarray:
     """Taxes on factor use and on factor income (version 0.5.0), by factor."""
     wage = v["W"][:, None] * v["WFDIST"]
@@ -463,7 +521,9 @@ class Solution:
         expenditure = (ph @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]) + v["PQ"] @ v["QER"]
                        + v["PA"] @ v["QHA"].sum(axis=1)
                        + exr * (pwe @ v["QE"]) - re_row - exr * (p["pwm"] @ v["QM"]) - rm_row)
-        income = (v["PVA"] @ v["QVA"] + (p["tq"] * v["TQADJ"] * v["PQ"] * v["QQ"]).sum()
+        # The commodities in nests of value added are intermediate inputs (0.5.1)
+        income = (v["PVA"] @ v["QVA"] - nest_inputs(self.model, v, p).sum()
+                  + (p["tq"] * v["TQADJ"] * v["PQ"] * v["QQ"]).sum()
                   + exr * (p["tm"] * v["TMADJ"] * p["pwm"] * v["QM"]).sum()
                   + exr * (p["te"] * pwe * v["QE"]).sum() + (p["ta"] * v["PA"] * v["QA"]).sum()
                   + vat_revenue(v, p)[0]
@@ -504,7 +564,7 @@ class Model:
                  debt=None, interest=None, debt_holders=None, foreign_borrowing=None,
                  export_only=None, export_demand=None, unemployment=None, wage_curve=None,
                  min_wage=None, smoothing=1e-10, sick_days=None, sick_elasticity=None,
-                 mortality=None, mortality_elasticity=None):
+                 mortality=None, mortality_elasticity=None, nests=None, sigma_nest=None):
         sam, mapping, self.rewritten = prepare(sam, mapping)
         self.sam = sam
         self.mapping = mapping
@@ -515,6 +575,7 @@ class Model:
                      "D": list(H) + list(E),
                      "I": list(H) + list(E) + [mapping.government, mapping.row]
                      + ([mapping.insurance] if mapping.insurance is not None else [])}
+        self._nest_sets(nests, sigma_nest)
         self._calibrate(sam, mapping,
                         _per_element(sigma_va, A, "sigma_va"),
                         _per_element(sigma_q, C, "sigma_q"),
@@ -672,9 +733,12 @@ class Model:
         if np.abs(QQ0 - demand).max() > tol:
             raise SAMError("composite supply does not equal domestic demand for some commodity")
 
-        # 7.2 Production
-        QINTA0 = QINT0.sum(axis=0)
-        ica = QINT0 / np.where(QINTA0 > 0, QINTA0, 1.0)
+        # 7.2 Production. Commodities in a nest of value added leave
+        # intermediate input (version 0.5.1, Section 17.2)
+        nest_f, nest_c = self.struct["nest_f"], self.struct["nest_c"]
+        ecell = (nest_c >= 0)[:, None] & (QINT0 != 0)
+        QINTA0 = np.where(ecell, 0.0, QINT0).sum(axis=0)
+        ica = np.where(ecell, 0.0, QINT0) / np.where(QINTA0 > 0, QINTA0, 1.0)
         PINTA0 = (ica * (1 + np.outer(tv, 1 - kappa))).sum(axis=0)
         VA = vec(F, A)
         fa = VA > tol
@@ -697,7 +761,9 @@ class Model:
             TF[F.index(factor)] += vec([account], A)[0]
         fail_if(((np.abs(TF) > tol) & ~fa).any(axis=1), F, "a tax on factor use is recorded where the factor is not used")
         tf = np.where(fa, TF / np.where(fa, VA, 1.0), 0.0)
-        QVA0 = (VA + TF).sum(axis=0)
+        # The commodities in nests, at the prices activities pay (PQ = 1)
+        VE = np.where(ecell, VINT, 0.0)
+        QVA0 = (VA + TF).sum(axis=0) + VE.sum(axis=0)
         fail_if(QVA0 <= tol, A, "every activity needs positive value added")
         iva = QVA0 / QA0
         inta = QINTA0 / QA0
@@ -707,18 +773,50 @@ class Model:
         delta_va = np.zeros((nF, nA))
         ad = np.zeros(nA)
         w = W0[:, None] * WFDIST0
+        # Nests (Section 17.2): each is valued at its members' costs, at a
+        # price of one; within it, shares follow from the members' prices and
+        # quantities as at the top of value added
+        N = self.sets["N"]
+        nN = len(N)
+        MF = np.array([[nest_f[f] == n for f in range(nF)] for n in range(nN)], dtype=float).reshape(nN, nF)
+        MC = np.array([[nest_c[c] == n for c in range(nC)] for n in range(nN)], dtype=float).reshape(nN, nC)
+        VN0 = MF @ np.where(fa, VA + TF, 0.0) + MC @ VE
+        nn = VN0 > tol
+        unused = ~nn.any(axis=1)
+        if np.any(unused):
+            raise SAMError("a nest of value added is used by no activity: "
+                           + " ".join(n for n, u in zip(N, unused) if u))
+        sigma_n, rho_n, cdn = self.params["sigma_n"], self.params["rho_n"], self.struct["cdn"]
+        delta_vn, an = np.zeros((nN, nA)), np.ones((nN, nA))
+        delta_ce = np.zeros((nC, nA))
+
+        def shares(price, q, value, total, r, cobb):
+            """Shares and efficiency of a CES or Cobb-Douglas aggregate."""
+            if cobb:
+                d = value / total
+                return d, total / np.prod(q ** d)
+            num = price * q ** (1 + r)
+            d = num / num.sum()
+            return d, total / (d * q ** (-r)).sum() ** (-1 / r)
+
         for k in range(nA):
-            m = fa[:, k]
-            if cd[k]:
-                d = (VA[m, k] + TF[m, k]) / QVA0[k]
-                delta_va[m, k] = d
-                ad[k] = QVA0[k] / np.prod(QF0[m, k] ** d)
-            else:
-                r = rho_va[k]
-                num = w[m, k] * (1 + tf[m, k]) * QF0[m, k] ** (1 + r)
-                d = num / num.sum()
-                delta_va[m, k] = d
-                ad[k] = QVA0[k] / (d * QF0[m, k] ** (-r)).sum() ** (-1 / r)
+            for n in np.flatnonzero(nn[:, k]):
+                mf = fa[:, k] & (nest_f == n)
+                mc = ecell[:, k] & (nest_c == n)
+                price = np.concatenate([w[mf, k] * (1 + tf[mf, k]), 1 + tv[mc] * (1 - kappa[k])])
+                q = np.concatenate([QF0[mf, k], QINT0[mc, k]])
+                value = np.concatenate([VA[mf, k] + TF[mf, k], VE[mc, k]])
+                d, an[n, k] = shares(price, q, value, VN0[n, k], rho_n[n], cdn[n])
+                delta_va[mf, k] = d[:mf.sum()]
+                delta_ce[mc, k] = d[mf.sum():]
+            m = fa[:, k] & (nest_f < 0)
+            mn = nn[:, k]
+            price = np.concatenate([w[m, k] * (1 + tf[m, k]), np.ones(mn.sum())])
+            q = np.concatenate([QF0[m, k], VN0[mn, k]])
+            value = np.concatenate([VA[m, k] + TF[m, k], VN0[mn, k]])
+            d, ad[k] = shares(price, q, value, QVA0[k], rho_va[k], cd[k])
+            delta_va[m, k] = d[:m.sum()]
+            delta_vn[mn, k] = d[m.sum():]
 
         # 7.3 CET and Armington functions (base prices PD = PE = 1)
         rho_t = 1.0 / sigma_t + 1.0
@@ -801,9 +899,11 @@ class Model:
         dwts = QD0 / QD0.sum()
         self.paired = {a: C[k] for k, a in enumerate(A)}
 
-        self.struct = {"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct, "cr": cr,
-                       "qint": QINT0 != 0, "qh": QH0 != 0, "shi_row": shi_row, "qshi": qshi != 0,
-                       "cxe": cxe, "ced": ced, "qha": HOME0 != 0}
+        self.struct.update({"ce": ce, "cm": cm, "fa": fa, "cd": cd, "cx": cx, "ct": ct, "cr": cr,
+                            "qint": (QINT0 != 0) & ~ecell, "qh": QH0 != 0, "shi_row": shi_row,
+                            "qshi": qshi != 0, "cxe": cxe, "ced": ced, "qha": HOME0 != 0,
+                            # nests of value added (version 0.5.1)
+                            "nn": nn, "ecell": ecell, "MF": MF, "MC": MC})
         self.params = {
             "pwm": np.ones(nC), "pwe": pwe, "tm": tm, "te": te, "tq": tq, "ta": ta,
             "theta": theta, "iva": iva, "inta": inta, "ica": ica, "ad": ad, "delta_va": delta_va, "rho_va": rho_va,
@@ -819,6 +919,10 @@ class Model:
             "tv": tv, "kappa": kappa,
             # taxes on factor use and income (version 0.5.0)
             "tf": tf, "tfy": tfy,
+            # nests of value added (version 0.5.1): shares at the top of value
+            # added and efficiency of each nest, shares of commodities within
+            # their nests, elasticities and exponents
+            "delta_vn": delta_vn, "an": an, "delta_ce": delta_ce, "sigma_n": sigma_n, "rho_n": rho_n,
             # version 0.3.2: margins by market, export demand, home consumption
             "icd": icd, "ici": ici, "ice": ice, "eta_e": eta_e, "qe0": QE0.copy(),
             "betah": betah, "gammah": np.zeros_like(betah),
@@ -844,6 +948,7 @@ class Model:
             "YSHI": np.atleast_1d(YSHI0), "SHIADJ": s1.copy(), "QSHI": qshi.copy(),
             "TQADJ": s1.copy(), "TMADJ": s1.copy(), "TVADJ": s1.copy(),
             "PWE": pwe.copy(), "QHA": HOME0.copy(),
+            "QNA": np.where(nn, VN0, 0.0), "PNA": nn.astype(float),
         }
         self.exists = {name: np.ones(value.shape, dtype=bool) for name, value in self.base.items()}
         self.exists["PE"] = ce.copy()
@@ -867,6 +972,49 @@ class Model:
         self.exists["YSHI"] = np.atleast_1d(shi is not None)
         self.exists["SHIADJ"] = np.atleast_1d(shi is not None)
         self.exists["QSHI"] = qshi != 0
+        self.exists["QNA"] = nn.copy()
+        self.exists["PNA"] = nn.copy()
+
+    def _nest_sets(self, nests, sigma_nest) -> None:
+        """Nests of value added (version 0.5.1, Section 17.2): name -> members
+        (factors and commodities), and an elasticity for each nest (one value
+        for every nest, or name -> value)."""
+        F, C = self.sets["F"], self.sets["C"]
+        nests = dict(nests or {})
+        N = list(nests)
+        nest_f, nest_c = np.full(len(F), -1), np.full(len(C), -1)
+        for n, name in enumerate(N):
+            if name in F or name in C:
+                raise ValueError(f"nests: {name} is the name of a factor or commodity")
+            members = list(nests[name])
+            if not members:
+                raise ValueError(f"nests: {name} has no members")
+            for m in members:
+                if m in F:
+                    where, k = nest_f, F.index(m)
+                elif m in C:
+                    where, k = nest_c, C.index(m)
+                else:
+                    raise ValueError(f"nests: {m} is not a factor or commodity")
+                if where[k] >= 0:
+                    raise ValueError(f"nests: {m} is in two nests")
+                where[k] = n
+        if N and sigma_nest is None:
+            raise ValueError("nests need elasticities (sigma_nest)")
+        if isinstance(sigma_nest, dict):
+            extra = [k for k in sigma_nest if k not in N]
+            missing = [k for k in N if k not in sigma_nest]
+            if extra or missing:
+                raise ValueError(f"sigma_nest: missing {missing}, unknown {extra}")
+            sn = np.array([float(sigma_nest[n]) for n in N])
+        else:
+            sn = np.full(len(N), float(sigma_nest) if N else 1.0)
+        if np.any(~np.isfinite(sn)) or np.any(sn <= 0):
+            raise ValueError("sigma_nest: elasticities must be positive")
+        cdn = np.abs(sn - 1.0) < 1e-12
+        self.sets["N"] = N
+        self.struct = {"nest_f": nest_f, "nest_c": nest_c, "cdn": cdn}
+        self.params = {"sigma_n": sn, "rho_n": np.where(cdn, 0.0, 1.0 / sn - 1.0)}
 
     def _top_nest(self, sigma_a) -> None:
         """Top nest of production (model_spec.md, 5.2 and 7.3): Leontief (sigma_a = 0,

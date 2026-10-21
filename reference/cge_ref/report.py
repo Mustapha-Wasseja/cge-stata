@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .model import factor_taxes, final_price, rents_abroad, vat_revenue, world_export_price
+from .model import final_price, rents_abroad, value_added_real, vat_revenue, world_export_price
 
 
 def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
@@ -45,7 +45,9 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     add("macro", "insurance_fund_real", "", ph0 @ v["QSHI"])
     add("macro", "exports_real", "", exr0 * (p0["pwe"] @ v["QE"]) + b["PQ"] @ v["QER"])
     add("macro", "imports_real", "", exr0 * (p0["pwm"] @ v["QM"]))
-    add("macro", "value_added_real", "", b["PVA"] @ v["QVA"])
+    # Without the commodities in nests of value added (version 0.5.1)
+    va_real = value_added_real(model, v)
+    add("macro", "value_added_real", "", va_real.sum())
     add("macro", "cpi", "", v["CPI"][0])
     add("macro", "dpi", "", v["DPI"][0])
     add("macro", "exchange_rate", "", exr)
@@ -100,7 +102,7 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     for k, a in enumerate(S["A"]):
         add("activities", "output", a, v["QA"][k])
         add("activities", "price", a, v["PA"][k])
-        add("activities", "value_added", a, v["QVA"][k])
+        add("activities", "value_added", a, va_real[k])
 
     for k, c in enumerate(S["C"]):
         add("commodities", "supply", c, v["QQ"][k])

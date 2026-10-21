@@ -107,6 +107,13 @@ def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict 
     lines.append("parameter SAM(AC, AC) /\n" + ",\n".join(cells) + "\n/;")
     pairs = [f"{q(acc)}.{q(f)} 1" for acc, f in m.factor_taxes.items()]
     lines.append("parameter ftfac(AC, AC) /" + (" " + ", ".join(pairs) if pairs else "") + " /;")
+    # nests of value added (version 0.5.1): members and elasticities
+    N, st = S["N"], model.struct
+    members = ([f"{q(N[n])}.{q(f)}" for f, n in zip(S["F"], st["nest_f"]) if n >= 0]
+               + [f"{q(N[n])}.{q(c)}" for c, n in zip(S["C"], st["nest_c"]) if n >= 0])
+    lines.append("set NST(*) 'nests of value added' / " + ", ".join(q(n) for n in N) + " /;")
+    lines.append("set NSTF(NST, AC) / " + ", ".join(members) + " /;")
+    lines.append("parameter signest(NST) / " + ", ".join(f"{q(n)} {num(s)}" for n, s in zip(N, p["sigma_n"])) + " /;")
 
     def param(name, labels, values):
         body = ", ".join(f"{q(e)} {num(v)}" for e, v in zip(labels, values) if v != 0)
@@ -463,6 +470,18 @@ def cases() -> list[dict]:
     tf = ftmix.params["tf"].copy()
     tf[lab] *= 0.5
     add("factor taxes, mixed", ftmix, {"mixed_payroll_cut": {"params": {"tf": tf}}}, "ftax_")
+    # Nests of value added (version 0.5.1, model_spec.md, Section 17.2)
+    vn = sc.nest_model()
+    add("nests", vn, sc.nest_shocks(vn), "vnest_")
+    vnmix = sc.nest_model(**sc.NEST_MIXED)
+    shocks = sc.nest_shocks(vnmix)
+    add("nests, mixed", vnmix, {"mixed_" + k: shocks[k] for k in ("energy_price_up50", "skilled_supply_up10")},
+        "vnest_")
+    add("nests, specific capital", vn, {"specific_energy_price_up50": sc.nest_shocks(vn)["energy_price_up50"]},
+        "vnest_", closure=Closure(factors={"cap": "specific"}))
+    vnvat = sc.vat_model(**sc.NEST_VAT)
+    add("nests, VAT", vnvat, {"vat_rate_up20": {"params": {"tv": vnvat.params["tv"] * 1.2}}}, "vnest_",
+        vat=sc.VAT_CREDIT)
     # Closure swaps (version 0.4.5, model_spec.md, Section 6)
     notariff = {"params": {"tm": np.zeros_like(std.params["tm"])}}
     add("swaps", std, {"swap_gsav_gadj": notariff}, closure=Closure(swaps=(("GSAV", "GADJ"),)))

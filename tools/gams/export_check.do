@@ -33,7 +33,8 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
-    trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax
+    trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
+    nests nestvat
 local ncase : word count `cases'
 
 tempname post
@@ -244,6 +245,28 @@ foreach case of local cases {
         cge_shock tf, elements(lab) scale(0.5)
         cge_shock tf, elements(cap) value(0.05)
         cge_shock tfy, elements(cap) scale(2)
+    }
+    * Nests of value added (version 0.5.1): Cobb-Douglas value added in one
+    * activity and a Cobb-Douglas labour nest; dearer energy and a payroll tax cut
+    else if "`case'" == "nests" {
+        quietly cge_synthetic, clear nests
+        quietly cge_sam, labels(account)
+        quietly cge_map, activities(act_agr act_man act_ser act_ene) commodities(com_agr com_man com_ser com_ene) ///
+            factors(lab_hi lab_lo cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir)    ///
+            saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab_hi)
+        quietly cge_calibrate, sigmava(0.5 1 1.5 0.8) sigmaq(2) sigmat(2) nests(labour: lab_hi lab_lo, ke: cap com_ene) ///
+            sigmanest(labour:1 ke:0.25)
+        cge_shock pwm, elements(com_ene) scale(1.5)
+        cge_shock tf, elements(lab_hi) scale(0.5)
+    }
+    * A nest of capital and manufactures, with VAT not every activity recovers
+    else if "`case'" == "nestvat" {
+        quietly cge_synthetic, clear vat
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap' vattax(tax_vat)
+        quietly cge_calibrate, `sigmas' vatcredit(act_agr:0 act_ser:0.5) nests(km: cap com_man) sigmanest(0.5)
+        quietly cge_closure, factors(cap:specific)
+        cge_shock tv, scale(1.2)
     }
     quietly cge_solve, name(`case') tolerance(1e-12)
     assert r(converged) == 1

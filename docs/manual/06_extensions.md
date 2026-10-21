@@ -159,7 +159,37 @@ barely moves. `cge_shock tf, elements(cap) value(0.1)` introduces a tax on the
 use of capital where the SAM has none. The government report shows the
 revenue from each tax.
 
+## 6.7 Nests of value added (Section 17.2)
+
+Value added can combine nests of inputs, each with its own elasticity: skill
+types of labour, such as doctors, nurses and other staff, or capital with
+energy. A nest's members are factors or commodities; a commodity in a nest
+leaves intermediate input, so that activities substitute between it and the
+other members.
+
+```stata
+cge_synthetic, clear nests
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser act_ene) commodities(com_agr com_man com_ser com_ene) ///
+    factors(lab_hi lab_lo cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab_hi)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) ///
+    nests(labour: lab_hi lab_lo, ke: cap com_ene) sigmanest(labour:1.5 ke:0.4)
+cge_shock pwm, elements(com_ene) scale(1.5)     // dearer imported energy
+cge_solve, name(energy_up)
+```
+
+Value added then combines the labour nest and the capital-energy nest with
+the elasticity `sigmava()`; results list the quantity (`QNA`) and price
+(`PNA`) of each nest in each activity. Reported value added, and real value
+added, leave out the energy bought, which is an intermediate input. A nest of
+factors with the same elasticity as value added gives the same results as no
+nest. Nests do not contain other nests.
+
 ## References
 
 Blanchflower, D. G. and A. J. Oswald (1995). An introduction to the wage curve.
 *Journal of Economic Perspectives* 9(3): 153-167.
+
+Burniaux, J.-M. and T. P. Truong (2002). GTAP-E: an energy-environmental
+version of the GTAP model. GTAP Technical Paper 16, Purdue University.

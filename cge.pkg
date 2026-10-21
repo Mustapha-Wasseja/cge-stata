@@ -91,5 +91,6 @@ F data/cge_synthetic_sam_vat.csv
 F data/cge_synthetic_sam_home.csv
 F data/cge_synthetic_sam_trade.csv
 F data/cge_synthetic_sam_ftax.csv
+F data/cge_synthetic_sam_nest.csv
 F data/cge_elasticities.csv
 F data/cge_elasticity_sources.csv

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.5  20oct2026}{...}
+{* *! version 0.5.1  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -16,7 +16,8 @@
 {opt vatc:redit(spec)} {opt debt(spec)} {opt int:erest(spec)} {opt debth:olders(spec)}
 {opt for:eignborrowing(#)} {opt exporto:nly(names)} {opt exportd:emand(spec)}
 {opt unemp:loyment(spec)} {opt wagec:urve(spec)} {opt minw:age(spec)} {opt smooth:ing(#)}
-{opt sickd:ays(spec)} {opt sicke:las(spec)} {opt mort:ality(#)} {opt morte:las(#)}]
+{opt sickd:ays(spec)} {opt sicke:las(spec)} {opt mort:ality(#)} {opt morte:las(#)}
+{opt nest:s(spec)} {opt sigman:est(spec)}]
 
 
 {title:Description}
@@ -66,6 +67,23 @@ per activity: 0, the default, is the Leontief nest, 1 is Cobb-Douglas, and other
 positive values give a CES nest, under which an activity uses relatively less
 of whichever input becomes dearer. Activities without intermediate inputs keep
 the Leontief nest.
+
+{phang}
+{opt nests(spec)} (from version 0.5.1; docs/model_spec.md, Section 17.2)
+defines nests of value added, separated by commas, each as a name followed by
+a colon and its members, factors or commodities, for example
+{cmd:nests(labour: lab_hi lab_lo, ke: cap com_ene)}. Each nest is a CES or
+Cobb-Douglas aggregate of its members, and value added combines the factors
+in no nest with the nests, with the elasticity {opt sigmava()}. A commodity
+in a nest, such as energy, leaves intermediate input: activities substitute
+between it and the other members of its nest. A factor or commodity may be
+in one nest only, and nests do not contain other nests. Results list the
+quantity ({cmd:QNA}) and price ({cmd:PNA}) of each nest in each activity.
+
+{phang}
+{opt sigmanest(spec)} gives the elasticity of substitution within the nests:
+one value for every nest, or {it:nest}{cmd::}{it:value} pairs. A value of 1
+selects the Cobb-Douglas form.
 
 {phang}
 {opt incelas(numlist)} and {opt frisch(numlist)} select linear expenditure
@@ -226,6 +244,12 @@ it changes the growth of the population and, with {opt deathfactors()} of
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) minwage(lab:0.95)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) sickdays(lab:0.05) sickelas(-0.4) mortality(0.01) mortelas(-0.3)}{p_end}
+
+{pstd}Nests of value added: two labour types, and capital with energy{p_end}
+{phang2}{cmd:. cge_synthetic, clear nests}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_ene) commodities(com_agr com_man com_ser com_ene) factors(lab_hi lab_lo cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab_hi)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) nests(labour: lab_hi lab_lo, ke: cap com_ene) sigmanest(labour:1.5 ke:0.4)}{p_end}
 
 
 {title:Stored results}

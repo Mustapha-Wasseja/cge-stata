@@ -67,7 +67,8 @@ memory is not changed.
 The model's free parameters are elasticities: of substitution between factors
 (`sigmava`), between imports and domestic goods (`sigmaq`, Armington), of
 transformation between exports and domestic sales (`sigmat`, CET), and,
-optionally, between value added and intermediate inputs (`sigmaa`), income
+optionally, between value added and intermediate inputs (`sigmaa`), within
+nests of value added (`sigmanest`, chapter 6.7), income
 elasticities and a Frisch parameter for LES demand, and the elasticities of
 the extensions (chapter 6). None has a default.
 

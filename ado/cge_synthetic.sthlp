@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat} {opt home} {opt trade} {opt factort:ax}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat} {opt home} {opt trade} {opt factort:ax} {opt nest:s}]
 
 
 {title:Options}
@@ -89,6 +89,14 @@ tax on labour of 4, 3 and 6 paid by the three activities ({cmd:tax_pay}) and a
 tax of 7 on capital income ({cmd:tax_fy}); direct taxes are 20 lower, so
 government revenue is unchanged. Map it with {cmd:factortax(tax_pay:lab)} and
 {cmd:factorincometax(tax_fy)}.
+
+{phang}
+{opt nests} (from version 0.5.1) loads a layout with four activities and
+commodities, including energy ({cmd:act_ene}, {cmd:com_ene}), two labour
+types ({cmd:lab_hi}, {cmd:lab_lo}), capital, and a payroll tax on skilled
+labour ({cmd:tax_pay}). It is used to test nests of value added: map it with
+{cmd:factortax(tax_pay:lab_hi)} and calibrate with, for example,
+{cmd:nests(labour: lab_hi lab_lo, ke: cap com_ene)} (see {helpb cge_calibrate}).
 
 {phang}
 {opt vat} loads the standard layout with a VAT account ({cmd:tax_vat}) that

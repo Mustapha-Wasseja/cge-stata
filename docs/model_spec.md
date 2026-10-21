@@ -162,6 +162,7 @@ Incomes, rates and adjustment variables
 | $HS$ | volume of health services consumed by households, the government and the health insurance fund |
 | $WALRAS$ | slack in the savings-investment balance; zero at a solution |
 | $RM_c$, $RE_c$, $RA_a$ | premiums on imports and exports, per unit of the world price, and rents on activity output, per unit of the activity price (from version 0.4.4, Section 16.1); zero and fixed unless a constraint frees them |
+| $QNA_{na}$, $PNA_{na}$ | quantity and price of nest $n$ of value added in activity $a$ (from version 0.5.1, Section 17.2) |
 
 ## 4. Parameters
 
@@ -1416,7 +1417,86 @@ Factor income $YF_f$ is net of taxes on use (I1 is unchanged). Shocks `tf`
 value introduces a tax where the SAM has none. Reports add the rows
 `tax_factor_use` and `tax_factor_income` to the government table.
 
+### 17.2 Nests of value added (from version 0.5.1)
+
+Value added may combine nests of inputs, each a CES or Cobb-Douglas
+aggregate with its own elasticity: labour as a combination of skill types,
+such as doctors, nurses and other staff, as in the PEP models (Decaluwé et
+al. 2013), or capital with energy, as in GTAP-E (Burniaux and Truong 2002).
+The nests and their members, factors or commodities, are given at
+calibration:
+
+```stata
+cge_calibrate, ... nests(labour: lab_hi lab_lo, ke: cap com_ene) sigmanest(labour:1.5 ke:0.4)
+```
+
+A factor or commodity belongs to at most one nest, and nests do not contain
+other nests. A nest exists in an activity that uses at least one of its
+members ($NA$). The top of value added in an activity combines its factors in
+no nest and its nests, with the elasticity $\sigma^{va}_a$.
+
+**Commodities in nests.** A commodity $c$ in nest $n$ bought by activity $a$
+($c \in NE_a$) leaves intermediate input: $QINT_{ca}$ is set by the nest
+(N3) instead of Q5, and is not part of $QINTA_a$ or of the shares $ica$.
+$PVA_a\,QVA_a$ then includes its cost at the price the activity pays,
+$p_{ca} = PQ_c\,(1 + tv_c\,TVADJ\,(1 - \kappa_a))$. Value added in reports
+(by activity and in total, at base prices) and the income side of GDP leave
+it out.
+
+**Equations.** Each member $m$ of a nest has a quantity $x_{ma}$, a factor in
+efficiency units $z_f\,QF_{fa}$ ($z_f = af_f\,EFF_f\,DW_f$) or a commodity
+$QINT_{ca}$, and a cost $p_{ma}$: $W_f\,WFDIST_{fa}\,(1 + tf_{fa})$ for a
+factor, $p_{ca}$ for a commodity. With $\rho_n = 1/\sigma_n - 1$ and the CES
+sums
+
+$$S_a = \sum_{f \notin N} \delta^{va}_{fa}\,(z_f\,QF_{fa})^{-\rho^{va}_a}
+       + \sum_{n \in NA_a} \delta^{n}_{na}\,QNA_{na}^{-\rho^{va}_a}, \qquad
+  S_{na} = \sum_{m \in n} \delta_{ma}\,x_{ma}^{-\rho_n},$$
+
+value added and its nests are
+
+$$QVA_a = ad_a\,S_a^{-1/\rho^{va}_a} \tag{Q3}$$
+
+$$QNA_{na} = an_{na}\,S_{na}^{-1/\rho_n} \tag{N1}$$
+
+$$PNA_{na} = \frac{PVA_a\,QVA_a}{S_a}\,\delta^{n}_{na}\,QNA_{na}^{-\rho^{va}_a - 1} \tag{N2}$$
+
+and the demands for the members of a nest are
+
+$$p_{fa} = \frac{PNA_{na}\,QNA_{na}}{S_{na}}\,\delta_{fa}\,(z_f\,QF_{fa})^{-\rho_n - 1}\,z_f \tag{Q4}$$
+
+$$p_{ca} = \frac{PNA_{na}\,QNA_{na}}{S_{na}}\,\delta_{ca}\,QINT_{ca}^{-\rho_n - 1} \tag{N3}$$
+
+Factors in no nest keep Q4 of Section 5.2, with $S_a$ in its denominator.
+With $\sigma = 1$, a nest or the top of value added is Cobb-Douglas, as in
+Q3' and Q4': $QNA_{na} = an_{na} \prod_m x_{ma}^{\delta_{ma}}$, and each
+member's cost is its share of the nest's value,
+$p_{ma}\,x_{ma} = \delta_{ma}\,PNA_{na}\,QNA_{na}$.
+
+**Calibration.** In the base $PNA^0_{na} = 1$ and $QNA^0_{na}$ is the cost
+of the nest's members: factor payments with taxes on use, and the SAM's
+purchases of its commodities. The shares within a nest follow from the
+members' costs and quantities as in Section 7.3,
+$\delta_{ma} \propto p^0_{ma}\,(x^0_{ma})^{1 + \rho_n}$ (or the value shares
+for Cobb-Douglas), and $an_{na}$ makes N1 hold. At the top of value added the
+nests enter at a price of one with quantities $QNA^0_{na}$, and $QVA^0_a$
+adds the cost of the commodities in nests.
+
+A nest of factors whose elasticity equals that of value added gives the same
+solution as no nest: a CES function of CES functions with one elasticity is
+a CES function. The test suites check this.
+
+**Parameters and results.** The parameters are $\delta^{n}_{na}$ (`dvn`),
+$an_{na}$ (`an`), $\delta_{ca}$ (`dce`), $\sigma_n$ (`sgn`) and $\rho_n$
+(`rhn`); within a nest, the shares of factors are kept in `dva`. Results
+list $QNA$ and $PNA$. Sensitivity analysis keeps the nests' elasticities at
+the values given.
+
 ## References
+
+Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
+Version of the GTAP Model*. GTAP Technical Paper 16, Center for Global Trade
+Analysis, Purdue University.
 
 Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. (2008). *The
 Impact of Macroeconomic Policies on Poverty and Income Distribution:

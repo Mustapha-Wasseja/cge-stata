@@ -145,8 +145,16 @@ parameters QINTA0(AC), ica(AC, AC), QF0(AC, AC), QVA0(AC), iva(AC), inta(AC), rv
      W0(AC) "base wage", WFD0(AC, AC) "base wage distortion";
 parameter QINT0(AC, AC) "intermediate input quantities";
 QINT0(C, A) = SAM(C, A) / (1 + tv(C) * (1 - kappa(A)));
-QINTA0(A) = sum(C, QINT0(C, A));
-ica(C, A)$(QINTA0(A) > 0) = QINT0(C, A) / QINTA0(A);
+* 17.2 Nests of value added (from version 0.5.1): nests NST with members NSTF,
+* factors and commodities, and elasticities signest. Commodities in a nest
+* leave intermediate input (NE) for value added
+sets NE(AC, AC) "commodity in a nest bought by an activity", QIX(AC, AC) "intermediate input flows",
+     NFREE(AC) "factors in no nest", NNA(NST, AC) "nest used by an activity", CDN(NST) "Cobb-Douglas nests";
+alias (NST, NSTP);
+NE(C, A) = yes$(sum(NST$NSTF(NST, C), 1) and QINT0(C, A) <> 0);
+QINTA0(A) = sum(C$(not NE(C, A)), QINT0(C, A));
+ica(C, A)$(QINTA0(A) > 0 and not NE(C, A)) = QINT0(C, A) / QINTA0(A);
+QIX(C, A) = yes$(ica(C, A) or NE(C, A));
 FA(F, A) = yes$(SAM(F, A) > tol);
 QF0(F, A)$FA(F, A) = SAM(F, A);
 QF0(F, A)$(fqgiven and FA(F, A)) = fqin(F, A);
@@ -162,16 +170,50 @@ parameters TFA0(AC, AC) "taxes on factor use", tf(AC, AC) "tax rate on factor us
 TFA0(F, A) = sum(FTAXS$ftfac(FTAXS, F), SAM(FTAXS, A));
 abort$(sum((F, A)$(not FA(F, A) and abs(TFA0(F, A)) > tol), 1)) "a tax on factor use where the factor is not used";
 tf(F, A)$FA(F, A) = TFA0(F, A) / SAM(F, A);
-QVA0(A) = sum(F, SAM(F, A) + TFA0(F, A));
+QVA0(A) = sum(F, SAM(F, A) + TFA0(F, A)) + sum(C$NE(C, A), SAM(C, A));
 iva(A) = QVA0(A) / QA0(A);
 inta(A) = QINTA0(A) / QA0(A);
 CDV(A) = yes$(abs(sigva(A) - 1) < 1e-12);
 rva(A)$(not CDV(A)) = 1 / sigva(A) - 1;
-dva(F, A)$(FA(F, A) and CDV(A)) = (SAM(F, A) + TFA0(F, A)) / QVA0(A);
-ad(A)$CDV(A) = QVA0(A) / prod(F$FA(F, A), QF0(F, A)**dva(F, A));
-dva(F, A)$(FA(F, A) and not CDV(A)) = W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rva(A))
-                                       / sum(FP$FA(FP, A), W0(FP) * WFD0(FP, A) * (1 + tf(FP, A)) * QF0(FP, A)**(1 + rva(A)));
-ad(A)$(not CDV(A)) = QVA0(A) / sum(F$FA(F, A), dva(F, A) * QF0(F, A)**(-rva(A)))**(-1 / rva(A));
+* Nests (17.2): each is valued at its members' costs, at a price of one;
+* shares within it follow from the members' prices and quantities
+NFREE(F) = yes$(not sum(NST$NSTF(NST, F), 1));
+parameters VNA0(NST, AC) "base value of a nest", rhn(NST) "exponent of a nest",
+     dvn(NST, AC) "share of a nest in value added", an(NST, AC) "efficiency of a nest",
+     dce(AC, AC) "share of a commodity in its nest", nden(NST, AC), tden(AC);
+VNA0(NST, A) = sum(F$(NSTF(NST, F) and FA(F, A)), SAM(F, A) + TFA0(F, A))
+               + sum(C$(NSTF(NST, C) and NE(C, A)), SAM(C, A));
+NNA(NST, A) = yes$(VNA0(NST, A) > tol);
+abort$(sum(NST$(not sum(A$NNA(NST, A), 1)), 1)) "a nest of value added is used by no activity";
+CDN(NST) = yes$(abs(signest(NST) - 1) < 1e-12);
+rhn(NST)$(not CDN(NST)) = 1 / signest(NST) - 1;
+nden(NST, A)$(NNA(NST, A) and not CDN(NST))
+    = sum(F$(NSTF(NST, F) and FA(F, A)), W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rhn(NST)))
+      + sum(C$(NSTF(NST, C) and NE(C, A)), (1 + tv(C) * (1 - kappa(A))) * QINT0(C, A)**(1 + rhn(NST)));
+dva(F, A)$(FA(F, A) and not NFREE(F))
+    = sum(NST$(NSTF(NST, F) and CDN(NST)), (SAM(F, A) + TFA0(F, A)) / VNA0(NST, A))
+      + sum(NST$(NSTF(NST, F) and not CDN(NST)), W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rhn(NST))
+                                                  / nden(NST, A));
+dce(C, A)$NE(C, A)
+    = sum(NST$(NSTF(NST, C) and CDN(NST)), SAM(C, A) / VNA0(NST, A))
+      + sum(NST$(NSTF(NST, C) and not CDN(NST)), (1 + tv(C) * (1 - kappa(A))) * QINT0(C, A)**(1 + rhn(NST))
+                                                  / nden(NST, A));
+an(NST, A)$(NNA(NST, A) and CDN(NST)) = VNA0(NST, A)
+    / (prod(F$(NSTF(NST, F) and FA(F, A)), QF0(F, A)**dva(F, A)) * prod(C$(NSTF(NST, C) and NE(C, A)), QINT0(C, A)**dce(C, A)));
+an(NST, A)$(NNA(NST, A) and not CDN(NST)) = VNA0(NST, A)
+    / (sum(F$(NSTF(NST, F) and FA(F, A)), dva(F, A) * QF0(F, A)**(-rhn(NST)))
+       + sum(C$(NSTF(NST, C) and NE(C, A)), dce(C, A) * QINT0(C, A)**(-rhn(NST))))**(-1 / rhn(NST));
+* The top of value added: the factors in no nest, and the nests
+dva(F, A)$(FA(F, A) and NFREE(F) and CDV(A)) = (SAM(F, A) + TFA0(F, A)) / QVA0(A);
+dvn(NST, A)$(NNA(NST, A) and CDV(A)) = VNA0(NST, A) / QVA0(A);
+ad(A)$CDV(A) = QVA0(A) / (prod(F$(FA(F, A) and NFREE(F)), QF0(F, A)**dva(F, A))
+                          * prod(NST$NNA(NST, A), VNA0(NST, A)**dvn(NST, A)));
+tden(A)$(not CDV(A)) = sum(F$(FA(F, A) and NFREE(F)), W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rva(A)))
+                       + sum(NST$NNA(NST, A), VNA0(NST, A)**(1 + rva(A)));
+dva(F, A)$(FA(F, A) and NFREE(F) and not CDV(A)) = W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rva(A)) / tden(A);
+dvn(NST, A)$(NNA(NST, A) and not CDV(A)) = VNA0(NST, A)**(1 + rva(A)) / tden(A);
+ad(A)$(not CDV(A)) = QVA0(A) / (sum(F$(FA(F, A) and NFREE(F)), dva(F, A) * QF0(F, A)**(-rva(A)))
+                                + sum(NST$NNA(NST, A), dvn(NST, A) * VNA0(NST, A)**(-rva(A))))**(-1 / rva(A));
 * Top nest: Leontief (siga = 0, or no intermediate inputs), Cobb-Douglas (1) or CES
 PINTA0(A) = sum(C, ica(C, A) * (1 + tv(C) * (1 - kappa(A))));
 LT(A) = yes$(siga(A) = 0 or QINTA0(A) <= 0);
@@ -339,7 +381,7 @@ variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(
      QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
      TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
      SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC), DW(AC),
-     RM(AC), RE(AC), RA(AC);
+     RM(AC), RE(AC), RA(AC), QNA(NST, AC), PNA(NST, AC);
 
 * 16.1 Rents (from version 0.4.4): premiums on imports and exports, per unit
 * of the world price, and rents on activity output, per unit of the activity
@@ -350,11 +392,15 @@ parameters rmto(AC, AC) "recipient of the premium on imports of a commodity",
 rmto(GOVS, C) = 1;
 reto(GOVS, C) = 1;
 rato(GOVS, A) = 1;
+* 17.2: the CES sum at the top of value added of activity za, and within nest zn
+$macro TOPSUM(za) (sum(FP$(FA(FP, za) and NFREE(FP)), dva(FP, za) * (af(FP) * EFF(FP) * DW(FP) * QF(FP, za))**(-rva(za))) + sum(NSTP$NNA(NSTP, za), dvn(NSTP, za) * QNA(NSTP, za)**(-rva(za))))
+$macro NSUM(zn, za) (sum(FP$(NSTF(zn, FP) and FA(FP, za)), dva(FP, za) * (af(FP) * EFF(FP) * DW(FP) * QF(FP, za))**(-rhn(zn))) + sum(CP$(NSTF(zn, CP) and NE(CP, za)), dce(CP, za) * QINT(CP, za)**(-rhn(zn))))
 $macro RENTTO(rr) (sum(C, rmto(rr, C) * RM(C) * pwm(C) * QM(C)) * EXR + sum(C, reto(rr, C) * RE(C) * (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) * EXR + sum(A, rato(rr, A) * RA(A) * PA(A) * QA(A)))
 
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
-     EQ4D(AC, AC), EQ5(AC, AC), EQ6(AC), EH1, EH2(AC), EH3(AC),
+     EQ4D(AC, AC), EQ4N(NST, AC, AC), EQ4M(NST, AC, AC), EN1C(NST, AC), EN1D(NST, AC), EN2C(NST, AC),
+     EN2D(NST, AC), EN3C(NST, AC, AC), EN3D(NST, AC, AC), EQ5(AC, AC), EQ6(AC), EH1, EH2(AC), EH3(AC),
      ET1(AC), ET2(AC), ET3(AC), ET4(AC), ET5(AC), ET6(AC), ET7(AC), ET8(AC), ET9(AC), ET3E(AC), ET10(AC),
      EI1(AC), EI2(AC, AC), EI3(AC), EI4(AC), EI5(AC, AC), EI5H(AC, AC), EI6(AC), EI7(AC), EI8, EI9, EI10(AC), EI11(AC),
      EI12, EI13(AC), EI14, EL1(AC), EL2(AC), ES1(AC), ES2(AC), ES3, ES4, ES5;
@@ -382,15 +428,35 @@ EQ2C(A)$(not LT(A) and not CDA(A))..
     QVA(A) =e= QINTA(A) * ((PINTA(A) / PVA(A)) * dla(A) / dlac(A))**(1 / (1 + rha(A)));
 EQ1D(A)$CDA(A)..  QA(A) =e= aa(A) * QVA(A)**dla(A) * QINTA(A)**dlac(A);
 EQ2D(A)$CDA(A)..  PVA(A) * QVA(A) * dlac(A) =e= PINTA(A) * QINTA(A) * dla(A);
-EQ3C(A)$(not CDV(A))..
-    QVA(A) =e= ad(A) * sum(F$FA(F, A), dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A)))**(-1 / rva(A));
+EQ3C(A)$(not CDV(A))..  QVA(A) =e= ad(A) * TOPSUM(A)**(-1 / rva(A));
 EQ3D(A)$CDV(A)..
-    QVA(A) =e= ad(A) * prod(F$FA(F, A), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A));
-EQ4C(F, A)$(FA(F, A) and not CDV(A))..
-    W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PVA(A) * QVA(A)
-        / sum(FP$FA(FP, A), dva(FP, A) * (af(FP) * EFF(FP) * DW(FP) * QF(FP, A))**(-rva(A)))
+    QVA(A) =e= ad(A) * prod(F$(FA(F, A) and NFREE(F)), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A))
+                     * prod(NST$NNA(NST, A), QNA(NST, A)**dvn(NST, A));
+EQ4C(F, A)$(FA(F, A) and NFREE(F) and not CDV(A))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PVA(A) * QVA(A) / TOPSUM(A)
         * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F) * DW(F);
-EQ4D(F, A)$(FA(F, A) and CDV(A))..  W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
+EQ4D(F, A)$(FA(F, A) and NFREE(F) and CDV(A))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
+* 17.2 Nests of value added: demand for the factors in a nest (EQ4N, EQ4M),
+* the quantity (EN1C, EN1D) and price (EN2C, EN2D) of each nest, and the
+* demand for the commodities in nests (EN3C, EN3D)
+EQ4N(NST, F, A)$(NSTF(NST, F) and FA(F, A) and not CDN(NST))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PNA(NST, A) * QNA(NST, A) / NSUM(NST, A)
+        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rhn(NST) - 1) * af(F) * EFF(F) * DW(F);
+EQ4M(NST, F, A)$(NSTF(NST, F) and FA(F, A) and CDN(NST))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PNA(NST, A) * QNA(NST, A);
+EN1C(NST, A)$(NNA(NST, A) and not CDN(NST))..  QNA(NST, A) =e= an(NST, A) * NSUM(NST, A)**(-1 / rhn(NST));
+EN1D(NST, A)$(NNA(NST, A) and CDN(NST))..
+    QNA(NST, A) =e= an(NST, A) * prod(F$(NSTF(NST, F) and FA(F, A)), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A))
+                               * prod(C$(NSTF(NST, C) and NE(C, A)), QINT(C, A)**dce(C, A));
+EN2C(NST, A)$(NNA(NST, A) and not CDV(A))..
+    PNA(NST, A) =e= PVA(A) * QVA(A) / TOPSUM(A) * dvn(NST, A) * QNA(NST, A)**(-rva(A) - 1);
+EN2D(NST, A)$(NNA(NST, A) and CDV(A))..  PNA(NST, A) * QNA(NST, A) =e= dvn(NST, A) * PVA(A) * QVA(A);
+EN3C(NST, C, A)$(NSTF(NST, C) and NE(C, A) and not CDN(NST))..
+    PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) =e= PNA(NST, A) * QNA(NST, A) / NSUM(NST, A)
+        * dce(C, A) * QINT(C, A)**(-rhn(NST) - 1);
+EN3D(NST, C, A)$(NSTF(NST, C) and NE(C, A) and CDN(NST))..
+    PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * QINT(C, A) =e= dce(C, A) * PNA(NST, A) * QNA(NST, A);
 EQ5(C, A)$ica(C, A)..  QINT(C, A) =e= ica(C, A) * QINTA(A);
 EQ6(C)$CX(C)..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
 EH1$linked..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C));
@@ -435,7 +501,7 @@ EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
                  + sum(C$CE(C), te(C) * (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) * EXR
                  + sum(A, ta(A) * PA(A) * QA(A))
                  + TVADJ * sum(C$tv(C), tv(C) * PQ(C) * (sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
-                       + QSHI(C)$qshibar(C) + sum(A$ica(C, A), (1 - kappa(A)) * QINT(C, A))))
+                       + QSHI(C)$qshibar(C) + sum(A$QIX(C, A), (1 - kappa(A)) * QINT(C, A))))
                  + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI + sum(GOVS, RENTTO(GOVS))
                  + sum((F, A)$FA(F, A), tf(F, A) * W(F) * WFDIST(F, A) * QF(F, A)) + sum(F, tfy(F) * YF(F));
 EI9..     EG =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QG(C)) + (sum(D, trdg(D)) + trgg + trshi) * CPI
@@ -455,7 +521,7 @@ EL2(F)$FL(F)..  (1 - QFS(F) / qlf(F)) + (W(F) / (CPI * wmin(F)) - 1)
 
 * 5.5 System constraints (S6 through the closure)
 ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F);
-ES2(C)$CQ(C)..  QQ(C) =e= sum(A$ica(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
+ES2(C)$CQ(C)..  QQ(C) =e= sum(A$QIX(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                     + QT(C)$CT(C) + QER(C)$CR(C) + QSHI(C)$qshibar(C);
 ES3..     sum(C$CM(C), pwm(C) * QM(C)) + (sum((ROWS, F), YIF(ROWS, F))
               + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D)) + sum(ROWS, RENTTO(ROWS))) / EXR
@@ -498,6 +564,7 @@ WFDIST.l(F, A) = WFD0(F, A);  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(
 SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;  DW.l(F) = 1;
 TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;  LSW.l(F) = 0;  LSM.l(F) = lsm0(F);
 RM.l(C) = 0;  RE.l(C) = 0;  RA.l(A) = 0;
+QNA.l(NST, A) = VNA0(NST, A);  PNA.l(NST, A) = 1$NNA(NST, A);
 
 * Closure (Section 6): 1 = the default of each block
 scalars clext "1 flexible exchange rate, 2 fixed",

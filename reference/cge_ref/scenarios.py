@@ -93,6 +93,71 @@ def factor_tax_cases() -> dict:
     return out
 
 
+# Nests of value added (version 0.5.1): a SYNTHETIC SAM with two labour
+# types, capital and an energy commodity (com_ene), and a payroll tax on
+# skilled labour. Labour types form one nest, capital and energy another.
+NEST_SAM = REPO / "data" / "cge_synthetic_sam_nest.csv"
+NESTS = {"labour": ["lab_hi", "lab_lo"], "ke": ["cap", "com_ene"]}
+NEST_ELASTICITIES = {"labour": 1.5, "ke": 0.4}
+# Mixed elasticities: a Cobb-Douglas labour nest and Cobb-Douglas value added
+# in manufacturing
+NEST_MIXED = {"sigma_va": {"act_agr": 0.5, "act_man": 1.0, "act_ser": 1.5, "act_ene": 0.8},
+              "sigma_nest": {"labour": 1.0, "ke": 0.25}}
+# A nest of capital and manufactures on the VAT layout
+NEST_VAT = {"nests": {"km": ["cap", "com_man"]}, "sigma_nest": 0.5}
+
+
+def nest_mapping() -> Mapping:
+    m = synthetic_mapping()
+    m.activities = ["act_agr", "act_man", "act_ser", "act_ene"]
+    m.commodities = ["com_agr", "com_man", "com_ser", "com_ene"]
+    m.factors = ["lab_hi", "lab_lo", "cap"]
+    m.factor_taxes = {"tax_pay": "lab_hi"}
+    return m
+
+
+def nest_model(nests=None, **settings) -> Model:
+    settings = {**TEST_ELASTICITIES, "nests": NESTS if nests is None else nests,
+                "sigma_nest": NEST_ELASTICITIES, **settings}
+    return Model(SAM.from_csv(NEST_SAM), nest_mapping(), **settings)
+
+
+def nest_shocks(model: Model) -> dict[str, dict]:
+    """Shocks of the nest models: the standard ones, with skilled labour, a
+    rise in the world price of energy and a cut in the payroll tax."""
+    base, p, S = model.base, model.params, model.sets
+    hi, ene, agr = S["F"].index("lab_hi"), S["C"].index("com_ene"), S["A"].index("act_agr")
+    tf = p["tf"].copy()
+    tf[hi] *= 0.5
+    return {
+        "tariff_removal": {"params": {"tm": np.zeros_like(p["tm"])}},
+        "import_price_up10": {"params": {"pwm": p["pwm"] * 1.10}},
+        "skilled_supply_up10": {"fixed": {"QFS": _scaled(base["QFS"], hi, 1.10)}},
+        "energy_price_up50": {"params": {"pwm": _scaled(p["pwm"], ene, 1.5)}},
+        "agri_productivity_up5": {"params": {"ad": _scaled(p["ad"], agr, 1.05)}},
+        "payroll_cut": {"params": {"tf": tf}},
+    }
+
+
+def nest_cases() -> dict:
+    """name -> solution: the nest model, with mixed elasticities, and the
+    nest model with capital specific to each activity (version 0.5.1)."""
+    out = {}
+    m = nest_model()
+    for name, shock in nest_shocks(m).items():
+        out["vnest_" + name] = m.solve(Closure(), tol=1e-12, **shock)
+    mixed = nest_model(**NEST_MIXED)
+    for name in ("energy_price_up50", "skilled_supply_up10"):
+        out["vnest_mixed_" + name] = mixed.solve(Closure(), tol=1e-12, **nest_shocks(mixed)[name])
+    out["vnest_specific_energy_price_up50"] = m.solve(Closure(factors={"cap": "specific"}), tol=1e-12,
+                                                     **nest_shocks(m)["energy_price_up50"])
+    # With VAT that not every activity recovers (12.2): manufactures and
+    # capital in one nest, and the VAT rates up 20 per cent
+    vat = vat_model(**NEST_VAT)
+    out["vnest_vat_rate_up20"] = vat.solve(Closure(), tol=1e-12, params={"tv": vat.params["tv"] * 1.2})
+    return out
+
+
 INSTITUTIONS_SAM = REPO / "data" / "cge_synthetic_sam_inst.csv"
 
 
@@ -628,7 +693,7 @@ REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_
             "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10",
             "wc_tariff_removal", "mwnb_pwm_up50", "hout_gov_health_up20", "hout_epidemic",
             "hout_mortality_up50", "hboth_gov_health_up20", "con_quota_row", "con_capacity",
-            "con_export_quota", "ftax_payroll_cut")
+            "con_export_quota", "ftax_payroll_cut", "vnest_energy_price_up50")
 
 
 def dynamic_cases() -> dict:
@@ -776,6 +841,7 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     solutions.update(swap_cases())
     # Taxes on factor use and income (0.5.0)
     solutions.update(factor_tax_cases())
+    solutions.update(nest_cases())
     written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
                + write_spa(directory) + write_regimes(solutions, directory))
     for name, solution in solutions.items():
