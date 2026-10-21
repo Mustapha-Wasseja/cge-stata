@@ -186,7 +186,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 30 cases. Together they cover:
+There are 31 cases. Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -214,13 +214,17 @@ There are 30 cases. Together they cover:
   combined by a CES function;
 - dynamic runs (from version 0.5.3), with every period solved in order:
   LES demand with population growth, the health link with a growth target and
-  a donor exit, and public debt with debt relief.
+  a donor exit, and public debt with debt relief;
+- user variables and equations (from version 0.6.1): real government savings
+  and nominal government consumption fixed through them, an indexed
+  variable, and an equation with base(), exp() and ln(), which GAMS
+  differentiates itself.
 
 Results (21 October 2026, GAMS 54.2; `tools/gams/export_check_results.csv`):
 
 | Solver | Type | Cases solved | Base, largest relative difference | Scenario, largest relative difference |
 |---|---|---|---|---|
-| PATH | CNS | 25 of 25 | 4.3e-16 | 1.6e-11 |
+| PATH | CNS | 26 of 26 | 4.3e-16 | 1.6e-11 |
 | PATH | MCP, with constraints | 5 of 5 | 2.8e-17 | 2.4e-12 |
 | CONOPT | CNS | 17 of 17 | 4.3e-16 | 3.6e-9 |
 | KNITRO | CNS | 17 of 17 | 4.3e-16 | 1.6e-11 |

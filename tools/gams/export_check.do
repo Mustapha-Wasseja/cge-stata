@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces
+    nests nestvat outces user
 local ncase : word count `cases'
 
 tempname post
@@ -268,6 +268,22 @@ foreach case of local cases {
         quietly cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1) sigmaac(com_man:2)
         cge_shock ad, elements(act_agr) scale(1.05)
         cge_shock pwm, scale(1.1)
+    }
+    * User variables and equations (version 0.6.1): real government savings
+    * and nominal government consumption fixed through them
+    else if "`case'" == "user" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_variable RGSAV = GSAV / CPI
+        cge_variable GEXP = sum(c, PQ(c) * QG(c)), nominal
+        cge_variable PREL(c) = PQ(c) * (1 + tv(c)) / CPI
+        cge_variable LAM, value(1)
+        cge_equation lam: QINV(com_man) = LAM * base(QINV(com_man)) * exp(0 * ln(CPI))
+        quietly cge_closure, swap(RGSAV TINSADJ GEXP GADJ)
+        cge_shock pwm, scale(1.1)
+        cge_shock tm, value(0)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers
     else if "`case'" == "nestvat" {

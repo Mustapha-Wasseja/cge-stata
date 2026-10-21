@@ -560,6 +560,10 @@ ES4..     YG =e= EG + GSAV;
 ES5..     sum(D, MPS(D) * (1 - TINS(D)) * YI(D)) + GSAV + sshi * YSHI + EXR * FSAV
           =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QINV(C)) + WALRAS;
 
+* User variables and equations (from version 0.6.1, model_spec.md, Section
+* 19), written by cge_gams
+$if exist cge_user.inc $include cge_user.inc
+
 model cge / all /;
 * For NLP solvers (--cgetype=nlp): the same equations and a constant objective
 variable OBJ "constant objective";

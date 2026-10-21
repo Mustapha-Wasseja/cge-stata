@@ -136,7 +136,34 @@ is what the closure `fixgsav` does. The optimum is stored as a simulation
 (`name()`, default `optimum`) and left as the current shock. The optimum may
 be local; try other starting values.
 
-## 4.5 Reading a simulation
+## 4.5 User variables and equations: `cge_variable`, `cge_equation`
+
+New relations among the model's variables can be added after calibration
+(from version 0.6.1; model_spec.md, Section 19). A defined variable, swapped
+into the closure, fixes an expression and frees another variable:
+
+```stata
+cge_variable GEXP = sum(c, PQ(c) * QG(c)), nominal   // government purchases, at market prices
+cge_closure, swap(GEXP GADJ)                          // fixed in value; volumes adjust
+cge_shock pwm, scale(1.1)
+cge_solve, name(fixed_budget)
+```
+
+A variable given a value is determined by equations of its own:
+
+```stata
+cge_variable LAM, value(1)
+cge_equation lam: QG(com_ser) = LAM * base(QG(com_ser))
+```
+
+Expressions may use model variables at an element (`PQ(com_hlt)`), the index
+of the equation (`cge_variable PREL(c) = PQ(c) / CPI`), sums over a set
+(`sum(c, ...)`), parameters that `cge_shock` changes (`tv(c)`), `base()` and
+`exp()`, `ln()` and `sqrt()`. `cge_equation, list` lists them, and
+`cge_equation, clear` removes them. They are solved in every simulation, kept
+when the model is calibrated again, and written into the GAMS export.
+
+## 4.6 Reading a simulation
 
 A simulation is a counterfactual equilibrium compared with the base: the
 model has no time in a static run, so a result is the change once the economy

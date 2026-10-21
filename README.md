@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.6.0 implements the standard single-country model described in
+Version 0.6.1 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,11 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.6.1 adds user variables and equations (`cge_variable`, `cge_equation`;
+Section 19), written in a small language that Stata compiles for its solver
+and `cge_gams` writes into the GAMS program. With closure swaps they give new
+closure rules, such as nominal government consumption fixed with volumes
+adjusting.
 Version 0.6.0 adds policy optimisation (`cge_optimize`; Section 18): a few
 instruments, such as a tax rate or a public service, chosen to maximise or
 minimise a report measure, such as household welfare, or to reach targets,

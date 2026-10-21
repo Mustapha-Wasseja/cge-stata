@@ -1,4 +1,4 @@
-*! cge.ado  v0.6.0  2026-10-21
+*! cge.ado  v0.6.1  2026-10-21
 *! cge-stata: computable general equilibrium modelling in Stata
 *! Displays the package version and the available commands
 *!
@@ -9,7 +9,7 @@ program define cge, rclass
     version 13.0
     syntax
 
-    local version "0.6.0"
+    local version "0.6.1"
 
     display as text _n "cge-stata " as result "`version'"
     display as text "Computable general equilibrium modelling in Stata"
@@ -28,6 +28,8 @@ program define cge, rclass
     display as text "  {help cge_closure}     choose the closure"
     display as text "  {help cge_shock}       change parameters or fixed variables"
     display as text "  {help cge_constraint}  limits that may bind: quotas, capacity, borrowing and deficit ceilings"
+    display as text "  {help cge_variable}    user variables, defined by an expression or by user equations"
+    display as text "  {help cge_equation}    user equations: new relations among the model's variables"
     display as text "  {help cge_solve}       solve and store a simulation"
     display as text "  {help cge_optimize}    choose instruments to maximise an outcome or reach targets"
     display as text "  {help cge_dynamic}     solve a recursive dynamic run, period by period"

@@ -49,14 +49,14 @@ program define cge_gams, rclass
     local dir = subinstr(`"`using'"', "\", "/", .)
     if substr(`"`dir'"', -1, 1) == "/" local dir = substr(`"`dir'"', 1, length(`"`dir'"') - 1)
     local written cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc ///
-        cge_shock_par.inc cge_shock_var.inc cge_constraints.inc cge_run.gms
+        cge_shock_par.inc cge_shock_var.inc cge_constraints.inc cge_user.inc cge_user_write.inc cge_run.gms
     local name = cond("`sim'" == "", "current", "`sim'")
     * a dynamic run writes one pair of scenario files and one result file per period
     local results cge_`name'.csv
     if "`dynamic'" != "" {
         local name `dynamic'
         local written cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc ///
-            cge_constraints.inc cge_run.gms
+            cge_constraints.inc cge_user.inc cge_user_write.inc cge_run.gms
         local results
         foreach p of local periods {
             local results `results' cge_`p'.csv

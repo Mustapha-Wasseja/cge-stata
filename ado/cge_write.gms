@@ -43,4 +43,6 @@ put '%2', 'MPSADJ', '', '', MPSADJ.l /;  put '%2', 'IADJ', '', '', IADJ.l /;
 put '%2', 'GADJ', '', '', GADJ.l /;  put '%2', 'WALRAS', '', '', WALRAS.l /;
 put '%2', 'YSHI', '', '', YSHI.l /;  put '%2', 'SHIADJ', '', '', SHIADJ.l /;  put '%2', 'HS', '', '', HS.l /;
 put '%2', 'TQADJ', '', '', TQADJ.l /;  put '%2', 'TMADJ', '', '', TMADJ.l /;  put '%2', 'TVADJ', '', '', TVADJ.l /;
+* user variables (from version 0.6.1), when the model has them
+$if exist cge_user_write.inc $batinclude cge_user_write.inc %1 %2
 putclose %1;

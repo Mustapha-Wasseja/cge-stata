@@ -47,6 +47,10 @@ f ado/cge_shock.ado
 f ado/cge_shock.sthlp
 f ado/cge_constraint.ado
 f ado/cge_constraint.sthlp
+f ado/cge_variable.ado
+f ado/cge_variable.sthlp
+f ado/cge_equation.ado
+f ado/cge_equation.sthlp
 f ado/cge_solve.ado
 f ado/cge_solve.sthlp
 f ado/cge_optimize.ado

@@ -1562,6 +1562,49 @@ objective (to $10^{-9}$) and the solution, and check that a target for
 government savings reached by the direct tax rate reproduces the closure
 `fixgsav` (to $10^{-10}$).
 
+## 19. User variables and equations (from version 0.6.1)
+
+`cge_variable` and `cge_equation` add variables and equations to the
+calibrated model, written in a small language:
+
+- numbers, `+ - * / ^`, parentheses, `exp()`, `ln()` (or `log()`) and
+  `sqrt()`;
+- model and user variables, `VAR` or `VAR(e)` or `VAR(e1, e2)`, at an element
+  or at the index of the equation or of a sum;
+- parameters that `cge_shock` changes, `par(e)`, at their current values;
+- `base(VAR(e))`, the base value of a variable;
+- `sum(i, expression)`, over the set of index `i`: `a` activities, `c`
+  commodities, `f` factors, `h` households, `d` households and enterprises,
+  `i` institutions receiving factor income, `n` nests, with digits allowed,
+  as in `c2`.
+
+`cge_variable NAME(i) = expression` adds the variable $U_i$ and the equation
+$U_i = e_i(x)$ for every element; its base value is $e_i(x^0)$.
+`cge_variable NAME(i), value(v)` adds a free variable without an equation,
+and `cge_equation NAME(i): lhs = rhs` an equation without a variable; each
+must be paired, so that the closure stays square. A defined variable swapped
+into the closure (`cge_closure, swap(NAME VAR)`) fixes the expression and
+frees `VAR`: for example, real government savings $GSAV/CPI$ held at the base
+with the direct tax rate adjusting, which under the CPI numeraire is the
+closure `fixgsav` (the test suites check that the solutions agree to
+$10^{-9}$).
+
+**Compilation.** Each equation is written out for every element of its set,
+and each sum over the elements of its set, then compiled to postfix order:
+numbers, variables (positions in the stacked vector), parameters, operators
+and functions. Stata evaluates the postfix rows at every point; their
+derivatives are found by grouped differences, from a Jacobian pattern built
+from the variables each equation element uses. The equations are a block `U`
+of the system; they are saved with the model and compiled again when it is
+calibrated again.
+
+**GAMS.** `cge_gams` writes the user variables (`U_NAME`, with their base
+levels) and one scalar equation per element (`UE1`, `UE2`, ...) to
+`cge_user.inc`, which `cge_model.gms` includes before the model statement,
+and the results of the user variables to `cge_user_write.inc`. GAMS then
+differentiates the same equations itself: the export check compares the
+solutions.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
