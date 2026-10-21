@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.4.2  2026-10-21
+*! cge_mata.mata  v0.4.3  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -133,7 +133,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.4.2")
+    return("0.4.3")
 }
 
 // =====================================================================
@@ -6936,6 +6936,493 @@ void _cge_spa(string scalar from, string scalar to, real scalar maxlen, real sca
         st_varlabel("total", "Total influence")
         st_varlabel("share", "Per cent of the global influence")
     }
+}
+
+// =====================================================================
+// GAMS export (from version 0.4.3; docs/gams.md)
+// =====================================================================
+
+// A number in a form GAMS reads: the shortest of 15, 16 or 17 significant
+// digits that gives back the same double
+string scalar _cge_gnum(real scalar x)
+{
+    string scalar s
+    if (x == 0) return("0")
+    s = strtrim(sprintf("%25.15g", x))
+    if (strtoreal(s) != x) s = strtrim(sprintf("%25.16g", x))
+    if (strtoreal(s) != x) s = strtrim(sprintf("%25.17g", x))
+    return(s)
+}
+
+real scalar _cge_gopen(string scalar fn)
+{
+    if (fileexists(fn)) unlink(fn)
+    return(fopen(fn, "w"))
+}
+
+// A subset of the accounts, one label to a line
+void _cge_gset(real scalar fh, string scalar name, string colvector labels)
+{
+    real scalar k
+    if (rows(labels) == 0) {
+        fput(fh, "set " + name + "(AC) / /;")
+        return
+    }
+    fput(fh, "set " + name + "(AC) /")
+    for (k = 1; k <= rows(labels); k++) fput(fh, "    '" + labels[k] + "'" + (k < rows(labels) ? "," : ""))
+    fput(fh, "/;")
+}
+
+// A parameter over accounts: its non-zero values
+void _cge_gpar(real scalar fh, string scalar name, string colvector labels, real colvector v)
+{
+    real colvector sel
+    real scalar k
+    sel = select((1::rows(v)), v :!= 0)
+    if (rows(sel) == 0) {
+        fput(fh, "parameter " + name + "(AC) / /;")
+        return
+    }
+    fput(fh, "parameter " + name + "(AC) /")
+    for (k = 1; k <= rows(sel); k++) {
+        fput(fh, "    '" + labels[sel[k]] + "' " + _cge_gnum(v[sel[k]]) + (k < rows(sel) ? "," : ""))
+    }
+    fput(fh, "/;")
+}
+
+// A parameter over pairs of accounts: its non-zero values
+void _cge_gpar2(real scalar fh, string scalar name, string colvector r, string colvector c, real matrix X)
+{
+    real scalar i, j, n, k
+    n = sum(X :!= 0)
+    if (n == 0) {
+        fput(fh, "parameter " + name + "(AC, AC) / /;")
+        return
+    }
+    fput(fh, "parameter " + name + "(AC, AC) /")
+    k = 0
+    for (i = 1; i <= rows(X); i++) {
+        for (j = 1; j <= cols(X); j++) {
+            if (X[i, j] == 0) continue
+            k++
+            fput(fh, "    '" + r[i] + "'.'" + c[j] + "' " + _cge_gnum(X[i, j]) + (k < n ? "," : ""))
+        }
+    }
+    fput(fh, "/;")
+}
+
+void _cge_gscalar(real scalar fh, string scalar name, real scalar v)
+{
+    fput(fh, "scalar " + name + " / " + _cge_gnum(v) + " /;")
+}
+
+// Creates a folder and any of its parents that do not exist
+void _cge_mkdirs(string scalar dir)
+{
+    string scalar d
+    real scalar k
+    d = subinstr(dir, char(92), "/")
+    for (k = 2; k <= strlen(d); k++) {
+        if (substr(d, k, 1) != "/" | substr(d, k - 1, 1) == ":") continue
+        if (!direxists(substr(d, 1, k - 1))) {
+            if (_mkdir(substr(d, 1, k - 1))) _cge_fail("cannot create folder " + substr(d, 1, k - 1), 603)
+        }
+    }
+    if (!direxists(d)) {
+        if (_mkdir(d)) _cge_fail("cannot create folder " + d, 603)
+    }
+}
+
+// The label of a mapped account, or none
+string colvector _cge_gacc(struct cge_model scalar M, real scalar i)
+{
+    if (i > 0 & i < .) return(M.labels[i])
+    return(J(0, 1, ""))
+}
+
+// The data of the model for cge_model.gms: the SAM after the layout rewrites,
+// the roles of its accounts and the settings given at calibration. GAMS
+// calibrates every parameter itself.
+void _cge_gams_data(struct cge_model scalar M, string scalar fn)
+{
+    struct cge_par scalar p
+    string rowvector c
+    string colvector mT
+    real colvector ie, fr, un, gun, wc, gwc, mw, gmw
+    real scalar fh, k, les
+
+    p = M.p0
+    c = M.calargs
+    if (cols(c) < 25) c = c, J(1, 25 - cols(c), "")
+    mT = (rows(M.iT) ? M.labels[M.iT] : J(0, 1, ""))
+    fh = _cge_gopen(fn)
+    fput(fh, "* Data for cge_model.gms, written by cge_gams (cge-stata " + _cge_version() + ")")
+    fput(fh, "* The SAM after the layout rewrites of docs/model_spec.md (Section 7.0), the")
+    fput(fh, "* roles of its accounts and the settings given at calibration; GAMS")
+    fput(fh, "* calibrates every parameter itself")
+    fput(fh, "set AC 'accounts' /")
+    for (k = 1; k <= rows(M.labels); k++) fput(fh, "    '" + M.labels[k] + "'" + (k < rows(M.labels) ? "," : ""))
+    fput(fh, "/;")
+    _cge_gset(fh, "A", M.A)
+    _cge_gset(fh, "C", M.C)
+    _cge_gset(fh, "F", M.F)
+    _cge_gset(fh, "H", M.H)
+    _cge_gset(fh, "E", M.E)
+    _cge_gset(fh, "T", select(mT, M.tmkt :== 0))
+    _cge_gset(fh, "TD", select(mT, M.tmkt :== 1))
+    _cge_gset(fh, "TIM", select(mT, M.tmkt :== 2))
+    _cge_gset(fh, "TEX", select(mT, M.tmkt :== 3))
+    _cge_gset(fh, "XO", select(M.C, M.cxe))
+    _cge_gset(fh, "GOVS", M.labels[M.igov])
+    _cge_gset(fh, "ROWS", M.labels[M.irow])
+    _cge_gset(fh, "SAVS", M.labels[M.isav])
+    _cge_gset(fh, "SHIS", _cge_gacc(M, M.ishi))
+    _cge_gset(fh, "DTAXS", _cge_gacc(M, M.idirtax))
+    _cge_gset(fh, "STAXS", _cge_gacc(M, M.isaltax))
+    _cge_gset(fh, "MTAXS", _cge_gacc(M, M.iimptax))
+    _cge_gset(fh, "ETAXS", _cge_gacc(M, M.iexptax))
+    _cge_gset(fh, "ATAXS", _cge_gacc(M, M.iacttax))
+    _cge_gset(fh, "VTAXS", _cge_gacc(M, M.ivattax))
+    _cge_gset(fh, "HCOM", select(M.C, M.chs))
+    _cge_gpar2(fh, "SAM", M.labels, M.labels, M.S)
+    // Elasticities
+    _cge_gpar(fh, "sigva", M.A, p.sva)
+    _cge_gpar(fh, "sigq", M.C, p.sq)
+    _cge_gpar(fh, "sigt", M.C, p.st)
+    _cge_gpar(fh, "siga", M.A, p.sa)
+    _cge_gpar(fh, "eta", M.F, p.etah)
+    // LES: income elasticities by commodity, Frisch parameters by household;
+    // home goods take the elasticity of the activity's paired commodity
+    les = (c[5] != "" | c[6] != "")
+    if (les) {
+        ie = (c[5] == "" ? J(M.nC, 1, 1) : _cge_elast(c[5], M.nC, "incelas"))
+        fr = strtoreal(tokens(c[6]))'
+        if (rows(fr) == 1) fr = J(M.nH, 1, fr)
+        _cge_gpar(fh, "incel", M.C, ie)
+        _cge_gpar(fh, "frisch", M.H, fr)
+        _cge_gscalar(fh, "les", 1)
+        _cge_gpar(fh, "incelh", M.A, ie[|1 \ M.n|])
+    }
+    else {
+        _cge_gpar(fh, "incel", M.C, J(M.nC, 1, 0))
+        _cge_gpar(fh, "frisch", M.H, J(M.nH, 1, 0))
+        _cge_gscalar(fh, "les", 0)
+        _cge_gpar(fh, "incelh", M.A, J(M.n, 1, 0))
+    }
+    _cge_gpar(fh, "etae", M.C, p.etae)
+    _cge_gpar(fh, "kappain", M.A, p.kappa)
+    // Public debt: the holders and the foreign share of borrowing as calibrated
+    _cge_gscalar(fh, "debtin", p.debt)
+    _cge_gscalar(fh, "ddebtin", p.ddebt)
+    _cge_gscalar(fh, "fdebtin", p.fdebt)
+    _cge_gscalar(fh, "rdin", p.rd)
+    _cge_gscalar(fh, "rfin", p.rf)
+    _cge_gscalar(fh, "holdgiven", 1)
+    _cge_gpar(fh, "holdin", M.D, p.hold)
+    _cge_gscalar(fh, "phigiven", 1)
+    _cge_gscalar(fh, "phiin", p.phi)
+    // Labour-market regimes (Section 14), as given at calibration
+    un = _cge_given(c[18], M.F, "unemployment", gun)
+    wc = _cge_given(c[19], M.F, "wagecurve", gwc)
+    mw = _cge_given(c[20], M.F, "minwage", gmw)
+    _cge_gpar(fh, "unin", M.F, editmissing(un, 0))
+    _cge_gpar(fh, "ungiven", M.F, gun)
+    _cge_gpar(fh, "wcin", M.F, editmissing(wc, 0))
+    _cge_gpar(fh, "mwin", M.F, editmissing(mw, 0))
+    _cge_gpar(fh, "mwgiven", M.F, gmw)
+    _cge_gscalar(fh, "muin", p.mu)
+    // Health outcomes (Section 15); the death rate does not enter the equations
+    _cge_gpar(fh, "sickin", M.F, p.sick0)
+    _cge_gpar(fh, "sickgiven", M.F, p.ins)
+    _cge_gpar(fh, "sickelin", M.F, p.epss)
+    _cge_gscalar(fh, "mortelin", p.epsm)
+    // Factor quantities, when given at calibration
+    _cge_gscalar(fh, "fqgiven", (c[4] != ""))
+    if (c[4] != "") _cge_gpar2(fh, "fqin", M.F, M.A, _cge_v(M, M.x0, _cge_vidx(M, "QF")))
+    else fput(fh, "parameter fqin(AC, AC) / /;")
+    fclose(fh)
+}
+
+// Shockable parameters: Stata name, GAMS name, and index set ("" for scalars)
+string matrix _cge_gams_params()
+{
+    return(("tm", "tm", "C") \ ("te", "te", "C") \ ("tq", "tq", "C") \ ("ta", "ta", "A") \
+           ("tv", "tv", "C") \ ("kappa", "kappa", "A") \ ("pwm", "pwm", "C") \ ("pwe", "pwe", "C") \
+           ("ad", "ad", "A") \ ("af", "af", "F") \ ("qg", "qgbar", "C") \ ("qinv", "qinvbar", "C") \
+           ("trdg", "trdg", "D") \ ("trdr", "trdr", "D") \ ("trfr", "trfr", "F") \ ("trgr", "trgr", "") \
+           ("trrg", "trrg", "") \ ("tshi", "tshi", "F") \ ("qshi", "qshibar", "C") \ ("trshi", "trshi", "") \
+           ("trshir", "trshir", "") \ ("rd", "rd", "") \ ("rf", "rf", "") \ ("ddebt", "ddebt", "") \
+           ("fdebt", "fdebt", "") \ ("qlf", "qlf", "F") \ ("wmin", "wmin", "F") \ ("wref", "wref", "F") \
+           ("sick", "sick", "F"))
+}
+
+string colvector _cge_gams_setlabels(struct cge_model scalar M, string scalar s)
+{
+    if (s == "A") return(M.A)
+    if (s == "C") return(M.C)
+    if (s == "F") return(M.F)
+    if (s == "D") return(M.D)
+    return("")
+}
+
+// GAMS name of a model variable, and of one of its elements
+string scalar _cge_gams_vname(string scalar v)
+{
+    return(v == "PWE" ? "PWEV" : v)
+}
+
+string scalar _cge_gams_elem(string scalar e1, string scalar e2)
+{
+    if (e1 == "") return("")
+    if (e2 == "") return("('" + e1 + "')")
+    return("('" + e1 + "', '" + e2 + "')")
+}
+
+// The scenario as GAMS statements: parameter changes and the closure (fpar),
+// then changes to fixed variables (fvar). Changes are ratios to the base where
+// the base is not zero, so that GAMS applies them to its own calibrated values.
+// Returns the number of changes.
+real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar p, real colvector x,
+                               real colvector fixed, string rowvector cl, string scalar fpar, string scalar fvar)
+{
+    string matrix P
+    string colvector lab, e1, e2
+    string scalar target, g, mode, gov
+    real colvector v0, v1, pos
+    real scalar fh, k, i, n, code
+
+    P = _cge_gams_params()
+    n = 0
+    fh = _cge_gopen(fpar)
+    fput(fh, "* Parameter changes and the closure, written by cge_gams")
+    for (k = 1; k <= rows(P); k++) {
+        v0 = _cge_par_get(M.p0, P[k, 1])
+        v1 = _cge_par_get(p, P[k, 1])
+        lab = _cge_gams_setlabels(M, P[k, 3])
+        for (i = 1; i <= rows(v0); i++) {
+            if (v1[i] == v0[i]) continue
+            target = P[k, 2] + (P[k, 3] == "" ? "" : "('" + lab[i] + "')")
+            fput(fh, target + " = " + (v0[i] != 0 ? _cge_gnum(v1[i] / v0[i]) + " * " + target : _cge_gnum(v1[i])) + ";")
+            n++
+        }
+    }
+    if (p.mort != M.p0.mort) printf("{txt}Note: the death rate (mort) enters only dynamic runs; its change is not exported\n")
+    // Closure: 1 is the default of each block (cge_model.gms)
+    fput(fh, "clext = " + (cl[1] == "flexexr" ? "1" : "2") + ";")
+    gov = cl[2]
+    code = (gov == "flexgsav" ? 1 : (gov == "fixgsav" ? 2 : (gov == "fixgsav:sales" ? 3 :
+           (gov == "fixgsav:import" ? 4 : 5))))
+    fput(fh, "clgov = " + strofreal(code) + ";")
+    fput(fh, "clsi = " + (cl[3] == "savings" ? "1" : "2") + ";")
+    fput(fh, "clnum = " + (cl[4] == "cpi" ? "1" : "2") + ";")
+    for (k = 1; k <= M.nF; k++) {
+        mode = cl[4 + k]
+        mode = substr(mode, strpos(mode, ":") + 1, .)
+        code = (mode == "mobile" ? 1 : (mode == "specific" ? 2 : (mode == "unemployed" ? 3 :
+               (mode == "wagecurve" ? 4 : 5))))
+        fput(fh, "fclo('" + M.F[k] + "') = " + strofreal(code) + ";")
+    }
+    fclose(fh)
+
+    fh = _cge_gopen(fvar)
+    fput(fh, "* Changes to fixed variables, written by cge_gams")
+    for (k = 1; k <= rows(M.vname); k++) {
+        pos = _cge_vpos(M, k)
+        if (!any(M.exists[pos] :* fixed[pos] :* (x[pos] :!= M.x0[pos]))) continue
+        _cge_vlabels(M, k, e1, e2)
+        g = _cge_gams_vname(M.vname[k])
+        for (i = 1; i <= rows(pos); i++) {
+            if (!M.exists[pos[i]] | !fixed[pos[i]] | x[pos[i]] == M.x0[pos[i]]) continue
+            target = g + ".fx" + _cge_gams_elem(e1[i], e2[i])
+            fput(fh, target + " = " + (M.x0[pos[i]] != 0 ? _cge_gnum(x[pos[i]] / M.x0[pos[i]]) + " * " + g + ".l" +
+                 _cge_gams_elem(e1[i], e2[i]) : _cge_gnum(x[pos[i]])) + ";")
+            n++
+        }
+    }
+    fclose(fh)
+    return(n)
+}
+
+// The driver: base, then the scenario, each written as scenario, variable,
+// element1, element2, value
+void _cge_gams_driver(string scalar fn, string scalar name, string scalar solver, string scalar type)
+{
+    real scalar fh
+    fh = _cge_gopen(fn)
+    fput(fh, char(36) + "title cge-stata model exported by cge_gams: " + name)
+    fput(fh, char(36) + "ontext")
+    fput(fh, "Written by cge_gams (cge-stata " + _cge_version() + "). GAMS calibrates the model from the")
+    fput(fh, "SAM and settings in cge_data.inc, solves the base and then scenario " + name + ",")
+    fput(fh, "whose parameter changes and closure are in cge_shock_par.inc and whose")
+    fput(fh, "changes to fixed variables are in cge_shock_var.inc. The equations are in")
+    fput(fh, "cge_model.gms (docs/model_spec.md). To run it:")
+    fput(fh, "  gams cge_run.gms                                    " + solver + ", as " +
+         (type == "nlp" ? "a nonlinear programme" : "a constrained nonlinear system"))
+    fput(fh, "  gams cge_run.gms --cgesolver=conopt                 CONOPT (or KNITRO, PATH)")
+    fput(fh, "  gams cge_run.gms --cgesolver=ipopt --cgetype=nlp    an NLP solver")
+    fput(fh, "Results: cge_base.csv and cge_" + name + ".csv, as scenario, variable, element1,")
+    fput(fh, "element2, value; the first row holds the model status.")
+    fput(fh, char(36) + "offtext")
+    fput(fh, char(36) + "if not set cgesolver " + char(36) + "setglobal cgesolver " + solver)
+    fput(fh, char(36) + "if not set cgetype " + char(36) + "setglobal cgetype " + type)
+    fput(fh, char(36) + "setglobal data cge_data.inc")
+    fput(fh, char(36) + "setglobal out cge_base.csv")
+    fput(fh, char(36) + "include cge_model.gms")
+    fput(fh, "")
+    fput(fh, "* Scenario " + name + ": parameter changes and the closure, then fixed variables")
+    fput(fh, char(36) + "include cge_shock_par.inc")
+    fput(fh, char(36) + "include cge_closure.gms")
+    fput(fh, char(36) + "include cge_shock_var.inc")
+    fput(fh, char(36) + "batinclude cge_solve.gms")
+    fput(fh, "file rescen / 'cge_" + name + ".csv' /;")
+    fput(fh, char(36) + "batinclude cge_write.gms rescen " + name)
+    fclose(fh)
+}
+
+// Writes the data, the scenario and the driver to folder dir, for the current
+// shocks and closure or for stored simulation sim
+void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver, string scalar type)
+{
+    struct cge_model scalar M, M2
+    struct cge_par scalar p
+    real colvector x, fixed
+    string rowvector cl
+    string scalar name
+    real scalar k, n
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (sim == "") {
+        name = "current"
+        p = M.p
+        x = M.xcur
+        fixed = M.fixed
+        cl = tokens(_cge_closure_text(M))
+    }
+    else {
+        k = _cge_sim_index(M, sim)
+        if (M.simrun[k] != "") _cge_fail("simulation " + sim + " is a period of dynamic run " + M.simrun[k] +
+                                         "; cge_gams exports static simulations", 198)
+        name = sim
+        p = M.simp[k]
+        x = M.simx[., k]
+        cl = tokens(M.simclosure[k])
+        M2 = M
+        _cge_closure_apply(M2, cl[1], subinstr(cl[2], ":", " "), cl[3], cl[4],
+                           substr(cl[|5 \ cols(cl)|]', strpos(cl[|5 \ cols(cl)|]', ":") :+ 1, .))
+        fixed = M2.fixed
+    }
+    _cge_gams_data(M, dir + "/cge_data.inc")
+    n = _cge_gams_scenario(M, p, x, fixed, cl, dir + "/cge_shock_par.inc", dir + "/cge_shock_var.inc")
+    _cge_gams_driver(dir + "/cge_run.gms", name, solver, type)
+    st_global("r(name)", name)
+    st_global("r(closure)", invtokens(cl))
+    st_numscalar("r(N_changes)", n)
+    st_numscalar("r(N_accounts)", rows(M.labels))
+    printf("{txt}Wrote the model ({res}%f{txt} accounts) and scenario {res}%s{txt} ({res}%f{txt} change(s) from the base) to {res}%s\n",
+           rows(M.labels), name, n, dir)
+}
+
+// Results written by cge_write.gms: keys "variable|element1|element2", values,
+// and the model status
+void _cge_gams_read(string scalar fn, string colvector key, real colvector val, real scalar status)
+{
+    string colvector lines
+    string rowvector f
+    real scalar k, m
+
+    if (!fileexists(fn)) _cge_fail("GAMS did not write " + fn + "; see cge_run.lst in the folder", 601)
+    lines = cat(fn)
+    key = J(rows(lines), 1, "")
+    val = J(rows(lines), 1, .)
+    status = .
+    m = 0
+    for (k = 2; k <= rows(lines); k++) {
+        f = _cge_unquote(_cge_split(subinstr(lines[k], char(13), ""), ",", `""""'))
+        if (cols(f) < 5) continue
+        if (f[2] == "__status__") {
+            status = strtoreal(f[5])
+            continue
+        }
+        m++
+        key[m] = f[2] + "|" + f[3] + "|" + f[4]
+        val[m] = strtoreal(f[5])
+    }
+    key = (m ? key[|1 \ m|] : J(0, 1, ""))
+    val = (m ? val[|1 \ m|] : J(0, 1, .))
+}
+
+// Largest relative difference, max(|g - s| / max(1, |s|)), between GAMS
+// results and a Stata solution, over the elements that exist in the model;
+// the variable where it occurs in vworst
+real scalar _cge_gams_diff(struct cge_model scalar M, transmorphic A, string colvector key, real colvector val,
+                           real colvector x, string scalar vworst, real scalar nmatch)
+{
+    real scalar k, pos, d, worst
+    worst = 0
+    vworst = ""
+    nmatch = 0
+    for (k = 1; k <= rows(key); k++) {
+        if (!asarray_contains(A, key[k])) continue
+        pos = asarray(A, key[k])
+        if (!M.exists[pos]) continue
+        if (substr(key[k], 1, 7) == "WALRAS|") continue
+        nmatch++
+        d = abs(val[k] - x[pos]) / max((1, abs(x[pos])))
+        if (d >= . | d > worst) {
+            worst = d
+            vworst = substr(key[k], 1, strpos(key[k], "|") - 1)
+            if (d >= .) return(.)
+        }
+    }
+    return(worst)
+}
+
+// Compares the GAMS base and scenario in dir with the Stata base and the
+// current solution or stored simulation sim
+void _cge_gams_compare(string scalar dir, string scalar sim)
+{
+    struct cge_model scalar M
+    transmorphic A
+    string colvector key, e1, e2
+    real colvector val, x, pos
+    string scalar name, vb, vs
+    real scalar k, i, status, bstatus, db, ds, nb, ns, walras
+
+    M = _cge_load()
+    A = asarray_create()
+    for (k = 1; k <= rows(M.vname); k++) {
+        _cge_vlabels(M, k, e1, e2)
+        pos = _cge_vpos(M, k)
+        for (i = 1; i <= rows(pos); i++) asarray(A, M.vname[k] + "|" + e1[i] + "|" + e2[i], pos[i])
+    }
+    if (sim == "") {
+        name = "current"
+        if (!rows(M.simname)) _cge_fail("compare needs a solution: solve the model with cge_solve first, or give sim()", 459)
+        k = rows(M.simname)
+        sim = M.simname[k]
+    }
+    else name = sim
+    k = _cge_sim_index(M, sim)
+    x = M.simx[., k]
+    _cge_gams_read(dir + "/cge_base.csv", key, val, bstatus)
+    db = _cge_gams_diff(M, A, key, val, M.x0, vb, nb)
+    _cge_gams_read(dir + "/cge_" + name + ".csv", key, val, status)
+    ds = _cge_gams_diff(M, A, key, val, x, vs, ns)
+    walras = .
+    for (i = 1; i <= rows(key); i++) if (key[i] == "WALRAS||") walras = val[i]
+    printf("{txt}GAMS model status: base {res}%g{txt}, scenario {res}%g{txt} (1, 2, 15 or 16: solved)\n", bstatus, status)
+    printf("{txt}Base: {res}%f{txt} values compared; largest relative difference {res}%9.2e{txt}%s\n", nb, db,
+           (vb != "" ? " (" + vb + ")" : ""))
+    printf("{txt}Scenario {res}%s{txt} against simulation {res}%s{txt}: {res}%f{txt} values compared; largest relative difference {res}%9.2e{txt}%s\n",
+           name, sim, ns, ds, (vs != "" ? " (" + vs + ")" : ""))
+    st_numscalar("r(modelstat)", status)
+    st_numscalar("r(base_modelstat)", bstatus)
+    st_numscalar("r(base_maxdiff)", db)
+    st_numscalar("r(maxdiff)", ds)
+    st_numscalar("r(N_compared)", ns)
+    st_numscalar("r(walras)", walras)
+    st_global("r(compared_with)", sim)
 }
 
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)

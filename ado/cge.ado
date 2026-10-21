@@ -1,4 +1,4 @@
-*! cge.ado  v0.4.2  2026-10-21
+*! cge.ado  v0.4.3  2026-10-21
 *! cge-stata: computable general equilibrium modelling in Stata
 *! Displays the package version and the available commands
 *!
@@ -9,7 +9,7 @@ program define cge, rclass
     version 13.0
     syntax
 
-    local version "0.4.2"
+    local version "0.4.3"
 
     display as text _n "cge-stata " as result "`version'"
     display as text "Computable general equilibrium modelling in Stata"
@@ -38,6 +38,7 @@ program define cge, rclass
     display as text "  {help cge_parameters}  calibrated parameters as a dataset"
     display as text "  {help cge_save}        save the model and its simulations to a file"
     display as text "  {help cge_use}         load a saved model"
+    display as text "  {help cge_gams}        write the model as a GAMS program; solve it with PATH, CONOPT or IPOPT"
     display as text _n "Data"
     display as text "  {help cge_synthetic}   load the synthetic SAM used in tests and examples"
 

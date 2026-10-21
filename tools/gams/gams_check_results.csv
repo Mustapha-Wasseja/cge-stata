@@ -118,6 +118,13 @@ health outcomes,hout_gov_health_up20,tests/expected,16,137,0,1.110e-16,1.213e-14
 health outcomes,hout_epidemic,tests/expected,16,137,0,1.110e-16,2.792e-13,4.785e-12
 "health outcomes, unemployed labour",hout_epidemic_unemployed,tests/expected,16,137,0,1.110e-16,5.364e-14,2.238e-13
 health outcomes and efficiency,hboth_gov_health_up20,tests/expected,16,138,0,1.110e-16,7.267e-15,4.214e-14
+factor quantities,fq_tariff_removal,Python,16,109,0,4.276e-16,9.852e-14,4.005e-12
+factor quantities,fq_labour_supply_up5,Python,16,109,0,4.276e-16,1.371e-14,4.458e-13
+factor quantities,fq_agri_productivity_up5,Python,16,109,0,4.276e-16,2.510e-13,1.220e-13
+"factor quantities, mixed",fqmix_tariff_removal,Python,16,109,0,4.276e-16,1.851e-13,1.002e-11
+"factor quantities, mixed",fqmix_labour_supply_up5,Python,16,109,0,4.276e-16,1.043e-13,9.717e-12
+"factor quantities, mixed",fqmix_agri_productivity_up5,Python,16,109,0,4.276e-16,1.821e-11,6.021e-11
+"factor quantities, minimum wage",fqmw_import_price_up10,Python,16,111,0,4.276e-16,4.644e-14,5.265e-13
 "standard, closure 1",alt1_tariff_removal,Python,16,109,0,2.776e-17,3.590e-15,6.956e-14
 "standard, closure 1",alt1_import_price_up10,Python,16,109,0,2.776e-17,3.678e-14,1.498e-13
 "standard, closure 1",alt1_agri_productivity_up5,Python,16,109,0,2.776e-17,1.072e-12,1.781e-11

@@ -4,11 +4,13 @@ Computable general equilibrium (CGE) modelling in Stata.
 
 `cge-stata` builds, calibrates and solves single-country CGE models from a
 social accounting matrix (SAM) entirely within Stata and Mata. No external
-modelling system (GAMS, GEMPACK or similar) is required.
+modelling system (GAMS, GEMPACK or similar) is required. From version 0.4.3 the
+model can also be written as a GAMS program, to solve with PATH, CONOPT or
+IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.4.2 implements the standard single-country model described in
+Version 0.4.3 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -77,6 +79,14 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.4.3 writes the model and a scenario as a GAMS program (`cge_gams`;
+[docs/gams.md](docs/gams.md)). GAMS calibrates the model itself from the SAM
+and the calibration settings, with the package's independent GAMS
+implementation of the equations. It can then be solved with PATH, CONOPT or
+KNITRO as a system of equations, or with IPOPT and other NLP solvers, and
+compared with Stata's solution from within Stata. On 17 cases covering every
+model feature and closure, the four solvers reproduce Stata's solutions to
+4e-9 or better.
 Version 0.4.2 adds structural path analysis (`cge_spa`; Defourny and Thorbecke
 1984): the paths along which an injection reaches an account, each with its
 direct influence, path multiplier and total influence, which add up to the

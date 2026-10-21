@@ -1,5 +1,6 @@
-* closure.gms -- bounds, variables that do not exist, and the closure (Section 6)
-* Included by cge_model.gms and cge_scenario.gms. Every variable is freed, then
+* cge_closure.gms -- bounds, variables that do not exist, and the closure (Section 6)
+* Included by cge_model.gms, by cge_scenario.gms (the check) and by the driver
+* that cge_gams writes (cge_run.gms). Every variable is freed, then
 * fixed where the model structure or the closure requires it, at its current level.
 
 PA.lo(AC) = -inf;      PA.up(AC) = inf;      PVA.lo(AC) = -inf;     PVA.up(AC) = inf;

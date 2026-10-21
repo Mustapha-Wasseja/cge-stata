@@ -4,16 +4,25 @@ Independent implementation of the static model of docs/model_spec.md
 (Sections 5 to 7), written from the specification rather than from the Stata
 or Python code. It calibrates from the SAM in the include file %data%, which
 is in the standard layout (after the layout rewrites of Section 7.0), solves
-the base as a constrained nonlinear system (CNS) with PATH, writes the base
-solution to %out%, and saves a work file from which cge_scenario.gms solves
-each scenario.
+the base, writes the base solution to %out%, and can save a work file from
+which a scenario is solved.
 
-Run by tools/gams/run_gams_check.py, for example:
-  gams cge_model.gms --data=data.inc --out=base.csv s=work
+The model is solved as a constrained nonlinear system (CNS, with PATH by
+default) or, with --cgetype=nlp, as a nonlinear programme with a constant
+objective, for NLP solvers such as CONOPT or IPOPT. --cgesolver names the
+solver (path by default).
+
+Used in two ways:
+- by tools/gams/run_gams_check.py, the package's independent check, for example
+    gams cge_model.gms --data=data.inc --out=base.csv s=work
+- by cge_gams (from version 0.4.3), which writes the data of a model in
+  Stata and a driver, cge_run.gms, that includes this file
 $offtext
 
 $if not set data $abort "set --data=<include file>"
 $if not set out $set out base.csv
+$if not set cgesolver $set cgesolver path
+$if not set cgetype $set cgetype cns
 
 * ---------------------------------------------------------------------
 * Data: sets of accounts by role, the SAM and the model settings
@@ -124,18 +133,26 @@ for (it = 1 to 60,
 abort$(smax(C, abs(vstep(C))) > 1e-13) "VAT rates did not converge";
 
 * ---------------------------------------------------------------------
-* 7.3 Production (W0 = WFDIST0 = 1: no factor quantities are supplied)
+* 7.3 Production. Factor quantities may be supplied (fqin, from version
+* 0.4.3); otherwise they are the factor payments, and W0 = WFDIST0 = 1
 * ---------------------------------------------------------------------
 sets FA(AC, AC) "factor used by activity", CDV(AC) "Cobb-Douglas value added",
      LT(AC) "Leontief top nest", CDA(AC) "Cobb-Douglas top nest";
 parameters QINTA0(AC), ica(AC, AC), QF0(AC, AC), QVA0(AC), iva(AC), inta(AC), rva(AC), dva(AC, AC),
-     ad(AC), PINTA0(AC), rha(AC), ratioa(AC), dla(AC), dlac(AC), aa(AC), valuea(AC);
+     ad(AC), PINTA0(AC), rha(AC), ratioa(AC), dla(AC), dlac(AC), aa(AC), valuea(AC),
+     W0(AC) "base wage", WFD0(AC, AC) "base wage distortion";
 parameter QINT0(AC, AC) "intermediate input quantities";
 QINT0(C, A) = SAM(C, A) / (1 + tv(C) * (1 - kappa(A)));
 QINTA0(A) = sum(C, QINT0(C, A));
 ica(C, A)$(QINTA0(A) > 0) = QINT0(C, A) / QINTA0(A);
 FA(F, A) = yes$(SAM(F, A) > tol);
 QF0(F, A)$FA(F, A) = SAM(F, A);
+QF0(F, A)$(fqgiven and FA(F, A)) = fqin(F, A);
+abort$(fqgiven and sum((F, A)$(FA(F, A) and fqin(F, A) <= 0), 1)) "factor quantities must be positive where factor payments are";
+W0(F) = 1;
+W0(F)$fqgiven = sum(A, SAM(F, A)) / sum(A, QF0(F, A));
+WFD0(F, A) = 1;
+WFD0(F, A)$(fqgiven and FA(F, A)) = SAM(F, A) / (W0(F) * QF0(F, A));
 QVA0(A) = sum(F, SAM(F, A));
 iva(A) = QVA0(A) / QA0(A);
 inta(A) = QINTA0(A) / QA0(A);
@@ -143,8 +160,8 @@ CDV(A) = yes$(abs(sigva(A) - 1) < 1e-12);
 rva(A)$(not CDV(A)) = 1 / sigva(A) - 1;
 dva(F, A)$(FA(F, A) and CDV(A)) = SAM(F, A) / QVA0(A);
 ad(A)$CDV(A) = QVA0(A) / prod(F$FA(F, A), QF0(F, A)**dva(F, A));
-dva(F, A)$(FA(F, A) and not CDV(A)) = QF0(F, A)**(1 + rva(A))
-                                       / sum(FP$FA(FP, A), QF0(FP, A)**(1 + rva(A)));
+dva(F, A)$(FA(F, A) and not CDV(A)) = W0(F) * WFD0(F, A) * QF0(F, A)**(1 + rva(A))
+                                       / sum(FP$FA(FP, A), W0(FP) * WFD0(FP, A) * QF0(FP, A)**(1 + rva(A)));
 ad(A)$(not CDV(A)) = QVA0(A) / sum(F$FA(F, A), dva(F, A) * QF0(F, A)**(-rva(A)))**(-1 / rva(A));
 * Top nest: Leontief (siga = 0, or no intermediate inputs), Cobb-Douglas (1) or CES
 PINTA0(A) = sum(C, ica(C, A) * (1 + tv(C) * (1 - kappa(A))));
@@ -289,7 +306,7 @@ scalar mu "smoothing of the minimum-wage condition";
 mu = muin;
 FL(F) = yes$(ungiven(F) or mwgiven(F));
 QFS0(F) = sum(A, QF0(F, A));
-wref(F) = 1 / sum(C, cwts(C) * (1 + tv(C)));
+wref(F) = W0(F) / sum(C, cwts(C) * (1 + tv(C)));
 u0(F) = 1;
 u0(F)$FL(F) = unin(F);
 wmin(F) = wref(F);
@@ -425,12 +442,18 @@ ES5..     sum(D, MPS(D) * (1 - TINS(D)) * YI(D)) + GSAV + sshi * YSHI + EXR * FS
           =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QINV(C)) + WALRAS;
 
 model cge / all /;
+* For NLP solvers (--cgetype=nlp): the same equations and a constant objective
+variable OBJ "constant objective";
+equation EOBJ;
+EOBJ..  OBJ =e= 0;
+model cgenlp / cge, EOBJ /;
+scalar mstat "model status of the last solve";
 
 * ---------------------------------------------------------------------
 * Base values (Section 7.1: base prices normalised to one)
 * ---------------------------------------------------------------------
 PA.l(A) = 1;  PVA.l(A) = 1;  PINTA.l(A) = PINTA0(A);  PX.l(C) = 1;  PD.l(C) = 1;
-PE.l(C) = 1$CE(C);  PM.l(C) = PM0(C);  PQ.l(C) = 1;  W.l(F) = 1;  EXR.l = 1;
+PE.l(C) = 1$CE(C);  PM.l(C) = PM0(C);  PQ.l(C) = 1;  W.l(F) = W0(F);  EXR.l = 1;
 PWEV.l(C) = pwe(C);  QHA.l(A, H) = QHA0(A, H);
 CPI.l = sum(C, cwts(C) * (1 + tv(C)));  DPI.l = sum(C, dwts(C));
 QA.l(A) = QA0(A);  QVA.l(A) = QVA0(A);  QINTA.l(A) = QINTA0(A);  QF.l(F, A) = QF0(F, A);
@@ -439,7 +462,7 @@ QM.l(C) = QM0(C)$CM(C);  QQ.l(C) = QQ0(C);  QH.l(C, H) = QH0(C, H);  QG.l(C) = q
 QINV.l(C) = qinvbar(C);  QFS.l(F) = sum(A, QF0(F, A));  YF.l(F) = YF0(F);  YIF.l(INS, F) = YIF0(INS, F);
 YI.l(D) = YI0(D);  EH.l(H) = EH0(H);  YG.l = YG0;  EG.l = EG0;  GSAV.l = GSAV0;  FSAV.l = FSAV0;
 TINS.l(D) = tins0(D);  MPS.l(D) = mps0(D);  TINSADJ.l = 1;  MPSADJ.l = 1;  IADJ.l = 1;  GADJ.l = 1;
-WFDIST.l(F, A) = 1;  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(C);  YSHI.l = YSHI0;
+WFDIST.l(F, A) = WFD0(F, A);  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(C);  YSHI.l = YSHI0;
 SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;  DW.l(F) = 1;
 TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;  LSW.l(F) = 0;  LSM.l(F) = lsm0(F);
 
@@ -450,21 +473,30 @@ scalars clext "1 flexible exchange rate, 2 fixed",
 parameter fclo(AC) "factor closure: 1 mobile, 2 activity-specific, 3 unemployed, 4 wage curve, 5 minimum wage";
 clext = 1;  clgov = 1;  clsi = 1;  clnum = 1;  fclo(F) = 1;
 
-$include closure.gms
+$include cge_closure.gms
 
-* PATH's convergence tolerance is absolute: scale it to the size of the SAM,
-* within what double precision allows
+* Convergence tolerances are absolute: scale them to the size of the SAM,
+* within what double precision allows. An option file is written for PATH,
+* CONOPT, IPOPT and KNITRO; other solvers use their defaults.
 scalar ptol;
 ptol = max(1e-11, 1e-13 * smax((AC, ACP), abs(SAM(AC, ACP))));
-file pathopt / path.opt /;
+file optf / %cgesolver%.opt /;
 * put files print numbers below .nz as zero (default 1e-5)
-pathopt.nz = 0;
-pathopt.nr = 2;
-pathopt.nd = 3;
-putclose pathopt 'convergence_tolerance ', ptol:0:3 /;
-cge.optfile = 1;
-option cns = path, limrow = 0, limcol = 0, solprint = off;
-solve cge using cns;
+optf.nz = 0;
+optf.nr = 2;
+optf.nd = 3;
+$ifi %cgesolver% == path   putclose optf 'convergence_tolerance ', ptol:0:3 /;
+$ifi %cgesolver% == conopt putclose optf 'rtnwma ', (ptol / max(1, smax((AC, ACP), abs(SAM(AC, ACP))))):0:3 /;
+$ifi %cgesolver% == ipopt  putclose optf 'tol 1e-12' / 'constr_viol_tol ', ptol:0:3 /;
+$ifi %cgesolver% == knitro putclose optf 'feastol_abs ', ptol:0:3 / 'feastol 1e-12' /;
+cge.optfile = 0;
+cgenlp.optfile = 0;
+$ifi %cgesolver% == path   cge.optfile = 1;  cgenlp.optfile = 1;
+$ifi %cgesolver% == conopt cge.optfile = 1;  cgenlp.optfile = 1;
+$ifi %cgesolver% == ipopt  cge.optfile = 1;  cgenlp.optfile = 1;
+$ifi %cgesolver% == knitro cge.optfile = 1;  cgenlp.optfile = 1;
+option limrow = 0, limcol = 0, solprint = off;
+$batinclude cge_solve.gms
 
 file res / '%out%' /;
-$batinclude write.gms res __base__
+$batinclude cge_write.gms res __base__

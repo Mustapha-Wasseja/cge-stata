@@ -1,6 +1,6 @@
 # cge-stata user manual
 
-Version 0.4.2. This manual explains how to build, calibrate and solve a
+Version 0.4.3. This manual explains how to build, calibrate and solve a
 computable general equilibrium (CGE) model from a social accounting matrix
 (SAM) with `cge-stata`, and how to use the results. It is written for
 economists who know Stata and the basics of SAM-based modelling. The model's
@@ -26,6 +26,8 @@ equations are in [docs/model_spec.md](../model_spec.md), the SAM tools in
 8. [Sensitivity analysis and household surveys](08_sensitivity_microsim.md)
 9. [A worked example: from a raw SAM to results](09_worked_example.md)
 10. [Validation, performance and troubleshooting](10_troubleshooting.md)
+11. [Solving the model in GAMS](11_gams.md): writing the model for GAMS,
+    other solvers, comparison with Stata, extending the equations
 
 ## Worked examples
 
@@ -44,5 +46,6 @@ describe no country.
 | `trade_home.do` | home consumption, export demand, export-only commodities, margins by market |
 | `labour_market.do` | unemployment, a wage curve and a minimum wage |
 | `health_outcomes.do` | days lost to illness, the death rate, population and labour |
+| `gams_export.do` | the model as a GAMS program, solved with PATH and IPOPT and compared with Stata |
 
 Every example is run by the Stata test suite (`tests/test_examples.do`).

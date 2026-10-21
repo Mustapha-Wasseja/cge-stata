@@ -1,5 +1,5 @@
-* write.gms -- write the solution: scenario, variable, element1, element2, value
-* $batinclude write.gms <put file> <scenario name>
+* cge_write.gms -- write the solution: scenario, variable, element1, element2, value
+* $batinclude cge_write.gms <put file> <scenario name>
 %1.pc = 5;
 * numbers below .nz would be written as zero (default 1e-5)
 %1.nz = 0;
@@ -8,7 +8,7 @@
 %1.nw = 24;
 put %1;
 put 'scenario', 'variable', 'element1', 'element2', 'value' /;
-put '%2', '__status__', '', '', cge.modelstat /;
+put '%2', '__status__', '', '', mstat /;
 loop(A, put '%2', 'PA', A.tl, '', PA.l(A) /;  put '%2', 'PVA', A.tl, '', PVA.l(A) /;
         put '%2', 'PINTA', A.tl, '', PINTA.l(A) /;  put '%2', 'QA', A.tl, '', QA.l(A) /;
         put '%2', 'QVA', A.tl, '', QVA.l(A) /;  put '%2', 'QINTA', A.tl, '', QINTA.l(A) /);

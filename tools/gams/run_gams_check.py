@@ -1,4 +1,4 @@
-"""Check the model against an independent GAMS implementation (version 0.1.16).
+"""Check the model against an independent GAMS implementation (from version 0.1.16).
 
 tools/gams/cge_model.gms implements docs/model_spec.md in GAMS, written from
 the specification. This script, for every case of the Python test suite:
@@ -15,6 +15,10 @@ the specification. This script, for every case of the Python test suite:
 
 Usage (GAMS with PATH required):
     python tools/gams/run_gams_check.py [--gams C:/GAMS/54/gams.exe] [--work DIR]
+        [--solver path|conopt|knitro|ipopt] [--type cns|nlp] [--only TEXT]
+
+The model files are those installed with the package (ado/cge_model.gms,
+cge_closure.gms, cge_write.gms and cge_solve.gms), which cge_gams also uses.
 
 Writes tools/gams/gams_check_results.csv (one row per scenario). GAMS listing
 files stay in the work directory (outside Dropbox by default); they name the
@@ -42,7 +46,10 @@ from cge_ref import Closure  # noqa: E402
 from cge_ref import scenarios as sc  # noqa: E402
 
 EXPECTED = REPO / "tests" / "expected"
-GAMS_FILES = ("cge_model.gms", "cge_scenario.gms", "closure.gms", "write.gms")
+# The model files are installed with the package (ado/); the restart file
+# for scenarios is part of the check
+MODEL_FILES = ("cge_model.gms", "cge_closure.gms", "cge_write.gms", "cge_solve.gms")
+CHECK_FILES = ("cge_scenario.gms",)
 # Python parameter names and their GAMS names (shockable parameters)
 PARAMS = {"pwm": "pwm", "pwe": "pwe", "tm": "tm", "te": "te", "tq": "tq", "ta": "ta", "ad": "ad",
           "qg": "qgbar", "qinv": "qinvbar", "trdg": "trdg", "trdr": "trdr", "trfr": "trfr",
@@ -72,7 +79,8 @@ def gams_set(name: str, elements, domain: str = "AC") -> str:
 
 
 def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict | None = None,
-               trade: dict | None = None, labour: dict | None = None, outcomes: dict | None = None) -> None:
+               trade: dict | None = None, labour: dict | None = None, outcomes: dict | None = None,
+               fq: dict | None = None) -> None:
     """The prepared SAM, the mapping and the settings supplied by the user (elasticities,
     VAT credit shares, debt and interest rates, unemployment rates, wage-curve
     elasticities and minimum wages, and the shares of working time lost to
@@ -152,6 +160,12 @@ def write_data(model, les: dict | None, path: Path, vat_credit=None, debt: dict 
     lines.append(param("sickgiven", F, [1.0 if f in sick else 0.0 for f in F]))
     lines.append(param("sickelin", F, [sickel.get(f, 0.0) for f in F]))
     lines.append(f"scalar mortelin / {num(outcomes.get('mortality_elasticity') or 0.0)} /;")
+    # Factor quantities (from version 0.4.3): base factor use where given
+    if fq:
+        cells = [f"{q(f)}.{q(a)} {num(v)}" for (f, a), v in fq.items() if v != 0]
+        lines += ["scalar fqgiven / 1 /;", "parameter fqin(AC, AC) /\n" + ",\n".join(cells) + "\n/;"]
+    else:
+        lines += ["scalar fqgiven / 0 /;", "parameter fqin(AC, AC) / /;"]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -242,10 +256,10 @@ def cases() -> list[dict]:
     out = []
 
     def add(label, model, shocks, prefix="", les=None, closure=None, python=False, vat=None, debt=None,
-            trade=None, labour=None, outcomes=None):
+            trade=None, labour=None, outcomes=None, fq=None):
         out.append({"label": label, "model": model, "shocks": shocks, "prefix": prefix, "les": les,
                     "closure": closure or Closure(), "python": python, "vat": vat, "debt": debt,
-                    "trade": trade, "labour": labour, "outcomes": outcomes})
+                    "trade": trade, "labour": labour, "outcomes": outcomes, "fq": fq})
 
     add("standard", std, sc.simulation_inputs(std))
     mixed = sc.synthetic_model(**sc.MIXED_ELASTICITIES)
@@ -364,6 +378,20 @@ def cases() -> list[dict]:
     add("health outcomes and efficiency", both,
         {"gov_health_up20": {"params": {"qg": sc._scaled(both.params["qg"], hlt, 1.2)}}}, "hboth_",
         outcomes=out_settings)
+    # Factor quantities (version 0.4.3): wages and wage distortions differ
+    # from one in the base; CES and mixed elasticities, compared with the
+    # Python reference
+    workers = {("lab", "act_agr"): 80.0, ("lab", "act_man"): 20.0, ("lab", "act_ser"): 30.0,
+               ("cap", "act_agr"): 37.0, ("cap", "act_man"): 40.0, ("cap", "act_ser"): 50.0}
+    for label, settings in (("factor quantities", {}), ("factor quantities, mixed", sc.MIXED_ELASTICITIES)):
+        fqm = sc.synthetic_model(factor_quantities=workers, **settings)
+        sims = sc.simulation_inputs(fqm)
+        pick = {k: sims[k] for k in ("tariff_removal", "labour_supply_up5", "agri_productivity_up5")}
+        add(label, fqm, pick, "fq_" if not settings else "fqmix_", python=True, fq=workers)
+    fqu = sc.synthetic_model(factor_quantities=workers, unemployment={"lab": 0.1})
+    add("factor quantities, minimum wage", fqu,
+        {"import_price_up10": sc.simulation_inputs(fqu)["import_price_up10"]}, "fqmw_", python=True,
+        closure=Closure(factors={"lab": "minwage"}), labour={"unemployment": {"lab": 0.1}}, fq=workers)
     # Alternative closures, compared with the Python reference
     alt1 = Closure(external="fixexr", government="fixgsav", savinv="investment", numeraire="dpi",
                    factors={"cap": "specific"})
@@ -382,7 +410,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--gams", default=shutil.which("gams") or r"C:\GAMS\54\gams.exe")
     ap.add_argument("--work", default=str(Path(tempfile.gettempdir()) / "cge_gams_check"))
+    # Another solver or model type (from version 0.4.3), e.g. --solver conopt,
+    # or --solver ipopt --type nlp; and a filter on the case labels
+    ap.add_argument("--solver", default="path")
+    ap.add_argument("--type", default="cns", choices=("cns", "nlp"))
+    ap.add_argument("--only", default="", help="run only the cases whose label contains this text")
     args = ap.parse_args()
+    solver = [f"--cgesolver={args.solver}", f"--cgetype={args.type}"]
     work = Path(args.work)
     if work.exists():
         shutil.rmtree(work)
@@ -390,14 +424,18 @@ def main() -> None:
     rows = []
     t0 = time.time()
     for n, case in enumerate(cases()):
+        if args.only and args.only not in case["label"]:
+            continue
         d = work / f"case{n:02d}"
         d.mkdir()
-        for f in GAMS_FILES:
+        for f in MODEL_FILES:
+            shutil.copy(REPO / "ado" / f, d / f)
+        for f in CHECK_FILES:
             shutil.copy(HERE / f, d / f)
         model = case["model"]
         write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"], case["trade"], case["labour"],
-                   case["outcomes"])
-        run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work"], d)
+                   case["outcomes"], case["fq"])
+        run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work", *solver], d)
         bstatus, base = read_gams(d / "base.csv")
         for name, shock in case["shocks"].items():
             full = case["prefix"] + name
@@ -405,7 +443,7 @@ def main() -> None:
             (d / f"{full}_p.inc").write_text(par, encoding="utf-8")
             (d / f"{full}_v.inc").write_text(var, encoding="utf-8")
             run_gams(args.gams, ["cge_scenario.gms", "r=work", f"--name={full}", f"--shockpar={full}_p.inc",
-                                 f"--shockvar={full}_v.inc", f"--out={full}.csv", f"o={full}.lst"], d)
+                                 f"--shockvar={full}_v.inc", f"--out={full}.csv", f"o={full}.lst", *solver], d)
             status, value = read_gams(d / f"{full}.csv")
             if case["python"]:
                 sol = model.solve(case["closure"], tol=1e-12, **shock)
@@ -420,7 +458,8 @@ def main() -> None:
             print(f"{case['label']:28s} {full:36s} status {r['gams_modelstat']:2d}  rows {r['rows']:4d}  "
                   f"missing {r['missing']}  base {r['base_maxrel']:.1e}  value {r['value_maxrel']:.1e}  "
                   f"WALRAS {r['walras_abs']:.1e}", flush=True)
-    out = HERE / "gams_check_results.csv"
+    out = HERE / ("gams_check_results.csv" if args.solver == "path" and not args.only
+                  else f"gams_check_results_{args.solver}.csv")
     with out.open("w", newline="", encoding="utf-8") as handle:
         w = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
         w.writeheader()

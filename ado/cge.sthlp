@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.1  20oct2026}{...}
+{* *! version 0.4.3  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -38,6 +38,8 @@ debt with interest.
 {p2col:{helpb cge_aggregate}}merge accounts into groups{p_end}
 {p2col:{helpb cge_balance}}balance the SAM by RAS or cross entropy{p_end}
 {p2col:{helpb cge_samexport}}write the SAM to a file or to memory{p_end}
+{p2col:{helpb cge_multiplier}}SAM multipliers and their decomposition{p_end}
+{p2col:{helpb cge_spa}}structural paths of a SAM multiplier{p_end}
 {p2colreset}{...}
 
 
@@ -46,6 +48,7 @@ debt with interest.
 {p2colset 5 22 24 2}{...}
 {p2col:{helpb cge_map}}assign SAM accounts to model roles, with options or from a template{p_end}
 {p2col:{helpb cge_calibrate}}calibrate the model and check benchmark replication{p_end}
+{p2col:{helpb cge_elasticities}}published elasticities, with sources, as calibration options{p_end}
 {p2col:{helpb cge_closure}}choose the closure{p_end}
 {p2col:{helpb cge_shock}}change parameters or fixed variables{p_end}
 {p2col:{helpb cge_solve}}solve and store a simulation{p_end}
@@ -59,6 +62,7 @@ debt with interest.
 {p2col:{helpb cge_parameters}}calibrated parameters as a dataset{p_end}
 {p2col:{helpb cge_save}}save the model and its simulations{p_end}
 {p2col:{helpb cge_use}}load a saved model{p_end}
+{p2col:{helpb cge_gams}}write the model as a GAMS program; solve it with PATH, CONOPT or IPOPT{p_end}
 {p2col:{helpb cge_synthetic}}load the synthetic SAM used in tests and examples{p_end}
 {p2colreset}{...}
 

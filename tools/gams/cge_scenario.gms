@@ -11,11 +11,13 @@ $if not set name $abort "set --name=<scenario name>"
 $if not set shockpar $abort "set --shockpar=<include file>"
 $if not set shockvar $abort "set --shockvar=<include file>"
 $if not set out $set out %name%.csv
+$if not set cgesolver $set cgesolver path
+$if not set cgetype $set cgetype cns
 
 $include "%shockpar%"
-$include closure.gms
+$include cge_closure.gms
 $include "%shockvar%"
-solve cge using cns;
+$batinclude cge_solve.gms
 
 file rescen / '%out%' /;
-$batinclude write.gms rescen %name%
+$batinclude cge_write.gms rescen %name%
