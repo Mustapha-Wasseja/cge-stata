@@ -1,5 +1,6 @@
-* multipliers.do -- worked example: SAM multipliers, their decomposition, and
-* the same injection in the CGE model (docs/sam_tools.md, Section 6)
+* multipliers.do -- worked example: SAM multipliers, their decomposition, the
+* paths behind them, and the same injection in the CGE model
+* (docs/sam_tools.md, Sections 6 and 7)
 *
 * The synthetic SAM is constructed for testing and describes no country; the
 * elasticities are illustrative.
@@ -22,6 +23,9 @@ cge_multiplier, decompose
 cge_multiplier, inject(com_hlt:10)
 local mult_output = r(output)
 local mult_va = r(value_added)
+
+* The paths by which health spending reaches household income
+cge_spa, from(com_hlt) to(hhd)
 
 * 3. The same spending in the CGE model: factors are fully employed, so health
 *    services expand by drawing factors from other activities, prices adjust,

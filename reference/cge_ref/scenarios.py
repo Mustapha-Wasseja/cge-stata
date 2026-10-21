@@ -439,6 +439,36 @@ def write_multipliers(directory: Path = EXPECTED_DIR) -> list[Path]:
     return written
 
 
+def spa_cases() -> dict:
+    """Structural path analysis (version 0.4.2): name -> (model, origin,
+    destination, maxlength, threshold)."""
+    return {
+        "health": (health_model(), "com_hlt", "hhd", 6, 0.001),
+        "std": (synthetic_model(), "com_agr", "hhd", 6, 0.001),
+        "inst": (institutions_model(), "com_ser", "npi", 8, 0.0001),
+        "sut_all": (sut_model(), "com_fuel", "hhd", 12, 0.0),
+    }
+
+
+def write_spa(directory: Path = EXPECTED_DIR) -> list[Path]:
+    """Paths, with direct influence, path multiplier and total influence, and
+    the global influence on the first line."""
+    from .multipliers import from_model, structural_paths
+    written = []
+    for name, (model, origin, destination, maxlength, threshold) in spa_cases().items():
+        glob, paths = structural_paths(from_model(model), origin, destination, maxlength, threshold)
+        path = directory / f"spa_{name}.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(["path", "length", "direct", "multiplier", "total"])
+            writer.writerow(["_global", 0, f"{glob:.15g}", 1, f"{glob:.15g}"])
+            for q in paths:
+                writer.writerow([" > ".join(q.poles), len(q.poles) - 1, f"{q.direct:.15g}",
+                                 f"{q.multiplier:.15g}", f"{q.total:.15g}"])
+        written.append(path)
+    return written
+
+
 def _scaled(array: np.ndarray, index: int, factor: float) -> np.ndarray:
     out = np.array(array, dtype=float, copy=True)
     out[index] *= factor
@@ -631,7 +661,8 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Labour-market regimes (0.3.3); health outcomes (0.3.4)
     solutions.update(labour_cases())
     solutions.update(outcome_cases())
-    written = write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
+    written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
+               + write_spa(directory))
     for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")

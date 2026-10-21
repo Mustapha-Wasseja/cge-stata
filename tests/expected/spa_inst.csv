@@ -1,0 +1,24 @@
+path,length,direct,multiplier,total
+_global,0,0.0301909468805863,1,0.0301909468805863
+com_ser > act_ser > cap > ent > npi,4,0.00757116898849182,1.91478464340201,0.0144971581117657
+com_ser > act_ser > lab > hhd > npi,4,0.0026246719160105,2.26316440923634,0.00594006406623712
+com_ser > act_ser > cap > ent > hhd > npi,5,0.000894232557695885,2.30754018196647,0.0020634775589059
+com_ser > act_ser > lab > hhd > com_agr > act_agr > cap > ent > npi,8,0.000712634561363797,2.51769116282413,0.00179419373746868
+com_ser > act_ser > lab > hhd > com_man > act_man > cap > ent > npi,8,0.000525053978830611,2.69487728393941,0.00141495604039262
+com_ser > act_ser > cap > hhd > npi,4,0.00046500093000186,2.26316440923634,0.00105237355504201
+com_ser > act_ser > com_man > act_man > cap > ent > npi,6,0.000416761595696798,2.43670662550427,0.00101552574149012
+com_ser > act_ser > com_agr > act_agr > cap > ent > npi,6,0.000215487117364767,2.36015093006909,0.000508582120466363
+com_ser > act_ser > lab > hhd > ent > npi,5,0.000151423379769837,2.30754018196647,0.000349415533308066
+com_ser > act_ser > com_man > act_man > lab > hhd > npi,6,0.000105348070023357,2.64305272078673,0.000278440503104865
+com_ser > act_ser > com_man > act_man > com_agr > act_agr > cap > ent > npi,8,5.93083809260828e-05,2.90795649175745,0.000172466191329626
+com_ser > act_ser > com_agr > act_agr > lab > hhd > npi,6,6.72992798977051e-05,2.46927402507751,0.000166180363757824
+com_ser > act_ser > com_man > act_man > cap > ent > hhd > npi,7,4.92238105153698e-05,2.69487728393941,0.000132652128786808
+com_ser > act_ser > com_man > act_man > cap > hhd > npi,6,2.55963814679923e-05,2.64305272078673,6.76525856812721e-05
+com_ser > act_ser > com_agr > act_agr > cap > ent > hhd > npi,7,2.54512343344213e-05,2.51769116282413,6.40783477667386e-05
+com_ser > act_ser > cap > hhd > ent > npi,5,2.68269767308765e-05,2.30754018196647,6.1904326767177e-05
+com_ser > act_ser > com_man > act_man > com_agr > act_agr > lab > hhd > npi,8,1.85227375865243e-05,2.86330711418562,5.30362863056886e-05
+com_ser > act_ser > com_agr > act_agr > cap > hhd > npi,6,1.32346418538991e-05,2.46927402507751,3.26799573610367e-05
+com_ser > act_ser > com_agr > act_agr > com_man > act_man > cap > ent > npi,8,8.54895580916508e-06,2.90795649175745,2.48599915430092e-05
+com_ser > act_ser > com_man > act_man > lab > hhd > ent > npi,7,6.0777732705783e-06,2.69487728393941,1.63788531238156e-05
+com_ser > act_ser > com_man > act_man > com_agr > act_agr > cap > hhd > npi,8,3.64256197813737e-06,2.86330711418562,1.04297736258628e-05
+com_ser > act_ser > com_agr > act_agr > lab > hhd > ent > npi,7,3.88265076332914e-06,2.51769116282413,9.77531551516613e-06

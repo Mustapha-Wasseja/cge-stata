@@ -117,9 +117,9 @@ def test_expected_files_are_current(tmp_path):
         with path.open(newline="") as fresh, (EXPECTED_DIR / path.name).open(newline="") as stored:
             new_rows, old_rows = list(csv.reader(fresh)), list(csv.reader(stored))
         # Label columns must match exactly and values to a tolerance; a SAM file
-        # (samtools_*) has one label column, a multiplier file two, a results
-        # file three
-        nlab = 1 if path.name.startswith("samtools_") else 2 if path.name.startswith("multipliers_") else 3
+        # (samtools_*) and a path file (spa_*) have one label column, a
+        # multiplier file two, a results file three
+        nlab = 1 if path.name.startswith(("samtools_", "spa_")) else 2 if path.name.startswith("multipliers_") else 3
         assert new_rows[0] == old_rows[0], path.name
         assert [r[:nlab] for r in new_rows] == [r[:nlab] for r in old_rows], path.name
         new = np.array([[float(x) for x in r[nlab:]] for r in new_rows[1:]])

@@ -1,6 +1,6 @@
 # cge-stata user manual
 
-Version 0.4.1. This manual explains how to build, calibrate and solve a
+Version 0.4.2. This manual explains how to build, calibrate and solve a
 computable general equilibrium (CGE) model from a social accounting matrix
 (SAM) with `cge-stata`, and how to use the results. It is written for
 economists who know Stata and the basics of SAM-based modelling. The model's
@@ -14,7 +14,7 @@ equations are in [docs/model_spec.md](../model_spec.md), the SAM tools in
 1. [Introduction](01_introduction.md): what the package does, installation,
    the workflow, and how the package is tested
 2. [Preparing the SAM](02_sam.md): reading, templates, aggregation, balancing,
-   export and multiplier analysis
+   export, multipliers and structural path analysis
 3. [Mapping and calibration](03_calibration.md): model roles, national-accounts
    layouts, elasticities, calibration and the checks
 4. [Closures, shocks and solving](04_simulation.md)
@@ -39,7 +39,7 @@ describe no country.
 | `tariff_removal.do` | a first model: mapping, calibration, a tariff removal under two closures, checks |
 | `sam_preparation.do` | templates, aggregation and balancing by cross entropy and RAS |
 | `elasticities.do` | published elasticities as calibration options |
-| `multipliers.do` | SAM multipliers, their decomposition, and the same injection in the CGE model |
+| `multipliers.do` | SAM multipliers, their decomposition, structural paths, and the same injection in the CGE model |
 | `fiscal_instruments.do` | revenue-neutral tax replacement, VAT with input credits, public debt |
 | `trade_home.do` | home consumption, export demand, export-only commodities, margins by market |
 | `labour_market.do` | unemployment, a wage curve and a minimum wage |

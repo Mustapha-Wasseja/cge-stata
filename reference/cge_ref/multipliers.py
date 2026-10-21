@@ -89,3 +89,51 @@ def multipliers(sam: SAM, mapping: Mapping, endogenous=(), exogenous=(), decompo
 
 def from_model(model, **kwargs) -> Multipliers:
     return multipliers(model.sam, model.mapping, **kwargs)
+
+
+@dataclasses.dataclass
+class Path:
+    poles: list[str]
+    direct: float               # product of the intensities along the path
+    multiplier: float           # det of M on the path's poles
+    total: float                # direct * multiplier
+
+
+def structural_paths(r: Multipliers, origin: str, destination: str, maxlength: int = 6,
+                     threshold: float = 0.001) -> tuple[float, list[Path]]:
+    """Elementary paths from origin to destination (docs/sam_tools.md, Section
+    7; Defourny and Thorbecke 1984), with at most maxlength arcs and a direct
+    influence of at least threshold times the global influence in absolute
+    value. Returns the global influence and the paths, largest total
+    influence first."""
+    if origin not in r.labels or destination not in r.labels:
+        raise SAMError("origin and destination must be endogenous accounts")
+    if origin == destination:
+        raise SAMError("origin and destination must differ")
+    i, j = r.index(origin), r.index(destination)
+    glob = float(r.M[j, i])
+    floor = threshold * abs(glob)
+    A, n = r.A, len(r.labels)
+    found: list[tuple[list[int], float]] = []
+
+    def extend(path: list[int], direct: float) -> None:
+        c = path[-1]
+        for k in range(n):
+            a = A[k, c]
+            if a == 0 or k in path:
+                continue
+            d = direct * a
+            if abs(d) < floor:
+                continue
+            if k == j:
+                found.append((path + [k], d))
+            elif len(path) <= maxlength - 1:
+                extend(path + [k], d)
+
+    extend([i], 1.0)
+    paths = []
+    for poles, d in found:
+        m = float(np.linalg.det(r.M[np.ix_(poles, poles)]))
+        paths.append(Path([r.labels[k] for k in poles], d, m, d * m))
+    paths.sort(key=lambda p: (-abs(p.total), " ".join(p.poles)))
+    return glob, paths

@@ -123,5 +123,5 @@ social accounting matrix framework. {it:Economic Journal} 89(356): 850-873.
 {title:Also see}
 
 {psee}
-{helpb cge_map}, {helpb cge_sam}, {helpb cge}
+{helpb cge_spa}, {helpb cge_map}, {helpb cge_sam}, {helpb cge}
 {p_end}

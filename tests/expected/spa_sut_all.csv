@@ -1,0 +1,14 @@
+path,length,direct,multiplier,total
+_global,0,0.155138916646021,1,0.155138916646021
+com_fuel > trd > com_ser > act_ser > lab > hhd,5,0.037037037037037,2.12926335247934,0.078861605647383
+com_fuel > trd > com_ser > act_ser > cap > hhd,5,0.0308641975308642,2.12926335247934,0.0657180047061525
+com_fuel > trd > com_ser > act_ser > com_man > act_man > cap > hhd,7,0.00124285359184688,2.33240861932366,0.00289884243018103
+com_fuel > trd > com_ser > act_ser > com_man > act_man > lab > hhd,7,0.00108749689286602,2.33240861932366,0.0025364871264084
+com_fuel > trd > com_ser > act_ser > com_agr > act_agr > lab > hhd,7,0.000921319329279528,2.31243746520063,0.0021304933344395
+com_fuel > trd > com_ser > act_ser > com_agr > act_agr > cap > hhd,7,0.000852220379583564,2.31243746520063,0.00197070633435654
+com_fuel > trd > com_ser > act_ser > com_man > act_man > com_agr > act_agr > lab > hhd,9,0.000185500536096549,2.52050608862395,0.00046755523067436
+com_fuel > trd > com_ser > act_ser > com_man > act_man > com_agr > act_agr > cap > hhd,9,0.000171587995889308,2.52050608862395,0.000432488588373783
+com_fuel > trd > com_ser > act_ser > com_agr > act_agr > com_man > act_man > cap > hhd,9,2.47334048128732e-05,2.52050608862395,6.2340697423248e-05
+com_fuel > trd > com_ser > act_ser > com_agr > act_agr > com_man > act_man > lab > hhd,9,2.16417292112641e-05,2.52050608862395,5.4548110245342e-05
+com_fuel > trd > com_ser > act_ser > com_agr > trp > com_man > act_man > cap > hhd,9,1.23667024064366e-06,2.52050608862395,3.1170348711624e-06
+com_fuel > trd > com_ser > act_ser > com_agr > trp > com_man > act_man > lab > hhd,9,1.0820864605632e-06,2.52050608862395,2.7274055122671e-06

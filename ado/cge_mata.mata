@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.4.1  2026-10-21
+*! cge_mata.mata  v0.4.2  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -133,7 +133,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.4.1")
+    return("0.4.2")
 }
 
 // =====================================================================
@@ -6813,6 +6813,128 @@ void _cge_mult(string scalar s_endo, string scalar s_exo, string scalar s_inj, r
         st_varlabel("row", "Account whose income changes")
         st_varlabel("column", "Account injected")
         st_varlabel("multiplier", "Change in income of row per unit injected into column")
+    }
+}
+
+// =====================================================================
+// Structural path analysis (from version 0.4.2; docs/sam_tools.md, Section 7)
+// =====================================================================
+
+// Elementary paths from the last pole of path to pole j, depth first: each
+// found path is a row of P (its poles, padded with zeros) with its direct
+// influence in D. A path is dropped, with its extensions, once its direct
+// influence falls below floor in absolute value; paths have at most maxlen
+// arcs. Mata passes P and D by address, so the calls add to them.
+void _cge_spa_extend(real matrix A, real scalar j, real rowvector path, real scalar d, real scalar floor,
+                     real scalar maxlen, real matrix P, real colvector D)
+{
+    real scalar c, k, a, dk
+    c = path[cols(path)]
+    for (k = 1; k <= rows(A); k++) {
+        a = A[k, c]
+        if (a == 0) continue
+        if (anyof(path, k)) continue
+        dk = d * a
+        if (abs(dk) < floor) continue
+        if (k == j) {
+            P = P \ (path, k, J(1, maxlen - cols(path), 0))
+            D = D \ dk
+            if (rows(D) > 100000) {
+                _cge_fail("more than 100,000 paths: raise threshold() or lower maxlength()", 459)
+            }
+        }
+        else if (cols(path) <= maxlen - 1) _cge_spa_extend(A, j, (path, k), dk, floor, maxlen, P, D)
+    }
+}
+
+void _cge_spa(string scalar from, string scalar to, real scalar maxlen, real scalar threshold, real scalar top,
+              string scalar s_endo, string scalar s_exo, real scalar load)
+{
+    struct cge_model scalar M
+    real colvector idx, blk, t, D, Mp, T, o, poles
+    real matrix A, Ma, P
+    string colvector L, ps
+    real scalar n, i, j, glob, k, np, expl
+    string scalar s
+
+    M = _cge_load()
+    _cge_need(M, "mapped")
+    _cge_mult_accounts(M, s_endo, s_exo, idx, blk)
+    n = rows(idx)
+    L = M.labels[idx]
+    t = colsum(M.S)'
+    t = t[idx]
+    A = M.S[idx, idx] :/ (t' + (t' :== 0))
+    Ma = luinv(I(n) - A)
+    if (hasmissing(Ma)) {
+        _cge_fail("I - A is singular: some payments among the endogenous accounts never leak to an exogenous account; make one of them exogenous", 459)
+    }
+    i = _cge_find(L, from)
+    j = _cge_find(L, to)
+    if (!i) _cge_fail("from(): " + from + " is not an endogenous account", 198)
+    if (!j) _cge_fail("to(): " + to + " is not an endogenous account", 198)
+    if (i == j) _cge_fail("from() and to() must differ", 198)
+    glob = Ma[j, i]
+    P = J(0, maxlen + 1, 0)
+    D = J(0, 1, .)
+    _cge_spa_extend(A, j, i, 1, threshold * abs(glob), maxlen, P, D)
+    np = rows(D)
+    Mp = J(np, 1, .)
+    ps = J(np, 1, "")
+    for (k = 1; k <= np; k++) {
+        poles = select(P[k, .], P[k, .] :!= 0)'
+        Mp[k] = det(Ma[poles, poles])
+        ps[k] = invtokens(L[poles]', " > ")
+    }
+    T = D :* Mp
+    expl = sum(T)
+    o = order((-abs(T), (1::np)), (1, 2))
+
+    printf("\n{txt}Structural paths from {res}%s{txt} to {res}%s{txt} (Defourny and Thorbecke 1984)\n", from, to)
+    printf("{txt}Global influence (the multiplier): {res}%9.4g\n", glob)
+    printf("{txt}%f path%s with at most %f arcs and a direct influence of at least %g times the global influence\n",
+           np, (np == 1 ? "" : "s"), maxlen, threshold)
+    if (np) {
+        printf("{txt}{hline 78}\n")
+        printf("{txt}%10s %10s %10s %8s  %s\n", "Total", "Direct", "Path mult.", "% global", "Path")
+        printf("{txt}{hline 78}\n")
+        for (k = 1; k <= min((np, top)); k++) {
+            s = ps[o[k]]
+            printf("{res}%10.4g %10.4g %10.4f %8.2f  {txt}%s\n", T[o[k]], D[o[k]], Mp[o[k]],
+                   (glob != 0 ? 100 * T[o[k]] / glob : .), s)
+        }
+        printf("{txt}{hline 78}\n")
+        if (np > top) printf("{txt}The %f largest of %f paths are shown; {cmd:clear} loads them all\n", top, np)
+        printf("{txt}The %f paths explain {res}%6.2f{txt} per cent of the global influence\n", np,
+               (glob != 0 ? 100 * expl / glob : .))
+    }
+    st_numscalar("r(global)", glob)
+    st_numscalar("r(N_paths)", np)
+    st_numscalar("r(explained)", expl)
+    st_numscalar("r(share)", (glob != 0 ? 100 * expl / glob : .))
+    if (np) {
+        st_global("r(path1)", ps[o[1]])
+        st_numscalar("r(total1)", T[o[1]])
+    }
+    if (load) {
+        if (np) st_addobs(np)
+        k = (np ? max(strlen(ps)) : 1)
+        (void) st_addvar((k > 244 ? "strL" : "str" + strofreal(k)), "path")
+        (void) st_addvar("double", ("length", "direct", "multiplier", "total", "share"))
+        if (np) {
+            st_sstore(., "path", ps[o])
+            st_store(., "length", rowsum(P[o, .] :!= 0) :- 1)
+            st_store(., "direct", D[o])
+            st_store(., "multiplier", Mp[o])
+            st_store(., "total", T[o])
+            st_store(., "share", 100 :* T[o] :/ glob)
+        }
+        st_varlabel("path", "Path from " + from + " to " + to)
+        st_varlabel("length", "Number of arcs")
+        st_varlabel("direct", "Direct influence")
+        st_varlabel("multiplier", "Path multiplier")
+        st_varlabel("total", "Total influence")
+        st_varlabel("share", "Per cent of the global influence")
     }
 }
 

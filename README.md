@@ -8,7 +8,7 @@ modelling system (GAMS, GEMPACK or similar) is required.
 
 ## Status
 
-Version 0.4.1 implements the standard single-country model described in
+Version 0.4.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -77,6 +77,10 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.4.2 adds structural path analysis (`cge_spa`; Defourny and Thorbecke
+1984): the paths along which an injection reaches an account, each with its
+direct influence, path multiplier and total influence, which add up to the
+multiplier.
 Version 0.4.1 adds SAM multiplier analysis (`cge_multiplier`; Pyatt and Round
 1979): the accounting multipliers of the mapped SAM, their decomposition into
 transfer, open-loop and closed-loop effects, and the fixed-price effects of

@@ -296,7 +296,39 @@ and average propensities equal to marginal ones; they are upper bounds on
 the effects that a CGE model, with its supply constraints and price changes,
 would find. They complement the CGE model; they do not replace it.
 
-## 7. Testing
+## 7. Structural path analysis (from version 0.4.2)
+
+`cge_spa` decomposes one accounting multiplier into the paths along which an
+injection travels through the SAM (Defourny and Thorbecke 1984). The accounts
+are the poles of a graph; there is an arc from pole $i$ to pole $j$ when $j$
+receives part of $i$'s spending, with intensity $A_{ji}$ (Section 6.1). An
+elementary path $p$ from origin $i$ to destination $j$ is a sequence of arcs
+that passes through no pole twice.
+
+- The **direct influence** of $i$ on $j$ along $p$ is the product of the
+  intensities of its arcs, $I^D_p = A_{k_1 i} A_{k_2 k_1} \cdots A_{j k_{m}}$:
+  the effect along the path with every other account held fixed.
+- The **path multiplier** $M_p$ adds the feedback of the loops that start and
+  end at the poles of $p$. With $P$ the set of poles of $p$,
+  $$M_p = \frac{\det\big((I - A)_{-P,-P}\big)}{\det(I - A)} = \det\big(M_{P,P}\big),$$
+  where $(I - A)_{-P,-P}$ leaves out the rows and columns of $P$ and
+  $M_{P,P}$ is the block of $M = (I - A)^{-1}$ on $P$; the two are equal by
+  Jacobi's identity for complementary minors, and the second needs only a
+  small determinant.
+- The **total influence** along $p$ is $I^T_p = I^D_p M_p$.
+- The **global influence** of $i$ on $j$ is the multiplier $M_{ji}$, and it is
+  the sum of the total influences along all elementary paths from $i$ to $j$
+  ($i \neq j$).
+
+The number of elementary paths grows quickly with the size of the SAM, so the
+search stops at paths of `maxlength()` arcs (default 6) and drops a path, and
+every extension of it, once its direct influence falls below `threshold()`
+times the global influence in absolute value (default 0.001). With intensities
+no larger than one, as when a SAM has no negative cells, extensions can only
+lower the direct influence, so no path above the threshold is missed. The
+share of the global influence explained by the paths found is reported.
+
+## 8. Testing
 
 The Python reference (`reference/cge_ref/samtools.py`) implements aggregation,
 GRAS and the cross-entropy method; its results for a SYNTHETIC unbalanced SAM
@@ -315,7 +347,11 @@ The Stata tests compare:
   accounts (`reference/cge_ref/multipliers.py`, `tests/expected/multipliers_*`),
   injections against the expected multipliers, and the identities of the
   decomposition; the Python tests add a SAM whose multipliers are worked by
-  hand.
+  hand;
+- structural paths for four layouts (`tests/expected/spa_*`), including every
+  elementary path of one, whose total influences add up to the multiplier; the
+  Python tests check that identity on five pairs of accounts, the path
+  multiplier against the ratio of determinants, and a hand-worked path.
 
 ## References
 
@@ -335,3 +371,7 @@ Research* 13(1): 47–64.
 
 Pyatt, G. and J. I. Round (1979). Accounting and fixed price multipliers in a
 social accounting matrix framework. *Economic Journal* 89(356): 850–873.
+
+Defourny, J. and E. Thorbecke (1984). Structural path analysis and multiplier
+decomposition within a social accounting matrix framework. *Economic Journal*
+94(373): 111–136.

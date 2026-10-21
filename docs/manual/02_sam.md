@@ -134,6 +134,24 @@ multiplier effect of 25.8 on gross output, while the CGE model, with factors
 fully employed and the deficit crowding out investment, finds a fall of 3.1.
 Report the two together, with their assumptions.
 
+**Structural paths.** `cge_spa` shows how a multiplier builds up along chains
+of payments (Defourny and Thorbecke 1984; [sam_tools.md](../sam_tools.md),
+Section 7):
+
+```stata
+cge_spa, from(com_hlt) to(hhd)
+```
+
+Each path, such as health services > health activity > labour > households,
+has a direct influence (the product of the spending shares along it), a path
+multiplier (the feedback of the loops through its accounts) and a total
+influence, their product; the total influences of all paths add up to the
+multiplier. On the synthetic health SAM, the path through labour carries 64
+per cent of the effect of health spending on household income and the path
+through capital 22 per cent; paths through other sectors' intermediate inputs
+carry the rest. `maxlength()` and `threshold()` limit the search, and the
+share of the multiplier explained by the paths found is reported.
+
 ## 2.7 The synthetic SAMs
 
 `cge_synthetic` loads the SYNTHETIC SAMs used in the tests and examples. They
@@ -145,6 +163,10 @@ load other layouts: `national` (national-accounts conventions), `institutions`
 and an insurance fund), `unbalanced`, `vat`, `home` and `trade`.
 
 ## References
+
+Defourny, J. and E. Thorbecke (1984). Structural path analysis and multiplier
+decomposition within a social accounting matrix framework. *Economic Journal*
+94(373): 111-136.
 
 Pyatt, G. and J. I. Round (1979). Accounting and fixed price multipliers in a
 social accounting matrix framework. *Economic Journal* 89(356): 850-873.

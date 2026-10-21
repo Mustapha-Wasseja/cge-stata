@@ -7,7 +7,7 @@ d Cobb-Douglas value added, CET exports, Armington imports,
 d households, government, savings-investment and the rest of the
 d world, with selectable closures and built-in validation checks; SAM tools
 d for reading SAMs of any size, mapping templates, aggregation and RAS or
-d cross-entropy balancing; SAM multipliers; a library of published elasticities, with sources.
+d cross-entropy balancing; SAM multipliers and structural path analysis; a library of published elasticities, with sources.
 d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja
@@ -31,6 +31,8 @@ f ado/cge_samexport.ado
 f ado/cge_samexport.sthlp
 f ado/cge_multiplier.ado
 f ado/cge_multiplier.sthlp
+f ado/cge_spa.ado
+f ado/cge_spa.sthlp
 f ado/cge_map.ado
 f ado/cge_map.sthlp
 f ado/cge_calibrate.ado

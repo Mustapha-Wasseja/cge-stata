@@ -107,3 +107,58 @@ def test_errors():
     # a tax account paid by commodities, in the institutions block
     with pytest.raises(SAMError, match="circular block structure"):
         from_model(model, endogenous=["tax_sal"], decompose=True)
+
+
+# Structural path analysis (version 0.4.2; docs/sam_tools.md, Section 7)
+from cge_ref.multipliers import structural_paths  # noqa: E402
+
+
+def test_paths_hand_worked_case():
+    sam, m = toy()
+    r = multipliers(sam, m)
+    glob, paths = structural_paths(r, "com", "hhd")
+    # one path: com -> act -> lab -> hhd, direct 1 * 0.5 * 1; its poles are all
+    # the accounts, so the path multiplier is 1 / det(I - A) = 1 / 0.6
+    assert len(paths) == 1 and paths[0].poles == ["com", "act", "lab", "hhd"]
+    assert paths[0].direct == pytest.approx(0.5)
+    assert paths[0].multiplier == pytest.approx(1 / 0.6)
+    assert paths[0].total == pytest.approx(glob)
+
+
+@pytest.mark.parametrize("make,origin,destination", [
+    (synthetic_model, "com_agr", "hhd"), (health_model, "com_hlt", "hhd"),
+    (institutions_model, "com_ser", "npi"), (institutions_model, "lab", "ent"),
+    (sut_model, "com_fuel", "hhd")])
+def test_total_influences_add_up_to_the_multiplier(make, origin, destination):
+    r = from_model(make())
+    glob, paths = structural_paths(r, origin, destination, maxlength=len(r.labels), threshold=0)
+    assert glob == r.M[r.index(destination), r.index(origin)]
+    assert sum(p.total for p in paths) == pytest.approx(glob, rel=1e-12)
+    # every path is elementary and ends at the destination
+    for p in paths:
+        assert len(set(p.poles)) == len(p.poles) and p.poles[0] == origin and p.poles[-1] == destination
+
+
+def test_path_multiplier_is_a_ratio_of_determinants():
+    r = from_model(health_model())
+    glob, paths = structural_paths(r, "com_hlt", "hhd")
+    n = len(r.labels)
+    full = np.linalg.det(np.eye(n) - r.A)
+    for p in paths:
+        keep = [k for k in range(n) if r.labels[k] not in p.poles]
+        sub = np.linalg.det((np.eye(n) - r.A)[np.ix_(keep, keep)])
+        assert p.multiplier == pytest.approx(sub / full, rel=1e-10)
+        direct = np.prod([r.A[r.index(b), r.index(a)] for a, b in zip(p.poles, p.poles[1:])])
+        assert p.direct == pytest.approx(direct, rel=1e-14)
+
+
+def test_path_limits():
+    r = from_model(health_model())
+    glob, paths = structural_paths(r, "com_hlt", "hhd", maxlength=3)
+    assert all(len(p.poles) <= 4 for p in paths)
+    glob, paths = structural_paths(r, "com_hlt", "hhd", threshold=0.1)
+    assert all(abs(p.direct) >= 0.1 * abs(glob) for p in paths)
+    with pytest.raises(SAMError, match="must differ"):
+        structural_paths(r, "hhd", "hhd")
+    with pytest.raises(SAMError, match="endogenous"):
+        structural_paths(r, "gov", "hhd")
