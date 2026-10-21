@@ -14,6 +14,35 @@ smaller ones, the full system.
 python tools/bench/run_bench.py [--sizes 40x5,80x10,120x10,160x20,200x20,250x20] [--full-up-to 120]
 ```
 
+## Result with one-sided differences (version 0.6.3, 21 October 2026; Windows laptop)
+
+```
+python tools/bench/run_bench.py --sizes 40x5,80x10,120x10,160x20,200x20,250x20 --full-up-to 0 --gams C:/GAMS/54/gams.exe
+python tools/bench/run_bench.py --stata "C:/Program Files/StataNow19/StataMP-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20 --full-up-to 0 --gams C:/GAMS/54/gams.exe --out tools/bench/bench_results_statanow19.csv
+```
+
+From version 0.6.3 Newton's Jacobian is built with one-sided differences: one
+evaluation of the equations for each group of columns instead of two. Each
+model is solved, exported, solved by GAMS and imported as for version 0.6.2
+below; `bench_results.csv` (Stata 13.1/IC) and `bench_results_statanow19.csv`
+(StataNow/MP 19.5) hold these results. The last two columns give the larger
+value of the two Stata runs.
+
+| Activities | Households | Accounts | Equations | Solved (reduced) | Jacobians | Stata 13.1/IC (s) | StataNow/MP 19.5, 4 cores (s) | GAMS, whole run (s) | GAMS solution in Stata: residual | Stata vs GAMS |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 40 | 5 | 95 | 1,814 | 711 | 3 | 0.4 | 0.5 | 1.8 | 2e-13 | 5e-12 |
+| 80 | 10 | 180 | 5,446 | 1,407 | 4 | 2.7 | 2.7 | 1.8 | 3e-13 | 9e-12 |
+| 120 | 10 | 260 | 10,555 | 2,045 | 3 | 5.0 | 3.5 | 2.0 | 5e-13 | 3e-11 |
+| 160 | 20 | 350 | 18,483 | 2,757 | 1 | 6.0 | 5.6 | 2.5 | 1e-13 | 6e-11 |
+| 200 | 20 | 430 | 26,858 | 3,418 | 4 | 37.8 | 32.3 | 2.6 | 8e-13 | 5e-12 |
+| 250 | 20 | 530 | 40,190 | 4,254 | 6 | 95.8 | 71.7 | 4.7 | 2e-09 | 3e-09 |
+
+On the 200-activity model, in runs one after the other that alternated the
+two methods, one-sided differences shortened the solve from 67.5 and 65.8
+seconds to 47.5 and 43.8 in Stata 13.1/IC, and from 54.8 and 53.2 to 28.5 and
+31.0 in StataNow/MP 19.5 on four cores. Both methods took 15 iterations and 4
+Jacobians, and their solutions agree to 2e-13.
+
 ## Result with GAMS (version 0.6.2, 21 October 2026; Windows laptop)
 
 ```
@@ -27,7 +56,7 @@ into Stata (`cge_gams ..., import()`), where it is checked against the
 model's equations and compared with Stata's solution. The GAMS time is the
 whole run: GAMS calibrates the model from the SAM, solves the base and then
 the scenario. The last two columns give the larger value of the two Stata
-runs.
+runs. Version 0.6.2 built the Jacobian with central differences.
 
 | Activities | Households | Accounts | Equations | Solved (reduced) | Jacobians | Stata 13.1/IC (s) | StataNow/MP 19.5, 4 cores (s) | GAMS, whole run (s) | GAMS solution in Stata: residual | Stata vs GAMS |
 |---|---|---|---|---|---|---|---|---|---|---|

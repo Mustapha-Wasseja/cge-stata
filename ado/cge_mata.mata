@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.6.2  2026-10-21
+*! cge_mata.mata  v0.6.3  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -194,7 +194,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.6.2")
+    return("0.6.3")
 }
 
 // =====================================================================
@@ -4992,31 +4992,38 @@ struct cge_jpat scalar _cge_jpat_make(struct cge_model scalar M, struct cge_sys 
     return(G)
 }
 
-// Central-difference Jacobian by groups of columns: one pair of residual
-// evaluations per group gives the derivatives of all its columns
+// Finite-difference Jacobian by groups of columns: the residuals at one
+// perturbed point per group give the derivatives of all its columns. With
+// f0, the residuals at z, the differences are one-sided (from version 0.6.3:
+// one evaluation per group); without it, central (two per group).
 real matrix _cge_jacobian(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
-                          struct cge_sys scalar S, real colvector z, struct cge_jpat scalar G)
+                          struct cge_sys scalar S, real colvector z, struct cge_jpat scalar G,
+                          | real colvector f0)
 {
     real matrix Jac
     real colvector h, zp, zm, d, cols, rr, x, esc
     real matrix D
-    real scalar g, k, j
+    real scalar g, k, j, fwd
 
+    fwd = (args() >= 7 ? rows(f0) > 0 : 0)
     Jac = J(S.neq, rows(z), 0)
-    h = 1e-6 :* rowmax((J(rows(z), 1, 1), abs(z)))
+    h = (fwd ? 1e-7 : 1e-6) :* rowmax((J(rows(z), 1, 1), abs(z)))
     for (g = 1; g <= G.ncolour; g++) {
         cols = G.gcol[|G.gstart[g] \ G.gstart[g + 1] - 1|]
         zp = z
-        zm = z
         zp[cols] = z[cols] + h[cols]
-        zm[cols] = z[cols] - h[cols]
-        d = _cge_F(M, p, xfix, S, zp) - _cge_F(M, p, xfix, S, zm)
+        if (fwd) d = _cge_F(M, p, xfix, S, zp) - f0
+        else {
+            zm = z
+            zm[cols] = z[cols] - h[cols]
+            d = _cge_F(M, p, xfix, S, zp) - _cge_F(M, p, xfix, S, zm)
+        }
         if (hasmissing(d)) return(J(S.neq, rows(z), .))
         for (k = 1; k <= rows(cols); k++) {
             j = cols[k]
             if (G.cstart[j + 1] == G.cstart[j]) continue
             rr = G.crow[|G.cstart[j] \ G.cstart[j + 1] - 1|]
-            Jac[rr, j] = d[rr] :/ (2 * h[j])
+            Jac[rr, j] = d[rr] :/ ((fwd ? 1 : 2) * h[j])
         }
     }
     x = xfix
@@ -5052,7 +5059,7 @@ real matrix _cge_jacobian_full(struct cge_model scalar M, struct cge_par scalar 
 // Test hook: the grouped and column-by-column Jacobians at the current point,
 // with the current shocks and closure, for the reduced system (the default)
 // or the full one
-void _cge_jaccheck(| real scalar full)
+void _cge_jaccheck(| real scalar full, real scalar forward)
 {
     struct cge_model scalar M
     struct cge_jpat scalar G
@@ -5061,18 +5068,51 @@ void _cge_jaccheck(| real scalar full)
     real matrix A, B
 
     if (args() == 0) full = 0
+    if (args() < 2) forward = 0
     M = _cge_load()
     _cge_need(M, "calibrated")
     S = _cge_sys_make(M, !full)
     z = M.xcur[S.free] :/ M.xscale[S.free]
     G = _cge_jpat_make(M, S)
-    A = _cge_jacobian(M, M.p, M.xcur, S, z, G)
+    if (forward) A = _cge_jacobian(M, M.p, M.xcur, S, z, G, _cge_F(M, M.p, M.xcur, S, z))
+    else A = _cge_jacobian(M, M.p, M.xcur, S, z, G)
     B = _cge_jacobian_full(M, M.p, M.xcur, S, z)
     st_numscalar("r(maxdiff)", max(abs(A - B)))
     st_numscalar("r(groups)", G.ncolour)
     st_numscalar("r(columns)", rows(z))
-    printf("{txt}Jacobian (%s system): {res}%f{txt} columns in {res}%f{txt} groups; largest difference from column-by-column {res}%9.3e\n",
-           (full ? "full" : "reduced"), rows(z), G.ncolour, max(abs(A - B)))
+    printf("{txt}Jacobian (%s system, %s differences): {res}%f{txt} columns in {res}%f{txt} groups; largest difference from column-by-column {res}%9.3e\n",
+           (full ? "full" : "reduced"), (forward ? "one-sided" : "central"), rows(z), G.ncolour, max(abs(A - B)))
+}
+
+// Test hook (from version 0.6.3): the current shocks and closure solved from
+// the base by Newton with the reduced system, with one-sided and with central
+// differences, and the largest relative difference between the two solutions
+void _cge_newtoncheck()
+{
+    struct cge_model scalar M
+    struct cge_sys scalar S
+    real colvector z1, z2
+    real scalar c1, c2, i1, i2, e1, e2, j1, j2
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    S = _cge_sys_make(M, 1)
+    z1 = M.x0[S.free] :/ M.xscale[S.free]
+    z2 = z1
+    c1 = _cge_newton(M, M.p, M.xcur, S, z1, 1e-10, 100, 0, i1, e1)
+    j1 = st_numscalar("r(jacobians)")
+    c2 = _cge_newton(M, M.p, M.xcur, S, z2, 1e-10, 100, 0, i2, e2, 1)
+    j2 = st_numscalar("r(jacobians)")
+    st_numscalar("r(converged_onesided)", c1)
+    st_numscalar("r(converged_central)", c2)
+    st_numscalar("r(iterations_onesided)", i1)
+    st_numscalar("r(iterations_central)", i2)
+    st_numscalar("r(jacobians_onesided)", j1)
+    st_numscalar("r(jacobians_central)", j2)
+    st_numscalar("r(maxdiff)", max(abs(z1 - z2) :/ rowmax((J(rows(z2), 1, 1), abs(z2)))))
+    printf("{txt}Newton, one-sided differences: converged {res}%f{txt}, {res}%f{txt} iterations, {res}%f{txt} Jacobian(s)\n", c1, i1, j1)
+    printf("{txt}Newton, central differences:   converged {res}%f{txt}, {res}%f{txt} iterations, {res}%f{txt} Jacobian(s)\n", c2, i2, j2)
+    printf("{txt}Largest relative difference between the solutions {res}%9.3e\n", st_numscalar("r(maxdiff)"))
 }
 
 // Newton-Raphson with a backtracking line search; returns 1 on convergence.
@@ -5081,13 +5121,14 @@ void _cge_jaccheck(| real scalar full)
 // Jacobian is computed again.
 real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                         struct cge_sys scalar S, real colvector z, real scalar tol, real scalar maxit,
-                        real scalar trace, real scalar iter, real scalar err)
+                        real scalar trace, real scalar iter, real scalar err, | real scalar central)
 {
     struct cge_jpat scalar G
     real colvector f, fn, dz, zn, perm
     real matrix LU, U
     real scalar norm0, step, it, fresh, njac
 
+    if (args() < 11) central = 0
     f = _cge_F(M, p, xfix, S, z)
     iter = 0
     err = .
@@ -5122,7 +5163,8 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             }
             fresh = 1
         }
-        LU = _cge_jacobian(M, p, xfix, S, z, G)
+        if (central) LU = _cge_jacobian(M, p, xfix, S, z, G)
+        else LU = _cge_jacobian(M, p, xfix, S, z, G, f)
         njac++
         if (hasmissing(LU)) break
         // Mata's _lud() gives A = (L*U)[p, .], so A x = b is solved with b[invorder(p)]
@@ -5233,6 +5275,13 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     z = start[S.free] :/ M.xscale[S.free]
     method = "newton"
     conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter, err)
+    if (!conv) {
+        // Newton again from the start, with central differences
+        if (trace) printf("{txt}Newton with one-sided differences failed; again with central differences\n")
+        z = start[S.free] :/ M.xscale[S.free]
+        conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter2, err, 1)
+        iter = iter + iter2
+    }
     if (!conv) {
         // Fallback: Powell's hybrid method, then Newton to polish the result
         method = "broydenpowell"

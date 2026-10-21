@@ -40,6 +40,8 @@ quietly summarize value if parameter == "hlink"
 assert r(mean) == 1
 mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
+mata: _cge_jaccheck(0, 1)
+assert r(maxdiff) < 1e-5
 mata: _cge_jaccheck(1)
 assert r(maxdiff) < 1e-6
 _standard_simulations hout_

@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.6.2 implements the standard single-country model described in
+Version 0.6.3 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,10 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.6.3 builds the Jacobian with one-sided differences, one evaluation
+of the equations for each group of variables instead of two. On a synthetic
+SAM with 40,190 equations, a tariff removal now takes 96 seconds in Stata
+13.1/IC and 72 in StataNow/MP 19.5 on four cores; the solutions are unchanged.
 Version 0.6.2 brings GAMS solutions back into Stata (`cge_gams ..., import()`):
 the solution is checked against the model's equations and stored as a
 simulation, for reports and microsimulation. On a synthetic SAM with

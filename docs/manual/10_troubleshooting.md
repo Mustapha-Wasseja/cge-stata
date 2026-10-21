@@ -25,24 +25,27 @@ building a model and after changing the closure.
 The solver works on a reduced system and computes the Jacobian by groups of
 columns (chapter 4). On a Windows laptop, synthetic SAMs of increasing size
 solved a tariff removal in these times, in Stata 13.1/IC, in StataNow/MP 19.5
-on four cores, and in GAMS with PATH (`tools/bench`, version 0.6.2):
+on four cores, and in GAMS with PATH (`tools/bench`, version 0.6.3):
 
 | Activities | Accounts | Equations | Solved (reduced) | Stata 13.1/IC (s) | StataNow/MP 19.5, 4 cores (s) | GAMS, whole run (s) |
 |---|---|---|---|---|---|---|
-| 40 | 95 | 1,814 | 711 | 0.7 | 0.5 | 1.9 |
-| 80 | 180 | 5,446 | 1,407 | 3.7 | 3.5 | 2.2 |
-| 120 | 260 | 10,555 | 2,045 | 7.1 | 5.6 | 2.0 |
-| 160 | 350 | 18,483 | 2,757 | 9.6 | 6.8 | 3.3 |
-| 200 | 430 | 26,858 | 3,418 | 53.9 | 53.3 | 4.0 |
-| 250 | 530 | 40,190 | 4,254 | 143.0 | 126.9 | 4.1 |
+| 40 | 95 | 1,814 | 711 | 0.4 | 0.5 | 1.8 |
+| 80 | 180 | 5,446 | 1,407 | 2.7 | 2.7 | 1.8 |
+| 120 | 260 | 10,555 | 2,045 | 5.0 | 3.5 | 2.0 |
+| 160 | 350 | 18,483 | 2,757 | 6.0 | 5.6 | 2.5 |
+| 200 | 430 | 26,858 | 3,418 | 37.8 | 32.3 | 2.6 |
+| 250 | 530 | 40,190 | 4,254 | 95.8 | 71.7 | 4.7 |
 
 Most of Stata's time goes into evaluating the model's equations to build the
 Jacobian by finite differences: about four fifths of the solve for the
-200-activity model in Stata 13.1/IC. In runs one after the other, four cores
-of StataNow/MP made that solve about 1.6 times faster than one core, and 1.4
-times faster than Stata 13.1/IC. StataNow is about ten to thirty times faster
-than Stata 13 at large dense matrix operations, which the solver uses little
-(`tools/bench/README.md`). GAMS uses analytic derivatives and a sparse
+200-activity model in Stata 13.1/IC with the central differences of version
+0.6.2. The one-sided differences of version 0.6.3 halve these evaluations,
+and shortened that solve by about a third in Stata 13.1/IC and by almost half
+in StataNow/MP. With central differences, four cores of StataNow/MP made the
+solve about 1.6 times faster than one core, and 1.4 times faster than Stata
+13.1/IC, in runs one after the other. StataNow is about ten to thirty times
+faster than Stata 13 at large dense matrix operations, which the solver uses
+little (`tools/bench/README.md`). GAMS uses analytic derivatives and a sparse
 solver, and its time, which includes calibration and the base solve, barely
 grows over this range.
 For models with more than about 2,000 equations in the reduced system, export

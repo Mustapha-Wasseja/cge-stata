@@ -30,6 +30,8 @@ quietly summarize value if parameter == "pwe" & element1 == "com_man"
 assert abs(r(mean) - 40 / 38) < 1e-15
 mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
+mata: _cge_jaccheck(0, 1)
+assert r(maxdiff) < 1e-5
 mata: _cge_jaccheck(1)
 assert r(maxdiff) < 1e-6
 _standard_simulations trade_
@@ -101,6 +103,8 @@ cge_calibrate, `sigmas'
 assert r(max_residual) < 1e-12
 mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
+mata: _cge_jaccheck(0, 1)
+assert r(maxdiff) < 1e-5
 _standard_simulations home_
 _compare_report home_tariff_removal
 cge_shock, reset

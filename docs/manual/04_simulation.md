@@ -83,9 +83,12 @@ replaces it. The method is Newton-Raphson with a backtracking line search on
 scaled variables. It works on a reduced system: explicit definitions (such as
 intermediate and household demand) are left out and computed from the other
 variables, which makes large models much smaller. The Jacobian combines exact
-derivatives for the equations with many variables with central differences,
-taken over groups of variables that share no equation. If Newton fails,
-Powell's hybrid method is tried, then Newton again to polish the result.
+derivatives for the equations with many variables with finite differences,
+taken over groups of variables that share no equation. From version 0.6.3 the
+differences are one-sided, with one evaluation of the equations for each
+group instead of two. If Newton fails, it is tried again with central
+differences, then Powell's hybrid method, then Newton again to polish the
+result.
 
 If that fails too, the shock is applied by **continuation** (from version
 0.4.5): in 4 equal steps, then 16, each solution the start of the next.

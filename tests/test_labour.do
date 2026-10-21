@@ -69,6 +69,8 @@ quietly cge_solve, name(wc_base) tolerance(1e-12)
 assert r(iterations) == 0
 mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
+mata: _cge_jaccheck(0, 1)
+assert r(maxdiff) < 1e-5
 mata: _cge_jaccheck(1)
 assert r(maxdiff) < 1e-6
 _labour_simulations wc_
@@ -148,6 +150,10 @@ cge_shock pwm, scale(1.5)
 cge_solve, name(mwnb_pwm_up50) tolerance(1e-12)
 _compare_reference mwnb_pwm_up50
 _compare_report mwnb_pwm_up50
+* Newton with one-sided and with central differences across the switch to
+* the floor (version 0.6.3)
+mata: _cge_newtoncheck()
+assert r(converged_onesided) == 1 & r(converged_central) == 1 & r(maxdiff) < 1e-8
 cge_shock, reset
 _urate mwnb_pwm_up50
 assert r(u) > 5 & reldif(r(rw), 0.95) < 1e-8

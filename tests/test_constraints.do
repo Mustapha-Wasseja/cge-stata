@@ -136,6 +136,8 @@ quietly summarize d
 assert r(max) < 1e-10
 mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-5
+mata: _cge_jaccheck(0, 1)
+assert r(maxdiff) < 1e-5
 
 * Capacity of health services, with government purchases of health services up
 * 20 per cent; the rent goes to households

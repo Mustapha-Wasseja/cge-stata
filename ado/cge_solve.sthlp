@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.5  21oct2026}{...}
+{* *! version 0.6.3  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -35,14 +35,17 @@ with 250 activities and 20 households, 4,254 of 40,190 equations.
 
 {pstd}
 The Jacobian combines exact derivatives for the equations with many variables
-with central differences for the others. The exact rows are the price indexes,
+with finite differences for the others. The exact rows are the price indexes,
 factor incomes and supplies, government revenue and spending, the balance of
 payments, the savings-investment balance, commodity market clearing and
-activity prices. The central differences are taken over groups of variables
-that appear in no common equation. The LU factors of a Jacobian are reused
-for further Newton steps while each step at least halves the residual. If
-Newton fails, Powell's hybrid method ({cmd:solvenl()}) is tried, followed by
-Newton steps to polish the result. {cmd:cge_solve} exits with error 430 if the
+activity prices. The finite differences are taken over groups of variables
+that appear in no common equation; from version 0.6.3 they are one-sided, with
+one evaluation of the equations for each group instead of two, which shortens
+the solve of large models by a third to a half. The LU factors of a Jacobian
+are reused for further Newton steps while each step at least halves the
+residual. If Newton fails, it is tried again with central differences, then
+Powell's hybrid method ({cmd:solvenl()}), followed by Newton steps to polish
+the result. {cmd:cge_solve} exits with error 430 if the
 model does not converge.
 
 {pstd}
