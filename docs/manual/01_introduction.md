@@ -36,7 +36,7 @@ elasticities are inputs, stated by the user.
 ## 1.2 Installation
 
 The package needs Stata 13 or later; it runs on Stata/IC. Install it from
-GitHub:
+GitHub (tested with StataNow 19.5):
 
 ```stata
 net install cge, from("https://raw.githubusercontent.com/Mustapha-Wasseja/cge-stata/main/") replace
