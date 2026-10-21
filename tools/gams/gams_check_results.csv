@@ -125,6 +125,8 @@ factor quantities,fq_agri_productivity_up5,Python,16,118,0,4.276e-16,2.081e-13,3
 "factor quantities, mixed",fqmix_labour_supply_up5,Python,16,118,0,4.276e-16,4.079e-14,5.404e-12
 "factor quantities, mixed",fqmix_agri_productivity_up5,Python,16,118,0,4.276e-16,4.151e-12,8.130e-11
 "factor quantities, minimum wage",fqmw_import_price_up10,Python,16,120,0,4.276e-16,1.530e-13,7.556e-13
+swaps,swap_gsav_gadj,tests/expected,16,118,0,3.053e-16,3.669e-13,3.045e-13
+swaps,swap_exr_numeraire,tests/expected,16,118,0,3.053e-16,1.705e-12,2.123e-11
 constraints,con_quota,tests/expected,1,118,0,3.053e-16,2.400e-12,2.140e-13
 constraints,con_quota_hhd,tests/expected,1,118,0,3.053e-16,5.890e-14,9.511e-13
 constraints,con_quota_row,tests/expected,1,118,0,3.053e-16,1.407e-12,2.231e-13

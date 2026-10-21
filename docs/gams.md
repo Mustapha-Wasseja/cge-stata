@@ -163,7 +163,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 22 cases. Together they cover:
+There are 23 cases. Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -179,7 +179,9 @@ There are 22 cases. Together they cover:
   households, a capacity limit on health services with the rent to capital,
   a borrowing limit under a peg, an import quota with rents paid abroad
   together with a ban on government borrowing, and a floor on the nominal
-  wage.
+  wage;
+- closure swaps (from version 0.4.5): government savings fixed with
+  consumption adjusting, and labour unemployed at a fixed wage, by swaps.
 
 Results (21 October 2026, GAMS 54.2; `tools/gams/export_check_results.csv`):
 

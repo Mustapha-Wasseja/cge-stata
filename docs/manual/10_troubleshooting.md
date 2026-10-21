@@ -46,7 +46,8 @@ files or long data.
 | "every activity needs positive value added" | an activity without factor payments: merge it with another activity or remove it |
 | benchmark replication fails | an error in the SAM or mapping that the checks did not catch; check negative cells, zero sales and the elasticities (for example `sigmaq(1)` for an imported commodity is not allowed) |
 | "closure is not square" | a closure fixes too many or too few variables, for example a factor closure that the model's data cannot support |
-| `cge_solve` exits with error 430 | the shock is too large for the starting point, or the closure has no solution: try the shock in steps, check the closure, and look at `trace` |
+| `cge_solve` exits with error 430 | the shock has no solution, or one too far from the base: read the diagnostics (the equations with the largest residuals, and the smallest pivot), try more steps with `steps()`, check the closure, and look at `trace` |
+| "the closure is singular" | a swap leaves an equation with no free variable: free a variable of that equation, or undo the swap |
 | a shock "is not fixed under the current closure" | the variable is endogenous under the closure: change the closure, or shock a parameter |
 | a negative or missing value appears in a report | percentage changes of negative bases (a deficit) are relative to the absolute value; a zero base gives a missing change |
 | Stata 13 cannot install from GitHub | its TLS version is too old: install from a downloaded copy (chapter 1) |

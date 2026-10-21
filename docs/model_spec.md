@@ -514,8 +514,17 @@ $RA_a$ are fixed, at zero in the base, under every closure (from version
 0.4.4). A constraint (Section 16) adds an equation and frees one variable
 that the closure fixes, so the system stays square.
 
+**Swaps** (from version 0.4.5). After the options above, a closure may fix
+any free variable element provided it frees a fixed one: `swap(GSAV GADJ)`
+fixes government savings and frees government consumption, `swap(EXR CPI)`
+makes the exchange rate the numeraire. Variables computed from their
+definitions in the reduced system (Section 4 of design.md) cannot be fixed.
+
 Variable and equation counts must be checked for every closure: the number of
-free variables must equal the number of equations.
+free variables must equal the number of equations. From version 0.4.5 a
+closure is also rejected if an equation is left with no free variable, which
+would make the Jacobian singular (a structural check over the rows found by
+central differences).
 
 ## 7. Calibration
 

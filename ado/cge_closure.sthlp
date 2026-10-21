@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.3  20oct2026}{...}
+{* *! version 0.4.5  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -11,7 +11,8 @@
 
 {p 8 12 2}
 {cmd:cge_closure} [{cmd:,} {opt ext:ernal(flexexr|fixexr)} {opt gov:ernment(flexgsav|fixgsav [direct|sales|import|vat])}
-{opt sav:inv(savings|investment)} {opt num:eraire(cpi|dpi)} {opt fac:tors(spec)}]
+{opt sav:inv(savings|investment)} {opt num:eraire(cpi|dpi)} {opt fac:tors(spec)}
+{opt swap(fix free [fix free ...])}]
 
 
 {title:Description}
@@ -70,19 +71,45 @@ its floor: either the floor binds and unemployment absorbs the shock, or the
 wage is above the floor and the labour force is fully employed. The solver
 finds which.
 
+{phang}
+{opt swap(fix free [fix free ...])} (from version 0.4.5) changes the closure
+element by element, after the options above: each pair fixes the first
+variable, which the closure leaves free, and frees the second, which it
+fixes. Elements are written {it:NAME}, {it:NAME}{cmd:(}{it:e1}{cmd:)} or
+{it:NAME}{cmd:(}{it:e1}{cmd:,}{it:e2}{cmd:)}, for example {cmd:W(lab)}. For
+example:
+
+{phang2}o  {cmd:swap(GSAV GADJ)} fixes government savings and lets government consumption adjust;{p_end}
+{phang2}o  {cmd:swap(EXR CPI)} makes the exchange rate the numeraire;{p_end}
+{phang2}o  {cmd:swap(QG(com_hlt) GADJ)} fixes government purchases of health services, which can then be shocked, and scales the other purchases with them.{p_end}
+
+{pmore}
+Swaps replace any earlier ones and stay until changed; {cmd:swap(none)}
+removes them. They are recorded with each simulation, saved with the model,
+kept in sensitivity analysis and exported by {helpb cge_gams}. Variables
+computed from their definitions (such as household demand) cannot be fixed.
+
+{pstd}
+The closure must be square, with as many free variables as equations, and
+from version 0.4.5 it must not leave an equation without a free variable:
+such a closure is singular, and {cmd:cge_closure} names the equation.
+
 
 {title:Example}
 
 {phang2}{cmd:. cge_closure, external(fixexr) savinv(investment) factors(lab:unemployed cap:specific)}{p_end}
 {phang2}{cmd:. cge_closure, factors(lab:wagecurve)}{p_end}
 {phang2}{cmd:. cge_closure, factors(lab:minwage cap:specific)}{p_end}
+{phang2}{cmd:. cge_closure, swap(GSAV GADJ)}{p_end}
 
 
 {title:Stored results}
 
 {synoptset 16 tabbed}{...}
+{p2col 5 16 20 2: Scalars}{p_end}
+{synopt:{cmd:r(N_swaps)}}number of swaps{p_end}
 {p2col 5 16 20 2: Macros}{p_end}
-{synopt:{cmd:r(closure)}}closure in one line{p_end}
+{synopt:{cmd:r(closure)}}closure in one line, with the swaps{p_end}
 
 
 {title:Also see}

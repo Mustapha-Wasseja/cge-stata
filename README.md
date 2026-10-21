@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.4.4 implements the standard single-country model described in
+Version 0.4.5 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,13 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.4.5 brings three habits of GAMS modelling into the package.
+Closure swaps fix any free variable and free any fixed one
+(`cge_closure, swap(GSAV GADJ)`), and a closure that leaves an equation
+without a free variable is rejected, naming the equation. A solve that fails
+is retried by continuation, the shock applied in steps. A failure is followed
+by diagnostics: the equations with the largest residuals, by element, and the
+smallest pivot of the Jacobian.
 Version 0.4.4 adds limits that may bind (`cge_constraint`; Section 16). Each
 is a bound on one element of a variable, such as imports of a commodity or the
 output of health services, paired with a variable that the closure fixes and

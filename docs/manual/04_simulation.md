@@ -24,6 +24,21 @@ The closure is checked to be square, displayed, and stored with each
 simulation. A closure set with `cge_closure` stays until changed;
 `cge_calibrate` resets the default.
 
+**Swaps.** From version 0.4.5, `swap()` changes the closure element by
+element, as GAMS modellers do by fixing and freeing variables. Each pair fixes
+a variable that the closure leaves free and frees one that it fixes:
+
+```stata
+cge_closure, swap(GSAV GADJ)                 // fixed government savings, spending adjusts
+cge_closure, swap(EXR CPI)                   // the exchange rate as numeraire
+cge_closure, swap(QG(com_hlt) GADJ)          // fix health purchases, then shock them:
+cge_shock QG, elements(com_hlt) scale(1.2)   //   other purchases scale with them
+cge_closure, swap(none)                      // remove the swaps
+```
+
+`cge_closure` rejects a swap that leaves an equation with no free variable,
+naming the equation, since the model would then have no unique solution.
+
 ## 4.2 Shocks: `cge_shock`
 
 `cge_shock` changes a parameter, or a variable fixed by the closure, before
@@ -70,8 +85,22 @@ intermediate and household demand) are left out and computed from the other
 variables, which makes large models much smaller. The Jacobian combines exact
 derivatives for the equations with many variables with central differences,
 taken over groups of variables that share no equation. If Newton fails,
-Powell's hybrid method is tried, then Newton again to polish the result. The
-command stops with error 430 if the model does not converge.
+Powell's hybrid method is tried, then Newton again to polish the result.
+
+If that fails too, the shock is applied by **continuation** (from version
+0.4.5): in 4 equal steps, then 16, each solution the start of the next.
+`steps(#)` asks for a number of steps from the start, and `steps(1)` turns
+continuation off. A shock that defeats both methods is often one that the
+economy cannot absorb: government purchases ten times larger, for example.
+The command then stops with error 430 and displays **diagnostics**:
+
+- the equations with the largest residuals at the last point, by block and
+  element;
+- any equation with no free variable, and any free variable in no equation;
+- the smallest pivot of the Jacobian, relative to the largest, and the
+  variable it belongs to.
+
+`cge_solve, diagnose` displays them after a solve that converges too.
 
 The solution is accepted when the largest scaled residual, over every
 equation, is below the tolerance (1e-10 by default). The residual and the

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.4  21oct2026}{...}
+{* *! version 0.4.5  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -52,6 +52,15 @@ whether each constraint binds; the model is then solved again with the exact
 conditions, changing the regime of any constraint whose other condition
 fails. The regimes are displayed and stored with the simulation.
 
+{pstd}
+From version 0.4.5, a solve that fails is tried again by continuation: the
+shock is applied in 4 equal steps, then 16, each solution the start of the
+next, with parameters and fixed values moving in proportion from the base.
+After a failure, diagnostics are displayed: the equations with the largest
+residuals, by block and element; equations with no free variable and free
+variables in no equation; and the smallest pivot of the Jacobian, relative
+to the largest, with the variable it belongs to.
+
 
 {title:Options}
 
@@ -73,6 +82,13 @@ residual; the default is 1e-10.
 {opt full} solves the full system, with every equation, instead of the
 reduced one. Both give the same solution; {opt full} is for checks.
 
+{phang}
+{opt steps(#)} applies the shock in {it:#} equal steps. The default, 0,
+does so only after a direct solve fails; {cmd:steps(1)} never does.
+
+{phang}
+{opt diagnose} displays the diagnostics after a solve that converges too.
+
 
 {title:Stored results}
 
@@ -84,6 +100,7 @@ reduced one. Both give the same solution; {opt full} is for checks.
 {synopt:{cmd:r(N_solved)}}number of equations in the system solved{p_end}
 {synopt:{cmd:r(jacobians)}}number of Jacobians computed{p_end}
 {synopt:{cmd:r(walras)}}value of the WALRAS slack variable{p_end}
+{synopt:{cmd:r(steps)}}steps of continuation (0 for a direct solve){p_end}
 {synopt:{cmd:r(N_constraints)}}number of constraints, if any{p_end}
 {synopt:{cmd:r(N_binding)}}number of constraints that bind{p_end}
 {p2col 5 18 22 2: Macros}{p_end}
@@ -91,6 +108,13 @@ reduced one. Both give the same solution; {opt full} is for checks.
 {synopt:{cmd:r(method)}}solution method{p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}
+{p2col 5 18 22 2: Diagnostics}{p_end}
+{synopt:{cmd:r(diag_block)}}block of the largest residual, and {cmd:r(diag_element)} its element{p_end}
+{synopt:{cmd:r(diag_residual)}}that residual{p_end}
+{synopt:{cmd:r(diag_N_empty_rows)}}equations with no free variable{p_end}
+{synopt:{cmd:r(diag_N_empty_cols)}}free variables in no equation{p_end}
+{synopt:{cmd:r(diag_pivot_ratio)}}smallest pivot of the Jacobian relative to the largest{p_end}
+{synopt:{cmd:r(diag_singular)}}1 if the Jacobian is singular or nearly so{p_end}
 
 
 {title:Also see}

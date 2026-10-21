@@ -68,6 +68,10 @@ class Closure:
     savinv: str = "savings"
     numeraire: str = "cpi"
     factors: dict[str, str] = field(default_factory=dict)
+    # Swaps (version 0.4.5, model_spec.md, Section 6): pairs (fixed, freed)
+    # of variable elements written NAME or NAME(e1) or NAME(e1,e2); the
+    # first, free under the closure above, is fixed and the second freed
+    swaps: tuple = ()
 
     def __post_init__(self) -> None:
         for name, options in CLOSURE_OPTIONS.items():
@@ -129,6 +133,15 @@ class Closure:
                     raise ValueError(f"{factor}: give a minimum wage")
                 fixed["WFDIST"][k, :] = True
                 fixed["LSW" if option == "wagecurve" else "LSM"][k] = True
+        # Swaps (Section 6): one element fixed for each element freed
+        for fix, free in self.swaps:
+            (fn, fk), (gn, gk) = model.position(fix, "swap"), model.position(free, "swap")
+            if fixed[fn].ravel()[fk]:
+                raise ValueError(f"swap: {fix} is already fixed under the closure")
+            if not fixed[gn].ravel()[gk]:
+                raise ValueError(f"swap: {free} is not fixed under the closure")
+            fixed[fn].ravel()[fk] = True
+            fixed[gn].ravel()[gk] = False
         return fixed
 
 
@@ -956,19 +969,29 @@ class Model:
             recipient[nR - 2] = 1.0
             self.params[name] = recipient
 
+    def position(self, spec, what: str = "variable", element=None) -> tuple[str, int]:
+        """A variable element, NAME, NAME(e1) or NAME(e1,e2), or a name and its
+        elements: the name and the flat index of the element."""
+        if element is None:
+            name, _, rest = str(spec).partition("(")
+            element = tuple(e.strip() for e in rest.rstrip(")").split(",")) if rest else ()
+        else:
+            name = spec
+        if name not in VARIABLES:
+            raise ValueError(f"{what}: {name} is not a model variable")
+        labels = self.element_labels(name)
+        key = tuple(element) + ("",) * (2 - len(element))
+        if key not in labels:
+            raise ValueError(f"{what}: {name}{tuple(element)} is not an element of {name}")
+        k = labels.index(key)
+        if not self.exists[name].ravel()[k]:
+            raise ValueError(f"{what}: {name}{tuple(element)} does not exist in this model")
+        return name, k
+
     def _constraint(self, c: Constraint, is_fixed: dict) -> dict:
         """Positions, signs, bound and scales of a constraint (Section 16.2)."""
         def position(name, element, what):
-            if name not in VARIABLES:
-                raise ValueError(f"{what}: {name} is not a model variable")
-            labels = self.element_labels(name)
-            key = tuple(element) + ("",) * (2 - len(element))
-            if key not in labels:
-                raise ValueError(f"{what}: {name}{tuple(element)} is not an element of {name}")
-            k = labels.index(key)
-            if not self.exists[name].ravel()[k]:
-                raise ValueError(f"{what}: {name}{tuple(element)} does not exist in this model")
-            return k
+            return self.position(name, what, element)[1]
         if (c.upper is None) == (c.lower is None):
             raise ValueError("a constraint needs an upper or a lower bound, not both")
         y = position(c.variable, c.element, "constraint")

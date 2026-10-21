@@ -196,6 +196,14 @@ def shock_statements(model, shock: dict, closure: Closure) -> tuple[str, str]:
     codes = {"mobile": 1, "specific": 2, "unemployed": 3, "wagecurve": 4, "minwage": 5}
     for f in model.sets["F"]:
         par.append(f"fclo({q(f)}) = {codes[closure.factors.get(f, 'mobile')]};")
+    # Closure swaps (version 0.4.5): fixed at their current levels, or freed
+    for fix, free in closure.swaps:
+        for spec, freed in ((fix, False), (free, True)):
+            name, k = model.position(spec)
+            ref, level = gams_ref(model, name, k)
+            g = "PWEV" if name == "PWE" else name
+            idx = ref[len(g):]
+            var += ([f"{g}.lo{idx} = -inf;", f"{g}.up{idx} = inf;"] if freed else [f"{g}.fx{idx} = {level};"])
     for name, new in shock.get("fixed", {}).items():
         base = np.atleast_1d(model.base[name]).ravel()
         new = np.atleast_1d(new).ravel()
@@ -429,6 +437,10 @@ def cases() -> list[dict]:
     add("factor quantities, minimum wage", fqu,
         {"import_price_up10": sc.simulation_inputs(fqu)["import_price_up10"]}, "fqmw_", python=True,
         closure=Closure(factors={"lab": "minwage"}), labour={"unemployment": {"lab": 0.1}}, fq=workers)
+    # Closure swaps (version 0.4.5, model_spec.md, Section 6)
+    notariff = {"params": {"tm": np.zeros_like(std.params["tm"])}}
+    add("swaps", std, {"swap_gsav_gadj": notariff}, closure=Closure(swaps=(("GSAV", "GADJ"),)))
+    add("swaps", std, {"swap_exr_numeraire": notariff}, closure=Closure(swaps=(("EXR", "CPI"),)))
     # Bounds and complementarity (version 0.4.4, model_spec.md, Section 16):
     # solved by PATH as a mixed complementarity problem, against the expected
     # results of the Python reference, which finds the regimes by an

@@ -409,6 +409,19 @@ def write_regimes(solutions: dict, directory: Path = EXPECTED_DIR) -> list[Path]
     return [path]
 
 
+# Closure swaps (version 0.4.5, model_spec.md, Section 6): government savings
+# fixed with government consumption adjusting, and the exchange rate as
+# numeraire
+def swap_cases() -> dict:
+    """name -> solution."""
+    std = synthetic_model()
+    notariff = {"params": {"tm": np.zeros_like(std.params["tm"])}}
+    return {
+        "swap_gsav_gadj": std.solve(Closure(swaps=(("GSAV", "GADJ"),)), tol=1e-12, **notariff),
+        "swap_exr_numeraire": std.solve(Closure(swaps=(("EXR", "CPI"),)), tol=1e-12, **notariff),
+    }
+
+
 def health_spending_up(t, p, fx):
     """Government purchases of health services 20 per cent higher from period 1."""
     if t == 1:
@@ -724,8 +737,9 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Labour-market regimes (0.3.3); health outcomes (0.3.4)
     solutions.update(labour_cases())
     solutions.update(outcome_cases())
-    # Bounds and complementarity (0.4.4)
+    # Bounds and complementarity (0.4.4); closure swaps (0.4.5)
     solutions.update(constraint_solutions())
+    solutions.update(swap_cases())
     written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
                + write_spa(directory) + write_regimes(solutions, directory))
     for name, solution in solutions.items():

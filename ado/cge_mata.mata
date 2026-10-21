@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.4.4  2026-10-21
+*! cge_mata.mata  v0.4.5  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -132,6 +132,9 @@ struct cge_model {
     // variable (1 up, -1 down); the constraints and regimes of each simulation
     real colvector   bY, bX, btype, bdir
     string colvector simcons
+    // closure swaps (from version 0.4.5): positions of the variables fixed and
+    // of those freed, in pairs, applied after the closure's options
+    real colvector   swfix, swfree
 }
 
 // Columns of the Jacobian for one solve (free variables), grouped so that the
@@ -146,7 +149,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.4.4")
+    return("0.4.5")
 }
 
 // =====================================================================
@@ -2707,6 +2710,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.bX = J(0, 1, .)
     M.btype = J(0, 1, .)
     M.bdir = J(0, 1, .)
+    M.swfix = J(0, 1, .)
+    M.swfree = J(0, 1, .)
     M.p0 = p
     M.p = p
 
@@ -3338,11 +3343,24 @@ void _cge_closure_apply(struct cge_model scalar M, string scalar ext, string sca
                                        " is not fixed under this closure, so it cannot adjust", 459)
         if (fixed[M.bY[k]]) _cge_fail("constraint on " + _cge_poslabel(M, M.bY[k]) + ": it is fixed under this closure", 459)
     }
+    // Swaps (Section 6, from version 0.4.5): one element fixed for each freed
+    for (k = 1; k <= rows(M.swfix); k++) {
+        if (fixed[M.swfix[k]]) _cge_fail("swap: " + _cge_poslabel(M, M.swfix[k]) + " is already fixed under the closure", 459)
+        if (!fixed[M.swfree[k]]) _cge_fail("swap: " + _cge_poslabel(M, M.swfree[k]) + " is not fixed under the closure", 459)
+        if (M.derived[M.swfix[k]]) {
+            _cge_fail("swap: " + _cge_poslabel(M, M.swfix[k]) + " is computed from its definition and cannot be fixed", 459)
+        }
+        fixed[M.swfix[k]] = 1
+        fixed[M.swfree[k]] = 0
+    }
     nfree = sum(M.exists :* (1 :- fixed)) + rows(M.bY)
     if (nfree != M.neq) {
         errprintf("closure is not square: %f free variables, %f equations\n", nfree, M.neq)
         exit(459)
     }
+    // A square closure is still singular if an equation has no free variable
+    // (from version 0.4.5); swaps can produce one
+    _cge_closure_rank(M, fixed)
     M.fixed = fixed
     M.c_ext = ext
     M.c_gov = gov
@@ -3351,23 +3369,98 @@ void _cge_closure_apply(struct cge_model scalar M, string scalar ext, string sca
     M.c_fac = fac
 }
 
+// Fails if an equation of the Jacobian pattern has no free variable: the rows
+// with exact derivatives, which depend on many variables, are not in the
+// pattern and are not checked
+void _cge_closure_rank(struct cge_model scalar M, real colvector fixed)
+{
+    real colvector isfree, cnt, has, gi
+    real matrix bad
+    string scalar blk, el, desc
+    real scalar k
+    if (rows(M.jr) == 0) return
+    isfree = M.exists :* (1 :- fixed)
+    if (rows(M.bX)) isfree[M.bX] = J(rows(M.bX), 1, 1)
+    cnt = J(M.neq, 1, 0)
+    has = cnt
+    for (k = 1; k <= rows(M.jr); k++) {
+        has[M.jr[k]] = 1
+        cnt[M.jr[k]] = cnt[M.jr[k]] + isfree[M.jc[k]]
+    }
+    bad = selectindex(has :& (cnt :== 0))
+    if (!length(bad)) return
+    gi = selectindex(M.emask)
+    _cge_eqlabel(M, gi[bad[1]], blk, el, desc)
+    _cge_fail("the closure is singular: equation " + blk + " (" + desc + ")" + (el != "" ? " for " + el : "") +
+              " has no free variable" + (length(bad) > 1 ? sprintf(", and %f more equations", length(bad) - 1) : ""), 459)
+}
+
 string scalar _cge_closure_text(struct cge_model scalar M)
 {
     string scalar s
     real scalar k
     s = M.c_ext + " " + M.c_gov + " " + M.c_si + " " + M.c_num
     for (k = 1; k <= M.nF; k++) s = s + " " + M.F[k] + ":" + M.c_fac[k]
+    for (k = 1; k <= rows(M.swfix); k++) s = s + " swap:" + _cge_poslabel(M, M.swfix[k]) + "=" + _cge_poslabel(M, M.swfree[k])
     return(s)
 }
 
+// Position of a variable element written NAME, NAME(e1) or NAME(e1,e2)
+real scalar _cge_specpos(struct cge_model scalar M, string scalar spec, string scalar what)
+{
+    string scalar name, el
+    real colvector pos
+    real scalar b, k
+    b = strpos(spec, "(")
+    name = (b ? substr(spec, 1, b - 1) : spec)
+    el = (b ? subinstr(subinstr(substr(spec, b + 1, .), ")", ""), ",", " ") : "")
+    k = _cge_vidx(M, name)
+    if (!k) _cge_fail(what + ": " + name + " is not a model variable", 198)
+    pos = _cge_cons_pos(M, k, el)
+    if (rows(pos) != 1) _cge_fail(what + ": " + spec + " is not one element; write, for example, W(lab)", 198)
+    if (!M.exists[pos]) _cge_fail(what + ": " + spec + " does not exist in this model", 459)
+    return(pos)
+}
+
+// Swaps from "fix free fix free ..." or the swap: tokens of a closure text
+void _cge_swap_parse(struct cge_model scalar M, string rowvector tok, real colvector fx, real colvector fr)
+{
+    real scalar k
+    fx = J(0, 1, .)
+    fr = J(0, 1, .)
+    if (cols(tok) == 0) return
+    if (tok[1] == "none") return
+    if (mod(cols(tok), 2)) _cge_fail("swap() takes pairs: the variable to fix, then the variable to free", 198)
+    for (k = 1; k <= cols(tok); k = k + 2) {
+        fx = fx \ _cge_specpos(M, tok[k], "swap")
+        fr = fr \ _cge_specpos(M, tok[k + 1], "swap")
+    }
+    if (rows(uniqrows(fx \ fr)) < rows(fx) + rows(fr)) _cge_fail("swap(): each variable element may appear once", 198)
+}
+
+// The swaps recorded in a closure text, as tokens "fix free ..."
+string rowvector _cge_swap_tokens(string rowvector cl)
+{
+    string rowvector out
+    real scalar k, e
+    out = J(1, 0, "")
+    for (k = 1; k <= cols(cl); k++) {
+        if (substr(cl[k], 1, 5) != "swap:") continue
+        e = strpos(cl[k], "=")
+        out = out, substr(cl[k], 6, e - 6), substr(cl[k], e + 1, .)
+    }
+    return(out)
+}
+
 void _cge_closure(string scalar ext, string scalar gov, string scalar si, string scalar num,
-                  string scalar facspec, real scalar facgiven)
+                  string scalar facspec, real scalar facgiven, | string scalar swapspec)
 {
     struct cge_model scalar M
     string rowvector tok
     string colvector fac
     string scalar f, mode
     real scalar k, pos, idx
+    real colvector fx, fr
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -3389,6 +3482,12 @@ void _cge_closure(string scalar ext, string scalar gov, string scalar si, string
             fac[idx] = mode
         }
     }
+    // Swaps (from version 0.4.5) replace any earlier ones; swap(none) removes them
+    if (args() >= 7 & strtrim(swapspec) != "") {
+        _cge_swap_parse(M, tokens(swapspec), fx, fr)
+        M.swfix = fx
+        M.swfree = fr
+    }
     _cge_closure_apply(M, ext, gov, si, num, fac)
     _cge_store(M)
     _cge_closure_show(M)
@@ -3403,6 +3502,11 @@ void _cge_closure_show(struct cge_model scalar M)
     printf("{txt}  savings-investment   {res}%s\n", M.c_si)
     printf("{txt}  numeraire            {res}%s\n", M.c_num)
     for (k = 1; k <= M.nF; k++) printf("{txt}  factor %-13s {res}%s\n", M.F[k], M.c_fac[k])
+    for (k = 1; k <= rows(M.swfix); k++) {
+        printf("{txt}  swap                 {res}%s{txt} fixed, {res}%s{txt} free\n", _cge_poslabel(M, M.swfix[k]),
+               _cge_poslabel(M, M.swfree[k]))
+    }
+    st_numscalar("r(N_swaps)", rows(M.swfix))
     st_global("r(closure)", _cge_closure_text(M))
 }
 
@@ -4698,19 +4802,45 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
     return(k)
 }
 
-void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full)
+void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
+                real scalar steps, real scalar diagnose)
 {
     struct cge_model scalar M
-    real colvector x
-    real scalar conv, iter, err, k, walras
-    string scalar method
+    real colvector x, x2
+    real scalar conv, iter, err, k, walras, nsteps, done, it2, n
+    string scalar method, m2
 
     if (args() < 5) full = 0
+    if (args() < 6) steps = 0
+    if (args() < 7) diagnose = 0
     M = _cge_load()
     _cge_need(M, "calibrated")
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
 
-    x = _cge_solve_point(M, M.p, M.xcur, M.x0, tol, maxit, trace, conv, iter, err, method, full)
+    // Continuation (from version 0.4.5): steps(n) applies the shock in n
+    // steps; by default (steps 0) a failed solve is tried again in 4, then 16
+    nsteps = 0
+    if (steps > 1) {
+        x = _cge_continue(M, steps, tol, maxit, trace, conv, iter, err, method, full, done)
+        nsteps = (conv ? steps : done)
+    }
+    else {
+        x = _cge_solve_point(M, M.p, M.xcur, M.x0, tol, maxit, trace, conv, iter, err, method, full)
+        if (!conv & steps == 0) {
+            for (k = 1; k <= 2; k++) {
+                n = (k == 1 ? 4 : 16)
+                printf("{txt}Not solved directly; trying again in %f steps\n", n)
+                x2 = _cge_continue(M, n, tol, maxit, trace, conv, it2, err, m2, full, done)
+                iter = iter + it2
+                if (conv) {
+                    x = x2
+                    method = m2
+                    nsteps = n
+                    break
+                }
+            }
+        }
+    }
     walras = x[M.voff[_cge_vidx(M, "WALRAS")] + 1]
     // The largest scaled residual of every equation, the left-out ones included
     err = _cge_maxres(M, M.p, x)
@@ -4718,9 +4848,14 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     (void) _cge_store_sim(M, name, x, conv, iter, err, method)
     _cge_store(M)
 
-    if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) ({res}%s{txt})\n", name, iter, method)
+    if (conv & nsteps > 1) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} steps, {res}%f{txt} iteration(s) ({res}%s{txt})\n",
+                                  name, nsteps, iter, method)
+    else if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) ({res}%s{txt})\n", name, iter, method)
     else printf("{err}Simulation %s did not converge (largest scaled residual %9.3e)\n", name, err)
     printf("{txt}Largest scaled residual {res}%9.3e{txt}; WALRAS = {res}%9.3e\n", err, walras)
+    // Diagnostics (from version 0.4.5): after a failure, or when asked
+    if (!conv | diagnose) _cge_diagnose(M, M.p, x, full, (diagnose ? 10 : 5))
+    st_numscalar("r(steps)", nsteps)
     st_numscalar("r(converged)", conv)
     st_numscalar("r(iterations)", iter)
     st_numscalar("r(max_residual)", err)
@@ -6244,6 +6379,9 @@ void _cge_sens_calibrate(real scalar d)
                    c[11], c[12], c[13], c[14], c[15], c[16], c[17], c[18], c[19], c[20], c[21],
                    c[22], c[23], c[24], c[25])
     M = _cge_load()
+    // Swaps (version 0.4.5) are kept
+    M.swfix = Mold.swfix
+    M.swfree = Mold.swfree
     _cge_closure_apply(M, G.ext, G.gov, G.si, G.num, G.fac)
     // Constraints (version 0.4.4) are kept: the layout does not depend on the
     // elasticities
@@ -7520,6 +7658,206 @@ void _cge_cons_clear()
 }
 
 // =====================================================================
+// Diagnostics and continuation (from version 0.4.5)
+// =====================================================================
+
+// Index set and description of an equation block
+void _cge_eqinfo(string scalar blk, string scalar set, string scalar desc)
+{
+    string matrix T
+    real colvector k
+    T = ("P1", "C", "import price") \ ("P2", "C", "export price") \ ("P3", "C", "composite supply price") \
+        ("P4", "C", "producer price of output") \ ("P5", "A", "activity price") \
+        ("P6", "A", "price of intermediate input") \ ("P7", "A", "zero profit") \
+        ("P8", "", "consumer price index") \ ("P9", "", "producer price index") \
+        ("Q1", "A", "value added (Leontief)") \ ("Q2", "A", "intermediate input (Leontief)") \
+        ("Q1C", "A", "output (top nest)") \ ("Q2C", "A", "value added and intermediates (top nest)") \
+        ("Q3", "A", "value added") \ ("Q4", "FA", "factor demand") \ ("H1", "", "health services") \
+        ("H2", "F", "factor efficiency") \ ("H3", "F", "days worked") \ ("Q5", "CA", "intermediate demand") \
+        ("Q6", "C", "commodity output") \ ("T1", "C", "CET transformation") \ ("T2", "C", "export supply") \
+        ("T3", "C", "output without exports") \ ("T3E", "C", "export-only output") \
+        ("T4", "C", "Armington aggregation") \ ("T5", "C", "import demand") \ ("T6", "C", "supply without imports") \
+        ("T7", "C", "supply from imports only") \ ("T8", "C", "margin demand") \
+        ("T9", "C", "exports from composite supply") \ ("T10", "C", "export demand") \
+        ("I1", "F", "factor income") \ ("I2", "IF", "factor income of institutions") \
+        ("I3", "D", "income of households and enterprises") \ ("I4", "H", "consumption spending") \
+        ("I5", "CH", "household demand") \ ("I5H", "AH", "home consumption") \ ("I6", "C", "investment demand") \
+        ("I7", "C", "government demand") \ ("I8", "", "government revenue") \ ("I9", "", "government spending") \
+        ("I10", "D", "direct tax rate") \ ("I11", "D", "savings rate") \ ("I12", "", "insurance fund revenue") \
+        ("I13", "C", "insurance fund purchases") \ ("I14", "", "insurance fund budget") \
+        ("L1", "F", "wage curve") \ ("L2", "F", "minimum wage") \ ("S1", "F", "factor market") \
+        ("S2", "C", "commodity market") \ ("S3", "", "balance of payments") \ ("S4", "", "government budget") \
+        ("S5", "", "savings-investment balance") \ ("B1", "B", "constraint")
+    k = selectindex(T[., 1] :== blk)
+    if (!length(k)) {
+        set = "?"
+        desc = ""
+        return
+    }
+    set = T[k[1], 2]
+    desc = T[k[1], 3]
+}
+
+// Block and element of equation element g (an index over all elements)
+void _cge_eqlabel(struct cge_model scalar M, real scalar g, string scalar blk, string scalar el,
+                  string scalar desc)
+{
+    string colvector s1, s2
+    string scalar set
+    real scalar k, off, i, j, e, n2
+    off = 0
+    for (k = 1; k <= rows(M.ename); k++) {
+        if (g <= off + M.elen[k]) break
+        off = off + M.elen[k]
+    }
+    blk = M.ename[k]
+    e = g - off
+    _cge_eqinfo(blk, set, desc)
+    if (set == "") el = ""
+    else if (set == "B") el = _cge_poslabel(M, M.bY[e])
+    else if (strlen(set) == 1) {
+        s1 = _cge_setlab(M, set)
+        el = (e <= rows(s1) ? s1[e] : strofreal(e))
+    }
+    else {
+        s1 = _cge_setlab(M, substr(set, 1, 1))
+        s2 = _cge_setlab(M, substr(set, 2, 1))
+        n2 = rows(s2)
+        i = floor((e - 1) / n2) + 1
+        j = mod(e - 1, n2) + 1
+        el = s1[i] + "," + s2[j]
+    }
+}
+
+// Why a solve fails: the largest residuals at point x by equation and
+// element; equations with no free variable and free variables in no
+// equation; and the smallest pivot of the Jacobian of the system solved
+void _cge_diagnose(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real scalar full,
+                   real scalar top)
+{
+    struct cge_sys scalar S
+    struct cge_jpat scalar G
+    real colvector L, R, K, gi, r, v, o, z, rows_g, perm, d, jj
+    real matrix Jac, U, rz, cz
+    string scalar blk, el, desc, wb, we
+    real scalar k, n, j, ratio, nz
+
+    printf("{txt}Diagnostics\n")
+    _cge_eq(M, p, x, L, R, K, 0)
+    gi = selectindex(M.emask)
+    r = ((L - R) :/ M.escale)[gi]
+    v = editmissing(abs(r), 1e300)
+    o = order(-v, 1)
+    n = min((top, rows(o)))
+    printf("{txt}  Largest scaled residuals\n")
+    wb = ""
+    we = ""
+    for (k = 1; k <= n; k++) {
+        _cge_eqlabel(M, gi[o[k]], blk, el, desc)
+        if (k == 1) {
+            wb = blk
+            we = el
+        }
+        printf("{txt}    %-4s %-38s %-22s {res}%10.3e\n", blk, _cge_trunc(desc, 38), _cge_trunc(el, 22), r[o[k]])
+    }
+    st_global("r(diag_block)", wb)
+    st_global("r(diag_element)", we)
+    st_numscalar("r(diag_residual)", r[o[1]])
+
+    // The system solved and its Jacobian at x
+    S = _cge_sys_make(M, !full)
+    rows_g = selectindex(S.mask)
+    z = x[S.free] :/ M.xscale[S.free]
+    if (S.reduced) _cge_derive(M, p, x)
+    G = _cge_jpat_make(M, S)
+    Jac = _cge_jacobian(M, p, x, S, z, G)
+    if (hasmissing(Jac)) {
+        printf("{txt}  The Jacobian cannot be evaluated here: a price or quantity is not positive\n")
+        st_numscalar("r(diag_singular)", .)
+        return
+    }
+    rz = selectindex(rowsum(abs(Jac)) :== 0)
+    cz = selectindex(colsum(abs(Jac)) :== 0)
+    nz = length(rz)
+    if (nz) {
+        printf("{txt}  Equations with no free variable (check the closure and swaps):\n")
+        for (k = 1; k <= min((nz, 10)); k++) {
+            _cge_eqlabel(M, rows_g[rz[k]], blk, el, desc)
+            printf("{txt}    %-4s %-38s %s\n", blk, _cge_trunc(desc, 38), el)
+        }
+    }
+    if (length(cz)) {
+        printf("{txt}  Free variables in no equation:\n")
+        for (k = 1; k <= min((length(cz), 10)); k++) printf("{txt}    %s\n", _cge_poslabel(M, S.free[cz[k]]))
+    }
+    st_numscalar("r(diag_N_empty_rows)", nz)
+    st_numscalar("r(diag_N_empty_cols)", length(cz))
+    if (nz | length(cz)) {
+        st_numscalar("r(diag_singular)", 1)
+        printf("{txt}  The Jacobian is singular\n")
+        return
+    }
+    // Partial pivoting permutes rows only: column j of U belongs to variable j
+    _lud(Jac, U, perm)
+    d = abs(diagonal(U))
+    ratio = min(d) / max(d)
+    jj = selectindex(d :== min(d))
+    j = jj[1]
+    st_numscalar("r(diag_pivot_ratio)", ratio)
+    st_numscalar("r(diag_singular)", (ratio < 1e-12))
+    printf("{txt}  Smallest pivot of the Jacobian, relative to the largest: {res}%9.3e{txt} (%s)\n", ratio,
+           _cge_poslabel(M, S.free[j]))
+    if (ratio < 1e-12) printf("{txt}  The Jacobian is singular or nearly so: %s may not be determined by the equations\n",
+                              _cge_poslabel(M, S.free[j]))
+}
+
+// Shocked parameters a share lam of the way from p0 to p
+struct cge_par scalar _cge_par_interp(struct cge_par scalar p0, struct cge_par scalar p, real scalar lam)
+{
+    struct cge_par scalar q
+    string matrix P
+    real scalar k
+    q = p
+    P = _cge_gams_params() \ ("mort", "mort", "")
+    for (k = 1; k <= rows(P); k++) {
+        _cge_par_set(q, P[k, 1], _cge_par_get(p0, P[k, 1]) + lam :* (_cge_par_get(p, P[k, 1]) - _cge_par_get(p0, P[k, 1])))
+    }
+    return(q)
+}
+
+// Continuation: the shock applied in n equal steps, parameters and fixed
+// values moving from the base, each solution the start of the next; done is
+// the number of steps solved
+real colvector _cge_continue(struct cge_model scalar M, real scalar n, real scalar tol, real scalar maxit,
+                             real scalar trace, real scalar conv, real scalar iter, real scalar err,
+                             string scalar method, real scalar full, real scalar done)
+{
+    struct cge_par scalar q
+    real colvector x, xf
+    real scalar k, it, lam
+    string scalar m
+    x = M.x0
+    iter = 0
+    done = 0
+    m = "newton"
+    for (k = 1; k <= n; k++) {
+        if (trace) printf("{txt}Continuation: step %f of %f\n", k, n)
+        if (k < n) {
+            lam = k / n
+            q = _cge_par_interp(M.p0, M.p, lam)
+            xf = M.x0 + lam :* (M.xcur - M.x0)
+            x = _cge_solve_point(M, q, xf, x, tol, maxit, trace, conv, it, err, m, full)
+        }
+        else x = _cge_solve_point(M, M.p, M.xcur, x, tol, maxit, trace, conv, it, err, m, full)
+        iter = iter + it
+        if (!conv) return(x)
+        done = k
+    }
+    method = m
+    return(x)
+}
+
+// =====================================================================
 // GAMS export (from version 0.4.3; docs/gams.md)
 // =====================================================================
 
@@ -7768,8 +8106,8 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
 {
     string matrix P
     string colvector lab, e1, e2
-    string scalar target, g, mode, gov
-    real colvector v0, v1, pos
+    string scalar target, g, mode, gov, idx
+    real colvector v0, v1, pos, fx, fr
     real scalar fh, k, i, n, code
 
     P = _cge_gams_params()
@@ -7806,6 +8144,16 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
     fclose(fh)
 
     fh = _cge_gopen(fvar)
+    // Swaps (from version 0.4.5): fixed at their current levels, or freed
+    _cge_swap_parse(M, _cge_swap_tokens(cl), fx, fr)
+    if (rows(fx)) fput(fh, "* Closure swaps, written by cge_gams")
+    for (k = 1; k <= rows(fx); k++) {
+        _cge_gams_ref(M, fx[k], g, idx)
+        fput(fh, g + ".fx" + idx + " = " + g + ".l" + idx + ";")
+        _cge_gams_ref(M, fr[k], g, idx)
+        fput(fh, g + ".lo" + idx + " = -inf;")
+        fput(fh, g + ".up" + idx + " = inf;")
+    }
     fput(fh, "* Changes to fixed variables, written by cge_gams")
     for (k = 1; k <= rows(M.vname); k++) {
         pos = _cge_vpos(M, k)
@@ -7933,7 +8281,7 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
 {
     struct cge_model scalar M, M2
     struct cge_par scalar p
-    real colvector x, fixed
+    real colvector x, fixed, fx, fr
     string rowvector cl
     string scalar name
     real scalar k, n, nc
@@ -7956,8 +8304,11 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
         x = M.simx[., k]
         cl = tokens(M.simclosure[k])
         M2 = M
+        _cge_swap_parse(M2, _cge_swap_tokens(cl), fx, fr)
+        M2.swfix = fx
+        M2.swfree = fr
         _cge_closure_apply(M2, cl[1], subinstr(cl[2], ":", " "), cl[3], cl[4],
-                           substr(cl[|5 \ cols(cl)|]', strpos(cl[|5 \ cols(cl)|]', ":") :+ 1, .))
+                           substr(cl[|5 \ 4 + M.nF|]', strpos(cl[|5 \ 4 + M.nF|]', ":") :+ 1, .))
         fixed = M2.fixed
     }
     // Constraints (from version 0.4.4) need a mixed complementarity problem
@@ -8415,6 +8766,8 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "btype", M.btype)
     _cge_io_put(fh, "bdir", M.bdir)
     _cge_io_put(fh, "simcons", M.simcons)
+    _cge_io_put(fh, "swfix", M.swfix)
+    _cge_io_put(fh, "swfree", M.swfree)
 }
 
 real scalar _cge_model_member(struct cge_model scalar M, string scalar name, transmorphic matrix v)
@@ -8524,6 +8877,8 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "btype") M.btype = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "bdir") M.bdir = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "simcons") M.simcons = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "swfix") M.swfix = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "swfree") M.swfree = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else return(0)
     return(1)
 }

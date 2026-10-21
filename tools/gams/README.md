@@ -81,7 +81,9 @@ Every case of the Python test suite:
   or taxes adjusting, a floor on the nominal wage, and two constraints at
   once. GAMS solves them as mixed complementarity problems with PATH
   (`--cgetype=mcp`), against the Python reference, which finds the regimes by
-  an active-set method.
+  an active-set method;
+- closure swaps (from version 0.4.5): government savings fixed with
+  government consumption adjusting, and the exchange rate as numeraire.
 
 For each case, every scenario is compared with the expected results in
 `tests/expected`, which the Stata suite also matches. Alternative closures
@@ -93,7 +95,7 @@ are compared with the Python reference:
 
 ## Result (21 October 2026, GAMS 54.2, PATH)
 
-159 scenarios; every expected value was found and solved.
+161 scenarios; every expected value was found and solved.
 
 - Base values from GAMS's own calibration agree to 4.9e-15 or better.
 - Solutions agree to 2.9e-11 or better, relative to the larger of 1 and the
