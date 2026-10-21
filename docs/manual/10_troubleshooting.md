@@ -9,10 +9,11 @@ continuous integration and writes the expected results of every test case;
 the Stata test suite (`tests/run_all.do`) compares every variable of every
 case with them and requires agreement to 1e-6 (in practice 1e-11 or better).
 The GAMS model was written from the specification, calibrates from the SAM
-alone and is solved with PATH; it reproduces the same 146 scenarios to 3e-11
-or better (`tools/gams/README.md`). From version 0.4.3 `cge_gams` writes any
-model for that GAMS program; 17 exported cases, solved with PATH, CONOPT,
-KNITRO and IPOPT, reproduce Stata's solutions to 4e-9 or better (chapter 11).
+alone and is solved with PATH; it reproduces the same 159 scenarios, 13 of them
+with constraints solved as complementarity problems, to 3e-11 or better
+(`tools/gams/README.md`). From version 0.4.3 `cge_gams` writes any model for
+that GAMS program; 22 exported cases, solved with PATH, CONOPT, KNITRO and
+IPOPT, reproduce Stata's solutions to 4e-9 or better (chapter 11).
 
 **Checks in every run.** Calibration checks benchmark replication; `cge_check`
 adds SAM balance, a square closure, homogeneity of degree zero in prices, a

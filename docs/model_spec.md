@@ -161,6 +161,7 @@ Incomes, rates and adjustment variables
 | $DW_f$ | days worked per worker of factor $f$, relative to the base (from version 0.3.4; one for $f \notin FS$) |
 | $HS$ | volume of health services consumed by households, the government and the health insurance fund |
 | $WALRAS$ | slack in the savings-investment balance; zero at a solution |
+| $RM_c$, $RE_c$, $RA_a$ | premiums on imports and exports, per unit of the world price, and rents on activity output, per unit of the activity price (from version 0.4.4, Section 16.1); zero and fixed unless a constraint frees them |
 
 ## 4. Parameters
 
@@ -221,12 +222,13 @@ $\sigma^{q}_c \neq 1$ is required for imported commodities.
 
 ### 5.1 Price block
 
-$$PM_c = pwm_c\,(1+tm_c\,TMADJ)\,EXR + \sum_{c'} PQ_{c'}\,ici_{c'c}, \qquad c \in CM \tag{P1}$$
+$$PM_c = pwm_c\,(1+tm_c\,TMADJ + RM_c)\,EXR + \sum_{c'} PQ_{c'}\,ici_{c'c}, \qquad c \in CM \tag{P1}$$
 
-$$PE_c = PWE_c\,(1-te_c)\,EXR - \sum_{c'} PQ_{c'}\,ice_{c'c}, \qquad c \in CE \tag{P2}$$
+$$PE_c = PWE_c\,(1-te_c - RE_c)\,EXR - \sum_{c'} PQ_{c'}\,ice_{c'c}, \qquad c \in CE \tag{P2}$$
 
 with $PWE_c = pwe_c$ for $c \notin CED$. The margin terms are zero without
-margins by market (Section 13.4).
+margins by market (Section 13.4). The premiums $RM_c$ and $RE_c$ (from version
+0.4.4, Section 16.1) are zero unless a quota or another constraint frees them.
 
 $$PQ_c\,(1-tq_c\,TQADJ)\,QQ_c = PDD_c\,QD_c + PM_c\,QM_c + \sum_{c' \in CT} PQ_{c'}\,icm_{c'c}\,QQ_c \tag{P3}$$
 
@@ -245,7 +247,10 @@ $$PA_a = \sum_c \theta_{ac}\,PX_c \tag{P5}$$
 
 $$PINTA_a = \sum_{c} PQ_c\,\big(1 + tv_c\,TVADJ\,(1-\kappa_a)\big)\,ica_{ca} \tag{P6}$$
 
-$$PA_a\,(1-ta_a)\,QA_a = PVA_a\,QVA_a + PINTA_a\,QINTA_a \tag{P7}$$
+$$PA_a\,(1-ta_a - RA_a)\,QA_a = PVA_a\,QVA_a + PINTA_a\,QINTA_a \tag{P7}$$
+
+with the rent $RA_a$ on activity output (from version 0.4.4, Section 16.1),
+zero unless a capacity limit or another constraint frees it.
 
 $$CPI = \sum_c cwts_c\,PH_c \tag{P8}$$
 
@@ -394,13 +399,18 @@ any, is sold domestically ($QX_c = QD_c$, T3).
 
 ### 5.4 Institution block
 
-$$YF_f = \sum_a W_f\,WFDIST_{fa}\,QF_{fa} + trnsfr_{f,row}\,EXR \tag{I1}$$
+$$YF_f = \sum_a W_f\,WFDIST_{fa}\,QF_{fa} + trnsfr_{f,row}\,EXR + R_f \tag{I1}$$
+
+where $R_\rho$ is the sum of the rents paid to recipient $\rho$ (from version
+0.4.4, Section 16.1; zero without rents). It is also added to the incomes of
+households and enterprises (I3), to government revenue (I8) and, for the rest
+of the world, to payments abroad (S3).
 
 $$YIF_{if} = shif_{if}\,(1-tshi_f)\,YF_f, \quad i \in I \setminus \{shi\}; \qquad YIF_{shi,f} = tshi_f\,YF_f \tag{I2}$$
 
 Without a health insurance fund, $tshi_f = 0$.
 
-$$YI_d = \sum_f YIF_{df} + \sum_{d' \in D} shii_{dd'}\,(1-MPS_{d'})(1-TINS_{d'})\,YI_{d'} + trnsfr_{d,gov}\,CPI + trnsfr_{d,row}\,EXR + hold_d\,r^d\,DD \tag{I3}$$
+$$YI_d = \sum_f YIF_{df} + \sum_{d' \in D} shii_{dd'}\,(1-MPS_{d'})(1-TINS_{d'})\,YI_{d'} + trnsfr_{d,gov}\,CPI + trnsfr_{d,row}\,EXR + hold_d\,r^d\,DD + R_d \tag{I3}$$
 
 $$EH_h = hc_h\,(1-MPS_h)(1-TINS_h)\,YI_h \tag{I4}$$
 
@@ -430,7 +440,7 @@ $$QINV_c = \overline{qinv}_c\,IADJ \tag{I6}$$
 
 $$QG_c = \overline{qg}_c\,GADJ \tag{I7}$$
 
-$$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,TQADJ\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,TMADJ\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,PWE_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + VAT + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI \tag{I8}$$
+$$YG = \sum_d TINS_d\,YI_d + \sum_c tq_c\,TQADJ\,PQ_c\,QQ_c + \sum_{c \in CM} tm_c\,TMADJ\,pwm_c\,QM_c\,EXR + \sum_{c \in CE} te_c\,PWE_c\,QE_c\,EXR + \sum_a ta_a\,PA_a\,QA_a + VAT + \sum_f YIF_{gov,f} + trnsfr_{gov,row}\,EXR + trnsfr_{gov,gov}\,CPI + R_{gov} \tag{I8}$$
 
 with VAT revenue (zero without VAT)
 
@@ -462,7 +472,7 @@ $$QQ_c = \sum_a QINT_{ca} + \sum_h QH_{ch} + QG_c + QINV_c + QT_c + QER_c + QSHI
 
 where $QT_c$ applies only for $c \in CT$ and $QER_c$ only for $c \in CR$.
 
-$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} + r^f\,DF = \sum_{c \in CE} PWE_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + trnsfr_{shi,row} + FSAV \tag{S3}$$
+$$\sum_{c \in CM} pwm_c\,QM_c + \sum_f \frac{YIF_{row,f}}{EXR} + \sum_d \frac{shir_d\,(1-MPS_d)(1-TINS_d)\,YI_d}{EXR} + trnsfr_{row,gov} + r^f\,DF + \frac{R_{row}}{EXR} = \sum_{c \in CE} PWE_c\,QE_c + \sum_{c \in CR} \frac{PQ_c\,QER_c}{EXR} + \sum_d trnsfr_{d,row} + \sum_f trnsfr_{f,row} + trnsfr_{gov,row} + trnsfr_{shi,row} + FSAV \tag{S3}$$
 
 $$YG = EG + GSAV \tag{S4}$$
 
@@ -499,7 +509,10 @@ each pair and leaves the other free.
 | | DPI | $DPI$ | $CPI$ |
 
 $TQADJ$, $TMADJ$ and $TVADJ$ are fixed, at one in the base, except the one
-that the government closure frees (Section 12.1).
+that the government closure frees (Section 12.1). The rents $RM_c$, $RE_c$ and
+$RA_a$ are fixed, at zero in the base, under every closure (from version
+0.4.4). A constraint (Section 16) adds an equation and frees one variable
+that the closure fixes, so the system stays square.
 
 Variable and equation counts must be checked for every closure: the number of
 free variables must equal the number of equations.
@@ -785,7 +798,7 @@ $pwm^0_c$, $pwe^0_c$; nominal measures use current prices and parameters.
 
 | Measure | Definition |
 |---|---|
-| Nominal GDP | $\sum_c PH_c\,(\sum_h QH_{ch} + QG_c + QINV_c + QSHI_c) + \sum_c PQ_c\,QER_c + EXR\sum_c pwe_c QE_c - EXR\sum_c pwm_c QM_c$ |
+| Nominal GDP | $\sum_c PH_c\,(\sum_h QH_{ch} + QG_c + QINV_c + QSHI_c) + \sum_c PQ_c\,QER_c + EXR\sum_c pwe_c QE_c - EXR\sum_c pwm_c QM_c$, less premiums paid abroad (from version 0.4.4, Section 16.1) |
 | Real GDP | the same at base prices ($PH^0_c$, $PQ^0_c$) and base world prices |
 | GDP deflator | nominal GDP / real GDP |
 | Real consumption, government consumption, investment, fund purchases | $\sum_c PH^0_c$ times $\sum_h QH_{ch}$, $QG_c$, $QINV_c$, $QSHI_c$ |
@@ -1254,6 +1267,114 @@ The health table shows, when the model has them: health services per head
 $R$; the share of working time lost, $100\,S_f$ (per cent), and days worked
 $DW_f$ for $f \in FS$; the death rate per 1,000, $1000\,MR$; and the
 population index $POP$. Shares and rates change in points.
+
+## 16. Bounds and complementarity (from version 0.4.4)
+
+A model with only equalities cannot represent a limit that binds in some
+scenarios and not in others: an import quota, a capacity limit, a ceiling on
+borrowing. From version 0.4.4 such limits are complementarity conditions,
+solved with the rest of the model, so that the solver finds which limits
+bind.
+
+### 16.1 Rents
+
+Three rent variables give quotas and capacity limits their price effect. Each
+is zero in the base and fixed by every closure, unless a constraint frees it
+(Section 16.2):
+
+| Variable | Description |
+|---|---|
+| $RM_c$ | premium on imports of $c \in CM$, per unit of the world price in local currency |
+| $RE_c$ | premium on exports of $c \in CE$, per unit of the world price |
+| $RA_a$ | rent on the output of activity $a$, per unit of the activity price |
+
+They enter three price equations:
+
+$$PM_c = pwm_c (1 + tm_c\,TMADJ + RM_c)\,EXR + \textstyle\sum_{c'} ici_{c'c} PQ_{c'} \tag{P1}$$
+
+$$PE_c = pwe_c (1 - te_c - RE_c)\,EXR - \textstyle\sum_{c'} ice_{c'c} PQ_{c'} \tag{P2}$$
+
+$$PA_a (1 - ta_a - RA_a) QA_a = PVA_a QVA_a + PINTA_a QINTA_a \tag{P7}$$
+
+A premium is a wedge between the world price and the domestic price, like a
+tariff, but its revenue is a rent. The rent on each element,
+
+$$R^M_c = RM_c\,pwm_c\,EXR\,QM_c, \qquad R^E_c = RE_c\,pwe_c\,EXR\,QE_c, \qquad R^A_a = RA_a\,PA_a\,QA_a,$$
+
+is paid to one recipient $\rho$: the government (the default, as when quota
+licences are auctioned), a household or enterprise, a factor, or the rest of
+the world (as with a voluntary export restraint, whose rents foreign
+exporters keep). Rents are added to the incomes in I1 (factors), I3
+(households and enterprises) and I8 (government). Rents paid abroad are added
+to the payments abroad in S3, at $R / EXR$. A premium fixed at a positive
+value (`cge_shock RM`) acts as a tariff whose revenue goes to the recipient.
+
+**GDP.** The income side adds the rents received at home and every
+capacity rent, which is value added produced at home wherever it is paid. The
+expenditure side values imports and exports net of the rents paid abroad.
+
+### 16.2 Constraints
+
+A constraint $k$ pairs a limited variable $Y_k$ (one element of a variable,
+for example $QM_{com\_man}$) and its bound $b_k$ with an adjusting variable
+$X_k$, which the closure fixes at $\bar{x}_k$ and which may move in one
+direction only:
+
+$$g_k = \sigma_k\,\frac{b_k - Y_k}{s^Y_k} \geq 0, \qquad h_k = \delta_k\,\frac{X_k - \bar{x}_k}{s^X_k} \geq 0, \qquad g_k\,h_k = 0,$$
+
+with $\sigma_k = 1$ for an upper bound and $-1$ for a lower bound, and
+$\delta_k = 1$ if $X_k$ may rise and $-1$ if it may fall. The scales $s$ are
+the base magnitudes of the variables (one where the base value is zero).
+Either $Y_k$ is at its bound and $X_k$ has moved from $\bar{x}_k$ to keep it
+there, or $X_k$ is at $\bar{x}_k$ and $Y_k$ is within its bound. Each
+constraint adds one equation (block B1) and frees one variable, so the system
+stays square.
+
+| Constraint | Limited variable | Adjusting variable | Effect when it binds |
+|---|---|---|---|
+| import quota | $QM_c \leq b$ | $RM_c$, up | the premium rises until imports equal the quota |
+| export quota | $QE_c \leq b$ | $RE_c$, up | the premium rises until exports equal the quota |
+| capacity | $QA_a \leq b$ | $RA_a$, up | the activity price rises above cost; the rent goes to the owners of the capacity |
+| borrowing limit under a peg | $FSAV \leq b$ | $EXR$, up | the peg holds until foreign savings reach the limit; the currency then depreciates |
+| deficit ceiling | $GSAV \geq b$ | $GADJ$, down | government consumption is cut once the deficit reaches the ceiling |
+| deficit ceiling, taxes | $GSAV \geq b$ | $TINSADJ$, up | direct tax rates rise instead |
+| nominal wage floor | $W_f \geq b$ | $QFS_f$, down | employment falls once the wage reaches the floor |
+
+$Y_k$ must be free and $X_k$ fixed under the closure. With $X_k$ a rent
+variable, the constraint and the rent's recipient are given together.
+
+### 16.3 Solution
+
+The conditions are solved in two stages:
+
+1. **Smoothed.** Each condition is written in the smoothed Fischer-Burmeister
+   form of Section 14.3, $g + h - \sqrt{g^2 + h^2 + 2\mu} = 0$ with
+   $\mu = 10^{-8}$, and solved with the rest of the model. The solver finds
+   the regime; none is chosen in advance.
+2. **Exact.** Each constraint takes the regime of the smoothed solution:
+   binding, $g_k = 0$, if $h_k > g_k$, and otherwise not binding,
+   $h_k = 0$. The model is solved again with these equations. A constraint
+   whose other condition then fails ($h_k < 0$ when binding, $g_k < 0$ when
+   not) changes regime, and the model is solved again, for at most ten
+   rounds.
+
+The solution therefore satisfies the conditions exactly, to the solver's
+tolerance. Three implementations check one another, each with its own
+method:
+
+- Stata: the two stages above;
+- the Python reference: an active-set method, which starts from the solution
+  without constraints;
+- GAMS: a mixed complementarity problem, solved with PATH.
+
+The minimum wage of Section 14.3 keeps its smoothed condition and its
+calibration.
+
+### 16.4 Reporting
+
+`cge_solve` reports each constraint's regime, and the regimes are stored with
+the simulation. The rent variables appear in the results like other
+variables.
 
 ## References
 

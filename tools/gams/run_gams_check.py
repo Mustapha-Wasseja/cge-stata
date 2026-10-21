@@ -210,6 +210,43 @@ def shock_statements(model, shock: dict, closure: Closure) -> tuple[str, str]:
     return "\n".join(par) + "\n", "\n".join(var) + "\n"
 
 
+def gams_ref(model, name: str, k: int) -> tuple[str, str]:
+    """A variable element as GAMS writes it, and its level."""
+    e1, e2 = model.element_labels(name)[k]
+    g = "PWEV" if name == "PWE" else name
+    idx = "" if not e1 else (f"({q(e1)})" if not e2 else f"({q(e1)}, {q(e2)})")
+    return g + idx, g + ".l" + idx
+
+
+def constraint_statements(model, cons, closure: Closure) -> str:
+    """Constraints (model_spec.md, Section 16) as a mixed complementarity
+    problem: for each, a slack SLK >= 0 paired with the bound,
+    sigma (b - Y) / sY >= 0, and the adjusting variable freed and linked to
+    its fixed level, X = xbar + delta sX SLK; then model cgecon."""
+    fixed = closure.fixed(model)
+    lines = ["* constraints, written by run_gams_check.py"]
+    pairs = []
+    rec = {"RM": "rmto", "RE": "reto", "RA": "rato"}
+    for k, c in enumerate(cons, 1):
+        r = model._constraint(c, fixed)
+        (yname, yi), (xname, xi) = r["y"], r["x"]
+        y, _ = gams_ref(model, yname, yi)
+        x, xl = gams_ref(model, xname, xi)
+        xg = "PWEV" if xname == "PWE" else xname
+        idx = x[len(xg):]
+        lines += [f"positive variable SLK{k};", f"equations BND{k}, LNK{k};", f"scalar xbar{k};",
+                  f"xbar{k} = {xl};",
+                  f"BND{k}.. ({num(r['sigma'])}) * (({num(r['bound'])}) - {y}) / {num(r['sy'])} =g= 0;",
+                  f"LNK{k}.. {x} =e= xbar{k} + ({num(r['delta'])}) * {num(r['sx'])} * SLK{k};",
+                  f"{xg}.lo{idx} = -inf;", f"{xg}.up{idx} = inf;", f"SLK{k}.l = 0;"]
+        if c.rents is not None:
+            el = model.element_labels(xname)[xi][0]
+            lines += [f"{rec[xname]}(AC, {q(el)}) = 0;", f"{rec[xname]}({q(c.rents)}, {q(el)}) = 1;"]
+        pairs += [f"LNK{k}", f"BND{k}.SLK{k}"]
+    lines += ["model cgecon / cge, " + ", ".join(pairs) + " /;", "cgecon.optfile = cge.optfile;"]
+    return "\n".join(lines) + "\n"
+
+
 def run_gams(gams: str, args: list[str], cwd: Path) -> None:
     r = subprocess.run([gams, *args, "lo=0"], cwd=cwd, capture_output=True, text=True)
     if r.returncode != 0:
@@ -256,10 +293,10 @@ def cases() -> list[dict]:
     out = []
 
     def add(label, model, shocks, prefix="", les=None, closure=None, python=False, vat=None, debt=None,
-            trade=None, labour=None, outcomes=None, fq=None):
+            trade=None, labour=None, outcomes=None, fq=None, cons=None):
         out.append({"label": label, "model": model, "shocks": shocks, "prefix": prefix, "les": les,
                     "closure": closure or Closure(), "python": python, "vat": vat, "debt": debt,
-                    "trade": trade, "labour": labour, "outcomes": outcomes, "fq": fq})
+                    "trade": trade, "labour": labour, "outcomes": outcomes, "fq": fq, "cons": cons})
 
     add("standard", std, sc.simulation_inputs(std))
     mixed = sc.synthetic_model(**sc.MIXED_ELASTICITIES)
@@ -392,6 +429,12 @@ def cases() -> list[dict]:
     add("factor quantities, minimum wage", fqu,
         {"import_price_up10": sc.simulation_inputs(fqu)["import_price_up10"]}, "fqmw_", python=True,
         closure=Closure(factors={"lab": "minwage"}), labour={"unemployment": {"lab": 0.1}}, fq=workers)
+    # Bounds and complementarity (version 0.4.4, model_spec.md, Section 16):
+    # solved by PATH as a mixed complementarity problem, against the expected
+    # results of the Python reference, which finds the regimes by an
+    # active-set method
+    for name, (model, closure, shock, cons) in sc.constraint_cases().items():
+        add("constraints", model, {name: shock}, closure=closure, cons=cons)
     # Alternative closures, compared with the Python reference
     alt1 = Closure(external="fixexr", government="fixgsav", savinv="investment", numeraire="dpi",
                    factors={"cap": "specific"})
@@ -435,15 +478,23 @@ def main() -> None:
         model = case["model"]
         write_data(model, case["les"], d / "data.inc", case["vat"], case["debt"], case["trade"], case["labour"],
                    case["outcomes"], case["fq"])
-        run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work", *solver], d)
+        # Constraints need a mixed complementarity problem (MCP), with PATH
+        csolver = [f"--cgesolver={args.solver}", "--cgetype=mcp"] if case["cons"] else solver
+        run_gams(args.gams, ["cge_model.gms", "--data=data.inc", "--out=base.csv", "s=work", *csolver], d)
         bstatus, base = read_gams(d / "base.csv")
         for name, shock in case["shocks"].items():
             full = case["prefix"] + name
             par, var = shock_statements(model, shock, case["closure"])
             (d / f"{full}_p.inc").write_text(par, encoding="utf-8")
             (d / f"{full}_v.inc").write_text(var, encoding="utf-8")
+            extra = []
+            if case["cons"]:
+                (d / f"{full}_c.inc").write_text(constraint_statements(model, case["cons"], case["closure"]),
+                                                 encoding="utf-8")
+                extra = [f"--cons={full}_c.inc"]
             run_gams(args.gams, ["cge_scenario.gms", "r=work", f"--name={full}", f"--shockpar={full}_p.inc",
-                                 f"--shockvar={full}_v.inc", f"--out={full}.csv", f"o={full}.lst", *solver], d)
+                                 f"--shockvar={full}_v.inc", f"--out={full}.csv", f"o={full}.lst", *csolver,
+                                 *extra], d)
             status, value = read_gams(d / f"{full}.csv")
             if case["python"]:
                 sol = model.solve(case["closure"], tol=1e-12, **shock)

@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.4.3 implements the standard single-country model described in
+Version 0.4.4 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -61,7 +61,12 @@ Version 0.4.3 implements the standard single-country model described in
 - health outcomes and demography (version 0.3.4, [Section 15](docs/model_spec.md)):
   working time lost to illness and a death rate that respond to health
   services per head; days worked scale labour input, and in dynamic runs
-  deaths change the growth of the population and of labour.
+  deaths change the growth of the population and of labour;
+- limits that bind in some scenarios and not in others (version 0.4.4,
+  [Section 16](docs/model_spec.md)): import and export quotas and capacity
+  limits, whose rents go to a chosen recipient, and closure switches such as
+  a peg that holds until borrowing reaches a limit or a deficit ceiling,
+  solved as complementarity conditions.
 
 Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
 derivatives for the aggregate equations with grouped central differences for
@@ -79,6 +84,17 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.4.4 adds limits that may bind (`cge_constraint`; Section 16). Each
+is a bound on one element of a variable, such as imports of a commodity or the
+output of health services, paired with a variable that the closure fixes and
+that may move in one direction. The solver finds whether each limit binds.
+Quotas and capacity limits work through rents, paid to the government, a
+household, an enterprise, a factor or the rest of the world. Other limits
+switch the closure: a peg that holds until foreign borrowing reaches a limit,
+or government spending cut once the deficit reaches a ceiling. Stata
+(smoothed, then exact conditions), the Python reference (an active-set method)
+and GAMS (a mixed complementarity problem solved with PATH) agree on 13 test
+cases to 4e-12 or better, and `cge_gams` exports such scenarios.
 Version 0.4.3 writes the model and a scenario as a GAMS program (`cge_gams`;
 [docs/gams.md](docs/gams.md)). GAMS calibrates the model itself from the SAM
 and the calibration settings, with the package's independent GAMS

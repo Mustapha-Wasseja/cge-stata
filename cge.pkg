@@ -5,7 +5,8 @@ d Builds, calibrates and solves static and recursive dynamic, single-country CGE
 d from a social accounting matrix, using Stata and Mata: CES or
 d Cobb-Douglas value added, CET exports, Armington imports,
 d households, government, savings-investment and the rest of the
-d world, with selectable closures and built-in validation checks; SAM tools
+d world, with selectable closures, limits that may bind (quotas, capacity,
+d borrowing and deficit ceilings) and built-in validation checks; SAM tools
 d for reading SAMs of any size, mapping templates, aggregation and RAS or
 d cross-entropy balancing; SAM multipliers and structural path analysis; a library of published elasticities, with sources;
 d and export of the model to GAMS, to solve it with PATH, CONOPT or IPOPT.
@@ -44,6 +45,8 @@ f ado/cge_closure.ado
 f ado/cge_closure.sthlp
 f ado/cge_shock.ado
 f ado/cge_shock.sthlp
+f ado/cge_constraint.ado
+f ado/cge_constraint.sthlp
 f ado/cge_solve.ado
 f ado/cge_solve.sthlp
 f ado/cge_dynamic.ado

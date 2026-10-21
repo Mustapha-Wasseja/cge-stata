@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.3  21oct2026}{...}
+{* *! version 0.4.4  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -51,6 +51,7 @@ debt with interest.
 {p2col:{helpb cge_elasticities}}published elasticities, with sources, as calibration options{p_end}
 {p2col:{helpb cge_closure}}choose the closure{p_end}
 {p2col:{helpb cge_shock}}change parameters or fixed variables{p_end}
+{p2col:{helpb cge_constraint}}limits that may bind: quotas, capacity, borrowing and deficit ceilings{p_end}
 {p2col:{helpb cge_solve}}solve and store a simulation{p_end}
 {p2col:{helpb cge_dynamic}}solve a recursive dynamic run, period by period{p_end}
 {p2col:{helpb cge_results}}display or save all results of a simulation{p_end}

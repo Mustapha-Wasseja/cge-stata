@@ -86,6 +86,55 @@ and, in dynamic runs, changes population and labour growth from the next
 period (chapter 7). The elasticities are hypotheses to take from studies of
 the country; the package supplies none for days lost or the death rate.
 
+## 6.5 Limits that may bind (Section 16)
+
+Some limits bind in one scenario and not in another: an import quota, the
+capacity of health providers, a ceiling on borrowing. From version 0.4.4,
+`cge_constraint` adds such a limit, and `cge_solve` finds whether it binds.
+Each limit is a bound on one element of a variable, paired with a variable
+that the closure fixes and that may move in one direction only. Either the
+limited variable is within its bound and the adjusting variable at its fixed
+level, or the limited variable is at its bound and the adjusting variable has
+moved.
+
+**Quotas and capacity.** A bound on imports (`QM`), exports (`QE`) or
+activity output (`QA`) is paired with a rent that is zero in the base: a
+premium on the import or export price (`RM`, `RE`), or a rent on the
+activity's output (`RA`). When the limit binds, the rent rises until demand
+equals the limit, and it is income of the recipient given in `rents()`. The
+recipient is the government by default, or a household, an enterprise, a
+factor or the rest of the world:
+
+```stata
+cge_shock qg, elements(com_hlt) scale(1.2)
+cge_constraint QA, elements(act_hlt) upper(1.03) scale rents(hhd)
+cge_solve, name(health20_cap)
+```
+
+Here government purchases of health services rise by 20 per cent, but
+providers can deliver only 3 per cent more than in the base. The price of
+health services rises above cost; the rent goes to the providers' owners,
+here households; and other buyers of health services, such as the insurance
+fund, get less.
+
+**Closure switches.** A limit can also switch the closure:
+
+```stata
+cge_closure, external(fixexr)
+cge_constraint FSAV, upper(30) adjust(EXR) up      // a peg holds until borrowing reaches 30
+cge_constraint GSAV, lower(0) adjust(GADJ) down    // no deficit: spending is cut instead
+cge_constraint W, elements(lab) lower(1) scale adjust(QFS) down   // a floor on the nominal wage
+```
+
+`cge_constraint, list` shows the constraints and their regimes, and
+`cge_constraint, clear` removes them. Constraints are kept by
+`cge_shock, reset`, in dynamic runs and sensitivity analysis, and when the
+model is saved. The example `examples/constraints.do` runs these cases.
+
+The Python reference finds the regimes by another method, and GAMS solves
+them as a mixed complementarity problem with PATH (chapter 11). The three
+agree on every test case to 4e-12 or better.
+
 ## References
 
 Blanchflower, D. G. and A. J. Oswald (1995). An introduction to the wage curve.

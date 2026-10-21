@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.4.3  2026-10-21
+*! cge_mata.mata  v0.4.4  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -57,6 +57,14 @@ struct cge_par {
     // for a death rate, the population index and a flag for the health link
     real colvector ins, sick0, sick, epss
     real scalar    mort0, mort, epsm, hasmort, pop, hlink
+    // bounds and complementarity (from version 0.4.4): recipients of the rents
+    // on imports, exports and activity output, as positions in the list of
+    // factors, households and enterprises, government and rest of the world;
+    // for each constraint its regime (0 none, 1 smoothed, 2 binding, 3 not
+    // binding), its bound and the reference level of its adjusting variable;
+    // and the smoothing of the conditions
+    real colvector rrm, rre, rra, bmode, bval, bxbar
+    real scalar    bmu
 }
 
 struct cge_model {
@@ -119,6 +127,11 @@ struct cge_model {
     // factor of each stored simulation ("" and missing for static ones)
     string colvector simrun
     real colvector   simper, simlam
+    // constraints (from version 0.4.4): positions of the limited and adjusting
+    // variables, bound type (1 upper, -1 lower) and direction of the adjusting
+    // variable (1 up, -1 down); the constraints and regimes of each simulation
+    real colvector   bY, bX, btype, bdir
+    string colvector simcons
 }
 
 // Columns of the Jacobian for one solve (free variables), grouped so that the
@@ -133,7 +146,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.4.3")
+    return("0.4.4")
 }
 
 // =====================================================================
@@ -264,12 +277,12 @@ void _cge_layout(struct cge_model scalar M)
                "QA","QVA","QINTA","QF","QINT","QX","QD","QE","QM","QQ","QH","QG","QINV","QFS",
                "YF","YIF","YI","EH","YG","EG","GSAV","FSAV","TINS","MPS","TINSADJ","MPSADJ",
                "IADJ","GADJ","WFDIST","WALRAS","QT","QER","YSHI","SHIADJ","QSHI","EFF","HS",
-               "TQADJ","TMADJ","TVADJ","PWE","QHA","LSW","LSM","DW")'
+               "TQADJ","TMADJ","TVADJ","PWE","QHA","LSW","LSM","DW","RM","RE","RA")'
     M.vset  = ("A","A","A","C","C","C","C","C","F","","","",
                "A","A","A","FA","CA","C","C","C","C","C","CH","C","C","F",
                "F","IF","D","H","","","","","D","D","","",
                "","","FA","","C","C","","","C","F","",
-               "","","","C","AH","F","F","F")'
+               "","","","C","AH","F","F","F","C","C","A")'
     M.voff = J(rows(M.vname), 1, 0)
     M.vrows = M.voff
     M.vcols = M.voff
@@ -2070,9 +2083,9 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
     real matrix YF, YIF, YI, EH, YG, EG, GSAV, FSAV, TINS, MPS, TINSADJ, MPSADJ
     real matrix IADJ, GADJ, WFDIST, WALRAS, QT, QER, YSHI, SHIADJ, QSHI, EFF, HS
-    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, LSW, LSM, DW
+    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, LSW, LSM, DW, RM, RE, RA
     real matrix qf, rho, cessum, q3, wage, pvaqva, lhs, rhs, yif, z, vint
-    real colvector oneA, oneC, oneF, oneH, oneD, DY, rs, tq, tm, tv, PH, pwe, PDD, unemp, rwage, ub
+    real colvector oneA, oneC, oneF, oneH, oneD, DY, rs, tq, tm, tv, PH, pwe, PDD, unemp, rwage, ub, rent
     real rowvector SN
     real scalar k, nH, nD
 
@@ -2096,6 +2109,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     TQADJ = _cge_v(M, x, 50); TMADJ = _cge_v(M, x, 51); TVADJ = _cge_v(M, x, 52)
     PWE = _cge_v(M, x, 53);   QHA = _cge_v(M, x, 54)
     LSW = _cge_v(M, x, 55);   LSM = _cge_v(M, x, 56);   DW = _cge_v(M, x, 57)
+    RM = _cge_v(M, x, 58);    RE = _cge_v(M, x, 59);    RA = _cge_v(M, x, 60)
 
     L = J(0, 1, .)
     R = J(0, 1, .)
@@ -2124,16 +2138,17 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     pwe = M.ced :* PWE + (1 :- M.ced) :* p.pwe
     PDD = PD + p.icd' * PQ
 
-    // 5.1 Price block
-    _cge_put(M, L, R, K, record, "P1", PM, p.pwm :* (1 :+ tm) :* EXR + p.ici' * PQ, M.cm)
-    _cge_put(M, L, R, K, record, "P2", PE, pwe :* (1 :- p.te) :* EXR - p.ice' * PQ, M.ce)
+    // 5.1 Price block; premiums on imports and exports (Section 16.1)
+    _cge_put(M, L, R, K, record, "P1", PM, p.pwm :* (1 :+ tm + RM) :* EXR + p.ici' * PQ, M.cm)
+    // (in Mata a - b binds more tightly than a :- b, so colon operators are used throughout)
+    _cge_put(M, L, R, K, record, "P2", PE, pwe :* (1 :- p.te :- RE) :* EXR - p.ice' * PQ, M.ce)
     // p.icm' * PQ: cost of margin services per unit of composite supply
     _cge_put(M, L, R, K, record, "P3", PQ :* (1 :- tq) :* QQ,
              M.cdo :* PDD :* QD + M.cm :* PM :* QM + (p.icm' * PQ) :* QQ, M.cq)
     _cge_put(M, L, R, K, record, "P4", PX :* QX, M.cdo :* PD :* QD + M.ce :* PE :* QE, M.cx)
     _cge_put(M, L, R, K, record, "P5", PA, p.theta * PX, oneA)
     _cge_put(M, L, R, K, record, "P6", PINTA, (p.ica :* (1 :+ vint))' * PQ, oneA)
-    _cge_put(M, L, R, K, record, "P7", PA :* (1 :- p.ta) :* QA, PVA :* QVA + PINTA :* QINTA, oneA)
+    _cge_put(M, L, R, K, record, "P7", PA :* (1 :- p.ta :- RA) :* QA, PVA :* QVA + PINTA :* QINTA, oneA)
     _cge_put(M, L, R, K, record, "P8", CPI, p.cwts' * PH, 1)
     _cge_put(M, L, R, K, record, "P9", DPI, p.dwts' * PD, 1)
 
@@ -2202,14 +2217,17 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
 
     // 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 :- MPS) :* (1 :- TINS) :* YI
-    _cge_put(M, L, R, K, record, "I1", YF, rowsum(wage :* QF) + p.trfr :* EXR, oneF)
+    // Rents by recipient: factors, households and enterprises, government,
+    // rest of the world (Section 16.1)
+    rent = _cge_rentvec(M, p, RM, RE, RA, QM, QE, PA, QA, pwe, EXR)
+    _cge_put(M, L, R, K, record, "I1", YF, rowsum(wage :* QF) + p.trfr :* EXR + rent[|1 \ M.nF|], oneF)
     // Health insurance contributions are taken before factor income is distributed
     yif = p.shif :* ((1 :- p.tshi) :* YF)'
     if (M.ishi) yif[M.nI, .] = (p.tshi :* YF)'
     _cge_put(M, L, R, K, record, "I2", YIF, yif, J(M.nI, M.nF, 1))
     _cge_put(M, L, R, K, record, "I3", YI,
              rowsum(YIF[|1, 1 \ nD, M.nF|]) + p.shii * DY + p.trdg :* CPI + p.trdr :* EXR
-             + p.hold :* (p.rd * p.ddebt), oneD)
+             + p.hold :* (p.rd * p.ddebt) + rent[|M.nF + 1 \ M.nF + nD|], oneD)
     _cge_put(M, L, R, K, record, "I4", EH, p.hc :* DY[|1 \ nH|], oneH)
     // Supernumerary spending, counting home goods at PA (13.1)
     SN = EH' - PH' * p.gamma - PA' * p.gammah
@@ -2221,7 +2239,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
              TINS' * YI + sum(tq :* PQ :* QQ) + sum(tm :* p.pwm :* QM) * EXR
              + sum(p.te :* pwe :* QE) * EXR + sum(p.ta :* PA :* QA)
              + sum(tv :* PQ :* (rowsum(QH) + QG + QINV + QSHI + rowsum(QINT :* (1 :- p.kappa)')))
-             + sum(YIF[nD + 1, .]) + p.trgr * EXR + p.trgg * CPI, 1)
+             + sum(YIF[nD + 1, .]) + p.trgr * EXR + p.trgg * CPI + rent[M.nF + nD + 1], 1)
     _cge_put(M, L, R, K, record, "I9", EG,
              PH' * QG + (sum(p.trdg) + p.trgg + p.trshi) * CPI + p.trrg * EXR
              + p.rd * p.ddebt + p.rf * p.fdebt * EXR, 1)
@@ -2246,12 +2264,51 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     _cge_put(M, L, R, K, record, "S2", QQ,
              rowsum(QINT) + rowsum(QH) + QG + QINV + M.ct :* QT + M.cr :* QER + QSHI, M.cq)
     _cge_put(M, L, R, K, record, "S3",
-             sum(p.pwm :* QM) + (sum(YIF[nD + 2, .]) + p.shir' * DY) / EXR + p.trrg + p.rf * p.fdebt,
+             sum(p.pwm :* QM) + (sum(YIF[nD + 2, .]) + p.shir' * DY) / EXR + p.trrg + p.rf * p.fdebt
+             + rent[M.nF + nD + 2] / EXR,
              sum(pwe :* QE) + sum(M.cr :* PQ :* QER) / EXR + sum(p.trdr) + sum(p.trfr) + p.trgr
              + p.trshir + FSAV, 1)
     _cge_put(M, L, R, K, record, "S4", YG, EG + GSAV, 1)
     _cge_put(M, L, R, K, record, "S5", (MPS :* (1 :- TINS))' * YI + GSAV + p.sshi * YSHI + EXR * FSAV,
              PH' * QINV + WALRAS, 1)
+
+    // Bounds and complementarity (Section 16.2): one row per constraint
+    _cge_put(M, L, R, K, record, "B1", _cge_bres(M, p, x), J(rows(M.bY), 1, 0), J(rows(M.bY), 1, 1))
+}
+
+// Rents by recipient (Section 16.1): factors, households and enterprises,
+// the government and the rest of the world
+real colvector _cge_rentvec(struct cge_model scalar M, struct cge_par scalar p, real colvector RM,
+                            real colvector RE, real colvector RA, real colvector QM, real colvector QE,
+                            real colvector PA, real colvector QA, real colvector pwe, real scalar EXR)
+{
+    real colvector out, vm, ve, va
+    real scalar k
+    out = J(M.nF + M.nD + 2, 1, 0)
+    vm = RM :* p.pwm :* QM * EXR
+    ve = RE :* pwe :* QE * EXR
+    va = RA :* PA :* QA
+    for (k = 1; k <= M.nC; k++) {
+        if (vm[k] != 0) out[p.rrm[k]] = out[p.rrm[k]] + vm[k]
+        if (ve[k] != 0) out[p.rre[k]] = out[p.rre[k]] + ve[k]
+    }
+    for (k = 1; k <= M.n; k++) if (va[k] != 0) out[p.rra[k]] = out[p.rra[k]] + va[k]
+    return(out)
+}
+
+// Residuals of the constraints (Section 16.2): g = sigma (b - Y) / sY, the
+// distance of the limited variable within its bound, and h = delta (X - xbar) /
+// sX, the move of the adjusting variable in its direction; smoothed
+// Fischer-Burmeister (regime 1), g (binding, 2) or h (not binding, 3; or no
+// constraint, 0)
+real colvector _cge_bres(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    real colvector g, h
+    if (rows(M.bY) == 0) return(J(0, 1, .))
+    g = M.btype :* (p.bval - x[M.bY]) :/ M.xscale[M.bY]
+    h = M.bdir :* (x[M.bX] - p.bxbar) :/ M.xscale[M.bX]
+    return((p.bmode :== 1) :* (g + h - sqrt(g :^ 2 + h :^ 2 :+ 2 * p.bmu)) + (p.bmode :== 2) :* g +
+           ((p.bmode :== 0) :| (p.bmode :== 3)) :* h)
 }
 
 // Scaled residuals of the existing equation elements. Mata's sum functions
@@ -2637,6 +2694,19 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.cx = cx
     M.ct = ct
     M.cr = cr
+    // Rents go to the government unless a constraint names another recipient;
+    // there are no constraints after calibration (Section 16)
+    p.rrm = J(nC, 1, M.nF + M.nD + 1)
+    p.rre = J(nC, 1, M.nF + M.nD + 1)
+    p.rra = J(n, 1, M.nF + M.nD + 1)
+    p.bmode = J(0, 1, .)
+    p.bval = J(0, 1, .)
+    p.bxbar = J(0, 1, .)
+    p.bmu = 1e-8
+    M.bY = J(0, 1, .)
+    M.bX = J(0, 1, .)
+    M.btype = J(0, 1, .)
+    M.bdir = J(0, 1, .)
     M.p0 = p
     M.p = p
 
@@ -2702,6 +2772,9 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, x0, "LSW", J(nF, 1, 0))
     _cge_setv(M, x0, "LSM", _cge_lsm0(p, rowsum(QF0)))
     _cge_setv(M, x0, "DW", J(nF, 1, 1))
+    _cge_setv(M, x0, "RM", J(nC, 1, 0))
+    _cge_setv(M, x0, "RE", J(nC, 1, 0))
+    _cge_setv(M, x0, "RA", J(n, 1, 0))
     M.x0 = x0
     M.xcur = x0
     M.xscale = abs(x0) :* (abs(x0) :> 1e-12) + (abs(x0) :<= 1e-12)
@@ -2733,6 +2806,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     _cge_setv(M, M.exists, "DW", p.ins)
     _cge_setv(M, M.exists, "LSW", p.inlf)
     _cge_setv(M, M.exists, "LSM", p.inlf)
+    _cge_setv(M, M.exists, "RM", cm)
+    _cge_setv(M, M.exists, "RE", ce)
 
     M.nominal = J(total, 1, 0)
     for (k = 1; k <= rows(M.vname); k++) {
@@ -2770,6 +2845,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.simrun = J(0, 1, "")
     M.simper = J(0, 1, .)
     M.simlam = J(0, 1, .)
+    M.simcons = J(0, 1, "")
     M.c_fac = J(nF, 1, "mobile")
     _cge_closure_apply(M, "flexexr", "flexgsav", "savings", "cpi", M.c_fac)
 
@@ -3251,7 +3327,18 @@ void _cge_closure_apply(struct cge_model scalar M, string scalar ext, string sca
         }
         else _cge_fail("factor closure must be mobile, specific, unemployed, wagecurve or minwage", 198)
     }
-    nfree = sum(M.exists :* (1 :- fixed))
+    // Rents are fixed, at zero in the base, unless a constraint frees them;
+    // each constraint needs its adjusting variable fixed and its limited
+    // variable free (Section 16.2)
+    _cge_fix(M, fixed, "RM", 0)
+    _cge_fix(M, fixed, "RE", 0)
+    _cge_fix(M, fixed, "RA", 0)
+    for (k = 1; k <= rows(M.bY); k++) {
+        if (!fixed[M.bX[k]]) _cge_fail("constraint on " + _cge_poslabel(M, M.bY[k]) + ": " + _cge_poslabel(M, M.bX[k]) +
+                                       " is not fixed under this closure, so it cannot adjust", 459)
+        if (fixed[M.bY[k]]) _cge_fail("constraint on " + _cge_poslabel(M, M.bY[k]) + ": it is fixed under this closure", 459)
+    }
+    nfree = sum(M.exists :* (1 :- fixed)) + rows(M.bY)
     if (nfree != M.neq) {
         errprintf("closure is not square: %f free variables, %f equations\n", nfree, M.neq)
         exit(459)
@@ -3410,6 +3497,7 @@ real colvector _cge_elements(string colvector set, string scalar elems, string s
 void _cge_shock(string scalar target, string scalar elems, string scalar mode, real scalar value)
 {
     struct cge_model scalar M
+    struct cge_par scalar q
     real colvector v, idx, pos, okpos
     real scalar k, i
     string scalar set
@@ -3418,7 +3506,10 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
     _cge_need(M, "calibrated")
 
     if (target == "reset") {
+        // Constraints and the recipients of rents are kept (Section 16)
+        q = M.p
         M.p = M.p0
+        _cge_cons_carry(M.p, q)
         M.xcur = M.x0
         _cge_store(M)
         printf("{txt}All shocks removed\n")
@@ -3530,9 +3621,13 @@ struct cge_sys {
 struct cge_sys scalar _cge_sys_make(struct cge_model scalar M, real scalar reduced)
 {
     struct cge_sys scalar S
+    real colvector isx
     S.reduced = reduced
+    // The adjusting variables of constraints are solved for (Section 16.2)
+    isx = J(rows(M.x0), 1, 0)
+    if (rows(M.bX)) isx[M.bX] = J(rows(M.bX), 1, 1)
     if (reduced) {
-        S.free = select((1::rows(M.x0)), M.exists :* (1 :- M.fixed) :* (1 :- M.derived))
+        S.free = select((1::rows(M.x0)), M.exists :* ((1 :- M.fixed) :| isx) :* (1 :- M.derived))
         S.mask = M.rmask
         S.jr = M.rjr
         S.jc = M.rjc
@@ -3540,7 +3635,7 @@ struct cge_sys scalar _cge_sys_make(struct cge_model scalar M, real scalar reduc
         S.drow2 = M.rdrow2
     }
     else {
-        S.free = select((1::rows(M.x0)), M.exists :* (1 :- M.fixed))
+        S.free = select((1::rows(M.x0)), M.exists :* ((1 :- M.fixed) :| isx))
         S.mask = M.emask
         S.jr = M.jr
         S.jc = M.jc
@@ -3570,10 +3665,13 @@ void _cge_derive(struct cge_model scalar M, struct cge_par scalar p, real colvec
     PQ = _cge_v(M, x, 8)
     TVADJ = _cge_v(M, x, 52)
     PH = PQ :* (1 :+ p.tv :* TVADJ)
-    if (M.dact[1]) _cge_setv(M, x, "PM", M.cm :* (p.pwm :* (1 :+ p.tm :* _cge_v(M, x, 51)) :* EXR + p.ici' * PQ))
+    if (M.dact[1]) {
+        _cge_setv(M, x, "PM", M.cm :* (p.pwm :* (1 :+ p.tm :* _cge_v(M, x, 51) + _cge_v(M, x, 58)) :* EXR +
+                                       p.ici' * PQ))
+    }
     if (M.dact[2]) {
-        _cge_setv(M, x, "PE", M.ce :* ((M.ced :* _cge_v(M, x, 53) + (1 :- M.ced) :* p.pwe) :* (1 :- p.te) :* EXR
-                                       - p.ice' * PQ))
+        _cge_setv(M, x, "PE", M.ce :* ((M.ced :* _cge_v(M, x, 53) + (1 :- M.ced) :* p.pwe) :*
+                                       (1 :- p.te :- _cge_v(M, x, 59)) :* EXR - p.ice' * PQ))
     }
     if (M.dact[3]) _cge_setv(M, x, "PINTA", (p.ica :* (1 :+ (p.tv :* TVADJ) * (1 :- p.kappa)'))' * PQ)
     if (M.dact[4]) _cge_setv(M, x, "QINT", p.ica :* _cge_v(M, x, 15)')
@@ -3772,12 +3870,12 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     pc = J(0, 1, .)
 
     // 5.1 Price block
-    _cge_sp_same(M, rowid, boff, pr, pc, "P1", "PM")
+    _cge_sp_same(M, rowid, boff, pr, pc, "P1", ("PM", "RM"))
     _cge_sp(M, rowid, boff, pr, pc, "P1", cC, "EXR", 1)
     _cge_sp(M, rowid, boff, pr, pc, "P1", cC, "TMADJ", 1)
     _cge_nz(p.ici, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "P1", j, "PQ", i)
-    _cge_sp_same(M, rowid, boff, pr, pc, "P2", ("PE", "PWE"))
+    _cge_sp_same(M, rowid, boff, pr, pc, "P2", ("PE", "PWE", "RE"))
     _cge_sp(M, rowid, boff, pr, pc, "P2", cC, "EXR", 1)
     _cge_nz(p.ice, i, j)
     _cge_sp(M, rowid, boff, pr, pc, "P2", j, "PQ", i)
@@ -3876,6 +3974,28 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     }
     _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "CPI", 1)
     _cge_sp(M, rowid, boff, pr, pc, "I3", cD, "EXR", 1)
+    // Rents received by households and enterprises (Section 16.1)
+    for (k = 1; k <= nC; k++) {
+        g = p.rrm[k] - nF
+        if (g >= 1 & g <= nD) {
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "RM", k)
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "QM", k)
+        }
+        g = p.rre[k] - nF
+        if (g >= 1 & g <= nD) {
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "RE", k)
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "QE", k)
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "PWE", k)
+        }
+    }
+    for (k = 1; k <= nA; k++) {
+        g = p.rra[k] - nF
+        if (g >= 1 & g <= nD) {
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "RA", k)
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "PA", k)
+            _cge_sp(M, rowid, boff, pr, pc, "I3", g, "QA", k)
+        }
+    }
     _cge_sp_same(M, rowid, boff, pr, pc, "I4", "EH")
     _cge_sp(M, rowid, boff, pr, pc, "I4", (1::nH), "MPS", (1::nH))
     _cge_sp(M, rowid, boff, pr, pc, "I4", (1::nH), "TINS", (1::nH))
@@ -3934,6 +4054,13 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
     _cge_sp(M, rowid, boff, pr, pc, "S4", 1, "YG", 1)
     _cge_sp(M, rowid, boff, pr, pc, "S4", 1, "EG", 1)
     _cge_sp(M, rowid, boff, pr, pc, "S4", 1, "GSAV", 1)
+
+    // Constraints (Section 16.2): the limited and the adjusting variable
+    g = _cge_find(M.ename, "B1")
+    if (M.elen[g]) {
+        pr = pr \ rowid[boff[g] :+ (1::M.elen[g])] \ rowid[boff[g] :+ (1::M.elen[g])]
+        pc = pc \ M.bY \ M.bX
+    }
 
     // Keep existing equations and variables
     keep = (pr :> 0) :& M.exists[pc]
@@ -4009,6 +4136,7 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
         G[r, cWFD[|(f - 1) * nA + 1 \ f * nA|]'] = -W[f] :* QF[f, .]
         G[r, cQF[|(f - 1) * nA + 1 \ f * nA|]'] = -W[f] :* WFD[f, .]
         G[r, _cge_vcols(M, "EXR")] = -p.trfr[f]
+        _cge_rent_grad(M, p, x, f, G, r, -1, 0)
     }
     // I8: government revenue
     r = 3 + nF
@@ -4037,6 +4165,7 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     G[r, _cge_vcols(M, "QA")'] = -(p.ta :* PA)'
     G[r, cYIF[|nD * nF + 1 \ (nD + 1) * nF|]'] = J(1, nF, -1)
     G[r, _cge_vcols(M, "CPI")] = -p.trgg
+    _cge_rent_grad(M, p, x, nF + nD + 1, G, r, -1, 0)
     // I9: government spending
     r = 4 + nF
     G[r, _cge_vcols(M, "EG")] = 1
@@ -4066,6 +4195,7 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     G[r, _cge_vcols(M, "PQ")'] = -(M.cr :* QER)' :/ EXR
     G[r, _cge_vcols(M, "QER")'] = -(M.cr :* PQ)' :/ EXR
     G[r, _cge_vcols(M, "FSAV")] = -1
+    _cge_rent_grad(M, p, x, nF + nD + 2, G, r, 1, 1)
     // S5: savings-investment balance
     r = 6 + 2 * nF
     G[r, _cge_vcols(M, "MPS")'] = ((1 :- TINS) :* YI)'
@@ -4082,6 +4212,40 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     return(G)
 }
 
+// Derivatives of the rents paid to recipient code (Section 16.1), times s,
+// added to row r of G; with perexr the rents are divided by EXR (S3)
+void _cge_rent_grad(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real scalar code,
+                    real matrix G, real scalar r, real scalar s, real scalar perexr)
+{
+    real colvector RM, RE, RA, QM, QE, PA, QA, pwe, sm, se, sa, cRM, cRE, cRA, cQM, cQE, cPA, cQA, cPWE
+    real scalar EXR, e, cEXR
+    sm = (p.rrm :== code)
+    se = (p.rre :== code)
+    sa = (p.rra :== code)
+    if (!any(sm) & !any(se) & !any(sa)) return
+    RM = _cge_vn(M, x, "RM");  RE = _cge_vn(M, x, "RE");  RA = _cge_vn(M, x, "RA")
+    QM = _cge_vn(M, x, "QM");  QE = _cge_vn(M, x, "QE");  PA = _cge_vn(M, x, "PA")
+    QA = _cge_vn(M, x, "QA");  EXR = _cge_vn(M, x, "EXR")
+    pwe = M.ced :* _cge_vn(M, x, "PWE") + (1 :- M.ced) :* p.pwe
+    cRM = _cge_vcols(M, "RM"); cRE = _cge_vcols(M, "RE"); cRA = _cge_vcols(M, "RA")
+    cQM = _cge_vcols(M, "QM"); cQE = _cge_vcols(M, "QE"); cPA = _cge_vcols(M, "PA")
+    cQA = _cge_vcols(M, "QA"); cPWE = _cge_vcols(M, "PWE"); cEXR = _cge_vcols(M, "EXR")
+    // Premiums are in local currency, EXR times a foreign-currency amount
+    e = (perexr ? 1 : EXR)
+    G[r, cRM'] = G[r, cRM'] + s * e :* (sm :* p.pwm :* QM)'
+    G[r, cQM'] = G[r, cQM'] + s * e :* (sm :* RM :* p.pwm)'
+    G[r, cRE'] = G[r, cRE'] + s * e :* (se :* pwe :* QE)'
+    G[r, cQE'] = G[r, cQE'] + s * e :* (se :* RE :* pwe)'
+    G[r, cPWE'] = G[r, cPWE'] + s * e :* (se :* M.ced :* RE :* QE)'
+    if (!perexr) G[r, cEXR] = G[r, cEXR] + s * (sum(sm :* RM :* p.pwm :* QM) + sum(se :* RE :* pwe :* QE))
+    // Rents on output are in local currency
+    e = (perexr ? 1 / EXR : 1)
+    G[r, cRA'] = G[r, cRA'] + s * e :* (sa :* PA :* QA)'
+    G[r, cPA'] = G[r, cPA'] + s * e :* (sa :* RA :* QA)'
+    G[r, cQA'] = G[r, cQA'] + s * e :* (sa :* RA :* PA)'
+    if (perexr) G[r, cEXR] = G[r, cEXR] - s * sum(sa :* RA :* PA :* QA) / EXR^2
+}
+
 // Exact derivatives of the market-clearing rows S2 (one per commodity) and the
 // activity-price rows P7 (one per activity), from version 0.2.0, with respect
 // to every stacked variable (unscaled). In the reduced system they are total
@@ -4095,7 +4259,7 @@ real matrix _cge_dense2(struct cge_model scalar M, struct cge_par scalar p, real
 {
     real matrix G
     real colvector PQ, EH, PA, QA, PVA, QVA, PINTA, QINTA, cQQ, cPQ, cEH, cQINTA, cQINT, cQH, cQT
-    real colvector cQSHI, cQG, cQINV, cQER, cPA, cQA, cPVA, cQVA, cPINTA, g, gh, cQD, cQM, cQE
+    real colvector cQSHI, cQG, cQINV, cQER, cPA, cQA, cPVA, cQVA, cPINTA, g, gh, cQD, cQM, cQE, RA, cRA
     real scalar nC, nA, nH, c, a, h, r, sh, cSHIADJ
 
     nC = M.nC
@@ -4117,6 +4281,7 @@ real matrix _cge_dense2(struct cge_model scalar M, struct cge_par scalar p, real
     cPINTA = _cge_vcols(M, "PINTA")
     cQD = _cge_vcols(M, "QD");       cQM = _cge_vcols(M, "QM")
     cQE = _cge_vcols(M, "QE")
+    RA = _cge_vn(M, x, "RA");        cRA = _cge_vcols(M, "RA")
 
     // S2: QQ - (sum_a QINT + sum_h QH + QG + QINV + QT + QER + QSHI)
     for (c = 1; c <= nC; c++) {
@@ -4150,11 +4315,12 @@ real matrix _cge_dense2(struct cge_model scalar M, struct cge_par scalar p, real
         }
         else G[c, cQH[|(c - 1) * nH + 1 \ c * nH|]'] = J(1, nH, -1)
     }
-    // P7: PA (1 - ta) QA - PVA QVA - PINTA QINTA
+    // P7: PA (1 - ta - RA) QA - PVA QVA - PINTA QINTA
     for (a = 1; a <= nA; a++) {
         r = nC + a
-        G[r, cPA[a]] = (1 - p.ta[a]) * QA[a]
-        G[r, cQA[a]] = PA[a] * (1 - p.ta[a])
+        G[r, cPA[a]] = (1 - p.ta[a] - RA[a]) * QA[a]
+        G[r, cQA[a]] = PA[a] * (1 - p.ta[a] - RA[a])
+        G[r, cRA[a]] = -PA[a] * QA[a]
         G[r, cPVA[a]] = -QVA[a]
         G[r, cQVA[a]] = -PVA[a]
         G[r, cQINTA[a]] = -PINTA[a]
@@ -4402,12 +4568,63 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
                                 real scalar trace, real scalar conv, real scalar iter,
                                 real scalar err, string scalar method, | real scalar full)
 {
+    real colvector x, act, g, h, flip
+    real scalar it2, r
+    string scalar m2
+
+    if (args() < 12) full = 0
+    if (rows(M.bY)) p.bxbar = xfix[M.bX]
+    if (!rows(M.bY)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full))
+    act = (p.bmode :> 0)
+    if (!any(act)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full))
+    // Constraints (Section 16.3). 1. The smoothed conditions find the regimes.
+    p.bmode = act
+    x = _cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full)
+    if (conv) {
+        _cge_bgaps(M, p, x, g, h)
+        p.bmode = act :* (2 :* (h :> g) + 3 :* (h :<= g))
+    }
+    else {
+        p.bmode = 3 :* act
+        x = start
+        iter = 0
+    }
+    // 2. Exact conditions in those regimes; a constraint whose other condition
+    // fails changes regime
+    for (r = 1; r <= 10; r++) {
+        x = _cge_solve_sys(M, p, xfix, x, tol, maxit, trace, conv, it2, err, m2, full)
+        iter = iter + it2
+        if (!conv) break
+        _cge_bgaps(M, p, x, g, h)
+        flip = act :* (((p.bmode :== 3) :& (g :< -1e-9)) :| ((p.bmode :== 2) :& (h :< -1e-9)))
+        if (!any(flip)) break
+        p.bmode = flip :* (5 :- p.bmode) + (1 :- flip) :* p.bmode
+    }
+    if (r > 10) conv = 0
+    if (conv & m2 != "newton") method = m2
+    return(x)
+}
+
+// g and h of every constraint at x (Section 16.2)
+void _cge_bgaps(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector g,
+                real colvector h)
+{
+    g = M.btype :* (p.bval - x[M.bY]) :/ M.xscale[M.bY]
+    h = M.bdir :* (x[M.bX] - p.bxbar) :/ M.xscale[M.bX]
+}
+
+// The system without constraint regimes to choose: Newton, then Powell's
+// hybrid method if Newton fails
+real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                              real colvector start, real scalar tol, real scalar maxit,
+                              real scalar trace, real scalar conv, real scalar iter,
+                              real scalar err, string scalar method, real scalar full)
+{
     struct cge_sys scalar S
     real colvector z, z2, x, isfree
     transmorphic SV
     real scalar rc, iter2
 
-    if (args() < 12) full = 0
     S = _cge_sys_make(M, !full)
     z = start[S.free] :/ M.xscale[S.free]
     method = "newton"
@@ -4464,6 +4681,7 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
         M.simrun = M.simrun \ ""
         M.simper = M.simper \ .
         M.simlam = M.simlam \ .
+        M.simcons = M.simcons \ _cge_cons_text(M, M.p, x)
         return(rows(M.simname))
     }
     M.simclosure[k] = _cge_closure_text(M)
@@ -4476,6 +4694,7 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
     M.simrun[k] = ""
     M.simper[k] = .
     M.simlam[k] = .
+    M.simcons[k] = _cge_cons_text(M, M.p, x)
     return(k)
 }
 
@@ -4507,6 +4726,13 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     st_numscalar("r(max_residual)", err)
     st_numscalar("r(walras)", walras)
     st_numscalar("r(N_solved)", (full ? M.neq : sum(M.rmask)))
+    // Constraints (Section 16): regimes
+    if (rows(M.bY)) {
+        _cge_cons_show(M, M.p, x)
+        st_numscalar("r(N_constraints)", sum(M.p.bmode :> 0))
+        st_numscalar("r(N_binding)", sum(M.p.bmode :== 2))
+        st_global("r(constraints)", _cge_cons_text(M, M.p, x))
+    }
     st_global("r(name)", name)
     st_global("r(method)", method)
     st_global("r(closure)", _cge_closure_text(M))
@@ -4566,18 +4792,35 @@ real colvector _cge_ev(struct cge_model scalar M, struct cge_par scalar p, real 
 real scalar _cge_gdpgap(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
 {
     real matrix PQ, QH, QG, QINV, QE, QM, EXR, PVA, QVA, QQ, PA, QA, QER, QSHI
+    real rowvector ab
     real scalar expend, income
     PQ = _cge_v(M, x, 8);    QH = _cge_v(M, x, 23);   QG = _cge_v(M, x, 24)
     QINV = _cge_v(M, x, 25); QE = _cge_v(M, x, 20);   QM = _cge_v(M, x, 21)
     EXR = _cge_v(M, x, 10);  PVA = _cge_v(M, x, 2);   QVA = _cge_v(M, x, 14)
     QQ = _cge_v(M, x, 22);   PA = _cge_v(M, x, 1);    QA = _cge_v(M, x, 13)
     QER = _cge_v(M, x, 44);  QSHI = _cge_v(M, x, 47)
+    // Rents (Section 16.1): premiums received at home and every rent on output
+    // are income; premiums paid abroad change the value of trade
+    ab = _cge_rents_abroad(M, p, x)
     expend = _cge_ph(M, p, x)' * (rowsum(QH) + QG + QINV + QSHI) + PQ' * QER +
-             PA' * rowsum(_cge_v(M, x, 54)) + EXR * (_cge_pwe(M, p, x)' * QE) - EXR * (p.pwm' * QM)
+             PA' * rowsum(_cge_v(M, x, 54)) + EXR * (_cge_pwe(M, p, x)' * QE) - ab[2] - EXR * (p.pwm' * QM) - ab[1]
     income = PVA' * QVA + sum(p.tq :* _cge_v(M, x, 50) :* PQ :* QQ) +
              EXR * sum(p.tm :* _cge_v(M, x, 51) :* p.pwm :* QM) +
-             EXR * sum(p.te :* _cge_pwe(M, p, x) :* QE) + sum(p.ta :* PA :* QA) + _cge_vat(M, p, x)
+             EXR * sum(p.te :* _cge_pwe(M, p, x) :* QE) + sum(p.ta :* PA :* QA) + _cge_vat(M, p, x) +
+             EXR * sum(_cge_v(M, x, 58) :* p.pwm :* QM) - ab[1] + EXR * sum(_cge_v(M, x, 59) :* _cge_pwe(M, p, x) :* QE) -
+             ab[2] + sum(_cge_v(M, x, 60) :* PA :* QA)
     return(expend - income)
+}
+
+// Premiums on imports and on exports paid to the rest of the world, in local
+// currency (Section 16.1)
+real rowvector _cge_rents_abroad(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    real scalar EXR, row
+    row = M.nF + M.nD + 2
+    EXR = _cge_v(M, x, 10)
+    return((EXR * sum((p.rrm :== row) :* _cge_v(M, x, 58) :* p.pwm :* _cge_v(M, x, 21)),
+            EXR * sum((p.rre :== row) :* _cge_v(M, x, 59) :* _cge_pwe(M, p, x) :* _cge_v(M, x, 20))))
 }
 
 void _cge_results_data(string scalar sim)
@@ -4696,7 +4939,7 @@ void _cge_check(string scalar sim, real scalar homog, real scalar perturb, real 
     fails = fails + _cge_report("SAM balance (largest imbalance)", v, 1e-8 * scale)
     v = _cge_maxres(M, M.p0, M.x0)
     fails = fails + _cge_report("benchmark replication (largest scaled residual)", v, 1e-9)
-    v = abs(sum(M.exists :* (1 :- M.fixed)) - M.neq)
+    v = abs(sum(M.exists :* (1 :- M.fixed)) + rows(M.bY) - M.neq)
     fails = fails + _cge_report("closure is square (free variables minus equations)", v, 0.5)
 
     if (rows(M.simname)) {
@@ -4788,6 +5031,7 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
     real colvector QA, PA, QVA, PVA0, QQ, QX, QD, EFF, PH, PH0, home, PA0, pwe, DW
     real matrix QH
     real scalar EXR, EXR0, CPI, DPI, gdpn, gdpr, k, gsav, intd, intf, endd, endf, ratio
+    real rowvector ab
 
     p0 = M.p0
     keys = J(0, 3, "")
@@ -4816,7 +5060,9 @@ void _cge_measures(struct cge_model scalar M, struct cge_par scalar p, real colv
     home = rowsum(_cge_vn(M, x, "QHA"))
     PA0 = _cge_vn(M, M.x0, "PA")
     pwe = _cge_pwe(M, p, x)
-    gdpn = PH' * fin + PQ' * QER + PA' * home + EXR * (pwe' * QE) - EXR * (p.pwm' * QM)
+    // Premiums paid abroad change the value of trade (from version 0.4.4)
+    ab = _cge_rents_abroad(M, p, x)
+    gdpn = PH' * fin + PQ' * QER + PA' * home + EXR * (pwe' * QE) - ab[2] - EXR * (p.pwm' * QM) - ab[1]
     gdpr = PH0' * fin + PQ0' * QER + PA0' * home + EXR0 * (p0.pwe' * QE) - EXR0 * (p0.pwm' * QM)
     _cge_radd(keys, val, "macro", "gdp_nominal", "", gdpn)
     _cge_radd(keys, val, "macro", "gdp_real", "", gdpr)
@@ -5278,12 +5524,20 @@ void _cge_par_fill(struct cge_par scalar p, struct cge_model scalar M)
     if (p.epsm >= .) p.epsm = 0
     if (p.pop >= .) p.pop = 1
     if (p.hlink >= .) p.hlink = any(p.etah)
+    // 0.4.4: rents to the government, no constraints
+    if (rows(p.rrm) == 0) {
+        p.rrm = J(M.nC, 1, M.nF + M.nD + 1)
+        p.rre = J(M.nC, 1, M.nF + M.nD + 1)
+        p.rra = J(M.n, 1, M.nF + M.nD + 1)
+    }
+    if (p.bmu >= .) p.bmu = 1e-8
 }
 
 // Variables added after the saved model's version are appended to the layout:
 // TQADJ, TMADJ and TVADJ (0.3.1), fixed at one; PWE and QHA (0.3.2), and LSW
 // and LSM (0.3.3), which do not exist in older models; DW (0.3.4), one where it
-// does not exist. The Jacobian pattern is rebuilt.
+// does not exist; the rents RM, RE and RA (0.4.4), zero. The Jacobian pattern
+// is rebuilt.
 void _cge_use_upgrade(struct cge_model scalar M)
 {
     real scalar nold, k, v, len
@@ -5305,6 +5559,10 @@ void _cge_use_upgrade(struct cge_model scalar M)
         else if (M.vname[k] == "DW") {
             val = J(len, 1, 1)
             ex = J(len, 1, 0)
+        }
+        else if (anyof(("RM", "RE", "RA"), M.vname[k])) {
+            val = J(len, 1, 0)
+            ex = (M.vname[k] == "RM" ? M.cm : (M.vname[k] == "RE" ? M.ce : J(len, 1, 1)))
         }
         else {
             val = J(len, 1, 1)
@@ -5413,7 +5671,7 @@ void _cge_use(string scalar fn)
         if (rows(M.ced) == 0) M.ced = J(M.nC, 1, 0)
         if (rows(M.cdo) == 0) M.cdo = M.cx
         if (rows(M.cq) == 0) M.cq = (M.cx :| M.cm)
-        if (!_cge_vidx(M, "DW")) _cge_use_upgrade(M)
+        if (!_cge_vidx(M, "RA")) _cge_use_upgrade(M)
     }
     // Files saved before version 0.2.0 have no dynamic-run items
     if (rows(M.simrun) != rows(M.simname)) {
@@ -5421,6 +5679,8 @@ void _cge_use(string scalar fn)
         M.simper = J(rows(M.simname), 1, .)
         M.simlam = J(rows(M.simname), 1, .)
     }
+    // Files saved before version 0.4.4 record no constraints
+    if (rows(M.simcons) != rows(M.simname)) M.simcons = J(rows(M.simname), 1, "")
     _cge_store(M)
     printf("{txt}Model loaded from {res}%s{txt} (saved by cge-stata %s; %s, %f simulation(s))\n", fn, ver,
            (M.calibrated == 1 ? "calibrated" : (M.mapped == 1 ? "mapped" : "SAM only")), rows(M.simname))
@@ -5585,11 +5845,13 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
         }
     }
 
-    // The run starts from the base; shocks set before it are kept aside
+    // The run starts from the base; shocks set before it are kept aside, but
+    // constraints are kept (from version 0.4.4)
     D.psave = M.p
     D.xsave = M.xcur
     if (M.xcur != M.x0) printf("{txt}Note: the run starts from the base; fixed values set with cge_shock are not used\n")
     M.p = M.p0
+    _cge_cons_carry(M.p, D.psave)
     M.xcur = M.x0
     D.prev = M.x0
     _cge_store(M)
@@ -5965,12 +6227,13 @@ void _cge_sens_values(struct cge_sens scalar G, real scalar d, real colvector va
 // Calibrate with the elasticities of draw d, then restore the closure
 void _cge_sens_calibrate(real scalar d)
 {
-    struct cge_model scalar M
+    struct cge_model scalar M, Mold
     struct cge_sens scalar G
     real colvector va, q, t, a
     string rowvector c
 
     G = _cge_sens_load()
+    Mold = _cge_load()
     _cge_sens_values(G, d, va, q, t, a)
     // Options of the last calibration; models calibrated before version 0.3.1
     // stored ten of them, before 0.3.3 seventeen and before 0.3.4 twenty-one
@@ -5982,6 +6245,25 @@ void _cge_sens_calibrate(real scalar d)
                    c[22], c[23], c[24], c[25])
     M = _cge_load()
     _cge_closure_apply(M, G.ext, G.gov, G.si, G.num, G.fac)
+    // Constraints (version 0.4.4) are kept: the layout does not depend on the
+    // elasticities
+    if (rows(Mold.bY)) {
+        M.bY = Mold.bY
+        M.bX = Mold.bX
+        M.btype = Mold.btype
+        M.bdir = Mold.bdir
+        M.p.bmode = Mold.p.bmode
+        M.p.bval = Mold.p.bval
+        M.p.bxbar = Mold.p.bxbar
+        M.p.rrm = Mold.p.rrm
+        M.p.rre = Mold.p.rre
+        M.p.rra = Mold.p.rra
+        M.p0.bmode = Mold.p0.bmode
+        M.p0.bval = Mold.p0.bval
+        M.p0.bxbar = Mold.p0.bxbar
+        _cge_cons_rebuild(M)
+        _cge_closure_apply(M, G.ext, G.gov, G.si, G.num, G.fac)
+    }
     _cge_store(M)
 }
 
@@ -6939,6 +7221,305 @@ void _cge_spa(string scalar from, string scalar to, real scalar maxlen, real sca
 }
 
 // =====================================================================
+// Bounds and complementarity (from version 0.4.4; model_spec.md, Section 16)
+// =====================================================================
+
+// Labels of the elements of index set s
+string colvector _cge_setlab(struct cge_model scalar M, string scalar s)
+{
+    if (s == "A") return(M.A)
+    if (s == "C") return(M.C)
+    if (s == "F") return(M.F)
+    if (s == "H") return(M.H)
+    if (s == "D") return(M.D)
+    return(M.I)
+}
+
+// A variable element by its position in the stacked vector, as NAME(e1,e2)
+string scalar _cge_poslabel(struct cge_model scalar M, real scalar pos)
+{
+    string colvector e1, e2
+    real scalar k, i
+    for (k = rows(M.voff); k > 1; k--) if (M.voff[k] < pos) break
+    i = pos - M.voff[k]
+    _cge_vlabels(M, k, e1, e2)
+    if (e1[i] == "") return(M.vname[k])
+    return(M.vname[k] + "(" + e1[i] + (e2[i] == "" ? "" : "," + e2[i]) + ")")
+}
+
+// Positions of the elements of variable k given in elems: all existing
+// elements of a variable with one index when elems is empty
+real colvector _cge_cons_pos(struct cge_model scalar M, real scalar k, string scalar elems)
+{
+    string scalar set
+    string rowvector tok
+    real colvector pos, idx
+    real scalar i, j
+    set = M.vset[k]
+    tok = tokens(elems)
+    if (set == "") {
+        if (cols(tok)) _cge_fail(M.vname[k] + " has no elements", 198)
+        return(M.voff[k] + 1)
+    }
+    if (strlen(set) == 1) {
+        if (!cols(tok)) {
+            pos = _cge_vpos(M, k)
+            return(select(pos, M.exists[pos]))
+        }
+        idx = _cge_elements(_cge_setlab(M, set), elems, "elements of " + M.vname[k])
+        return(M.voff[k] :+ idx)
+    }
+    if (cols(tok) != 2) _cge_fail(M.vname[k] + " has two indexes: give one element of each", 198)
+    i = _cge_find(_cge_setlab(M, substr(set, 1, 1)), tok[1])
+    j = _cge_find(_cge_setlab(M, substr(set, 2, 1)), tok[2])
+    if (!i | !j) _cge_fail(tok[1] + " " + tok[2] + " is not an element of " + M.vname[k], 111)
+    return(M.voff[k] + (i - 1) * M.vcols[k] + j)
+}
+
+// Names of the recipients of rents, in the order of the codes
+string colvector _cge_recipients(struct cge_model scalar M)
+{
+    return(M.F \ M.D \ M.labels[M.igov] \ M.labels[M.irow])
+}
+
+// Code of the recipient of the rent at position pos, or 0 for other variables
+real scalar _cge_rentcode(struct cge_model scalar M, struct cge_par scalar p, real scalar pos)
+{
+    real scalar k, i
+    for (k = rows(M.voff); k > 1; k--) if (M.voff[k] < pos) break
+    i = pos - M.voff[k]
+    if (M.vname[k] == "RM") return(p.rrm[i])
+    if (M.vname[k] == "RE") return(p.rre[i])
+    if (M.vname[k] == "RA") return(p.rra[i])
+    return(0)
+}
+
+// One constraint, as text: bound, adjusting variable and, after a solve, the
+// regime
+string scalar _cge_cons_one(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real scalar k)
+{
+    string scalar s
+    string colvector rec
+    real scalar code
+    s = _cge_poslabel(M, M.bY[k]) + (M.btype[k] == 1 ? " <= " : " >= ") + strtrim(sprintf("%12.0g", p.bval[k])) +
+        ", " + _cge_poslabel(M, M.bX[k]) + (M.bdir[k] == 1 ? " up" : " down")
+    code = _cge_rentcode(M, p, M.bX[k])
+    rec = _cge_recipients(M)
+    if (code) s = s + ", rents to " + rec[code]
+    if (p.bmode[k] == 2) s = s + ": binding"
+    else if (p.bmode[k] == 3) s = s + ": not binding"
+    else if (p.bmode[k] == 1) s = s + ": not solved"
+    return(s)
+}
+
+// The active constraints of a solution, as text ("" if none)
+string scalar _cge_cons_text(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    string scalar s
+    real scalar k
+    s = ""
+    for (k = 1; k <= rows(M.bY); k++) {
+        if (rows(p.bmode) < k) break
+        if (p.bmode[k] <= 0) continue
+        s = s + (s == "" ? "" : "; ") + _cge_cons_one(M, p, x, k)
+    }
+    return(s)
+}
+
+// The constraints of a solution, with the values of their variables
+void _cge_cons_show(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    real scalar k
+    if (!any(p.bmode :> 0)) return
+    printf("{txt}Constraints (model_spec.md, Section 16)\n")
+    for (k = 1; k <= rows(M.bY); k++) {
+        if (p.bmode[k] <= 0) continue
+        printf("{txt}  %s\n", _cge_cons_one(M, p, x, k))
+        printf("{txt}      %s = {res}%12.0g{txt};  %s = {res}%12.0g\n", _cge_poslabel(M, M.bY[k]), x[M.bY[k]],
+               _cge_poslabel(M, M.bX[k]), x[M.bX[k]])
+    }
+}
+
+// The constraints and the recipients of rents of parameters q, copied to p
+void _cge_cons_carry(struct cge_par scalar p, struct cge_par scalar q)
+{
+    p.bmode = q.bmode
+    p.bval = q.bval
+    p.bxbar = q.bxbar
+    p.rrm = q.rrm
+    p.rre = q.rre
+    p.rra = q.rra
+}
+
+// Equation masks, scales and the Jacobian pattern after a change of the
+// constraints; the closure is checked by the caller
+void _cge_cons_rebuild(struct cge_model scalar M)
+{
+    real colvector L, R, K, mag
+    _cge_eq(M, M.p0, M.x0, L, R, K, 1)
+    M.emask = K
+    mag = rowmax((abs(L), abs(R)))
+    M.escale = mag :* (mag :> 1e-9) + (mag :<= 1e-9)
+    M.neq = sum(K)
+    _cge_pattern(M, M.p)
+}
+
+// cge_constraint: a bound on elements of variable yname, each paired with an
+// adjusting variable (Section 16.2). Bounds are levels, or multiples of the
+// base values with scale. A constraint on the same element with the same
+// type of bound is replaced.
+void _cge_constraint(string scalar yname, string scalar elems, string scalar s_up, string scalar s_lo,
+                     real scalar scale, string scalar adjust, string scalar dir, string scalar rents)
+{
+    struct cge_model scalar M
+    string rowvector at
+    string colvector rec
+    string scalar xname
+    real colvector ypos, xpos
+    real scalar ky, kx, typ, b, d, code, isrent, i, slot, bi, j, el
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    ky = _cge_vidx(M, yname)
+    if (!ky) _cge_fail(yname + " is not a model variable", 198)
+    if ((s_up == "") == (s_lo == "")) _cge_fail("give one bound: upper() or lower()", 198)
+    typ = (s_up != "" ? 1 : -1)
+    b = strtoreal(typ == 1 ? s_up : s_lo)
+    if (b >= .) _cge_fail("the bound must be a number", 198)
+    ypos = _cge_cons_pos(M, ky, elems)
+    if (!rows(ypos)) _cge_fail(yname + " has no elements in this model", 459)
+
+    // The adjusting variable: the rent of QM, QE and QA by default
+    at = tokens(adjust)
+    if (!cols(at)) {
+        xname = (yname == "QM" ? "RM" : (yname == "QE" ? "RE" : (yname == "QA" ? "RA" : "")))
+        if (xname == "") _cge_fail("give the adjusting variable, for example adjust(EXR) up", 198)
+        at = xname
+    }
+    xname = at[1]
+    kx = _cge_vidx(M, xname)
+    if (!kx) _cge_fail("adjust(): " + xname + " is not a model variable", 198)
+    if (cols(at) > 1) {
+        if (rows(ypos) > 1) _cge_fail("adjust(): one adjusting element cannot serve several constraints; give one element of " + yname, 198)
+        xpos = _cge_cons_pos(M, kx, invtokens(at[|2 \ cols(at)|]))
+    }
+    else if (M.vset[kx] == "") {
+        if (rows(ypos) > 1) _cge_fail("adjust(): " + xname + " cannot serve several constraints; give one element of " + yname, 198)
+        xpos = M.voff[kx] + 1
+    }
+    else {
+        // the adjusting variable takes the element of the limited one
+        if (M.vset[kx] != M.vset[ky]) _cge_fail("adjust(): give the element of " + xname, 198)
+        xpos = ypos :- M.voff[ky] :+ M.voff[kx]
+    }
+    isrent = anyof(("RM", "RE", "RA"), xname)
+    d = (dir == "" ? (isrent ? 1 : 0) : (dir == "up" ? 1 : -1))
+    if (d == 0) _cge_fail("give the direction in which " + xname + " may move: up or down", 198)
+    if (rents != "" & !isrent) _cge_fail("rents(): only for the rent variables RM, RE and RA", 198)
+    rec = _cge_recipients(M)
+    code = M.nF + M.nD + 1
+    if (rents != "") {
+        code = _cge_find(rec, rents)
+        if (!code) _cge_fail("rents(): " + rents + " is not a factor, household, enterprise, the government or the rest of the world", 111)
+    }
+
+    for (i = 1; i <= rows(ypos); i++) {
+        if (!M.exists[ypos[i]]) _cge_fail(_cge_poslabel(M, ypos[i]) + " does not exist in this model", 459)
+        if (!M.exists[xpos[i]]) _cge_fail(_cge_poslabel(M, xpos[i]) + " does not exist in this model", 459)
+        if (M.fixed[ypos[i]]) _cge_fail(_cge_poslabel(M, ypos[i]) + " is fixed under the current closure, so it cannot be bounded", 459)
+        if (!M.fixed[xpos[i]]) _cge_fail(_cge_poslabel(M, xpos[i]) + " is not fixed under the current closure, so it cannot adjust", 459)
+        bi = (scale ? b * M.x0[ypos[i]] : b)
+        if (scale & M.x0[ypos[i]] == 0) _cge_fail("scale: the base value of " + _cge_poslabel(M, ypos[i]) + " is zero; give the bound as a level", 198)
+        slot = 0
+        for (j = 1; j <= rows(M.bY); j++) if (M.bY[j] == ypos[i] & M.btype[j] == typ) slot = j
+        for (j = 1; j <= rows(M.bY); j++) {
+            if (j != slot & M.bX[j] == xpos[i]) {
+                _cge_fail(_cge_poslabel(M, xpos[i]) + " already adjusts for the constraint on " + _cge_poslabel(M, M.bY[j]), 459)
+            }
+        }
+        if (!slot) {
+            M.bY = M.bY \ ypos[i]
+            M.bX = M.bX \ xpos[i]
+            M.btype = M.btype \ typ
+            M.bdir = M.bdir \ d
+            M.p.bmode = M.p.bmode \ 1
+            M.p.bval = M.p.bval \ bi
+            M.p.bxbar = M.p.bxbar \ M.xcur[xpos[i]]
+            M.p0.bmode = M.p0.bmode \ 0
+            M.p0.bval = M.p0.bval \ bi
+            M.p0.bxbar = M.p0.bxbar \ M.x0[xpos[i]]
+            slot = rows(M.bY)
+        }
+        else {
+            M.bX[slot] = xpos[i]
+            M.bdir[slot] = d
+            M.p.bmode[slot] = 1
+            M.p.bval[slot] = bi
+            M.p.bxbar[slot] = M.xcur[xpos[i]]
+            M.p0.bval[slot] = bi
+            M.p0.bxbar[slot] = M.x0[xpos[i]]
+        }
+        if (isrent) {
+            el = xpos[i] - M.voff[kx]
+            if (xname == "RM") M.p.rrm[el] = code
+            else if (xname == "RE") M.p.rre[el] = code
+            else M.p.rra[el] = code
+        }
+    }
+    _cge_cons_rebuild(M)
+    _cge_closure_apply(M, M.c_ext, M.c_gov, M.c_si, M.c_num, M.c_fac)
+    _cge_store(M)
+    for (i = 1; i <= rows(M.bY); i++) {
+        if (anyof(ypos, M.bY[i]) & M.btype[i] == typ) printf("{txt}Constraint {res}%s\n", _cge_cons_one(M, M.p, M.xcur, i))
+    }
+    st_numscalar("r(N_constraints)", rows(M.bY))
+}
+
+// cge_constraint, list
+void _cge_cons_list()
+{
+    struct cge_model scalar M
+    real scalar k
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (!rows(M.bY)) {
+        printf("{txt}No constraints\n")
+        st_numscalar("r(N_constraints)", 0)
+        return
+    }
+    printf("{txt}Constraints (regime in the last solution)\n")
+    for (k = 1; k <= rows(M.bY); k++) printf("{txt}  %f. %s\n", k, _cge_cons_one(M, M.p, M.xcur, k))
+    st_numscalar("r(N_constraints)", rows(M.bY))
+    st_numscalar("r(N_binding)", sum(M.p.bmode :== 2))
+}
+
+// cge_constraint, clear: no constraints, and every rent to the government
+void _cge_cons_clear()
+{
+    struct cge_model scalar M
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    M.bY = J(0, 1, .)
+    M.bX = J(0, 1, .)
+    M.btype = J(0, 1, .)
+    M.bdir = J(0, 1, .)
+    M.p.bmode = J(0, 1, .)
+    M.p.bval = J(0, 1, .)
+    M.p.bxbar = J(0, 1, .)
+    M.p0.bmode = J(0, 1, .)
+    M.p0.bval = J(0, 1, .)
+    M.p0.bxbar = J(0, 1, .)
+    M.p.rrm = M.p0.rrm
+    M.p.rre = M.p0.rre
+    M.p.rra = M.p0.rra
+    _cge_cons_rebuild(M)
+    _cge_closure_apply(M, M.c_ext, M.c_gov, M.c_si, M.c_num, M.c_fac)
+    _cge_store(M)
+    printf("{txt}All constraints removed\n")
+    st_numscalar("r(N_constraints)", 0)
+}
+
+// =====================================================================
 // GAMS export (from version 0.4.3; docs/gams.md)
 // =====================================================================
 
@@ -7243,6 +7824,65 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
     return(n)
 }
 
+// A variable element in GAMS: name, index, reference and level
+void _cge_gams_ref(struct cge_model scalar M, real scalar pos, string scalar g, string scalar idx)
+{
+    string colvector e1, e2
+    real scalar k, i
+    for (k = rows(M.voff); k > 1; k--) if (M.voff[k] < pos) break
+    i = pos - M.voff[k]
+    _cge_vlabels(M, k, e1, e2)
+    g = _cge_gams_vname(M.vname[k])
+    idx = _cge_gams_elem(e1[i], e2[i])
+}
+
+// Constraints (Section 16) as a mixed complementarity problem: for each, a
+// slack SLK >= 0 paired with the bound, sigma (b - Y) / sY >= 0, and the
+// adjusting variable freed and linked to its fixed level, X = xbar + delta sX
+// SLK; the recipients of rents; and model cgecon. Returns the number of
+// constraints.
+real scalar _cge_gams_cons(struct cge_model scalar M, struct cge_par scalar p, string scalar fn)
+{
+    string colvector rec, e1, e2
+    string scalar gy, iy, gx, ix, pairs, r, tab
+    real scalar fh, k, n, code, kx, el
+    fh = _cge_gopen(fn)
+    fput(fh, "* Constraints (model_spec.md, Section 16), written by cge_gams")
+    rec = _cge_recipients(M)
+    pairs = ""
+    n = 0
+    for (k = 1; k <= rows(M.bY); k++) {
+        if (p.bmode[k] <= 0) continue
+        n++
+        r = strofreal(n)
+        _cge_gams_ref(M, M.bY[k], gy, iy)
+        _cge_gams_ref(M, M.bX[k], gx, ix)
+        fput(fh, "* " + _cge_poslabel(M, M.bY[k]) + (M.btype[k] == 1 ? " <= " : " >= ") + _cge_gnum(p.bval[k]) +
+             ", " + _cge_poslabel(M, M.bX[k]) + (M.bdir[k] == 1 ? " up" : " down"))
+        fput(fh, "positive variable SLK" + r + ";")
+        fput(fh, "equations BND" + r + ", LNK" + r + ";")
+        fput(fh, "scalar xbar" + r + ";")
+        fput(fh, "xbar" + r + " = " + gx + ".l" + ix + ";")
+        fput(fh, "BND" + r + "..  (" + _cge_gnum(M.btype[k]) + ") * ((" + _cge_gnum(p.bval[k]) + ") - " + gy + iy +
+             ") / " + _cge_gnum(M.xscale[M.bY[k]]) + " =g= 0;")
+        fput(fh, "LNK" + r + "..  " + gx + ix + " =e= xbar" + r + " + (" + _cge_gnum(M.bdir[k]) + ") * " +
+             _cge_gnum(M.xscale[M.bX[k]]) + " * SLK" + r + ";")
+        fput(fh, gx + ".lo" + ix + " = -inf;")
+        fput(fh, gx + ".up" + ix + " = inf;")
+        code = _cge_rentcode(M, p, M.bX[k])
+        if (code) {
+            tab = (gx == "RM" ? "rmto" : (gx == "RE" ? "reto" : "rato"))
+            fput(fh, tab + "(AC, " + substr(ix, 2, strlen(ix) - 2) + ") = 0;")
+            fput(fh, tab + "('" + rec[code] + "', " + substr(ix, 2, strlen(ix) - 2) + ") = 1;")
+        }
+        pairs = pairs + ", LNK" + r + ", BND" + r + ".SLK" + r
+    }
+    fput(fh, "model cgecon / cge" + pairs + " /;")
+    fput(fh, "cgecon.optfile = cge.optfile;")
+    fclose(fh)
+    return(n)
+}
+
 // The driver: base, then the scenario, each written as scenario, variable,
 // element1, element2, value
 void _cge_gams_driver(string scalar fn, string scalar name, string scalar solver, string scalar type)
@@ -7257,9 +7897,16 @@ void _cge_gams_driver(string scalar fn, string scalar name, string scalar solver
     fput(fh, "changes to fixed variables are in cge_shock_var.inc. The equations are in")
     fput(fh, "cge_model.gms (docs/model_spec.md). To run it:")
     fput(fh, "  gams cge_run.gms                                    " + solver + ", as " +
-         (type == "nlp" ? "a nonlinear programme" : "a constrained nonlinear system"))
-    fput(fh, "  gams cge_run.gms --cgesolver=conopt                 CONOPT (or KNITRO, PATH)")
-    fput(fh, "  gams cge_run.gms --cgesolver=ipopt --cgetype=nlp    an NLP solver")
+         (type == "nlp" ? "a nonlinear programme" : (type == "mcp" ? "a mixed complementarity problem" :
+         "a constrained nonlinear system")))
+    if (type == "mcp") {
+        fput(fh, "The scenario has constraints (cge_constraints.inc), so it is solved as a")
+        fput(fh, "mixed complementarity problem, with PATH or another MCP solver.")
+    }
+    else {
+        fput(fh, "  gams cge_run.gms --cgesolver=conopt                 CONOPT (or KNITRO, PATH)")
+        fput(fh, "  gams cge_run.gms --cgesolver=ipopt --cgetype=nlp    an NLP solver")
+    }
     fput(fh, "Results: cge_base.csv and cge_" + name + ".csv, as scenario, variable, element1,")
     fput(fh, "element2, value; the first row holds the model status.")
     fput(fh, char(36) + "offtext")
@@ -7273,7 +7920,8 @@ void _cge_gams_driver(string scalar fn, string scalar name, string scalar solver
     fput(fh, char(36) + "include cge_shock_par.inc")
     fput(fh, char(36) + "include cge_closure.gms")
     fput(fh, char(36) + "include cge_shock_var.inc")
-    fput(fh, char(36) + "batinclude cge_solve.gms")
+    fput(fh, char(36) + "include cge_constraints.inc")
+    fput(fh, char(36) + "batinclude cge_solve.gms cgecon")
     fput(fh, "file rescen / 'cge_" + name + ".csv' /;")
     fput(fh, char(36) + "batinclude cge_write.gms rescen " + name)
     fclose(fh)
@@ -7288,7 +7936,7 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
     real colvector x, fixed
     string rowvector cl
     string scalar name
-    real scalar k, n
+    real scalar k, n, nc
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -7312,15 +7960,37 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
                            substr(cl[|5 \ cols(cl)|]', strpos(cl[|5 \ cols(cl)|]', ":") :+ 1, .))
         fixed = M2.fixed
     }
+    // Constraints (from version 0.4.4) need a mixed complementarity problem
+    if (rows(p.bmode) != rows(M.bY)) _cge_fail("the constraints have changed since simulation " + sim + " was solved; solve it again", 459)
+    nc = (rows(M.bY) ? sum(p.bmode :> 0) : 0)
+    if (nc & type != "mcp") _cge_fail("the scenario has constraints: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
     _cge_gams_data(M, dir + "/cge_data.inc")
     n = _cge_gams_scenario(M, p, x, fixed, cl, dir + "/cge_shock_par.inc", dir + "/cge_shock_var.inc")
+    (void) _cge_gams_cons(M, p, dir + "/cge_constraints.inc")
     _cge_gams_driver(dir + "/cge_run.gms", name, solver, type)
+    st_numscalar("r(N_constraints)", nc)
     st_global("r(name)", name)
     st_global("r(closure)", invtokens(cl))
     st_numscalar("r(N_changes)", n)
     st_numscalar("r(N_accounts)", rows(M.labels))
     printf("{txt}Wrote the model ({res}%f{txt} accounts) and scenario {res}%s{txt} ({res}%f{txt} change(s) from the base) to {res}%s\n",
            rows(M.labels), name, n, dir)
+}
+
+// 1 if the scenario (current, or stored simulation sim) has constraints
+real scalar _cge_gams_hascons(string scalar sim)
+{
+    struct cge_model scalar M
+    struct cge_par scalar p
+    M = _cge_load()
+    if (M.calibrated != 1 | !rows(M.bY)) return(0)
+    if (sim == "") p = M.p
+    else {
+        if (!_cge_find(M.simname, sim)) return(0)
+        p = M.simp[_cge_find(M.simname, sim)]
+    }
+    if (rows(p.bmode) != rows(M.bY)) return(0)
+    return(any(p.bmode :> 0))
 }
 
 // Results written by cge_write.gms: keys "variable|element1|element2", values,
@@ -7520,6 +8190,13 @@ void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefi
     _cge_io_put(fh, prefix + "hasmort", p.hasmort)
     _cge_io_put(fh, prefix + "pop", p.pop)
     _cge_io_put(fh, prefix + "hlink", p.hlink)
+    _cge_io_put(fh, prefix + "rrm", p.rrm)
+    _cge_io_put(fh, prefix + "rre", p.rre)
+    _cge_io_put(fh, prefix + "rra", p.rra)
+    _cge_io_put(fh, prefix + "bmode", p.bmode)
+    _cge_io_put(fh, prefix + "bval", p.bval)
+    _cge_io_put(fh, prefix + "bxbar", p.bxbar)
+    _cge_io_put(fh, prefix + "bmu", p.bmu)
 }
 
 real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
@@ -7615,6 +8292,13 @@ real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmo
     else if (name == "hasmort") p.hasmort = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "pop") p.pop = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "hlink") p.hlink = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "rrm") p.rrm = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "rre") p.rre = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "rra") p.rra = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bmode") p.bmode = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bval") p.bval = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bxbar") p.bxbar = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bmu") p.bmu = (rows(v) * cols(v) == 0 ? . : v)
     else return(0)
     return(1)
 }
@@ -7726,6 +8410,11 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "simrun", M.simrun)
     _cge_io_put(fh, "simper", M.simper)
     _cge_io_put(fh, "simlam", M.simlam)
+    _cge_io_put(fh, "bY", M.bY)
+    _cge_io_put(fh, "bX", M.bX)
+    _cge_io_put(fh, "btype", M.btype)
+    _cge_io_put(fh, "bdir", M.bdir)
+    _cge_io_put(fh, "simcons", M.simcons)
 }
 
 real scalar _cge_model_member(struct cge_model scalar M, string scalar name, transmorphic matrix v)
@@ -7830,6 +8519,11 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "simrun") M.simrun = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "simper") M.simper = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "simlam") M.simlam = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bY") M.bY = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bX") M.bX = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "btype") M.btype = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bdir") M.bdir = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "simcons") M.simcons = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else return(0)
     return(1)
 }

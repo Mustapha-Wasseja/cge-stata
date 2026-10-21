@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.4  20oct2026}{...}
+{* *! version 0.4.4  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -76,7 +76,13 @@ introduced). {cmd:rd}, {cmd:rf}, {cmd:ddebt} and {cmd:fdebt} need public debt
 ({helpb cge_calibrate}, {opt debt()} and {opt interest()}); interest is paid on
 the stocks at the rates. The tax scaling factors {cmd:TQADJ}, {cmd:TMADJ} and
 {cmd:TVADJ}, like {cmd:TINSADJ}, are variables that can be set while the
-closure fixes them.
+closure fixes them. So are the rents {cmd:RM}, {cmd:RE} and {cmd:RA} (from
+version 0.4.4): a premium on imports set by hand acts as a tariff whose
+revenue goes to its recipient ({helpb cge_constraint}).
+
+{pstd}
+{cmd:cge_shock, reset} removes every shock but keeps the constraints of
+{helpb cge_constraint}.
 
 {pstd}
 {cmd:qlf}, {cmd:wmin} and {cmd:wref} need a labour force ({helpb cge_calibrate},

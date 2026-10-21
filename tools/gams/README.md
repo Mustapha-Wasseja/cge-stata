@@ -73,7 +73,15 @@ Every case of the Python test suite:
   the death rate enters only dynamic runs, which are not checked in GAMS);
 - factor quantities, so that base wages and wage distortions differ from one,
   with CES and mixed elasticities and with a minimum wage (from version
-  0.4.3; compared with the Python reference).
+  0.4.3; compared with the Python reference);
+- constraints (from version 0.4.4): import quotas with rents to the
+  government, households or abroad, quotas that do not bind or sit at the
+  base, an export quota, capacity limits on services and on health services,
+  a borrowing limit under a peg, a ban on government borrowing with spending
+  or taxes adjusting, a floor on the nominal wage, and two constraints at
+  once. GAMS solves them as mixed complementarity problems with PATH
+  (`--cgetype=mcp`), against the Python reference, which finds the regimes by
+  an active-set method.
 
 For each case, every scenario is compared with the expected results in
 `tests/expected`, which the Stata suite also matches. Alternative closures
@@ -85,12 +93,14 @@ are compared with the Python reference:
 
 ## Result (21 October 2026, GAMS 54.2, PATH)
 
-146 scenarios; every expected value was found and solved.
+159 scenarios; every expected value was found and solved.
 
 - Base values from GAMS's own calibration agree to 4.9e-15 or better.
 - Solutions agree to 2.9e-11 or better, relative to the larger of 1 and the
   value.
 - WALRAS is zero in both, up to rounding (9.6e-11 at most).
+- The 13 scenarios with constraints, solved as mixed complementarity problems,
+  agree to 2.4e-12 or better, with every regime as in the Python reference.
 
 On a 54-account synthetic health SAM (535 equations; testing work outside the
 repository), GAMS agrees with the Python reference to 1.9e-9 in all 13

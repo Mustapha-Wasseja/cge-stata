@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .model import final_price, vat_revenue, world_export_price
+from .model import final_price, rents_abroad, vat_revenue, world_export_price
 
 
 def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
@@ -28,8 +28,10 @@ def _measures(model, v: dict, p: dict) -> list[tuple[str, str, str, float]]:
     def add(table: str, measure: str, element: str, value) -> None:
         rows.append((table, measure, element, float(value)))
 
-    gdp_n = (ph @ final + v["PQ"] @ v["QER"] + v["PA"] @ home + exr * (pwe @ v["QE"])
-             - exr * (p["pwm"] @ v["QM"]))
+    # Premiums paid abroad change the value of trade (version 0.4.4, Section 16.1)
+    rm_row, re_row = rents_abroad(model, v, p)
+    gdp_n = (ph @ final + v["PQ"] @ v["QER"] + v["PA"] @ home + exr * (pwe @ v["QE"]) - re_row
+             - exr * (p["pwm"] @ v["QM"]) - rm_row)
     gdp_r = (ph0 @ final + b["PQ"] @ v["QER"] + b["PA"] @ home + exr0 * (p0["pwe"] @ v["QE"])
              - exr0 * (p0["pwm"] @ v["QM"]))
     add("macro", "gdp_nominal", "", gdp_n)

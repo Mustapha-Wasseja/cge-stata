@@ -110,3 +110,34 @@ quietly cge_closure, external(flexexr) government(flexgsav) savinv(savings) nume
 quietly cge_dynamic, name(dyn) periods(0/1) capital(cap) depreciation(0.05) rental(0.1)
 capture noisily cge_gams using "`dir'", sim(dyn1) replace
 assert _rc == 198
+
+* ---------------------------------------------------------------------
+* 4. Constraints (version 0.4.4): a mixed complementarity problem
+* ---------------------------------------------------------------------
+cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, `stdmap'
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+cge_constraint QM, elements(com_man) upper(1.02) scale rents(hhd)
+quietly cge_solve, name(quota) tolerance(1e-12)
+cge_gams using "`dir'_q", sim(quota) replace
+assert r(N_constraints) == 1
+mata:
+c = cat(st_local("dir") + "_q/cge_constraints.inc")
+d = cat(st_local("dir") + "_q/cge_run.gms")
+st_numscalar("okc", sum(c :== "BND1..  (1) * ((61.2) - QM('com_man')) / 60 =g= 0;") +
+             sum(c :== "LNK1..  RM('com_man') =e= xbar1 + (1) * 1 * SLK1;") +
+             sum(c :== "rmto('hhd', 'com_man') = 1;") + sum(c :== "model cgecon / cge, LNK1, BND1.SLK1 /;") +
+             sum(d :== char(36) + "if not set cgetype " + char(36) + "setglobal cgetype mcp"))
+end
+assert scalar(okc) == 5
+capture noisily cge_gams using "`dir'_q", sim(quota) replace type(cns)
+assert _rc == 198
+* Without constraints the file declares the model alone
+cge_constraint, clear
+quietly cge_solve, name(free) tolerance(1e-12)
+cge_gams using "`dir'_q", sim(free) replace
+assert r(N_constraints) == 0
+mata: st_numscalar("okc", sum(cat(st_local("dir") + "_q/cge_constraints.inc") :== "model cgecon / cge /;"))
+assert scalar(okc) == 1

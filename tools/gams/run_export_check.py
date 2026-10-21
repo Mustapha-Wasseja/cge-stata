@@ -10,7 +10,7 @@ For every case of export_check.do:
 
 Usage (Stata for Windows and GAMS required):
     python tools/gams/run_export_check.py [--stata PATH] [--gams PATH] [--work DIR]
-        [--solver path|conopt|knitro|ipopt] [--type cns|nlp]
+        [--solver path|conopt|knitro|ipopt|nlpec] [--type cns|nlp|mcp]
 
 Writes tools/gams/export_check_results.csv, one row per case and solver (a run
 replaces the rows of its solver). Stata logs and GAMS listings stay in the work directory
@@ -30,6 +30,8 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# Cases of export_check.do with constraints
+MCP_CASES = ("quota", "capacity", "peglimit", "nodeficit", "wagefloor")
 REPO = HERE.parents[1]
 
 
@@ -62,7 +64,7 @@ def main() -> None:
     ap.add_argument("--gams", default=shutil.which("gams") or r"C:\GAMS\54\gams.exe")
     ap.add_argument("--work", default=str(Path(tempfile.gettempdir()) / "cge_export_check"))
     ap.add_argument("--solver", default="path")
-    ap.add_argument("--type", default="cns", choices=("cns", "nlp"))
+    ap.add_argument("--type", default="cns", choices=("cns", "nlp", "mcp"))
     args = ap.parse_args()
     stata = args.stata or find_stata()
     work = Path(args.work)
@@ -75,17 +77,27 @@ def main() -> None:
     folders = sorted(d for d in work.iterdir() if (d / "cge_run.gms").exists())
     if not folders:
         raise SystemExit(f"Stata exported no model; see {work / 'export.log'}")
+    # Scenarios with constraints (version 0.4.4) are mixed complementarity
+    # problems: they are solved only by MCP solvers, with --cgetype=mcp
+    mcp_solvers = ("path", "nlpec", "miles")
+    skipped = []
     for d in folders:
+        constrained = "positive variable" in (d / "cge_constraints.inc").read_text(encoding="utf-8")
+        if constrained and args.solver not in mcp_solvers:
+            skipped.append(d.name)
+            continue
+        gtype = "mcp" if constrained else args.type
         r = subprocess.run([args.gams, "cge_run.gms", "lo=0", f"--cgesolver={args.solver}",
-                            f"--cgetype={args.type}"], cwd=d, capture_output=True, text=True)
+                            f"--cgetype={gtype}"], cwd=d, capture_output=True, text=True)
         print(f"GAMS {d.name:14s} return code {r.returncode}", flush=True)
+    folders = [d for d in folders if d.name not in skipped]
     run_stata(stata, work, "compare")
 
     res = work / "export_check.csv"
     if not res.exists():
         raise SystemExit(f"Stata wrote no comparison; see {work / 'compare.log'}")
     with res.open(encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
+        rows = [r for r in csv.DictReader(handle) if r["case"] not in skipped]
     # One file for every solver: the rows of this solver replace earlier ones
     out = HERE / "export_check_results.csv"
     fields = ["case", "solver", "type", "gams_modelstat", "values", "base_maxrel", "value_maxrel"]
@@ -93,7 +105,7 @@ def main() -> None:
     if out.exists():
         with out.open(encoding="utf-8") as handle:
             kept = [r for r in csv.DictReader(handle) if (r["solver"], r["type"]) != (args.solver, args.type)]
-    new = [{"case": r["case"], "solver": args.solver, "type": args.type,
+    new = [{"case": r["case"], "solver": args.solver, "type": "mcp" if r["case"] in MCP_CASES else args.type,
             "gams_modelstat": int(float(r["modelstat"])), "values": int(float(r["N"])),
             "base_maxrel": f"{float(r['base_maxdiff']):.3e}", "value_maxrel": f"{float(r['maxdiff']):.3e}"}
            for r in rows]

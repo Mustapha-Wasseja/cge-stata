@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.3  21oct2026}{...}
+{* *! version 0.4.4  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_gams} {helpb using} {it:folder}
 [{cmd:,} {opt sim(name)} {opt replace} {opt run} {opt compare} {opt noexport}
-{opt gams(path)} {opt solver(name)} {opt type(cns|nlp)}]
+{opt gams(path)} {opt solver(name)} {opt type(cns|nlp|mcp)}]
 
 
 {title:Description}
@@ -49,7 +49,14 @@ Files written:
 {p2col:{cmd:cge_data.inc}}the SAM, the roles of its accounts and the calibration settings{p_end}
 {p2col:{cmd:cge_shock_par.inc}}parameter changes and the closure{p_end}
 {p2col:{cmd:cge_shock_var.inc}}changes to fixed variables{p_end}
+{p2col:{cmd:cge_constraints.inc}}constraints, as complementarity pairs (from version 0.4.4){p_end}
 {p2colreset}{...}
+
+{pstd}
+A scenario with constraints ({helpb cge_constraint}) is written as a mixed
+complementarity problem. Each constraint becomes a slack variable, which must
+be zero or positive, paired with its bound, and its adjusting variable is
+linked to the slack. It is solved with PATH or another MCP solver.
 
 {pstd}
 GAMS writes {cmd:cge_base.csv} and {cmd:cge_}{it:name}{cmd:.csv}, one row per
@@ -98,11 +105,17 @@ file with tolerances scaled to the size of the SAM is written for PATH,
 CONOPT, IPOPT and KNITRO; other solvers use their defaults.
 
 {phang}
-{opt type(cns|nlp)} chooses the GAMS model type: {cmd:cns}, a constrained
-nonlinear system (PATH, CONOPT, KNITRO), or {cmd:nlp}, the same equations
-with a constant objective, for NLP solvers. The default is {cmd:nlp} for
-{cmd:ipopt}, {cmd:minos} and {cmd:snopt}, and {cmd:cns} otherwise. Both can
-also be set when GAMS is run: {cmd:gams cge_run.gms --cgesolver=ipopt --cgetype=nlp}.
+{opt type(cns|nlp|mcp)} chooses the GAMS model type:
+
+{phang2}o  {cmd:cns}, a constrained nonlinear system (PATH, CONOPT, KNITRO);{p_end}
+{phang2}o  {cmd:nlp}, the same equations with a constant objective, for NLP solvers;{p_end}
+{phang2}o  {cmd:mcp}, a mixed complementarity problem (PATH), which a scenario with constraints needs.{p_end}
+
+{pmore}
+The default is {cmd:mcp} for a scenario with constraints, {cmd:nlp} for
+{cmd:ipopt}, {cmd:minos} and {cmd:snopt}, and {cmd:cns} otherwise. Both
+solver and type can also be set when GAMS is run, for example
+{cmd:gams cge_run.gms --cgesolver=ipopt --cgetype=nlp}.
 
 
 {title:Examples}
@@ -128,6 +141,7 @@ also be set when GAMS is run: {cmd:gams cge_run.gms --cgesolver=ipopt --cgetype=
 {p2col 5 22 26 2: Scalars}{p_end}
 {synopt:{cmd:r(N_accounts)}}accounts in the exported SAM{p_end}
 {synopt:{cmd:r(N_changes)}}parameter and fixed-variable changes from the base{p_end}
+{synopt:{cmd:r(N_constraints)}}constraints exported{p_end}
 {synopt:{cmd:r(modelstat)}}GAMS model status of the scenario ({opt compare}; 1, 2, 15 and 16 mean solved){p_end}
 {synopt:{cmd:r(base_modelstat)}}GAMS model status of the base{p_end}
 {synopt:{cmd:r(maxdiff)}}largest relative difference from the simulation{p_end}

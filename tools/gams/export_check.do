@@ -33,7 +33,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
-    trade home wagecurve minwage outcomes fquant
+    trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor
 local ncase : word count `cases'
 
 tempname post
@@ -182,12 +182,58 @@ foreach case of local cases {
         quietly cge_calibrate, `sigmas' fquantities(fq)
         cge_shock tm, value(0)
     }
+    * Constraints (version 0.4.4), solved in GAMS as mixed complementarity problems
+    else if "`case'" == "quota" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_shock tm, value(0)
+        cge_constraint QM, elements(com_man) upper(1.02) scale rents(hhd)
+    }
+    else if "`case'" == "capacity" {
+        quietly cge_synthetic, clear health
+        quietly cge_sam, labels(account)
+        quietly cge_map, `hltmap'
+        quietly cge_calibrate, `sigmas'
+        cge_shock qg, elements(com_hlt) scale(1.2)
+        cge_constraint QA, elements(act_hlt) upper(1.03) scale rents(cap)
+    }
+    else if "`case'" == "peglimit" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        quietly cge_closure, external(fixexr)
+        cge_shock pwe, scale(0.8)
+        cge_constraint FSAV, upper(2) scale adjust(EXR) up
+    }
+    else if "`case'" == "nodeficit" {
+        quietly cge_synthetic, clear institutions
+        quietly cge_sam, labels(account)
+        quietly cge_map, `instmap'
+        quietly cge_calibrate, `sigmas'
+        cge_shock tm, value(0)
+        cge_constraint QM, elements(com_man) upper(1.02) scale rents(row)
+        cge_constraint GSAV, lower(0) adjust(GADJ) down
+    }
+    else if "`case'" == "wagefloor" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_shock pwm, scale(1.1)
+        cge_constraint W, elements(lab) lower(1) scale adjust(QFS) down
+    }
     quietly cge_solve, name(`case') tolerance(1e-12)
     assert r(converged) == 1
     if "`phase'" == "export" {
         cge_gams using `"`dir'/`case'"', sim(`case') replace
     }
     else {
+        * cases that GAMS did not solve (constraints with a solver that is not an MCP solver)
+        capture confirm file `"`dir'/`case'/cge_`case'.csv"'
+        if _rc continue
         cge_gams using `"`dir'/`case'"', sim(`case') compare noexport
         post `post' ("`case'") ("`case'") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
             (r(walras)) (r(N_compared))

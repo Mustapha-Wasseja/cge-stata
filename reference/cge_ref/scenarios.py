@@ -347,6 +347,68 @@ def outcome_cases() -> dict:
     return out
 
 
+# Bounds and complementarity (version 0.4.4, model_spec.md, Section 16). The
+# bounds are test values: an import quota 2 per cent above base imports of
+# manufactures; an export quota; a limit on the output of services; a limit
+# on foreign borrowing under a fixed exchange rate; a government that may
+# not borrow (GSAV >= 0); a floor on the nominal wage
+def constraint_cases() -> dict:
+    """name -> (model, closure, shock, constraints)."""
+    from .model import Constraint
+    std = synthetic_model()
+    b, p = std.base, std.params
+    C, A = std.sets["C"], std.sets["A"]
+    man, ser = C.index("com_man"), C.index("com_ser")
+    notariff = {"params": {"tm": np.zeros_like(p["tm"])}}
+
+    def quota(**kw):
+        return [Constraint("QM", ("com_man",), upper=1.02 * b["QM"][man], **kw)]
+
+    no_borrowing = Constraint("GSAV", (), lower=0.0, adjust="GADJ", direction="down")
+    health = health_model()
+    hlt, ahlt = health.sets["C"].index("com_hlt"), health.sets["A"].index("act_hlt")
+    return {
+        "con_quota": (std, Closure(), notariff, quota()),
+        "con_quota_hhd": (std, Closure(), notariff, quota(rents="hhd")),
+        "con_quota_row": (std, Closure(), notariff, quota(rents="row")),
+        "con_quota_slack": (std, Closure(), notariff, [Constraint("QM", ("com_man",), upper=2 * b["QM"][man])]),
+        "con_quota_base": (std, Closure(), {}, [Constraint("QM", ("com_man",), upper=b["QM"][man])]),
+        "con_export_quota": (std, Closure(), {"params": {"pwe": _scaled(p["pwe"], man, 1.2)}},
+                             [Constraint("QE", ("com_man",), upper=1.05 * b["QE"][man])]),
+        "con_capacity": (std, Closure(), {"params": {"qg": _scaled(p["qg"], ser, 1.5)}},
+                         [Constraint("QA", ("act_ser",), upper=1.01 * b["QA"][A.index("act_ser")], rents="cap")]),
+        "con_peg_limit": (std, Closure(external="fixexr"), {"params": {"pwe": p["pwe"] * 0.8}},
+                          [Constraint("FSAV", (), upper=2 * b["FSAV"][0], adjust="EXR", direction="up")]),
+        "con_deficit_spending": (std, Closure(), notariff, [no_borrowing]),
+        "con_deficit_tax": (std, Closure(), notariff,
+                            [Constraint("GSAV", (), lower=0.0, adjust="TINSADJ", direction="up")]),
+        "con_wage_floor": (std, Closure(), {"params": {"pwm": p["pwm"] * 1.1}},
+                           [Constraint("W", ("lab",), lower=b["W"][0], adjust="QFS", direction="down")]),
+        "con_two": (std, Closure(), notariff, quota() + [no_borrowing]),
+        "con_health_capacity": (health, Closure(), {"params": {"qg": _scaled(health.params["qg"], hlt, 1.2)}},
+                                [Constraint("QA", ("act_hlt",), upper=1.03 * health.base["QA"][ahlt],
+                                            rents="hhd")]),
+    }
+
+
+def constraint_solutions() -> dict:
+    return {name: model.solve(closure, tol=1e-12, constraints=cons, **shock)
+            for name, (model, closure, shock, cons) in constraint_cases().items()}
+
+
+def write_regimes(solutions: dict, directory: Path = EXPECTED_DIR) -> list[Path]:
+    """Regime of each constraint (version 0.4.4): 1 binding, 0 not."""
+    path = directory / "con_regimes.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["case", "constraint", "binding"])
+        for name, solution in solutions.items():
+            if name.startswith("con_"):
+                for k, binding in enumerate(solution.binding):
+                    writer.writerow([name, k + 1, int(binding)])
+    return [path]
+
+
 def health_spending_up(t, p, fx):
     """Government purchases of health services 20 per cent higher from period 1."""
     if t == 1:
@@ -518,7 +580,8 @@ REPORTED = ("tariff_removal", "inst_transfers_abroad_down50", "les_import_price_
             "vat_tariff_removal_vat", "rep_tariff_removal_sales", "debt_rate_up", "debt_relief",
             "home_tariff_removal", "home_les_tariff_removal", "trade_world_demand_up10",
             "wc_tariff_removal", "mwnb_pwm_up50", "hout_gov_health_up20", "hout_epidemic",
-            "hout_mortality_up50", "hboth_gov_health_up20")
+            "hout_mortality_up50", "hboth_gov_health_up20", "con_quota_row", "con_capacity",
+            "con_export_quota")
 
 
 def dynamic_cases() -> dict:
@@ -661,8 +724,10 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     # Labour-market regimes (0.3.3); health outcomes (0.3.4)
     solutions.update(labour_cases())
     solutions.update(outcome_cases())
+    # Bounds and complementarity (0.4.4)
+    solutions.update(constraint_solutions())
     written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
-               + write_spa(directory))
+               + write_spa(directory) + write_regimes(solutions, directory))
     for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")

@@ -33,8 +33,13 @@ TVADJ.lo = -inf;       TVADJ.up = inf;
 PWEV.lo(AC) = -inf;     PWEV.up(AC) = inf;     QHA.lo(AC, ACP) = -inf; QHA.up(AC, ACP) = inf;
 LSW.lo(AC) = -inf;      LSW.up(AC) = inf;      LSM.lo(AC) = -inf;      LSM.up(AC) = inf;
 DW.lo(AC) = -inf;       DW.up(AC) = inf;
+RM.lo(AC) = -inf;       RM.up(AC) = inf;       RE.lo(AC) = -inf;       RE.up(AC) = inf;
+RA.lo(AC) = -inf;       RA.up(AC) = inf;
 
-* Prices and quantities that are positive in the base stay positive
+* Prices and quantities that are positive in the base stay positive; as a
+* mixed complementarity problem (from version 0.4.4) every variable without a
+* pair must be free or fixed, so these bounds are left out
+if (mcpmode = 0,
 PA.lo(A) = 1e-10;  PVA.lo(A) = 1e-10;  PQ.lo(C)$CQ(C) = 1e-10;  W.lo(F) = 1e-10;  EXR.lo = 1e-10;
 CPI.lo = 1e-10;  DPI.lo = 1e-10;  QA.lo(A) = 1e-10;  QVA.lo(A) = 1e-10;  QQ.lo(C)$CQ(C) = 1e-10;
 PWEV.lo(C)$CED(C) = 1e-10;
@@ -45,6 +50,7 @@ QF.lo(F, A)$FA(F, A) = 1e-10;  QT.lo(C)$CT(C) = 1e-10;  QER.lo(C)$CR(C) = 1e-10;
 EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;  DW.lo(F)$FS(F) = 1e-10;
 * the wage curve needs positive unemployment
 QFS.up(F)$(FL(F) and epsw(F) > 0) = qlf(F) * (1 - 1e-12);
+);
 
 * Variables that do not exist are held at their base values
 PE.fx(C)$(not CE(C)) = PE.l(C);        QE.fx(C)$(not CE(C)) = QE.l(C);
@@ -61,6 +67,9 @@ YSHI.fx$(not fund) = YSHI.l;           SHIADJ.fx$(not fund) = SHIADJ.l;
 HS.fx$(not linked) = HS.l;
 LSW.fx(F)$(not FL(F)) = 0;             LSM.fx(F)$(not FL(F)) = 0;
 DW.fx(F)$(not FS(F)) = 1;
+* Rents (16.1) are fixed unless a constraint frees them
+RM.fx(C) = RM.l(C);                     RE.fx(C) = RE.l(C);
+RA.fx(A) = RA.l(A);
 
 * Closure
 GADJ.fx = GADJ.l;

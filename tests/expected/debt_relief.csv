@@ -120,3 +120,12 @@ WALRAS,,,0,2.61823641662309e-14
 TQADJ,,,1,1
 TMADJ,,,1,1
 TVADJ,,,1,1
+RM,com_agr,,0,0
+RM,com_man,,0,0
+RM,com_ser,,0,0
+RE,com_agr,,0,0
+RE,com_man,,0,0
+RE,com_ser,,0,0
+RA,act_agr,,0,0
+RA,act_man,,0,0
+RA,act_ser,,0,0

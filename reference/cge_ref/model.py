@@ -31,7 +31,13 @@ VARIABLES: dict[str, str] = {
     "PWE": "C", "QHA": "AH",
     "LSW": "F", "LSM": "F",
     "DW": "F",
+    # Rents (version 0.4.4, model_spec.md, Section 16.1): premiums on imports
+    # and exports, and rents on the output of activities
+    "RM": "C", "RE": "C", "RA": "A",
 }
+
+# Rent variable of a quantity limited by a constraint (Section 16.2)
+RENT_OF = {"QM": "RM", "QE": "RE", "QA": "RA"}
 
 # Tax scaling factors freed by each government closure (version 0.3.1)
 INSTRUMENTS = {"direct": ("TINSADJ", "tins0"), "sales": ("TQADJ", "tq"), "import": ("TMADJ", "tm"),
@@ -94,6 +100,9 @@ class Closure:
             fixed[adj][:] = False
         fixed["MPSADJ" if self.savinv == "savings" else "IADJ"][:] = True
         fixed["CPI" if self.numeraire == "cpi" else "DPI"][:] = True
+        # Rents are fixed, at zero in the base, unless a constraint frees them
+        for name in ("RM", "RE", "RA"):
+            fixed[name][:] = True
 
         unknown = set(self.factors) - set(model.sets["F"])
         if unknown:
@@ -203,8 +212,9 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     # Price paid by domestic buyers of domestic output, with domestic margins (13.4)
     pdd = v["PD"] + v["PQ"] @ p["icd"]
     # 5.1 Price block
-    eq["P1"] = (v["PM"], p["pwm"] * (1 + tm) * v["EXR"] + v["PQ"] @ p["ici"], cm)
-    eq["P2"] = (v["PE"], pwe * (1 - p["te"]) * v["EXR"] - v["PQ"] @ p["ice"], ce)
+    # Premiums on imports and exports (version 0.4.4, Section 16.1)
+    eq["P1"] = (v["PM"], p["pwm"] * (1 + tm + v["RM"]) * v["EXR"] + v["PQ"] @ p["ici"], cm)
+    eq["P2"] = (v["PE"], pwe * (1 - p["te"] - v["RE"]) * v["EXR"] - v["PQ"] @ p["ice"], ce)
     margin_cost = (v["PQ"] @ p["icm"]) * v["QQ"]   # sum over c' of PQ[c'] icm[c', c] QQ[c]
     eq["P3"] = (v["PQ"] * (1 - tq) * v["QQ"],
                 np.where(cdo, pdd * v["QD"], 0.0) + np.where(cm, v["PM"] * v["QM"], 0.0) + margin_cost,
@@ -212,7 +222,8 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["P4"] = (v["PX"] * v["QX"], np.where(cdo, v["PD"] * v["QD"], 0.0) + np.where(ce, v["PE"] * v["QE"], 0.0), cx)
     eq["P5"] = (v["PA"], p["theta"] @ v["PX"], every_a)
     eq["P6"] = (v["PINTA"], (p["ica"] * (1 + vint)).T @ v["PQ"], every_a)
-    eq["P7"] = (v["PA"] * (1 - p["ta"]) * v["QA"], v["PVA"] * v["QVA"] + v["PINTA"] * v["QINTA"], every_a)
+    eq["P7"] = (v["PA"] * (1 - p["ta"] - v["RA"]) * v["QA"], v["PVA"] * v["QVA"] + v["PINTA"] * v["QINTA"],
+                every_a)
     eq["P8"] = (v["CPI"], np.atleast_1d(p["cwts"] @ ph), one)
     eq["P9"] = (v["DPI"], np.atleast_1d(p["dwts"] @ v["PD"]), one)
 
@@ -274,7 +285,11 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
 
     # 5.4 Institution block. DY is income after direct taxes and savings.
     DY = (1 - v["MPS"]) * (1 - v["TINS"]) * v["YI"]
-    eq["I1"] = (v["YF"], (wage * v["QF"]).sum(axis=1) + p["trfr"] * v["EXR"],
+    # Rents by recipient: factors, households and enterprises, government,
+    # rest of the world (Section 16.1)
+    nF = v["YF"].size
+    rent = rents(v, p, pwe)
+    eq["I1"] = (v["YF"], (wage * v["QF"]).sum(axis=1) + p["trfr"] * v["EXR"] + rent[:nF],
                 np.ones(v["YF"].shape, dtype=bool))
     # Health insurance contributions are taken before factor income is distributed
     shi = s["shi_row"]
@@ -283,7 +298,8 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
         yif[shi] = p["tshi"] * v["YF"]
     eq["I2"] = (v["YIF"], yif, np.ones(v["YIF"].shape, dtype=bool))
     eq["I3"] = (v["YI"], v["YIF"][:nD].sum(axis=1) + p["shii"] @ DY + p["trdg"] * v["CPI"]
-                + p["trdr"] * v["EXR"] + p["hold"] * p["rd"] * p["ddebt"], np.ones(nD, dtype=bool))
+                + p["trdr"] * v["EXR"] + p["hold"] * p["rd"] * p["ddebt"] + rent[nF:nF + nD],
+                np.ones(nD, dtype=bool))
     eq["I4"] = (v["EH"], p["hc"] * DY[:nH], np.ones(nH, dtype=bool))
     supernumerary = v["EH"] - ph @ p["gamma"] - v["PA"] @ p["gammah"]
     eq["I5"] = (ph[:, None] * v["QH"],
@@ -297,7 +313,7 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
                + (tm * p["pwm"] * v["QM"]).sum() * v["EXR"]
                + (p["te"] * pwe * v["QE"]).sum() * v["EXR"]
                + (p["ta"] * v["PA"] * v["QA"]).sum() + vat_revenue(v, p)
-               + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"])
+               + v["YIF"][nD].sum() + p["trgr"] * v["EXR"] + p["trgg"] * v["CPI"] + rent[nF + nD])
     eq["I8"] = (v["YG"], revenue, one)
     eq["I9"] = (v["EG"], np.atleast_1d(ph @ v["QG"]) + (p["trdg"].sum() + p["trgg"] + p["trshi"]) * v["CPI"]
                 + p["trrg"] * v["EXR"] + p["rd"] * p["ddebt"] + p["rf"] * p["fdebt"] * v["EXR"], one)
@@ -323,7 +339,7 @@ def _equations(v: dict, p: dict, s: dict) -> dict[str, tuple[np.ndarray, np.ndar
     eq["S2"] = (v["QQ"], v["QINT"].sum(axis=1) + v["QH"].sum(axis=1) + v["QG"] + v["QINV"]
                 + np.where(ct, v["QT"], 0.0) + np.where(cr, v["QER"], 0.0) + v["QSHI"], cq)
     eq["S3"] = ((p["pwm"] * v["QM"]).sum() + (v["YIF"][nD + 1].sum() + p["shir"] @ DY) / v["EXR"]
-                + p["trrg"] + p["rf"] * p["fdebt"],
+                + p["trrg"] + p["rf"] * p["fdebt"] + rent[nF + nD + 1] / v["EXR"],
                 (pwe * v["QE"]).sum() + np.where(cr, v["PQ"] * v["QER"], 0.0).sum() / v["EXR"]
                 + p["trdr"].sum() + p["trfr"].sum() + p["trgr"] + p["trshir"] + v["FSAV"], one)
     eq["S4"] = (v["YG"], v["EG"] + v["GSAV"], one)
@@ -351,6 +367,40 @@ def vat_revenue(v: dict, p: dict) -> np.ndarray:
     return np.atleast_1d((tv * v["PQ"] * base).sum())
 
 
+def rents(v: dict, p: dict, pwe: np.ndarray) -> np.ndarray:
+    """Rents by recipient (version 0.4.4, Section 16.1): factors, households and
+    enterprises, the government, then the rest of the world."""
+    exr = v["EXR"][0]
+    return (p["rent_m"] @ (v["RM"] * p["pwm"] * exr * v["QM"]) + p["rent_e"] @ (v["RE"] * pwe * exr * v["QE"])
+            + p["rent_a"] @ (v["RA"] * v["PA"] * v["QA"]))
+
+
+def rents_abroad(model, v: dict, p: dict) -> tuple[float, float]:
+    """Premiums on imports and on exports paid to the rest of the world, in
+    local currency (Section 16.1)."""
+    exr, pwe = v["EXR"][0], world_export_price(model, v, p)
+    return (float(p["rent_m"][-1] @ (v["RM"] * p["pwm"] * exr * v["QM"])),
+            float(p["rent_e"][-1] @ (v["RE"] * pwe * exr * v["QE"])))
+
+
+@dataclass
+class Constraint:
+    """A bound on one element of a variable, paired with a variable that the
+    closure fixes and that may move in one direction only (version 0.4.4,
+    model_spec.md, Section 16.2). The adjusting variable of QM, QE and QA is
+    by default their rent (RM, RE, RA, rising), paid to `rents` (the
+    government by default)."""
+
+    variable: str
+    element: tuple = ()
+    upper: float | None = None
+    lower: float | None = None
+    adjust: str | None = None
+    adjust_element: tuple | None = None
+    direction: str | None = None
+    rents: str | None = None
+
+
 @dataclass
 class Solution:
     model: "Model"
@@ -361,6 +411,8 @@ class Solution:
     iterations: int
     max_residual: float
     method: str
+    # Constraints (version 0.4.4): binding (True) or not, in the order given
+    binding: list | None = None
 
     def __getitem__(self, name: str) -> np.ndarray:
         return self.values[name]
@@ -382,13 +434,18 @@ class Solution:
         exr = v["EXR"][0]
         ph = final_price(v, p)
         pwe = world_export_price(self.model, v, p)
+        # Rents (Section 16.1): premiums received at home and every rent on
+        # output are income; premiums paid abroad change the value of trade
+        rm_row, re_row = rents_abroad(self.model, v, p)
         expenditure = (ph @ (v["QH"].sum(axis=1) + v["QG"] + v["QINV"] + v["QSHI"]) + v["PQ"] @ v["QER"]
                        + v["PA"] @ v["QHA"].sum(axis=1)
-                       + exr * (pwe @ v["QE"]) - exr * (p["pwm"] @ v["QM"]))
+                       + exr * (pwe @ v["QE"]) - re_row - exr * (p["pwm"] @ v["QM"]) - rm_row)
         income = (v["PVA"] @ v["QVA"] + (p["tq"] * v["TQADJ"] * v["PQ"] * v["QQ"]).sum()
                   + exr * (p["tm"] * v["TMADJ"] * p["pwm"] * v["QM"]).sum()
                   + exr * (p["te"] * pwe * v["QE"]).sum() + (p["ta"] * v["PA"] * v["QA"]).sum()
-                  + vat_revenue(v, p)[0])
+                  + vat_revenue(v, p)[0]
+                  + exr * (v["RM"] * p["pwm"] * v["QM"]).sum() - rm_row
+                  + exr * (v["RE"] * pwe * v["QE"]).sum() - re_row + (v["RA"] * v["PA"] * v["QA"]).sum())
         return float(expenditure - income)
 
     def equivalent_variation(self) -> np.ndarray:
@@ -446,6 +503,7 @@ class Model:
         self._top_nest(sigma_a)
         self._health_link(health_commodities, health_elasticities, sick_days, sick_elasticity,
                           mortality, mortality_elasticity)
+        self._rents()
         self.var_scale = {k: np.where(np.abs(b) > 1e-12, np.abs(b), 1.0) for k, b in self.base.items()}
         with np.errstate(all="ignore"):      # masked elements may divide by zero
             eqs = _equations(self.base, self.params, self.struct)
@@ -883,6 +941,57 @@ class Model:
         self.exists["HS"] = np.atleast_1d(linked)
         self.exists["DW"] = ins.copy()
 
+    def _rents(self) -> None:
+        """Rent variables, zero in the base, and their recipients: the government
+        unless a constraint names another (version 0.4.4, Section 16.1)."""
+        S, b, m = self.sets, self.base, self.mapping
+        S["R"] = S["F"] + S["D"] + [m.government, m.row]
+        nR, nA, nC = len(S["R"]), len(S["A"]), len(S["C"])
+        for name, n, exists in (("RM", nC, self.struct["cm"]), ("RE", nC, self.struct["ce"]),
+                                ("RA", nA, np.ones(nA, dtype=bool))):
+            b[name] = np.zeros(n)
+            self.exists[name] = np.asarray(exists, dtype=bool).copy()
+        for name, n in (("rent_m", nC), ("rent_e", nC), ("rent_a", nA)):
+            recipient = np.zeros((nR, n))
+            recipient[nR - 2] = 1.0
+            self.params[name] = recipient
+
+    def _constraint(self, c: Constraint, is_fixed: dict) -> dict:
+        """Positions, signs, bound and scales of a constraint (Section 16.2)."""
+        def position(name, element, what):
+            if name not in VARIABLES:
+                raise ValueError(f"{what}: {name} is not a model variable")
+            labels = self.element_labels(name)
+            key = tuple(element) + ("",) * (2 - len(element))
+            if key not in labels:
+                raise ValueError(f"{what}: {name}{tuple(element)} is not an element of {name}")
+            k = labels.index(key)
+            if not self.exists[name].ravel()[k]:
+                raise ValueError(f"{what}: {name}{tuple(element)} does not exist in this model")
+            return k
+        if (c.upper is None) == (c.lower is None):
+            raise ValueError("a constraint needs an upper or a lower bound, not both")
+        y = position(c.variable, c.element, "constraint")
+        if is_fixed[c.variable].ravel()[y]:
+            raise ValueError(f"constraint: {c.variable}{tuple(c.element)} is fixed under the closure")
+        xname = c.adjust or RENT_OF.get(c.variable)
+        if xname is None:
+            raise ValueError(f"constraint on {c.variable}: give the adjusting variable")
+        xel = c.element if c.adjust_element is None else c.adjust_element
+        x = position(xname, xel, "adjusting variable")
+        if not is_fixed[xname].ravel()[x]:
+            raise ValueError(f"adjusting variable {xname}{tuple(xel)} is not fixed under the closure")
+        direction = c.direction or ("up" if xname in ("RM", "RE", "RA") else None)
+        if direction not in ("up", "down"):
+            raise ValueError(f"constraint on {c.variable}: the direction of {xname} must be up or down")
+        if c.rents is not None and xname not in ("RM", "RE", "RA"):
+            raise ValueError("rents: only for rent variables (RM, RE, RA)")
+        return {"y": (c.variable, y), "x": (xname, x), "sigma": 1.0 if c.upper is not None else -1.0,
+                "delta": 1.0 if direction == "up" else -1.0,
+                "bound": float(c.upper if c.upper is not None else c.lower),
+                "sy": float(self.var_scale[c.variable].ravel()[y]), "sx": float(self.var_scale[xname].ravel()[x]),
+                "rents": c.rents}
+
     def _labour(self, unemployment, wage_curve, min_wage, smoothing) -> None:
         """Labour force, wage curve and minimum wage (model_spec.md, Section 14)."""
         F, b, p = self.sets["F"], self.base, self.params
@@ -1045,8 +1154,9 @@ class Model:
 
     def solve(self, closure: Closure | None = None, params: dict | None = None,
               fixed: dict | None = None, start: dict | None = None,
-              tol: float = 1e-10, max_iter: int = 100) -> Solution:
-        """Solve the model under a closure, with changed parameters or fixed variables."""
+              tol: float = 1e-10, max_iter: int = 100, constraints=()) -> Solution:
+        """Solve the model under a closure, with changed parameters or fixed
+        variables, and with constraints (version 0.4.4, Section 16)."""
         closure = closure or Closure()
         p = {k: np.array(v, dtype=float, copy=True) for k, v in self.params.items()}
         for name, value in (params or {}).items():
@@ -1056,6 +1166,19 @@ class Model:
 
         is_fixed = closure.fixed(self)
         free = {k: self.exists[k] & ~is_fixed[k] for k in VARIABLES}
+        cons = [self._constraint(c, is_fixed) for c in constraints]
+        # Each constraint frees its adjusting variable; a rent goes to the
+        # recipient named with its constraint
+        recipients = {"RM": "rent_m", "RE": "rent_e", "RA": "rent_a"}
+        for k in cons:
+            name, j = k["x"]
+            free[name].ravel()[j] = True
+            if k["rents"] is not None:
+                if k["rents"] not in self.sets["R"]:
+                    raise ValueError(f"rents: {k['rents']} is not a factor, household, enterprise, "
+                                     "the government or the rest of the world")
+                p[recipients[name]][:, j] = 0.0
+                p[recipients[name]][self.sets["R"].index(k["rents"]), j] = 1.0
 
         # Free variables start from `start` (default: the base); fixed and
         # non-existent elements are held at their base values unless set in `fixed`.
@@ -1067,10 +1190,17 @@ class Model:
             if np.any(changed & ~is_fixed[name]):
                 raise ValueError(f"{name} is not fixed under this closure, so it cannot be set")
             values[name] = np.where(is_fixed[name] & self.exists[name], new, values[name])
+        # The reference level of an adjusting variable is its fixed value
+        for k in cons:
+            name, j = k["x"]
+            given = (fixed or {}).get(name, self.base[name])
+            k["xbar"] = float(np.broadcast_to(np.asarray(given, dtype=float), self.base[name].shape).ravel()[j])
+            values[name].ravel()[j] = k["xbar"]
 
         n_free = int(sum(mask.sum() for mask in free.values()))
-        if n_free != self.n_equations:
-            raise ValueError(f"closure is not square: {n_free} free variables, {self.n_equations} equations")
+        if n_free != self.n_equations + len(cons):
+            raise ValueError(f"closure is not square: {n_free} free variables, "
+                             f"{self.n_equations + len(cons)} equations")
 
         z0 = np.concatenate([values[k][free[k]] / self.var_scale[k][free[k]] for k in VARIABLES])
 
@@ -1083,10 +1213,42 @@ class Model:
                 pos += count
             return out
 
+        def gaps(v: dict) -> tuple[np.ndarray, np.ndarray]:
+            """g: the distance of Y within its bound; h: the move of X in its direction."""
+            g = np.array([k["sigma"] * (k["bound"] - v[k["y"][0]].ravel()[k["y"][1]]) / k["sy"] for k in cons])
+            h = np.array([k["delta"] * (v[k["x"][0]].ravel()[k["x"][1]] - k["xbar"]) / k["sx"] for k in cons])
+            return g, h
+
+        # Active set (Section 16.3): every constraint starts as not binding
+        # (h = 0); a constraint whose bound is violated binds (g = 0), and one
+        # whose adjusting variable moves the wrong way is released
+        binding = [False] * len(cons)
+
         def F(z: np.ndarray) -> np.ndarray:
-            res = self.residuals(unpack(z), p)
-            return np.concatenate(list(res.values()))
+            v = unpack(z)
+            res = list(self.residuals(v, p).values())
+            if cons:
+                g, h = gaps(v)
+                res.append(np.where(binding, g, h))
+            return np.concatenate(res)
 
         result = solve_system(F, z0, tol=tol, max_iter=max_iter)
-        return Solution(self, unpack(result.z), p, closure, result.converged,
-                        result.iterations, result.max_residual, result.method)
+        rounds = 0
+        while cons and result.converged:
+            g, h = gaps(unpack(result.z))
+            changed = False
+            for k in range(len(cons)):
+                if not binding[k] and g[k] < -1e-9:
+                    binding[k], changed = True, True
+                elif binding[k] and h[k] < -1e-9:
+                    binding[k], changed = False, True
+            if not changed:
+                break
+            rounds += 1
+            if rounds > 25:
+                break
+            result = solve_system(F, result.z, tol=tol, max_iter=max_iter)
+        converged = result.converged and rounds <= 25
+        return Solution(self, unpack(result.z), p, closure, converged,
+                        result.iterations, result.max_residual, result.method,
+                        binding=list(binding) if cons else None)

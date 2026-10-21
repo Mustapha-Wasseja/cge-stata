@@ -115,3 +115,12 @@ TMADJ,,,1,1
 TVADJ,,,1,1
 PWE,com_man,,1.05263157894737,1.12725258998537
 PWE,com_cash,,1,1.00658647837127
+RM,com_agr,,0,0
+RM,com_man,,0,0
+RM,com_ser,,0,0
+RE,com_man,,0,0
+RE,com_ser,,0,0
+RE,com_cash,,0,0
+RA,act_agr,,0,0
+RA,act_man,,0,0
+RA,act_ser,,0,0

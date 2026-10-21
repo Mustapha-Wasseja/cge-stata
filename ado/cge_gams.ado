@@ -23,10 +23,13 @@ program define cge_gams, rclass
     if "`type'" == "" {
         local type cns
         if inlist("`solver'", "ipopt", "ipopth", "minos", "snopt") local type nlp
+        * a scenario with constraints is a mixed complementarity problem (from version 0.4.4)
+        mata: st_local("hascons", strofreal(_cge_gams_hascons("`sim'")))
+        if `hascons' local type mcp
     }
     local type = strlower("`type'")
-    if !inlist("`type'", "cns", "nlp") {
-        display as error "type() must be cns (a constrained nonlinear system) or nlp"
+    if !inlist("`type'", "cns", "nlp", "mcp") {
+        display as error "type() must be cns (a constrained nonlinear system), nlp or mcp"
         exit 198
     }
     if "`run'" != "" & "`c(mode)'" == "batch" & "`c(os)'" == "Windows" {
@@ -38,7 +41,7 @@ program define cge_gams, rclass
     local dir = subinstr(`"`using'"', "\", "/", .)
     if substr(`"`dir'"', -1, 1) == "/" local dir = substr(`"`dir'"', 1, length(`"`dir'"') - 1)
     local written cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc ///
-        cge_shock_par.inc cge_shock_var.inc cge_run.gms
+        cge_shock_par.inc cge_shock_var.inc cge_constraints.inc cge_run.gms
     local name = cond("`sim'" == "", "current", "`sim'")
 
     if "`noexport'" == "" {

@@ -61,7 +61,20 @@ cge_gams using gams_notariff, sim(notariff) compare noexport
 
 The example `examples/gams_export.do` does all of this.
 
-## 11.3 Limits
+## 11.3 Constraints
+
+A scenario with constraints (chapter 6.5) is written as a mixed
+complementarity problem in `cge_constraints.inc`. Each constraint becomes:
+
+- a slack variable, zero or positive, paired with the bound;
+- its adjusting variable, linked to the slack.
+
+GAMS then solves it with PATH (`type(mcp)`, the default for such a
+scenario). CONOPT, KNITRO and IPOPT do not solve complementarity problems.
+NLPEC, which turns one into a nonlinear programme for CONOPT, solved the
+test cases only to about 1e-4 with its default settings.
+
+## 11.4 Limits
 
 - Static simulations are exported. Dynamic runs, microsimulation and
   sensitivity analysis stay in Stata.

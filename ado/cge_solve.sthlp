@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.2.0  16oct2026}{...}
+{* *! version 0.4.4  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -45,6 +45,13 @@ Newton fails, Powell's hybrid method ({cmd:solvenl()}) is tried, followed by
 Newton steps to polish the result. {cmd:cge_solve} exits with error 430 if the
 model does not converge.
 
+{pstd}
+With constraints ({helpb cge_constraint}, from version 0.4.4), the
+complementarity conditions are first solved in a smoothed form, which finds
+whether each constraint binds; the model is then solved again with the exact
+conditions, changing the regime of any constraint whose other condition
+fails. The regimes are displayed and stored with the simulation.
+
 
 {title:Options}
 
@@ -77,14 +84,17 @@ reduced one. Both give the same solution; {opt full} is for checks.
 {synopt:{cmd:r(N_solved)}}number of equations in the system solved{p_end}
 {synopt:{cmd:r(jacobians)}}number of Jacobians computed{p_end}
 {synopt:{cmd:r(walras)}}value of the WALRAS slack variable{p_end}
+{synopt:{cmd:r(N_constraints)}}number of constraints, if any{p_end}
+{synopt:{cmd:r(N_binding)}}number of constraints that bind{p_end}
 {p2col 5 18 22 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}simulation name{p_end}
 {synopt:{cmd:r(method)}}solution method{p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
+{synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}
 
 
 {title:Also see}
 
 {psee}
-{helpb cge}, {helpb cge_shock}, {helpb cge_results}, {helpb cge_check}
+{helpb cge}, {helpb cge_shock}, {helpb cge_constraint}, {helpb cge_results}, {helpb cge_check}
 {p_end}

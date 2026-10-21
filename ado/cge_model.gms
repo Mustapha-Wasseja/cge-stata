@@ -8,9 +8,11 @@ the base, writes the base solution to %out%, and can save a work file from
 which a scenario is solved.
 
 The model is solved as a constrained nonlinear system (CNS, with PATH by
-default) or, with --cgetype=nlp, as a nonlinear programme with a constant
-objective, for NLP solvers such as CONOPT or IPOPT. --cgesolver names the
-solver (path by default).
+default); with --cgetype=nlp, as a nonlinear programme with a constant
+objective, for NLP solvers such as CONOPT or IPOPT; or, with --cgetype=mcp,
+as a mixed complementarity problem, which constraints need (from version
+0.4.4, model_spec.md, Section 16). --cgesolver names the solver (path by
+default).
 
 Used in two ways:
 - by tools/gams/run_gams_check.py, the package's independent check, for example
@@ -326,7 +328,19 @@ variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(
      QA(AC), QVA(AC), QINTA(AC), QF(AC, AC), QINT(AC, AC), QX(AC), QD(AC), QE(AC), QM(AC), QQ(AC),
      QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
      TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
-     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC), DW(AC);
+     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC), DW(AC),
+     RM(AC), RE(AC), RA(AC);
+
+* 16.1 Rents (from version 0.4.4): premiums on imports and exports, per unit
+* of the world price, and rents on activity output, per unit of the activity
+* price. Each is paid to the government unless a constraint names another
+* recipient: a factor, a household or enterprise, or the rest of the world.
+parameters rmto(AC, AC) "recipient of the premium on imports of a commodity",
+     reto(AC, AC) "recipient of the premium on its exports", rato(AC, AC) "recipient of the rent on an activity's output";
+rmto(GOVS, C) = 1;
+reto(GOVS, C) = 1;
+rato(GOVS, A) = 1;
+$macro RENTTO(rr) (sum(C, rmto(rr, C) * RM(C) * pwm(C) * QM(C)) * EXR + sum(C, reto(rr, C) * RE(C) * (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) * EXR + sum(A, rato(rr, A) * RA(A) * PA(A) * QA(A)))
 
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
@@ -336,8 +350,8 @@ equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP
      EI12, EI13(AC), EI14, EL1(AC), EL2(AC), ES1(AC), ES2(AC), ES3, ES4, ES5;
 
 * 5.1 Prices
-EP1(C)$CM(C)..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ) * EXR + sum(CP$ici(CP, C), PQ(CP) * ici(CP, C));
-EP2(C)$CE(C)..  PE(C) =e= (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * (1 - te(C)) * EXR
+EP1(C)$CM(C)..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ + RM(C)) * EXR + sum(CP$ici(CP, C), PQ(CP) * ici(CP, C));
+EP2(C)$CE(C)..  PE(C) =e= (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * (1 - te(C) - RE(C)) * EXR
                           - sum(CP$ice(CP, C), PQ(CP) * ice(CP, C));
 EP3(C)$CQ(C)..  PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e=
                 ((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) * QD(C))$CDO(C) + (PM(C) * QM(C))$CM(C)
@@ -345,7 +359,7 @@ EP3(C)$CQ(C)..  PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e=
 EP4(C)$CX(C)..  PX(C) * QX(C) =e= (PD(C) * QD(C))$CDO(C) + (PE(C) * QE(C))$CE(C);
 EP5(A)..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * PX(C));
 EP6(A)..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * ica(C, A));
-EP7(A)..        PA(A) * (1 - ta(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A);
+EP7(A)..        PA(A) * (1 - ta(A) - RA(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A);
 EP8..           CPI =e= sum(C$cwts(C), cwts(C) * PQ(C) * (1 + tv(C) * TVADJ));
 EP9..           DPI =e= sum(C$dwts(C), dwts(C) * PD(C));
 
@@ -390,11 +404,11 @@ ET10(C)$CED(C)..  QE(C) =e= qebar(C) * (PWEV(C) / pwe(C))**(-etae(C));
 ET9(C)$CR(C)..  QER(C) =e= qerbar(C) * (PQ(C) / (EXR * pwe(C)))**(-sigt(C));
 
 * 5.4 Institutions
-EI1(F)..  YF(F) =e= sum(A$FA(F, A), W(F) * WFDIST(F, A) * QF(F, A)) + trfr(F) * EXR;
+EI1(F)..  YF(F) =e= sum(A$FA(F, A), W(F) * WFDIST(F, A) * QF(F, A)) + trfr(F) * EXR + RENTTO(F);
 EI2(INS, F)..  YIF(INS, F) =e= (shif(INS, F) * (1 - tshi(F)) * YF(F))$(not SHIS(INS))
                                + (tshi(F) * YF(F))$SHIS(INS);
 EI3(D)..  YI(D) =e= sum(F, YIF(D, F)) + sum(DP$shii(D, DP), shii(D, DP) * (1 - MPS(DP)) * (1 - TINS(DP)) * YI(DP))
-                    + trdg(D) * CPI + trdr(D) * EXR + hold(D) * rd * ddebt;
+                    + trdg(D) * CPI + trdr(D) * EXR + hold(D) * rd * ddebt + RENTTO(D);
 EI4(H)..  EH(H) =e= hc(H) * (1 - MPS(H)) * (1 - TINS(H)) * YI(H);
 EI5(C, H)$beta(C, H)..
     PQ(C) * (1 + tv(C) * TVADJ) * QH(C, H) =e= PQ(C) * (1 + tv(C) * TVADJ) * gamma(C, H)
@@ -412,7 +426,7 @@ EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
                  + sum(A, ta(A) * PA(A) * QA(A))
                  + TVADJ * sum(C$tv(C), tv(C) * PQ(C) * (sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                        + QSHI(C)$qshibar(C) + sum(A$ica(C, A), (1 - kappa(A)) * QINT(C, A))))
-                 + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI;
+                 + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI + sum(GOVS, RENTTO(GOVS));
 EI9..     EG =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QG(C)) + (sum(D, trdg(D)) + trgg + trshi) * CPI
                  + trrg * EXR + rd * ddebt + rf * fdebt * EXR;
 EI10(D).. TINS(D) =e= tins0(D) * TINSADJ;
@@ -433,7 +447,8 @@ ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F);
 ES2(C)$CQ(C)..  QQ(C) =e= sum(A$ica(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                     + QT(C)$CT(C) + QER(C)$CR(C) + QSHI(C)$qshibar(C);
 ES3..     sum(C$CM(C), pwm(C) * QM(C)) + (sum((ROWS, F), YIF(ROWS, F))
-              + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D))) / EXR + trrg + rf * fdebt
+              + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D)) + sum(ROWS, RENTTO(ROWS))) / EXR
+          + trrg + rf * fdebt
           =e= sum(C$CE(C), (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) + sum(C$CR(C), PQ(C) * QER(C)) / EXR
               + sum(D, trdr(D))
               + sum(F, trfr(F)) + trgr + trshir + FSAV;
@@ -447,7 +462,13 @@ variable OBJ "constant objective";
 equation EOBJ;
 EOBJ..  OBJ =e= 0;
 model cgenlp / cge, EOBJ /;
+* As a mixed complementarity problem (--cgetype=mcp): the equations of the
+* base; a scenario with constraints adds their pairs (model cgecon)
+model cgebase / cge /;
 scalar mstat "model status of the last solve";
+scalar mcpmode "1 when solved as a mixed complementarity problem";
+mcpmode = 0;
+$ifi %cgetype% == mcp mcpmode = 1;
 
 * ---------------------------------------------------------------------
 * Base values (Section 7.1: base prices normalised to one)
@@ -465,6 +486,7 @@ TINS.l(D) = tins0(D);  MPS.l(D) = mps0(D);  TINSADJ.l = 1;  MPSADJ.l = 1;  IADJ.
 WFDIST.l(F, A) = WFD0(F, A);  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(C);  YSHI.l = YSHI0;
 SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;  DW.l(F) = 1;
 TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;  LSW.l(F) = 0;  LSM.l(F) = lsm0(F);
+RM.l(C) = 0;  RE.l(C) = 0;  RA.l(A) = 0;
 
 * Closure (Section 6): 1 = the default of each block
 scalars clext "1 flexible exchange rate, 2 fixed",
@@ -490,13 +512,14 @@ $ifi %cgesolver% == conopt putclose optf 'rtnwma ', (ptol / max(1, smax((AC, ACP
 $ifi %cgesolver% == ipopt  putclose optf 'tol 1e-12' / 'constr_viol_tol ', ptol:0:3 /;
 $ifi %cgesolver% == knitro putclose optf 'feastol_abs ', ptol:0:3 / 'feastol 1e-12' /;
 cge.optfile = 0;
-cgenlp.optfile = 0;
-$ifi %cgesolver% == path   cge.optfile = 1;  cgenlp.optfile = 1;
-$ifi %cgesolver% == conopt cge.optfile = 1;  cgenlp.optfile = 1;
-$ifi %cgesolver% == ipopt  cge.optfile = 1;  cgenlp.optfile = 1;
-$ifi %cgesolver% == knitro cge.optfile = 1;  cgenlp.optfile = 1;
+$ifi %cgesolver% == path   cge.optfile = 1;
+$ifi %cgesolver% == conopt cge.optfile = 1;
+$ifi %cgesolver% == ipopt  cge.optfile = 1;
+$ifi %cgesolver% == knitro cge.optfile = 1;
+cgenlp.optfile = cge.optfile;
+cgebase.optfile = cge.optfile;
 option limrow = 0, limcol = 0, solprint = off;
-$batinclude cge_solve.gms
+$batinclude cge_solve.gms cgebase
 
 file res / '%out%' /;
 $batinclude cge_write.gms res __base__

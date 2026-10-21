@@ -1,0 +1,15 @@
+case,constraint,binding
+con_quota,1,1
+con_quota_hhd,1,1
+con_quota_row,1,1
+con_quota_slack,1,0
+con_quota_base,1,0
+con_export_quota,1,1
+con_capacity,1,1
+con_peg_limit,1,1
+con_deficit_spending,1,1
+con_deficit_tax,1,1
+con_wage_floor,1,1
+con_two,1,1
+con_two,2,1
+con_health_capacity,1,1

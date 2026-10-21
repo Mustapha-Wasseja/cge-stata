@@ -34,6 +34,7 @@ same file that the package's independent check has used since version 0.1.16
 | `cge_data.inc` | the SAM, the roles of its accounts and the calibration settings |
 | `cge_shock_par.inc` | parameter changes and the closure |
 | `cge_shock_var.inc` | changes to fixed variables |
+| `cge_constraints.inc` | constraints, as complementarity pairs, and model `cgecon` (from version 0.4.4) |
 
 The scenario is either the shocks and closure in memory (what the next
 `cge_solve` would solve) or, with `sim()`, those of a stored simulation.
@@ -95,6 +96,23 @@ base and for the scenario, with the variable where it occurs.
 |---|---|---|
 | `cns` (default) | constrained nonlinear system: the equations, square, with no objective | PATH, CONOPT, KNITRO |
 | `nlp` | the same equations and a constant objective, `OBJ =e= 0` | IPOPT, CONOPT, KNITRO, MINOS, SNOPT |
+| `mcp` (from version 0.4.4; the default with constraints) | a mixed complementarity problem: the equations, unpaired, and each constraint's bound paired with a slack | PATH |
+
+**Constraints.** A scenario with constraints (`cge_constraint`; model_spec.md,
+Section 16) can only be written as a mixed complementarity problem. For
+constraint *k*, `cge_constraints.inc` declares:
+
+- a slack `SLK`*k* ≥ 0;
+- the bound `BND`*k*, σ (b − Y) / s<sup>Y</sup> ≥ 0, paired with the slack;
+- the link `LNK`*k*, X = x̄ + δ s<sup>X</sup> `SLK`*k*, an unpaired equality
+  that frees the adjusting variable X.
+
+When the slack is zero, Y may lie within its bound and X stays at x̄; when it
+is positive, Y is at its bound. This is the complementarity condition of
+Section 16.2, which GAMS passes to PATH exactly, without smoothing. The
+variables with no pair must be free or fixed, so the bounds that keep prices
+and quantities positive in the CNS form are left out. The base is solved as
+model `cgebase`, the scenario as `cgecon`.
 
 Convergence tolerances are absolute, so they are scaled to the largest SAM
 cell, within what double precision allows (`ptol`, the larger of 1e-11 and
@@ -145,7 +163,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 17 cases. Together they cover:
+There are 22 cases. Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -156,16 +174,28 @@ There are 17 cases. Together they cover:
 - the wage curve and the minimum wage, and factor quantities;
 - every closure option: fixed exchange rate, fixed government savings with
   sales, import or VAT rates adjusting, investment-driven savings, the DPI
-  numeraire, capital specific to each activity, and unemployed labour.
+  numeraire, capital specific to each activity, and unemployed labour;
+- constraints (from version 0.4.4): an import quota whose rent goes to
+  households, a capacity limit on health services with the rent to capital,
+  a borrowing limit under a peg, an import quota with rents paid abroad
+  together with a ban on government borrowing, and a floor on the nominal
+  wage.
 
 Results (21 October 2026, GAMS 54.2; `tools/gams/export_check_results.csv`):
 
 | Solver | Type | Cases solved | Base, largest relative difference | Scenario, largest relative difference |
 |---|---|---|---|---|
 | PATH | CNS | 17 of 17 | 4.3e-16 | 1.6e-11 |
+| PATH | MCP, with constraints | 5 of 5 | 2.8e-17 | 2.4e-12 |
 | CONOPT | CNS | 17 of 17 | 4.3e-16 | 3.6e-9 |
 | KNITRO | CNS | 17 of 17 | 4.3e-16 | 1.6e-11 |
 | IPOPT | NLP | 17 of 17 | 5.6e-15 | 1.6e-11 |
+
+CONOPT, KNITRO and IPOPT do not solve complementarity problems, so they were
+not run on the five cases with constraints. NLPEC, which reformulates a
+complementarity problem as a nonlinear programme for CONOPT, was also tried.
+With its default settings it solved the 17 cases without constraints to
+1.1e-9, but the five with constraints only to between 7e-6 and 3.5e-4.
 
 Stata solved every case with a tolerance of 1e-12 on the scaled residuals.
 Differences of about 1e-11 are therefore at the precision of the two
