@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.6.1 implements the standard single-country model described in
+Version 0.6.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,12 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.6.2 brings GAMS solutions back into Stata (`cge_gams ..., import()`):
+the solution is checked against the model's equations and stored as a
+simulation, for reports and microsimulation. On a synthetic SAM with
+40,190 equations (4,254 in the reduced system), a tariff removal took
+143 seconds in Stata 13.1/IC, 127 in StataNow/MP 19.5 on four cores
+and 4.1 in GAMS with PATH, so larger models are best solved in GAMS.
 Version 0.6.1 adds user variables and equations (`cge_variable`, `cge_equation`;
 Section 19), written in a small language that Stata compiles for its solver
 and `cge_gams` writes into the GAMS program. With closure swaps they give new
@@ -246,6 +252,9 @@ analysis.
 ## Requirements
 
 Stata 13 or later (Stata/IC is sufficient). No other Stata packages are needed.
+The test suite passes in Stata 13.1/IC and in StataNow/MP 19.5. Stata 13
+cannot read model files (`cge_save`) saved in later versions of Stata, whose
+Mata file format differs; later versions read those saved in Stata 13.
 
 ## Installation
 

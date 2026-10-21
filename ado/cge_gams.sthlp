@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_gams} {helpb using} {it:folder}
 [{cmd:,} {opt sim(name)} {opt dyn:amic(name)} {opt replace} {opt run} {opt compare} {opt noexport}
-{opt gams(path)} {opt solver(name)} {opt type(cns|nlp|mcp)}]
+{opt gams(path)} {opt solver(name)} {opt type(cns|nlp|mcp)} {opt imp:ort(name)}]
 
 
 {title:Description}
@@ -81,6 +81,15 @@ parameters and to fixed variables, are written to
 the driver solves the periods in order, each from the solution of the one
 before. With {opt compare}, every period is compared with Stata's. Runs with
 constraints are not exported.
+
+{phang}
+{opt import(name)} (from version 0.6.2) stores the GAMS solution of the
+scenario as simulation {it:name}: the free variables take GAMS's values, the
+fixed ones Stata's, and the model's equations are checked in Stata, whose
+largest scaled residual is reported. A model too large for Stata's solver
+can thus be solved by PATH and its results used in Stata, with
+{helpb cge_report} or {helpb cge_microsim}. With {opt noexport} the results
+already in {it:folder} are imported.
 
 {phang}
 {opt replace} allows the files of an earlier export in {it:folder} to be
@@ -159,6 +168,9 @@ solver and type can also be set when GAMS is run, for example
 {synopt:{cmd:r(N_compared)}}values compared{p_end}
 {synopt:{cmd:r(walras)}}value of the WALRAS variable in GAMS (largest over periods with {opt dynamic()}){p_end}
 {synopt:{cmd:r(N_periods)}}periods exported or compared ({opt dynamic()}){p_end}
+{synopt:{cmd:r(N_imported)}}values imported ({opt import()}){p_end}
+{synopt:{cmd:r(max_residual)}}largest scaled residual of the imported solution in Stata ({opt import()}){p_end}
+{synopt:{cmd:r(converged)}}1 if the imported solution solves the model in Stata ({opt import()}){p_end}
 {p2col 5 22 26 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}name of the exported scenario{p_end}
 {synopt:{cmd:r(closure)}}its closure{p_end}

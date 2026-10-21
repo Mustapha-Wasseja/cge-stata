@@ -74,7 +74,22 @@ scenario). CONOPT, KNITRO and IPOPT do not solve complementarity problems.
 NLPEC, which turns one into a nonlinear programme for CONOPT, solved the
 test cases only to about 1e-4 with its default settings.
 
-## 11.4 Limits
+## 11.4 Large models
+
+Stata's solver holds the Jacobian as a dense matrix and factorises it with
+LAPACK, so time and memory grow with the square and the cube of the number of
+equations (chapter 10). For models of several thousand equations, GAMS with
+PATH is faster: export the scenario, solve it in GAMS and bring the solution
+back with `import()`, which checks it against the model's equations in
+Stata (from version 0.6.2):
+
+```stata
+cge_gams using big, replace
+* gams cge_run.gms, in the folder big
+cge_gams using big, noexport import(big_path)
+```
+
+## 11.5 Limits
 
 - Static simulations and dynamic runs are exported (dynamic runs from
   version 0.5.3, with `dynamic(run)`: GAMS solves the periods in order, each

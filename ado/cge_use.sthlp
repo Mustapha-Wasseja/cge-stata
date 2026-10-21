@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.15  16oct2026}{...}
+{* *! version 0.6.2  21oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -20,6 +20,11 @@
 including its closure, current shocks and stored simulations. The dataset in
 memory is not changed. The default extension is {cmd:.cgem}. Items saved by a
 version that the current one no longer uses are ignored, with a note.
+
+{pstd}
+Later versions of Stata read files saved in Stata 13. Stata 13 cannot read
+files saved in later versions, whose Mata file format differs; {cmd:cge_use}
+then stops with a message and leaves the model in memory unchanged.
 
 
 {title:Example}

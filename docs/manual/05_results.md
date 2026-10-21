@@ -69,4 +69,8 @@ cge_use using "model.cgem"
 
 A saved model holds the SAM, the mapping, the calibration, the closure and
 every simulation, so results can be reported later without recomputing them.
-Models saved by earlier versions are upgraded when loaded.
+Models saved by earlier versions are upgraded when loaded. Model files are
+written in Mata's file format, which changed after Stata 13: later versions
+of Stata read files saved in Stata 13, but Stata 13 cannot read files saved
+in later versions (tested with StataNow 19.5), so a model to be shared with
+users of Stata 13 is best saved in Stata 13.

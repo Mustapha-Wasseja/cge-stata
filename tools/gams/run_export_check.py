@@ -98,13 +98,16 @@ def main() -> None:
         raise SystemExit(f"Stata wrote no comparison; see {work / 'compare.log'}")
     with res.open(encoding="utf-8") as handle:
         rows = [r for r in csv.DictReader(handle) if r["case"] not in skipped]
-    # One file for every solver: the rows of this solver replace earlier ones
+    # One file for every solver: the rows of this solver replace earlier ones,
+    # including those of the cases with constraints, which are solved as MCP
+    # whatever the type
     out = HERE / "export_check_results.csv"
     fields = ["case", "solver", "type", "gams_modelstat", "values", "base_maxrel", "value_maxrel"]
     kept = []
     if out.exists():
         with out.open(encoding="utf-8") as handle:
-            kept = [r for r in csv.DictReader(handle) if (r["solver"], r["type"]) != (args.solver, args.type)]
+            kept = [r for r in csv.DictReader(handle)
+                    if r["solver"] != args.solver or (r["type"] != args.type and r["case"] not in MCP_CASES)]
     new = [{"case": r["case"], "solver": args.solver, "type": "mcp" if r["case"] in MCP_CASES else args.type,
             "gams_modelstat": int(float(r["modelstat"])), "values": int(float(r["N"])),
             "base_maxrel": f"{float(r['base_maxdiff']):.3e}", "value_maxrel": f"{float(r['maxdiff']):.3e}"}

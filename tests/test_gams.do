@@ -77,6 +77,20 @@ assert r(base_maxdiff) < 1e-14
 assert r(maxdiff) < 1e-10
 assert r(N_compared) == 108
 assert abs(r(walras)) < 1e-9
+* The GAMS solution as a simulation (version 0.6.2): it solves the model in
+* Stata and agrees with Stata's solution
+cge_gams using "`dir'", sim(closures) noexport import(closures_gams)
+assert r(converged) == 1 & r(max_residual) < 1e-9 & r(modelstat) == 16
+tempfile own
+quietly cge_results, sim(closures) clear nodisplay
+rename value own
+quietly save `own'
+quietly cge_results, sim(closures_gams) clear nodisplay
+quietly merge 1:1 variable element1 element2 using `own'
+assert _merge == 3
+quietly generate double rel = abs(value - own) / max(1, abs(own))
+quietly summarize rel
+assert r(max) < 1e-10
 * A different simulation does not match these results
 cge_shock, reset
 cge_shock pwm, scale(1.2)

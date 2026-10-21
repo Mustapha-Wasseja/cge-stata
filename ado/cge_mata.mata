@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.6.1  2026-10-21
+*! cge_mata.mata  v0.6.2  2026-10-21
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -194,7 +194,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.6.1")
+    return("0.6.2")
 }
 
 // =====================================================================
@@ -6292,16 +6292,25 @@ void _cge_use(string scalar fn)
     real scalar fh, unknown, ok, cur, d, k
     if (!fileexists(fn)) _cge_fail("file " + fn + " not found", 601)
     // Check the file's identifier before fgetmatrix(), which stops with an
-    // error on another kind of file and would leave it open. Some header bytes
-    // that fputmatrix() writes differ between Stata sessions, so only the
-    // format's opening bytes and the identifier itself are compared.
+    // error on another kind of file and would leave it open. The header bytes
+    // that fputmatrix() writes before the identifier differ between Stata
+    // sessions and versions, so the format's opening bytes are compared and
+    // the identifier is looked for in the first 512 bytes. The seventh byte
+    // gives the format: 0 in files written by Stata 13 and 1 in those written
+    // by StataNow 19.5, which Stata 13 cannot read.
     sig = _cge_signature()
     fh = fopen(fn, "r")
-    hd = fread(fh, strlen(sig))
+    hd = fread(fh, 512)
     head = (rows(hd) * cols(hd) ? hd : "")
     if (substr(head, 1, 5) != substr(sig, 1, 5) | !strpos(head, "cge-stata model")) {
         fclose(fh)
         _cge_fail(fn + " is not a cge-stata model file", 610)
+    }
+    if (ascii(substr(head, 7, 1)) > ascii(substr(sig, 7, 1))) {
+        fclose(fh)
+        _cge_fail(fn + " was saved by a later version of Stata, whose model files Stata " +
+                  strofreal(floor(c("stata_version"))) + " cannot read; load it in the " +
+                  "version of Stata that saved it or a later one", 610)
     }
     fseek(fh, 0, -1)
     v = fgetmatrix(fh)
@@ -10496,6 +10505,94 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     st_global("r(name)", name)
     st_global("r(instruments_list)", invtokens(O.label'))
     rmexternal("cge__opt")
+}
+
+
+// Imports the GAMS solution of a scenario as a simulation (from version
+// 0.6.2): the free variables from GAMS, the fixed ones from Stata, with the
+// equations checked in Stata. For a model too large for Stata's solver, the
+// scenario can be solved by PATH and its results used in Stata.
+void _cge_gams_import(string scalar dir, string scalar sim, string scalar newname)
+{
+    struct cge_model scalar M, M2
+    struct cge_par scalar p, psave
+    transmorphic A
+    string colvector key, e1, e2
+    string rowvector cl
+    real colvector val, x, fixed, pos, fx, fr, isfree, got
+    string scalar name, closure
+    real scalar k, i, status, err, n, nmiss, conv, s
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (sim == "") {
+        name = "current"
+        p = M.p
+        x = M.xcur
+        fixed = M.fixed
+        closure = _cge_closure_text(M)
+    }
+    else {
+        name = sim
+        s = _cge_sim_index(M, sim)
+        if (M.simrun[s] != "") _cge_fail("simulation " + sim + " is a period of a dynamic run", 198)
+        p = M.simp[s]
+        x = M.simx[., s]
+        closure = M.simclosure[s]
+        cl = tokens(closure)
+        M2 = M
+        _cge_swap_parse(M2, _cge_swap_tokens(cl), fx, fr)
+        M2.swfix = fx
+        M2.swfree = fr
+        _cge_closure_apply(M2, cl[1], subinstr(cl[2], ":", " "), cl[3], cl[4],
+                           substr(cl[|5 \ 4 + M.nF|]', strpos(cl[|5 \ 4 + M.nF|]', ":") :+ 1, .))
+        fixed = M2.fixed
+    }
+    A = asarray_create()
+    for (k = 1; k <= rows(M.vname); k++) {
+        _cge_vlabels(M, k, e1, e2)
+        pos = _cge_vpos(M, k)
+        for (i = 1; i <= rows(pos); i++) asarray(A, M.vname[k] + "|" + e1[i] + "|" + e2[i], pos[i])
+    }
+    _cge_gams_read(dir + "/cge_" + name + ".csv", key, val, status)
+    // every free variable that exists, and the adjusting variables of
+    // constraints, take GAMS's value
+    isfree = M.exists :* (1 :- fixed)
+    if (rows(M.bX)) isfree[M.bX] = J(rows(M.bX), 1, 1)
+    got = J(rows(x), 1, 0)
+    n = 0
+    for (k = 1; k <= rows(key); k++) {
+        if (!asarray_contains(A, key[k])) continue
+        i = asarray(A, key[k])
+        if (!isfree[i]) continue
+        x[i] = val[k]
+        got[i] = 1
+        n++
+    }
+    nmiss = sum(isfree :* (1 :- got))
+    if (nmiss) {
+        pos = select((1::rows(x)), isfree :* (1 :- got))
+        _cge_fail("the GAMS results lack " + strofreal(nmiss) + " free variable(s) of the model, such as " +
+                  _cge_poslabel(M, pos[1]), 459)
+    }
+    err = _cge_maxres(M, p, x)
+    conv = (anyof((1, 2, 15, 16), status) & err < 1e-8)
+    psave = M.p
+    M.p = p
+    if (newname == "") newname = name + "_gams"
+    k = _cge_store_sim(M, newname, x, conv, 0, err, "gams")
+    M.simclosure[k] = closure
+    M.p = psave
+    _cge_store(M)
+    printf("{txt}Imported {res}%f{txt} values of scenario {res}%s{txt} from GAMS (model status {res}%g{txt}) as simulation {res}%s\n",
+           n, name, status, newname)
+    printf("{txt}Largest scaled residual of the model's equations in Stata: {res}%9.3e{txt}%s\n", err,
+           (conv ? "" : " {err}(not a solution)"))
+    st_numscalar("r(N_imported)", n)
+    st_numscalar("r(modelstat)", status)
+    st_numscalar("r(max_residual)", err)
+    st_numscalar("r(converged)", conv)
+    st_global("r(name)", newname)
 }
 
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)

@@ -1,11 +1,16 @@
 """Scale benchmark (version 0.2.0): synthetic SAMs of increasing size are read,
 mapped, calibrated and solved in Stata, with the reduced system and, for the
-smaller ones, the full system.
+smaller ones, the full system. With --gams (from version 0.6.2), each model is
+also exported, solved by GAMS with PATH and timed, and its GAMS solution is
+imported into Stata, checked against the model's equations and compared with
+Stata's.
 
 Usage: python tools/bench/run_bench.py [--stata EXE] [--sizes 40x5,80x10,...] [--full-up-to N]
+    [--gams GAMS.EXE] [--out CSV]
 
-Writes tools/bench/bench_results.csv. The SAMs, do-files and Stata logs go to a
-temporary directory; Stata logs contain the licence serial and are not kept.
+Writes tools/bench/bench_results.csv, or the file given with --out. The SAMs, do-files, Stata logs and GAMS
+listings go to a temporary directory; Stata logs contain the licence serial,
+and GAMS listings the licence holder, and are not kept.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ import csv
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -23,6 +29,7 @@ REPO = HERE.parents[1]
 DO = """version 13.0
 clear all
 set more off
+set linesize 255
 adopath ++ "{ado}"
 timer clear
 timer on 1
@@ -45,6 +52,33 @@ local res = r(max_residual)
 quietly timer list
 display "BENCH reduced neq `neq' nsolved `nsol' iterations `it' jacobians `jac' residual `res' map " r(t1) " calibrate " r(t2) " solve " r(t3)
 {full}
+{export}
+"""
+
+# From version 0.6.2: the model and scenario for GAMS, and the model saved for
+# the import of GAMS's solution
+EXPORT = """quietly cge_gams using "{gdir}", sim(reduced) replace
+quietly cge_save using "{model}", replace
+"""
+
+IMPORT = """version 13.0
+clear all
+set more off
+set linesize 255
+adopath ++ "{ado}"
+quietly cge_use using "{model}"
+cge_gams using "{gdir}", sim(reduced) noexport import(gams)
+local res = r(max_residual)
+local stat = r(modelstat)
+quietly cge_results, sim(reduced) clear nodisplay
+rename value v_stata
+tempfile st
+quietly save `st'
+quietly cge_results, sim(gams) clear nodisplay
+quietly merge 1:1 variable element1 element2 using `st', nogenerate
+generate double rel = abs(v_stata - value) / max(1, abs(v_stata)) if variable != "WALRAS"
+quietly summarize rel
+display "BENCH gams status `stat' residual `res' agreement " r(max)
 """
 
 FULL = """timer on 4
@@ -69,6 +103,8 @@ def main() -> None:
     ap.add_argument("--stata", default=r"C:\Program Files (x86)\Stata13\Stata-64.exe")
     ap.add_argument("--sizes", default="40x5,80x10,120x10,160x20,200x20")
     ap.add_argument("--full-up-to", type=int, default=120)
+    ap.add_argument("--gams", default=None, help="gams.exe: also solve each model with GAMS (PATH)")
+    ap.add_argument("--out", default=str(HERE / "bench_results.csv"))
     args = ap.parse_args()
     import sys
     sys.path.insert(0, str(HERE))
@@ -86,8 +122,11 @@ def main() -> None:
         coms = " ".join(l for l in labels if re.fullmatch(r"c\d+", l))
         hhs = " ".join(l for l in labels if l.startswith("hh"))
         do = work / f"bench_{n}x{h}.do"
+        gdir, model = work / f"gams_{n}x{h}", work / f"model_{n}x{h}.cgem"
+        export = EXPORT.format(gdir=gdir.as_posix(), model=model.as_posix()) if args.gams else ""
         do.write_text(DO.format(ado=(REPO / "ado").as_posix(), sam=csvp.as_posix(), acts=acts, coms=coms,
-                                hhs=hhs, full=FULL if n <= args.full_up_to else ""), encoding="utf-8")
+                                hhs=hhs, full=FULL if n <= args.full_up_to else "", export=export),
+                      encoding="utf-8")
         subprocess.run([args.stata, "/e", "do", do.name], cwd=work, check=True)
         log = (work / f"bench_{n}x{h}.log").read_text(encoding="utf-8", errors="replace")
         rec = {"activities": n, "households": h, "accounts": len(labels)}
@@ -102,9 +141,24 @@ def main() -> None:
         rec["seconds_solve_full"] = float(m[4]) if m else None
         m = re.search(r"^BENCH agreement (\S+)", log, re.M)
         rec["max_rel_diff_full"] = float(m[1]) if m else None
+        if args.gams:
+            # GAMS calibrates, solves the base and the scenario; the time is the whole run
+            t0 = time.time()
+            subprocess.run([args.gams, "cge_run.gms", "lo=0"], cwd=gdir, check=True)
+            rec["seconds_gams_total"] = round(time.time() - t0, 1)
+            imp = work / f"import_{n}x{h}.do"
+            imp.write_text(IMPORT.format(ado=(REPO / "ado").as_posix(), model=model.as_posix(),
+                                         gdir=gdir.as_posix()), encoding="utf-8")
+            subprocess.run([args.stata, "/e", "do", imp.name], cwd=work, check=True)
+            log = (work / f"import_{n}x{h}.log").read_text(encoding="utf-8", errors="replace")
+            m = re.search(r"^BENCH gams status (\S+) residual (\S+) agreement (\S+)", log, re.M)
+            if not m:
+                raise SystemExit(f"import {size} failed; see {work / imp.with_suffix('.log').name}")
+            rec.update(gams_modelstat=float(m[1]), gams_residual_in_stata=float(m[2]),
+                       max_rel_diff_gams=float(m[3]))
         rows.append(rec)
         print(rec, flush=True)
-    out = HERE / "bench_results.csv"
+    out = Path(args.out)
     with out.open("w", newline="", encoding="utf-8") as handle:
         w = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
         w.writeheader()

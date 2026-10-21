@@ -113,6 +113,21 @@ The comparison computes |GAMS − Stata| / max(1, |Stata|) for every variable
 and element that exists in the model. It reports the largest value for the
 base and for the scenario, with the variable where it occurs.
 
+**The GAMS solution in Stata** (from version 0.6.2). `import(name)` stores
+the GAMS solution as a Stata simulation: the free variables take GAMS's
+values, the fixed ones Stata's, and Stata evaluates the model's equations at
+the result and reports the largest scaled residual. For a model too large for
+Stata's dense solver, the route is to build, calibrate and shock the model in
+Stata, export it, solve it with PATH, and import the solution for reports,
+microsimulation or comparison:
+
+```stata
+cge_gams using big, replace                 // the current shocks
+* in GAMS: gams cge_run.gms
+cge_gams using big, noexport import(big_path)
+cge_report, sims(big_path)
+```
+
 ## 3. Solvers and model types
 
 | `type()` | GAMS model | Solvers |

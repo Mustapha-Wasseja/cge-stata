@@ -23,14 +23,30 @@ building a model and after changing the closure.
 ## 10.2 Performance
 
 The solver works on a reduced system and computes the Jacobian by groups of
-columns (chapter 4). On a Windows laptop with Stata 13.1/IC, synthetic SAMs of
-increasing size solved a tariff removal in these times (`tools/bench`):
+columns (chapter 4). On a Windows laptop, synthetic SAMs of increasing size
+solved a tariff removal in these times, in Stata 13.1/IC, in StataNow/MP 19.5
+on four cores, and in GAMS with PATH (`tools/bench`, version 0.6.2):
 
-| Activities | Accounts | Equations | Solved (reduced) | Solve (seconds) |
-|---|---|---|---|---|
-| 40 | 95 | 1,814 | 711 | 1.9 |
-| 120 | 260 | 10,555 | 2,045 | 17.8 |
-| 250 | 530 | 40,190 | 4,254 | 178.1 |
+| Activities | Accounts | Equations | Solved (reduced) | Stata 13.1/IC (s) | StataNow/MP 19.5, 4 cores (s) | GAMS, whole run (s) |
+|---|---|---|---|---|---|---|
+| 40 | 95 | 1,814 | 711 | 0.7 | 0.5 | 1.9 |
+| 80 | 180 | 5,446 | 1,407 | 3.7 | 3.5 | 2.2 |
+| 120 | 260 | 10,555 | 2,045 | 7.1 | 5.6 | 2.0 |
+| 160 | 350 | 18,483 | 2,757 | 9.6 | 6.8 | 3.3 |
+| 200 | 430 | 26,858 | 3,418 | 53.9 | 53.3 | 4.0 |
+| 250 | 530 | 40,190 | 4,254 | 143.0 | 126.9 | 4.1 |
+
+Most of Stata's time goes into evaluating the model's equations to build the
+Jacobian by finite differences: about four fifths of the solve for the
+200-activity model, against less than a tenth for the LU factorisation of
+the dense Jacobian, so the extra cores of Stata/MP shorten the solve little
+(`tools/bench/README.md`). GAMS uses analytic derivatives and a sparse
+solver, and its time, which includes calibration and the base solve, barely
+grows over this range.
+For models with more than about 2,000 equations in the reduced system, export
+the scenario to GAMS and bring the solution back with
+`cge_gams ..., import()` (chapter 11.4); the solution is checked against the
+model's equations in Stata.
 
 Times vary with other work on the machine; they show orders of magnitude.
 Calibration and mapping are fast compared with solving. Stata/IC holds at

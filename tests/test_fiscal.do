@@ -247,3 +247,24 @@ _compare_reference tariff_removal
 cge_closure, government(fixgsav sales)
 cge_solve, name(rep_tariff_removal_sales) tolerance(1e-12)
 _compare_reference rep_tariff_removal_sales
+
+* ---------------------------------------------------------------------
+* 5. A model saved in StataNow 19.5 by version 0.6.2
+*    (tests/data/model_v062_stata19.cgem: the standard layout with a stored
+*    tariff removal). Later versions of Stata read it; Stata 13 cannot read
+*    the file format of later versions, and stops with a message that leaves
+*    the model in memory unchanged.
+* ---------------------------------------------------------------------
+if c(stata_version) >= 14 {
+    cge_use using "data/model_v062_stata19.cgem"
+    assert "`r(saved_by)'" == "0.6.2"
+    _compare_reference tariff_removal
+    cge_closure, government(fixgsav sales)
+    cge_solve, name(rep_tariff_removal_sales) tolerance(1e-12)
+    _compare_reference rep_tariff_removal_sales
+}
+else {
+    capture noisily cge_use using "data/model_v062_stata19.cgem"
+    assert _rc == 610
+    _compare_reference rep_tariff_removal_sales
+}
