@@ -1,7 +1,8 @@
-*! cge_microsim.ado  v0.8.1  2026-10-23
+*! cge_microsim.ado  v0.8.2  2026-10-23
 *! cge-stata: pass one or more simulations to household survey data
 *! (model_spec.md, Section 11): consumption, prices, poverty, inequality and
-*! incidence by household; welfare, and the decomposition of the changes
+*! incidence by household; welfare, the decomposition of the changes and
+*! fiscal incidence
 *!
 *! Author: Mustapha Wasseja
 *! Requires: Stata 13+
@@ -11,7 +12,8 @@ program define cge_microsim, rclass
     syntax [if] [in] [pweight aweight fweight iweight], SIM(string) GROUP(varname)   ///
         CONSumption(varname numeric) [SIZE(varname numeric) INCome(string)          ///
         BUDget(string) LINE(string) QUANTiles(integer 10) GENerate(name) REPLACE     ///
-        DETail DECompose CLEAR SAVing(string) NODisplay]
+        DETail DECompose MARKet(varname numeric) DTax(varlist numeric) TRANSfers(varlist numeric) ///
+        ITax(varlist numeric) SUBsidies(varlist numeric) INKind(string) CLEAR SAVing(string) NODisplay]
 
     * Simulations: one or more (several from version 0.8.0)
     local sims `sim'
@@ -77,6 +79,11 @@ program define cge_microsim, rclass
             exit 198
         }
     }
+    * Fiscal incidence (from version 0.8.2): market income and the instruments
+    if "`market'" == "" & "`dtax'`transfers'`itax'`subsidies'`inkind'" != "" {
+        display as error "give market() with the fiscal instruments"
+        exit 198
+    }
     if "`clear'" != "" & "`generate'" != "" {
         display as error "clear replaces the survey with the results; use saving() to keep the variables of generate()"
         exit 198
@@ -89,9 +96,9 @@ program define cge_microsim, rclass
         tempvar wvar
         quietly generate double `wvar' `exp' if `touse'
     }
-    markout `touse' `consumption' `wvar' `size' `linevars'
+    markout `touse' `consumption' `wvar' `size' `linevars' `market' `dtax' `transfers' `itax' `subsidies'
     * Variables named in income() and budget() must exist and be numeric
-    foreach spec in income budget {
+    foreach spec in income budget inkind {
         foreach pair of local `spec' {
             gettoken v : pair, parse(":")
             confirm numeric variable `v'
@@ -119,7 +126,9 @@ program define cge_microsim, rclass
         forvalues k = 1/`nsims' {
             local sfx ""
             if `nsims' > 1 local sfx `k'
-            foreach suffix in nom price real pc ev cv {
+            local sfxs nom price real pc ev cv
+            if "`market'" != "" local sfxs `sfxs' ym yn yd yc yf
+            foreach suffix of local sfxs {
                 local gvars `gvars' `generate'_`suffix'`sfx'
             }
         }
@@ -137,7 +146,8 @@ program define cge_microsim, rclass
     _cge_load
     mata: _cge_microsim("`sims'", "`touse'", "`gs'", "`consumption'", "`wvar'", "`size'", ///
         `"`income'"', `"`budget'"', "`lines'", `quantiles', "`generate'",              ///
-        ("`nodisplay'" == ""), ("`detail'" != ""), ("`decompose'" != ""))
+        ("`nodisplay'" == ""), ("`detail'" != ""), ("`decompose'" != ""), "`market'", "`dtax'",       ///
+        "`transfers'", "`itax'", "`subsidies'", `"`inkind'"')
     return add
 
     if "`clear'" != "" {

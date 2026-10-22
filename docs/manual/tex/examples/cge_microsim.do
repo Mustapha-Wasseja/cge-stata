@@ -84,6 +84,18 @@ summarize w1_ev w1_cv dreal
 count if w1_ev < dreal
 *<<
 
+*>> ms_fiscal
+generate double market = wage + profit
+generate double dtx = 0.1 * market
+generate double itx = 0.05 * cons
+generate double school = cond(runiform() < 0.4, 20 * runiform(), 0)
+set linesize 110
+cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize)       ///
+    income(wage:lab profit:cap transfer:gov) budget(food:com_agr goods:com_man services:com_ser) ///
+    line(100) market(market) dtax(dtx) transfers(transfer) itax(itx) inkind(school:com_ser)
+*<<
+set linesize 100
+
 *>> ms_data
 set linesize 110
 cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) ///

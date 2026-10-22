@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.8.1  2026-10-23
+*! cge_mata.mata  v0.8.2  2026-10-23
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -200,7 +200,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.8.1")
+    return("0.8.2")
 }
 
 // =====================================================================
@@ -8744,6 +8744,204 @@ real rowvector _cge_ms_pov(real colvector r, real colvector v, real colvector z)
     return((_cge_fgt(r, v, z, 0), _cge_fgt(r, v, z, 1), _cge_fgt(r, v, z, 2), sum(v :* (r :< z))))
 }
 
+// =====================================================================
+// Fiscal incidence (CEQ) in cge_microsim (from version 0.8.2)
+// =====================================================================
+
+// Concentration coefficient of t over weights v, with the observations
+// ranked by x: 2 sum(v t (F - 1/2)) / sum(v t), F the mid-point of each
+// observation's share of the weights, tied values of x sharing their
+// mid-point. With t = x it is the Gini coefficient.
+real scalar _cge_conc(real colvector t, real colvector x, real colvector v)
+{
+    real colvector o, xs, vs, ts, gid, gw, gs, F
+    real matrix info
+    real scalar n
+    n = rows(x)
+    if (n < 2) return(.)
+    o = order(x, 1)
+    xs = x[o]
+    vs = v[o]
+    ts = t[o]
+    gid = runningsum(1 \ (xs[|2 \ n|] :!= xs[|1 \ n - 1|]))
+    info = panelsetup(gid, 1)
+    gw = panelsum(vs, info)
+    gs = runningsum(gw) - gw
+    F = (gs[gid] + gw[gid] :/ 2) :/ sum(vs)
+    return(2 * sum(vs :* ts :* (F :- 0.5)) / sum(vs :* ts))
+}
+
+// The fiscal measures of one scenario (from version 0.8.2). Household totals:
+// market income ym and the instruments, in the columns of X with types ty
+// (1 direct taxes, 2 direct transfers, 3 indirect taxes, 4 indirect
+// subsidies, 5 in-kind benefits); n persons and person weights v; lines Z;
+// quantile groups qg of base market income per person. Out: CC, by income
+// concept (market, net market, disposable, consumable, final), the mean
+// per person, Gini, concentration coefficient in market income, and FGT0,
+// FGT1, FGT2 and the number of poor for each line; II, by instrument, the
+// total, per cent of market income, concentration coefficient, Kakwani
+// index, coverage, coverage of the poor in market income, and marginal
+// contributions to the Gini and the headcount of final income; RD, the
+// redistributive effect, Reynolds-Smolensky index, reranking and fiscal
+// impoverishment; QS and QP, by quantile and instrument, the share of the
+// instrument and its per cent of the quantile's market income
+void _cge_ms_fisc(real colvector ym, real matrix X, real rowvector ty, real colvector nsz, real colvector v,
+                  real matrix Z, real colvector qg, real scalar nq, real matrix CC, real matrix II,
+                  real colvector RD, real matrix QS, real matrix QP, real matrix Yout)
+{
+    real matrix Y, ypc
+    real colvector tx, tpc, wo, poor, sel
+    real scalar n, k, j, l, nz, gm, nk, tax
+    n = rows(ym)
+    nz = cols(Z)
+    nk = cols(X)
+    tx = J(n, 5, 0)
+    for (k = 1; k <= 5; k++) {
+        sel = selectindex(ty :== k)'
+        if (cols(sel)) tx[., k] = rowsum(X[., sel])
+    }
+    // concepts: market, net market, disposable, consumable, final
+    Y = J(n, 5, .)
+    Y[., 1] = ym
+    Y[., 2] = Y[., 1] - tx[., 1]
+    Y[., 3] = Y[., 2] + tx[., 2]
+    Y[., 4] = Y[., 3] - tx[., 3] + tx[., 4]
+    Y[., 5] = Y[., 4] + tx[., 5]
+    Yout = Y
+    ypc = Y :/ nsz
+    CC = J(5, 3 + 4 * nz, .)
+    for (k = 1; k <= 5; k++) {
+        CC[k, 1] = sum(v :* ypc[., k]) / sum(v)
+        CC[k, 2] = _cge_gini(ypc[., k], v)
+        CC[k, 3] = _cge_conc(ypc[., k], ypc[., 1], v)
+        for (l = 1; l <= nz; l++) CC[k, (4 + 4 * (l - 1))..(3 + 4 * l)] = _cge_ms_pov(ypc[., k], v, Z[., l])
+    }
+    gm = CC[1, 2]
+    II = J(nk, 8, .)
+    QS = J(nq, nk, .)
+    QP = J(nq, nk, .)
+    poor = (nz ? (ypc[., 1] :< Z[., 1]) : J(n, 1, 0))
+    for (j = 1; j <= nk; j++) {
+        tpc = X[., j] :/ nsz
+        tax = (ty[j] == 1 | ty[j] == 3)
+        II[j, 1] = sum(v :* tpc)
+        II[j, 2] = 100 * II[j, 1] / sum(v :* ypc[., 1])
+        II[j, 3] = _cge_conc(tpc, ypc[., 1], v)
+        II[j, 4] = (tax ? II[j, 3] - gm : gm - II[j, 3])
+        II[j, 5] = sum(v :* (X[., j] :> 0)) / sum(v)
+        if (nz) II[j, 6] = sum(v :* (X[., j] :> 0) :* poor) / sum(v :* poor)
+        // final income without the instrument
+        wo = ypc[., 5] + (tax ? tpc : -tpc)
+        II[j, 7] = _cge_gini(wo, v) - CC[5, 2]
+        if (nz) II[j, 8] = _cge_fgt(wo, v, Z[., 1], 0) - CC[5, 4]
+        for (k = 1; k <= nq; k++) {
+            sel = selectindex(qg :== k)
+            if (!rows(sel)) continue
+            QS[k, j] = sum(v[sel] :* tpc[sel]) / II[j, 1]
+            QP[k, j] = 100 * sum(v[sel] :* tpc[sel]) / sum(v[sel] :* ypc[sel, 1])
+        }
+    }
+    RD = J(4, 1, .)
+    RD[1] = gm - CC[5, 2]
+    RD[2] = gm - CC[5, 3]
+    RD[3] = CC[5, 2] - CC[5, 3]
+    if (nz) RD[4] = sum(v :* (Y[., 4] :< Y[., 1]) :* (ypc[., 4] :< Z[., 1])) / sum(v)
+}
+
+// The changes of the instruments in a simulation, as ratios to the base for
+// each household, before deflation (from version 0.8.2): direct taxes with
+// market income and the group's direct tax rate; direct transfers as the
+// group's transfers from the government; indirect taxes with nominal spending
+// and the household's tax wedge, the share of sales tax and VAT in the price
+// it pays; subsidies with nominal spending; in-kind benefits as the model's
+// spending on their commodity, or on the health insurance fund's purchases
+real matrix _cge_ms_fratio(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector hi,
+                           real rowvector ty, string rowvector tgt, real colvector mr, real colvector C0,
+                           real colvector C1, real colvector pr, real colvector P, real matrix B, real colvector ci,
+                           real colvector tot, real matrix wg, real colvector Pg)
+{
+    real matrix RT
+    real colvector TINS, TINS0, tr, gr, cr, w0, w1, t0, t1, PQ, PQ0, QG, QG0, QS, QS0
+    real scalar nH, h, j, c, a, b
+    nH = M.nH
+    RT = J(rows(C0), cols(ty), 1)
+    TINS = _cge_vn(M, x, "TINS")
+    TINS0 = _cge_vn(M, M.x0, "TINS")
+    tr = (TINS0[|1 \ nH|] :> 0) :* (TINS[|1 \ nH|] :/ (TINS0[|1 \ nH|] + (TINS0[|1 \ nH|] :== 0))) + (TINS0[|1 \ nH|] :<= 0)
+    gr = J(nH, 1, .)
+    for (h = 1; h <= nH; h++) gr[h] = _cge_ms_ratio(M, p, x, h, "gov")
+    cr = (C0 :> 0) :* (C1 :/ (C0 + (C0 :== 0))) + (C0 :<= 0)
+    // tax wedges of commodities (sales tax and VAT), 0 for home consumption
+    w0 = (1 :- (1 :- M.p0.tq :* _cge_vn(M, M.x0, "TQADJ")) :/ (1 :+ M.p0.tv :* _cge_vn(M, M.x0, "TVADJ"))) \ J(M.n, 1, 0)
+    w1 = (1 :- (1 :- p.tq :* _cge_vn(M, x, "TQADJ")) :/ (1 :+ p.tv :* _cge_vn(M, x, "TVADJ"))) \ J(M.n, 1, 0)
+    t0 = (wg' * w0)[hi, 1]
+    t1 = ((wg' * (pr :* w1)) :/ Pg)[hi, 1]
+    if (cols(B)) {
+        t0 = (tot :> 0) :* ((B * w0[ci]) :/ (tot + (tot :== 0))) + (tot :<= 0) :* t0
+        t1 = (tot :> 0) :* ((B * (pr[ci] :* w1[ci])) :/ (tot + (tot :== 0)) :/ P) + (tot :<= 0) :* t1
+    }
+    PQ = _cge_vn(M, x, "PQ")
+    PQ0 = _cge_vn(M, M.x0, "PQ")
+    QG = _cge_vn(M, x, "QG")
+    QG0 = _cge_vn(M, M.x0, "QG")
+    QS = _cge_vn(M, x, "QSHI")
+    QS0 = _cge_vn(M, M.x0, "QSHI")
+    for (j = 1; j <= cols(ty); j++) {
+        if (ty[j] == 1) RT[., j] = mr :* tr[hi, 1]
+        else if (ty[j] == 2) RT[., j] = gr[hi, 1]
+        else if (ty[j] == 3) RT[., j] = cr :* ((t0 :> 0) :* (t1 :/ (t0 + (t0 :== 0))) + (t0 :<= 0))
+        else if (ty[j] == 4) RT[., j] = cr
+        else {
+            if (tgt[j] == "shi") {
+                a = sum(PQ0 :* QS0)
+                b = sum(PQ :* QS)
+            }
+            else {
+                c = _cge_find(M.C, tgt[j])
+                a = PQ0[c] * QG0[c]
+                b = PQ[c] * QG[c]
+            }
+            RT[., j] = J(rows(C0), 1, (a > 0 ? b / a : 1))
+        }
+    }
+    return(RT)
+}
+
+// The table of fiscal incidence, base -> simulated (from version 0.8.2)
+void _cge_ms_showfisc(string rowvector inst, real rowvector ty, real matrix CB, real matrix CS, real matrix IB,
+                      real matrix IS, real colvector RB, real colvector RS, real scalar nz, string scalar zl)
+{
+    string rowvector cl, tl
+    real scalar k
+    cl = ("market", "net market", "disposable", "consumable", "final")
+    tl = ("direct tax", "transfer", "indirect tax", "subsidy", "in kind")
+    printf("\n{txt}Fiscal incidence: income concepts per person, persons ranked by market income per person\n")
+    printf("{txt}{hline 98}\n")
+    printf("{txt}%-12s %24s %22s %22s %15s\n", "income", "mean, base -> simulated", "Gini", "concentration",
+           (nz ? "headcount (%)" : ""))
+    printf("{txt}{hline 98}\n")
+    for (k = 1; k <= 5; k++) {
+        printf("{txt}%-12s {res}%10.4g -> %10.4g %9.4f -> %9.4f %9.4f -> %9.4f", cl[k], CB[k, 1], CS[k, 1], CB[k, 2],
+               CS[k, 2], CB[k, 3], CS[k, 3])
+        if (nz) printf("{res} %6.2f -> %6.2f\n", 100 * CB[k, 4], 100 * CS[k, 4])
+        else printf("\n")
+    }
+    printf("{txt}{hline 98}\n")
+    printf("{txt}%-12s %-12s %22s %22s %13s %13s\n", "instrument", "", "% of market income", "Kakwani", "coverage (%)",
+           "MC to Gini")
+    printf("{txt}{hline 98}\n")
+    for (k = 1; k <= cols(inst); k++) {
+        printf("{txt}%-12s %-12s {res}%9.3f -> %9.3f %9.4f -> %9.4f %13.2f %13.5f\n", abbrev(inst[k], 12), tl[ty[k]],
+               IB[k, 2], IS[k, 2], IB[k, 4], IS[k, 4], 100 * IB[k, 5], IB[k, 7])
+    }
+    printf("{txt}{hline 98}\n")
+    printf("{txt}Redistributive effect {res}%7.4f{txt} -> {res}%7.4f{txt}; Reynolds-Smolensky {res}%7.4f{txt} -> {res}%7.4f{txt}; reranking {res}%7.4f{txt} -> {res}%7.4f\n",
+           RB[1], RS[1], RB[2], RS[2], RB[3], RS[3])
+    if (nz) printf("{txt}Fiscal impoverishment at line {res}%s{txt}: {res}%6.2f{txt} -> {res}%6.2f{txt} per cent of persons\n",
+                   zl, 100 * RB[4], 100 * RS[4])
+    printf("{txt}Kakwani: positive when progressive. MC: Gini of final income without the instrument less with it, base\n")
+}
+
 // The measures of a distribution r over persons v, as decomposed: the mean;
 // FGT0, FGT1, FGT2 and the number of poor for each line; the nine inequality
 // measures (from version 0.8.1)
@@ -8847,21 +9045,24 @@ void _cge_ms_rmat(string scalar name, real matrix X, string colvector req, strin
 void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, string scalar cvar,
                    string scalar wvar, string scalar svar, string scalar income, string scalar budget,
                    string scalar lines, real scalar nq, string scalar gen, real scalar show,
-                   real scalar detail, real scalar decomp)
+                   real scalar detail, real scalar decomp, string scalar market, string scalar dtax,
+                   string scalar transfers, string scalar itax, string scalar subsidies, string scalar inkind)
 {
     struct cge_model scalar M
     struct cge_par scalar p
     string colvector g, ug, rlab, cn
     string rowvector ivars, isrc, bvars, bcom, simv, ltok, ineqn, povn, nm, chn, alln
     string colvector alll, req
-    string scalar sfx, sname
+    string rowvector inst, tgt, iv, itg, fcl, fin
+    string scalar sfx, sname, zl1
     string matrix S
     real colvector x, C0, w, nsz, hi, EH, EH0, MPS, TINS, MPS0, TINS0, kappa, grp, ratio, C1, PQ, PQ0
     real colvector pr, Pg, P, R, r0, r1, pw, Y0, Y1, tot, ci, sel, present, qg, pv, q0, q1
-    real colvector ev, cv, rS, fn, Ys, kap, gi
-    real rowvector a, b, cc, mm, P00, P11, P10, P01
+    real colvector ev, cv, rS, fn, Ys, kap, gi, ym0, ym1, qf, mr, YI, YI0, yig, FRB, FRS
+    real rowvector a, b, cc, mm, P00, P11, P10, P01, ty, tl
     real matrix Y, rho, QH0, wg, B, T, Z, V, IB, IS, PT, QT, GT, RH, IM, PH, GR, WT
-    real scalar s, n, k, h, j, nH, row, nz, ns, l, si, hasline, zv, d, nr, K, ktax, kgrp, mk, mu0, mu1
+    real matrix XF, XS, RT, FCB, FCS, FIB, FIS, FQSB, FQSS, FQPB, FQPS, FYB, FYS
+    real scalar s, n, k, h, j, nH, row, nz, ns, l, si, hasline, zv, d, nr, K, ktax, kgrp, mk, mu0, mu1, hasf, c
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -8943,6 +9144,43 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
         ci = J(0, 1, .)
         tot = J(n, 1, 0)
     }
+    // Fiscal instruments (from version 0.8.2): direct taxes, direct
+    // transfers, indirect taxes, indirect subsidies and in-kind benefits,
+    // amounts paid or received by the household
+    hasf = (market != "")
+    if (hasf) {
+        ym0 = st_data(., market, touse)
+        inst = J(1, 0, "")
+        ty = J(1, 0, .)
+        tgt = J(1, 0, "")
+        tl = (1, 2, 3, 4)
+        for (k = 1; k <= 4; k++) {
+            iv = tokens((dtax, transfers, itax, subsidies)[k])
+            inst = inst, iv
+            ty = ty, J(1, cols(iv), k)
+            tgt = tgt, J(1, cols(iv), "")
+        }
+        if (inkind != "") {
+            _cge_ms_pairs(inkind, "inkind", iv, itg)
+            for (k = 1; k <= cols(itg); k++) {
+                if (itg[k] == "shi") {
+                    if (sum(_cge_vn(M, M.x0, "QSHI")) <= 0) _cge_fail("inkind(): the model has no health insurance fund (shi)", 459)
+                }
+                else if (!_cge_find(M.C, itg[k])) _cge_fail("inkind(): " + itg[k] + " is not a commodity of the model or shi", 111)
+            }
+            inst = inst, iv
+            ty = ty, J(1, cols(iv), 5)
+            tgt = tgt, itg
+        }
+        if (!cols(inst)) _cge_fail("market(): give the fiscal instruments, in dtax(), transfers(), itax(), subsidies() or inkind()", 198)
+        if (cols(uniqrows(inst')') < cols(inst)) _cge_fail("a variable is given as more than one fiscal instrument", 198)
+        XF = st_data(., inst, touse)
+        if (min(XF) < 0) _cge_fail("fiscal instruments are amounts paid or received and cannot be negative", 459)
+        qf = _cge_wxtile(ym0 :/ nsz, w :* nsz, nq)
+        fcl = ("market", "net_market", "disposable", "consumable", "final")
+        fin = ("total", "pct_market", "conc", "kakwani", "coverage", "coverage_poor", "mc_gini", "mc_fgt0")
+        zl1 = (nz ? ltok[1] : "")
+    }
     // the measures of the decomposition, and their lines
     alln = "mean"
     alll = ""
@@ -9022,6 +9260,41 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
 
         // Equivalent and compensating variations (from version 0.8.1)
         _cge_ms_evcv(M, p, x, hi, C0, C1, pr, B, ci, tot, ev, cv)
+
+        // Fiscal incidence, base and simulated (from version 0.8.2): market
+        // income with the household's income components (or its group's
+        // income), the instruments as _cge_ms_fratio() says, all at base
+        // prices
+        if (hasf) {
+            YI = _cge_vn(M, x, "YI")
+            YI0 = _cge_vn(M, M.x0, "YI")
+            yig = YI[|1 \ nH|] :/ YI0[|1 \ nH|]
+            if (income != "") mr = (Y0 :!= 0) :* (Y1 :/ (Y0 + (Y0 :== 0))) + (Y0 :== 0) :* yig[hi, 1]
+            else mr = yig[hi, 1]
+            RT = _cge_ms_fratio(M, p, x, hi, ty, tgt, mr, C0, C1, pr, P, B, ci, tot, wg, Pg)
+            ym1 = ym0 :* mr :/ P
+            XS = XF :* RT :/ P
+            _cge_ms_fisc(ym0, XF, ty, nsz, pw, Z, qf, nq, FCB, FIB, FRB, FQSB, FQPB, FYB)
+            _cge_ms_fisc(ym1, XS, ty, nsz, pw, Z, qf, nq, FCS, FIS, FRS, FQSS, FQPS, FYS)
+            for (k = 1; k <= 5; k++) {
+                S = S \ (J(3, 1, (sname, "fiscal", "all")), ("mean" \ "gini" \ "conc"), J(3, 1, ("", fcl[k])))
+                V = V \ _cge_ms_rows(J(3, 1, .), FCB[k, (1..3)]', FCS[k, (1..3)]')
+                for (l = 1; l <= nz; l++) {
+                    S = S \ (J(4, 1, (sname, "fiscal", "all")), povn', J(4, 1, (ltok[l], fcl[k])))
+                    V = V \ _cge_ms_rows(J(4, 1, .), FCB[k, (4 * l)..(3 + 4 * l)]', FCS[k, (4 * l)..(3 + 4 * l)]')
+                }
+            }
+            for (j = 1; j <= cols(inst); j++) {
+                S = S \ (J(8, 1, (sname, "fiscal", "all")), fin', ("" \ "" \ "" \ "" \ "" \ zl1 \ "" \ zl1), J(8, 1, inst[j]))
+                V = V \ _cge_ms_rows(J(8, 1, .), FIB[j, .]', FIS[j, .]')
+                for (k = 1; k <= nq; k++) {
+                    S = S \ (J(2, 1, (sname, "fiscalq", "all")), ("share" \ "pct_market"), J(2, 1, ("", inst[j])))
+                    V = V \ _cge_ms_rows((k \ k), (FQSB[k, j] \ FQPB[k, j]), (FQSS[k, j] \ FQPS[k, j]))
+                }
+            }
+            S = S \ (J(4, 1, (sname, "fiscal", "all")), ("re" \ "rs" \ "rerank" \ "fi"), ("" \ "" \ "" \ zl1), J(4, 1, ""))
+            V = V \ _cge_ms_rows(J(4, 1, .), FRB, FRS)
+        }
 
         // Means, poverty and inequality: all households, then each group present
         T = J(nr, 11, .)
@@ -9153,6 +9426,7 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
                                 ltok[1], (nz > 1 ? ", the other lines in r(poverty)" : ""))
             if (detail) _cge_ms_detail(rlab, ltok, PT, IB, IS, QT, nq, V, S, sname)
             if (decomp) _cge_ms_showdec(chn, alln, alll, IM, PH, GR, ltok)
+            if (hasf) _cge_ms_showfisc(inst, ty, FCB, FCS, FIB, FIS, FRB, FRS, nz, zl1)
         }
 
         if (gen != "") {
@@ -9167,6 +9441,15 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             st_varlabel(nm[4], "Real consumption per person, simulation " + sname)
             st_varlabel(nm[5], "Equivalent variation (base prices), simulation " + sname)
             st_varlabel(nm[6], "Compensating variation, simulation " + sname)
+            if (hasf) {
+                nm = (gen + "_ym", gen + "_yn", gen + "_yd", gen + "_yc", gen + "_yf") :+ sfx
+                (void) st_addvar("double", nm)
+                st_store(., nm, touse, FYS)
+                for (k = 1; k <= 5; k++) {
+                    st_varlabel(nm[k], ("Market", "Net market", "Disposable", "Consumable", "Final")[k] +
+                                " income (base prices), simulation " + sname)
+                }
+            }
             if (si == 1) {
                 (void) st_addvar("double", gen + "_q")
                 st_store(., gen + "_q", touse, qg)
@@ -9197,6 +9480,17 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
                               sum(w[sel] :* cv[sel]) / sum(pw[sel]), 100 * sum(w[sel] :* cv[sel]) / sum(w[sel] :* C0[sel]))
             }
             _cge_ms_rmat("r(welfare)", WT, J(nr, 1, ""), rlab, ("ev" \ "ev_pct" \ "cv" \ "cv_pct"))
+            if (hasf) {
+                cn = ("mean" \ "gini" \ "conc") \ (nz ? ("fgt0" \ "fgt1" \ "fgt2" \ "npoor") : J(0, 1, ""))
+                cn = vec((cn' :+ "_base") \ (cn' :+ "_sim"))
+                _cge_ms_rmat("r(concepts)", _cge_ms_interleave(FCB[., (1..(3 + 4 * (nz > 0)))], FCS[., (1..(3 + 4 * (nz > 0)))]),
+                             J(5, 1, ""), fcl', cn)
+                cn = vec((fin :+ "_base") \ (fin :+ "_sim"))
+                _cge_ms_rmat("r(instruments)", _cge_ms_interleave(FIB, FIS), J(cols(inst), 1, ""), inst', cn)
+                _cge_ms_rmat("r(redistribution)", (FRB, FRS), J(4, 1, ""), ("re" \ "rs" \ "rerank" \ "fi"), ("base" \ "sim"))
+                _cge_ms_rmat("r(fshare)", FQSB, J(nq, 1, ""), "q" :+ strofreal(1::nq), inst')
+                st_global("r(instlist)", invtokens(inst))
+            }
             if (decomp) {
                 req = J(rows(alll), 1, "")
                 for (j = 1; j <= rows(alll); j++) if (alll[j] != "") req[j] = "line" + strofreal(_cge_find(ltok', alll[j]))
@@ -9371,11 +9665,11 @@ void _cge_ms_post()
     pc = V[., 4]
     st_store(., ("q", "base", "value", "change", "pct"), (V[., (1..3)], ch, pc))
     st_varlabel("sim", "Simulation")
-    st_varlabel("table", "Table: summary, quantile, gic, shapley or growthred")
+    st_varlabel("table", "Table: summary, quantile, gic, shapley, growthred, fiscal or fiscalq")
     st_varlabel("group", "Household group (all: every household)")
     st_varlabel("measure", "Measure")
     st_varlabel("line", "Poverty line")
-    st_varlabel("channel", "Channel (shapley) or component (growthred)")
+    st_varlabel("channel", "Channel, component, income concept or fiscal instrument")
     st_varlabel("q", "Quantile group (quantile) or percentile (gic)")
     st_varlabel("base", "Base value")
     st_varlabel("value", "Value in the simulation")

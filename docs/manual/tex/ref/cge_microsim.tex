@@ -18,7 +18,9 @@ poverty for several lines, including lines that differ by household, the
 number of poor, eight more inequality measures, incidence by quantile of
 base consumption and the growth incidence curve, and all results as a
 dataset. From version 0.8.1 it gives each household's equivalent and
-compensating variations, and divides every change among its channels.
+compensating variations, and divides every change among its channels; from
+version 0.8.2, fiscal incidence as the Commitment to Equity method measures
+it, before and after the simulation.
 
 \cgesec{Quick start}
 
@@ -57,6 +59,14 @@ Welfare by household, and the contribution of each channel to every change
 cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) ///
     income(wage:lab profit:cap remit:row grants:gov) line(1200) generate(w1) decompose
 \end{stcode}
+Fiscal incidence of direct taxes \cmd{dtx}, transfers \cmd{grants}, indirect
+taxes \cmd{itx} and health services \cmd{hlt}, which follow government
+purchases of \cmd{com_hlt}
+\begin{stcode}
+cge_microsim [pweight = w], sim(hfund) group(grp) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap remit:row grants:gov) line(1200) market(ym)        ///
+    dtax(dtx) transfers(grants) itax(itx) inkind(hlt:com_hlt)
+\end{stcode}
 As above, with the results as a dataset, saved to \cmd{incidence.dta}
 \begin{stcode}
 cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) size(hhsize) ///
@@ -86,6 +96,13 @@ cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) siz
 \opt{}{replace} & allow the variables of \cmd{generate()} to be replaced\\
 \opt{det}{ail} & display poverty for every line, inequality, welfare and incidence\\
 \opt{dec}{ompose} & divide every change among its channels\\
+\optgroup{Fiscal incidence}
+\optarg{mark}{et}{varname} & market income\\
+\optarg{dt}{ax}{varlist} & direct taxes and contributions\\
+\optarg{trans}{fers}{varlist} & direct transfers\\
+\optarg{it}{ax}{varlist} & indirect taxes\\
+\optarg{sub}{sidies}{varlist} & indirect subsidies\\
+\optarg{ink}{ind}{var\texttt{:}target \ldots} & in-kind benefits, with the model's spending they follow\\
 \opt{}{clear} & replace the survey in memory with the results\\
 \optarg{sav}{ing}{filename[\texttt{, replace}]} & save the results as a dataset\\
 \opt{nod}{isplay} & suppress the tables of results\\
@@ -178,6 +195,32 @@ group's consumption, and \cmd{prices}. The contributions add up to the change.
 The change in each poverty measure is also divided into growth and
 redistribution. With $K$ channels, every measure is computed for $2^K$
 distributions; $K$ may be at most 12.
+
+\item[\optarg{mark}{et}{varname}] (from version 0.8.2) is the household's
+market income, before taxes and transfers, in the units of consumption. It
+ranks persons, by market income per person, for fiscal incidence, and is
+required with the instruments below, which are amounts that the household
+pays or receives and cannot be negative. Market income changes in the
+simulation as the household's income components do, or as its group's
+income without \cmd{income()}.
+
+\item[\optarg{dt}{ax}{varlist}] lists direct taxes and contributions paid.
+Each changes with market income and the group's direct tax rate.
+
+\item[\optarg{trans}{fers}{varlist}] lists direct transfers received, which
+change as the group's transfers from the government.
+
+\item[\optarg{it}{ax}{varlist}] lists indirect taxes paid, which change with
+the household's nominal spending and with the share of sales tax and VAT in
+the prices it pays, at its own or its group's budget shares.
+
+\item[\optarg{sub}{sidies}{varlist}] lists indirect subsidies received, which
+change with nominal spending.
+
+\item[\optarg{ink}{ind}{var\texttt{:}target \ldots}] lists in-kind benefits,
+such as health or education services, valued at cost, each with the model's
+spending it follows: a commodity, whose purchases by the government give the
+change, or \cmd{shi}, the purchases of the health insurance fund.
 
 \item[\opt{}{clear}] replaces the survey in memory with the results, as a
 dataset (see \emph{Results as a dataset} below). It cannot be combined with
@@ -302,6 +345,24 @@ The equivalent variation, the change in consumption at base prices worth as
 much as the simulation, is at least the change in real consumption for every
 household, since the household can substitute among goods.
 
+\cgesubsec{Example 7: fiscal incidence}
+
+The survey gives market income, wages and profits; direct taxes of 10 per
+cent of it; indirect taxes of 5 per cent of consumption; and free schooling,
+valued at cost, for some households, which follows government purchases of
+services:
+\stlog[\scriptsize]{ms_fiscal}
+Direct taxes, 10 per cent of market income, are proportional: their Kakwani
+index is 0. Transfers and schooling, of amounts unrelated to income, are worth
+relatively more to poorer persons and are progressive, with Kakwani indexes
+of 0.30 and 0.32; indirect taxes, 5 per cent of consumption, take a slightly
+larger share of the market income of poorer persons, and their index is
+$-0.002$. Each instrument's marginal contribution is the change in the Gini
+coefficient of final income that it makes. The simulation changes each
+instrument with the model: the direct tax rate rises to keep government
+savings fixed, so direct taxes rise from 10.0 to 13.1 per cent of market
+income, and fiscal impoverishment from 29.00 to 29.45 per cent of persons.
+
 \cgesubsec{Results as a dataset}
 
 With \cmd{clear} or \cmd{saving()}, the results form a dataset with one
@@ -312,11 +373,11 @@ Variable & Content\\
 \midrule\endhead
 \bottomrule\endlastfoot
 \cmd{sim} & the simulation\\
-\cmd{table} & \cmd{summary}, \cmd{quantile}, \cmd{gic}, \cmd{shapley} or \cmd{growthred}\\
+\cmd{table} & \cmd{summary}, \cmd{quantile}, \cmd{gic}, \cmd{shapley}, \cmd{growthred}, \cmd{fiscal} or \cmd{fiscalq}\\
 \cmd{group} & \cmd{all}, every household, or a household group (\cmd{summary})\\
 \cmd{measure} & the measure, below\\
 \cmd{line} & the poverty line, for \cmd{fgt0}, \cmd{fgt1}, \cmd{fgt2} and \cmd{npoor}\\
-\cmd{channel} & the channel (\cmd{shapley}) or component (\cmd{growthred}), from version 0.8.1\\
+\cmd{channel} & the channel (\cmd{shapley}), component (\cmd{growthred}), income concept or instrument (\cmd{fiscal}, \cmd{fiscalq}), from version 0.8.1\\
 \cmd{q} & the quantile group (\cmd{quantile}) or the percentile (\cmd{gic})\\
 \cmd{base}, \cmd{value} & the base and simulated values\\
 \cmd{change}, \cmd{pct} & the change and the per cent change\\
@@ -334,7 +395,15 @@ of poor persons, in units of the weights); and \cmd{gini}, \cmd{theil},
 \cmd{shapley} has, for every measure of \cmd{summary} for all households and
 each channel, the base value and the base value plus the channel's
 contribution, so that \cmd{change} is the contribution; \cmd{growthred} has
-the growth and redistribution components of each poverty measure. Poverty measures and inequality indexes are
+the growth and redistribution components of each poverty measure. With
+\cmd{market()}, the table \cmd{fiscal} has, for each income concept
+(\cmd{channel} \cmd{market}, \cmd{net_market}, \cmd{disposable},
+\cmd{consumable} or \cmd{final}), \cmd{mean}, \cmd{gini}, \cmd{conc} and the
+poverty measures; for each instrument, \cmd{total}, \cmd{pct_market},
+\cmd{conc}, \cmd{kakwani}, \cmd{coverage}, \cmd{coverage_poor}, \cmd{mc_gini}
+and \cmd{mc_fgt0}; and \cmd{re}, \cmd{rs}, \cmd{rerank} and \cmd{fi}; the table
+\cmd{fiscalq} has each instrument's \cmd{share} and \cmd{pct_market} by
+quantile of market income per person. Poverty measures and inequality indexes are
 proportions; \cmd{pct} is the per cent change of the measure itself.
 
 \cgesec{Stored results}
@@ -354,6 +423,7 @@ proportions; \cmd{pct} is the per cent change of the measure itself.
 \res{r(sims)} & the simulations\\
 \res{r(lines)} & the poverty lines\\
 \res{r(channels)} & the channels of \cmd{decompose}\\
+\res{r(instlist)} & the fiscal instruments\\
 \resgroup{Matrices}
 \res{r(table)} & one row for all households (\cmd{all}) and one for each group in the survey; columns \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{fgt0_base}, \cmd{fgt0_sim}, \cmd{fgt1_base}, \cmd{fgt1_sim}, \cmd{fgt2_base}, \cmd{fgt2_sim} (first line), \cmd{gini_base} and \cmd{gini_sim}\\
 \res{r(poverty)} & for each line (equations \cmd{line1}, \cmd{line2}, \ldots) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated\\
@@ -363,6 +433,10 @@ proportions; \cmd{pct} is the per cent change of the measure itself.
 \res{r(welfare)} & for each group: \cmd{ev} and \cmd{cv} per person, \cmd{ev_pct} and \cmd{cv_pct}, as per cent of base consumption\\
 \res{r(shapley)} & with \cmd{decompose}: for each measure (poverty measures with equations \cmd{line1}, \ldots), the base, the contribution of each channel, and the simulated value\\
 \res{r(growthred)} & with \cmd{decompose}: for each line and poverty measure, the base, growth, redistribution and the simulated value\\
+\res{r(concepts)} & with \cmd{market()}: for each income concept, the mean per person, Gini and concentration coefficients and, with a line, FGT0 to FGT2 and the number of poor, base and simulated\\
+\res{r(instruments)} & with \cmd{market()}: for each instrument, the measures of the table \cmd{fiscal}, base and simulated\\
+\res{r(redistribution)} & with \cmd{market()}: \cmd{re}, \cmd{rs}, \cmd{rerank} and \cmd{fi}, base and simulated\\
+\res{r(fshare)} & with \cmd{market()}: each instrument's base share by quantile of market income\\
 \end{storedres}
 The results in \cmd{r()} are those of the first simulation of \cmd{sim()}.
 
@@ -500,6 +574,39 @@ R = \tfrac12\bigl[P(\mu^0, L^1) - P(\mu^0, L^0) + P(\mu^1, L^1) - P(\mu^1, L^0)\
 with $G + R = P(\mu^1, L^1) - P(\mu^0, L^0)$, computed from the distributions
 $r^0 \mu^1/\mu^0$ and $r^1 \mu^0/\mu^1$.
 
+\textbf{Fiscal incidence (from version 0.8.2).} Following the Commitment to
+Equity method \citep{lustig2018}, with market income $y^m_i$, direct taxes
+$D_i$, direct transfers $B_i$, indirect taxes $I_i$, indirect subsidies $S_i$
+and in-kind benefits $K_i$, the income concepts are
+\begin{equation*}
+y^n = y^m - D, \quad y^d = y^n + B, \quad y^c = y^d - I + S, \quad y^f = y^c + K,
+\end{equation*}
+net market, disposable, consumable and final income, measured per person
+over persons. Persons are ranked by market income per person; with $F_i$ the
+mid-point of person $i$'s cumulative share of the weights in that order
+(tied values sharing their mid-point), the concentration coefficient of $t$ is
+\begin{equation*}
+C_t = \frac{2 \sum_i v_i\, t_i\, (F_i - 1/2)}{\sum_i v_i\, t_i},
+\end{equation*}
+the Gini coefficient when $t$ is market income itself. The Kakwani index
+\citep{kakwani1977} is $C_T - G_m$ for a tax and $G_m - C_T$ for a benefit;
+the redistributive effect is $G_m - G_f$, the Reynolds--Smolensky index
+\citep{reynolds1977} $G_m - C_f$, and reranking $G_f - C_f$. The marginal
+contribution of an instrument to a measure is the measure of final income
+without it less the measure with it. Fiscal impoverishment
+\citep{higgins2016} is the share of persons with $y^c_i < y^m_i$ who are poor
+in consumable income. In the simulation, market income changes as the
+household's income components, or as its group's income $\V{YI}_h$; direct
+taxes as market income times the group's direct tax rate $\V{TINS}_h$;
+transfers as the group's transfers from the government; indirect taxes as
+nominal spending times the household's tax wedge, $\sum_j s_{ij} w_j$ with
+$w_j = 1 - (1 - tq_j\,\V{TQADJ})/(1 + tv_j\,\V{TVADJ})$ the share of sales
+tax and VAT in the price of commodity $j$, at the shares of the household's
+budget at the new prices; subsidies as nominal spending; and in-kind benefits
+as the model's spending on their target, $\V{PQ}_c\,\V{QG}_c$ for a commodity
+or the health insurance fund's purchases $\sum_c \V{PQ}_c\,\V{QSHI}_c$. All
+are then deflated by the household's price index.
+
 \Chapref{chap:microsim} describes the link in full.
 
 \cgesec{References}
@@ -513,8 +620,23 @@ Datt, G., and M. Ravallion. 1992. Growth and redistribution components of
 changes in poverty measures: A decomposition with applications to Brazil and
 India in the 1980s. \textit{Journal of Development Economics} 38: 275--295.
 
+Higgins, S., and N. Lustig. 2016. Can a poverty-reducing and progressive tax
+and transfer system hurt the poor? \textit{Journal of Development Economics}
+122: 63--75.
+
+Kakwani, N. C. 1977. Measurement of tax progressivity: An international
+comparison. \textit{Economic Journal} 87: 71--80.
+
+Lustig, N., ed. 2018. \textit{Commitment to Equity Handbook: Estimating the
+Impact of Fiscal Policy on Inequality and Poverty}. Washington, DC: Brookings
+Institution Press and CEQ Institute, Tulane University.
+
 Ravallion, M., and S. Chen. 2003. Measuring pro-poor growth.
 \textit{Economics Letters} 78: 93--99.
+
+Reynolds, M., and E. Smolensky. 1977. \textit{Public Expenditures, Taxes, and
+the Distribution of Income: The United States, 1950, 1961, 1970}. New York:
+Academic Press.
 
 Shorrocks, A. F. 2013. Decomposition procedures for distributional analysis:
 A unified framework based on the Shapley value. \textit{Journal of Economic

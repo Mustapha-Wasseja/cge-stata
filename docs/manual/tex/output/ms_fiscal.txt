@@ -1,0 +1,43 @@
+. generate double market = wage + profit
+
+. generate double dtx = 0.1 * market
+
+. generate double itx = 0.05 * cons
+
+. generate double school = cond(runiform() < 0.4, 20 * runiform(), 0)
+
+
+. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize)       ///
+>     income(wage:lab profit:cap transfer:gov) budget(food:com_agr goods:com_man services:com_ser) ///
+>     line(100) market(market) dtax(dtx) transfers(transfer) itax(itx) inkind(school:com_ser)
+
+Household survey results of simulation notariff: 1000 households
+Real consumption per person (base prices); poverty and inequality over persons
+--------------------------------------------------------------------------------------------------
+                      base   simulated    % chg      headcount (%)    poverty gap (%)           Gini (%)
+--------------------------------------------------------------------------------------------------
+all                  184.3       183.6   -0.389    26.75 ->   26.91     8.72 ->    8.80    36.32 ->   36.33
+hhd                  184.3       183.6   -0.389    26.75 ->   26.91     8.72 ->    8.80    36.32 ->   36.33
+--------------------------------------------------------------------------------------------------
+Poverty line 100 per person; severity (FGT2) is in r(table)
+
+Fiscal incidence: income concepts per person, persons ranked by market income per person
+--------------------------------------------------------------------------------------------------
+income        mean, base -> simulated                   Gini          concentration   headcount (%)
+--------------------------------------------------------------------------------------------------
+market            203.5 ->        209    0.3649 ->    0.3649    0.3649 ->    0.3649  23.22 ->  22.13
+net market        183.1 ->      181.5    0.3649 ->    0.3649    0.3649 ->    0.3649  27.33 ->  27.78
+disposable        184.4 ->      182.8    0.3631 ->    0.3631    0.3628 ->    0.3628  26.75 ->  27.17
+consumable        175.2 ->      173.6    0.3631 ->    0.3631    0.3628 ->    0.3628  29.39 ->  29.68
+final             176.4 ->      174.8    0.3610 ->    0.3610    0.3607 ->    0.3606  28.72 ->  29.17
+--------------------------------------------------------------------------------------------------
+instrument                    % of market income                Kakwani  coverage (%)    MC to Gini
+--------------------------------------------------------------------------------------------------
+dtx          direct tax      10.000 ->    13.144   -0.0000 ->   -0.0000        100.00       0.00036
+transfer     transfer         0.628 ->     0.612    0.3004 ->    0.3018         18.29       0.00189
+itx          indirect tax     4.528 ->     4.390   -0.0019 ->   -0.0019        100.00       0.00010
+school       in kind          0.581 ->     0.578    0.3177 ->    0.3178         41.31       0.00202
+--------------------------------------------------------------------------------------------------
+Redistributive effect  0.0038 ->  0.0039; Reynolds-Smolensky  0.0042 ->  0.0043; reranking  0.0004 ->  0.0004
+Fiscal impoverishment at line 100:  29.00 ->  29.45 per cent of persons
+Kakwani: positive when progressive. MC: Gini of final income without the instrument less with it, base

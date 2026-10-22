@@ -1000,6 +1000,28 @@ $\frac12[P(\mu^0, L^1) - P(\mu^0, L^0) + P(\mu^1, L^1) - P(\mu^1, L^0)]$
 (Datt and Ravallion 1992, in Shapley form), computed from $r^0 \mu^1/\mu^0$
 and $r^1 \mu^0/\mu^1$.
 
+**Fiscal incidence (from version 0.8.2).** With market income $y^m_i$ and
+instruments $T_{ik}$ of five types (direct taxes $D$, direct transfers $B$,
+indirect taxes $I$, indirect subsidies $S$, in-kind benefits $K$), the CEQ
+income concepts (Lustig 2018) are net market $y^n = y^m - D$, disposable
+$y^d = y^n + B$, consumable $y^c = y^d - I + S$ and final $y^f = y^c + K$, per
+person over persons, ranked by $y^m_i/n_i$. In a simulation each changes,
+before deflation by $P_i$: $y^m$ as the household's income components
+($Y^1/Y^0$) or its group's income $YI_h/YI^0_h$; $D$ by that ratio times
+$TINS_h/TINS^0_h$; $B$ by $\rho_{h,gov}$; $I$ by $C^1_i/C^0_i$ times
+$\bar\tau^1_i/\bar\tau^0_i$, with $\bar\tau_i = \sum_j s_{ij} w_j$ the
+household's tax wedge, $w_j = 1 - (1 - tq_j TQADJ)/(1 + tv_j TVADJ)$ (0 for
+home consumption) and $s^1_{ij} = s_{ij}(p^1_j/p^0_j)/P_i$; $S$ by
+$C^1_i/C^0_i$; $K$ by the ratio of $PQ_c QG_c$ for its target commodity $c$, or
+of $\sum_c PQ_c QSHI_c$ for `shi`. The concentration coefficient of $t$ is
+$2\sum_i v_i t_i (F_i - 1/2)/\sum_i v_i t_i$, with $F_i$ the mid-point of
+person $i$'s cumulative weight in the ranking (tied values sharing their
+mid-point); Kakwani $K_T = C_T - G_m$ for taxes and $G_m - C_T$ for benefits;
+$RE = G_m - G_f$, $RS = G_m - C_f$, reranking $G_f - C_f$; the marginal
+contribution of $T$ to $I$ is $I(y^f \pm T) - I(y^f)$; fiscal impoverishment
+is the share of persons with $y^c_i < y^m_i$ and $y^c_i/n_i < z_i$ (Higgins
+and Lustig 2016).
+
 ## 12. Fiscal instruments (from version 0.3.1)
 
 ### 12.1 Revenue-neutral tax replacement

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.8.1  23oct2026}{...}
+{* *! version 0.8.2  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -13,6 +13,8 @@
 {cmd:cge_microsim} [{it:if}] [{it:in}] [{it:weight}]{cmd:,} {opt sim(names)} {opt group(varname)}
 {opt cons:umption(varname)} [{opt size(varname)} {opt inc:ome(var:source ...)}
 {opt bud:get(var:commodity ...)} {opt line(lines)} {opt quant:iles(#)}
+{opt mark:et(varname)} {opt dt:ax(varlist)} {opt trans:fers(varlist)} {opt it:ax(varlist)}
+{opt sub:sidies(varlist)} {opt ink:ind(var:target ...)}
 {opt gen:erate(prefix)} {opt replace} {opt det:ail} {opt dec:ompose} {opt clear}
 {opt sav:ing(filename[, replace])} {opt nod:isplay}]
 
@@ -46,7 +48,8 @@ The command then reports, before and after each simulation:
 {phang2}- incidence by decile, or by any number of quantiles, of base consumption per person;{p_end}
 {phang2}- the growth incidence curve, the growth of each percentile of the distribution;{p_end}
 {phang2}- each household's equivalent and compensating variations (from version 0.8.1);{p_end}
-{phang2}- with {opt decompose}, the contribution of each channel, each source of income, direct taxes and savings, and prices, to every change, and the growth and redistribution components of the change in poverty (from version 0.8.1).{p_end}
+{phang2}- with {opt decompose}, the contribution of each channel, each source of income, direct taxes and savings, and prices, to every change, and the growth and redistribution components of the change in poverty (from version 0.8.1);{p_end}
+{phang2}- with {opt market()} and the fiscal instruments, fiscal incidence as the Commitment to Equity (CEQ) method measures it: market, net market, disposable, consumable and final income, the concentration, Kakwani index, coverage and marginal contribution of each tax and benefit, the Reynolds-Smolensky index and fiscal impoverishment, in the base and after the simulation, with in-kind health benefits that follow the model's health spending (from version 0.8.2).{p_end}
 
 {pstd}
 The survey's own income and consumption data drive the results. The CGE
@@ -122,6 +125,25 @@ several simulations all but the last are numbered, {it:prefix}{cmd:_nom1}, {it:p
 and incidence by quantile.
 
 {phang}
+{opt market(varname)} is the household's market income, before taxes and
+transfers, which ranks persons for fiscal incidence (from version 0.8.2).
+With it, the fiscal instruments are amounts the household pays or receives,
+not negative:
+
+{phang2}- {opt dtax(varlist)}, direct taxes and contributions; they change with market income and the group's direct tax rate;{p_end}
+{phang2}- {opt transfers(varlist)}, direct transfers, which change as the group's transfers from the government;{p_end}
+{phang2}- {opt itax(varlist)}, indirect taxes, which change with nominal spending and the share of sales tax and VAT in the prices the household pays;{p_end}
+{phang2}- {opt subsidies(varlist)}, indirect subsidies, which change with nominal spending;{p_end}
+{phang2}- {opt inkind(var:target ...)}, in-kind benefits, such as health or education services, valued at cost: each changes as the model's spending on its target, a commodity bought by the government, such as {cmd:com_hlt}, or {cmd:shi}, the purchases of the health insurance fund.{p_end}
+
+{pmore}
+Market income changes as the household's income components do, or as its
+group's income without {opt income()}. All are deflated by the household's
+price index. Net market income is market income less direct taxes;
+disposable income adds transfers; consumable income subtracts indirect taxes
+and adds subsidies; final income adds in-kind benefits.
+
+{phang}
 {opt decompose} divides the change in every measure for all households among
 its channels by the Shapley method: each source of income in {opt income()},
 direct taxes and savings ({cmd:taxsav}), the households that follow their
@@ -156,6 +178,25 @@ shares. A household that follows its group has its group's welfare change
 ({helpb cge_report}) in proportion to its consumption.
 
 
+{title:Fiscal incidence}
+
+{pstd}
+Persons are ranked by market income per person. For each instrument, the
+concentration coefficient is the Gini formula applied to the instrument with
+persons in that order; the Kakwani index is the concentration coefficient
+less the Gini coefficient of market income for taxes, and the reverse for
+benefits, so that it is positive when the instrument is progressive. The
+redistributive effect is the Gini of market income less that of final income;
+the Reynolds-Smolensky index uses the concentration coefficient of final
+income instead, and reranking is their difference. The marginal contribution
+of an instrument is the Gini (or headcount, at the first line) of final
+income without it, less with it. Fiscal impoverishment is the share of
+persons who are poor in consumable income and have less than their market
+income (Higgins and Lustig 2016). Coverage is the share of persons in
+households that receive or pay the instrument; coverage of the poor uses the
+persons poor in market income, at the first line.
+
+
 {title:Results as a dataset}
 
 {pstd}
@@ -172,6 +213,8 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {p2col:{cmd:gic}}percentiles 1 to 99 of consumption per person, base and simulated: {cmd:pct} is the growth incidence curve{p_end}
 {p2col:{cmd:shapley}}with {opt decompose}: for every measure of {cmd:summary} for all households and each channel, the base and the base plus the channel's contribution; {cmd:change} is the contribution{p_end}
 {p2col:{cmd:growthred}}with {opt decompose}: the growth and redistribution components of each poverty measure{p_end}
+{p2col:{cmd:fiscal}}with {opt market()}: for each income concept ({cmd:channel}: {cmd:market}, {cmd:net_market}, {cmd:disposable}, {cmd:consumable}, {cmd:final}) {cmd:mean}, {cmd:gini}, {cmd:conc} and the poverty measures; for each instrument {cmd:total}, {cmd:pct_market}, {cmd:conc}, {cmd:kakwani}, {cmd:coverage}, {cmd:coverage_poor}, {cmd:mc_gini} and {cmd:mc_fgt0}; and {cmd:re}, {cmd:rs}, {cmd:rerank} and {cmd:fi}{p_end}
+{p2col:{cmd:fiscalq}}with {opt market()}: by quantile of market income per person, each instrument's {cmd:share} and its {cmd:pct_market} of the quantile's market income{p_end}
 {p2colreset}{...}
 
 
@@ -210,6 +253,13 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {pstd}Welfare by household, and the contributions of each channel{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) budget(food:com_agr goods:com_man) line(100) generate(w1) decompose}{p_end}
 
+{pstd}Fiscal incidence, with in-kind services that follow government purchases{p_end}
+{phang2}{cmd:. generate double market = wage + profit}{p_end}
+{phang2}{cmd:. generate double dtx = 0.1 * market}{p_end}
+{phang2}{cmd:. generate double itx = 0.05 * cons}{p_end}
+{phang2}{cmd:. generate double school = cond(runiform() < 0.4, 20 * runiform(), 0)}{p_end}
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) market(market) dtax(dtx) itax(itx) inkind(school:com_ser)}{p_end}
+
 {pstd}The results as a dataset, and the growth incidence curve{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) clear nodisplay}{p_end}
 {phang2}{cmd:. list q pct if sim == "notariff" & table == "gic" & inlist(q, 10, 50, 90), noobs}{p_end}
@@ -232,6 +282,7 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {synopt:{cmd:r(sims)}}the simulations{p_end}
 {synopt:{cmd:r(lines)}}the poverty lines{p_end}
 {synopt:{cmd:r(channels)}}the channels of {opt decompose}{p_end}
+{synopt:{cmd:r(instlist)}}the fiscal instruments{p_end}
 {p2col 5 20 24 2: Matrices}{p_end}
 {synopt:{cmd:r(table)}}for all households and each group: mean real consumption per person, base and simulated, and its per cent change; FGT0, FGT1 and FGT2 at the first line, base and simulated; the Gini coefficient, base and simulated{p_end}
 {synopt:{cmd:r(poverty)}}for each line ({cmd:line1}, {cmd:line2}, ...) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated{p_end}
@@ -241,6 +292,10 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {synopt:{cmd:r(welfare)}}for each group: EV and CV per person, and as per cent of base consumption{p_end}
 {synopt:{cmd:r(shapley)}}with {opt decompose}: for each measure, the base, the contribution of each channel, and the simulated value{p_end}
 {synopt:{cmd:r(growthred)}}with {opt decompose}: for each line and poverty measure, the base, growth, redistribution and the simulated value{p_end}
+{synopt:{cmd:r(concepts)}}with {opt market()}: for each income concept, mean per person, Gini, concentration coefficient and (with a line) FGT0 to FGT2 and the number of poor, base and simulated{p_end}
+{synopt:{cmd:r(instruments)}}with {opt market()}: for each instrument, the eight measures of the table {cmd:fiscal}, base and simulated{p_end}
+{synopt:{cmd:r(redistribution)}}with {opt market()}: redistributive effect, Reynolds-Smolensky index, reranking and fiscal impoverishment, base and simulated{p_end}
+{synopt:{cmd:r(fshare)}}with {opt market()}: the base share of each instrument by quantile of market income{p_end}
 
 
 {title:References}
@@ -257,8 +312,25 @@ changes in poverty measures: A decomposition with applications to Brazil and
 India in the 1980s. Journal of Development Economics 38: 275-295.
 
 {phang}
+Higgins, S., and N. Lustig (2016). Can a poverty-reducing and progressive tax
+and transfer system hurt the poor? Journal of Development Economics 122: 63-75.
+
+{phang}
+Kakwani, N. C. (1977). Measurement of tax progressivity: An international
+comparison. Economic Journal 87: 71-80.
+
+{phang}
+Lustig, N., ed. (2018). Commitment to Equity Handbook: Estimating the Impact of
+Fiscal Policy on Inequality and Poverty. Brookings Institution Press and CEQ
+Institute, Tulane University.
+
+{phang}
 Ravallion, M., and S. Chen (2003). Measuring pro-poor growth. Economics
 Letters 78: 93-99.
+
+{phang}
+Reynolds, M., and E. Smolensky (1977). Public Expenditures, Taxes, and the
+Distribution of Income: The United States, 1950, 1961, 1970. Academic Press.
 
 {phang}
 Shorrocks, A. F. (2013). Decomposition procedures for distributional analysis:

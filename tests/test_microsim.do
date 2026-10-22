@@ -552,3 +552,213 @@ foreach h in hhd npi {
     assert abs(r(min) - `cvp_`h'') < 1e-9 & abs(r(max) - `cvp_`h'') < 1e-9
     drop evr cvr
 }
+
+* ---------------------------------------------------------------------
+* 7. Version 0.8.2: fiscal incidence (CEQ income concepts, concentration,
+*    Kakwani, Reynolds-Smolensky, coverage, marginal contributions) and
+*    in-kind health benefits
+* ---------------------------------------------------------------------
+* The model is calibrated again with Cobb-Douglas demand
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+quietly cge_solve, name(notariff) tolerance(1e-12)
+cge_shock, reset
+cge_shock CPI, value(2)
+quietly cge_solve, name(double) tolerance(1e-12)
+cge_shock, reset
+* market income, direct taxes, transfers (gov), indirect taxes, subsidies on
+* food and in-kind services
+generate double ym = lab + cap + rem + dom
+generate double dtx = 0.1 * (lab + cap)
+generate double itx = 0.05 * cons
+generate double sbs = 0.02 * food
+set seed 11
+generate double svc = cond(runiform() < 0.5, 8 * runiform(), 0)
+local fis market(ym) dtax(dtx) transfers(gov) itax(itx) subsidies(sbs) inkind(svc:com_ser)
+cge_microsim `ms' sim(notariff) line(10) `fis' generate(fz) nodisplay
+matrix FC = r(concepts)
+matrix FI = r(instruments)
+matrix FR = r(redistribution)
+matrix FS = r(fshare)
+assert "`r(instlist)'" == "dtx gov itx sbs svc"
+assert rowsof(FC) == 5 & colsof(FC) == 14 & rowsof(FI) == 5 & colsof(FI) == 16
+
+* the concepts in the base, per person
+generate double c1 = ym / size
+generate double c2 = (ym - dtx) / size
+generate double c3 = (ym - dtx + gov) / size
+generate double c4 = (ym - dtx + gov - itx + sbs) / size
+generate double c5 = (ym - dtx + gov - itx + sbs + svc) / size
+forvalues k = 1/5 {
+    quietly summarize c`k' [aweight = pw]
+    assert reldif(r(mean), FC[`k', 1]) < 1e-12
+}
+* the Gini coefficient of market income, and concentration coefficients in
+* market income, by their formula: 2 cov(t, F) / mean(t), F the mid-rank
+sort c1
+quietly summarize pw, meanonly
+local W = r(sum)
+generate double F = (sum(pw) - pw / 2) / `W'
+foreach v in c1 c5 {
+    quietly summarize `v' [aweight = pw]
+    local m = r(mean)
+    generate double z_`v' = pw * `v' * (F - 0.5)
+    quietly summarize z_`v', meanonly
+    local cc_`v' = 2 * r(sum) / (`m' * `W')
+}
+assert reldif(`cc_c1', FC[1, 3]) < 1e-12 & reldif(`cc_c1', FC[1, 5]) < 1e-12
+assert reldif(`cc_c5', FC[5, 5]) < 1e-12
+generate double tg = gov / size
+quietly summarize tg [aweight = pw]
+local m = r(mean)
+generate double z_tg = pw * tg * (F - 0.5)
+quietly summarize z_tg, meanonly
+local cc_tg = 2 * r(sum) / (`m' * `W')
+assert reldif(`cc_tg', FI[2, 5]) < 1e-12
+* Kakwani: for taxes the concentration less the Gini of market income, for
+* benefits the reverse
+assert reldif(FI[1, 7], FI[1, 5] - FC[1, 3]) < 1e-12
+assert reldif(FI[2, 7], FC[1, 3] - FI[2, 5]) < 1e-12
+* redistributive effect, Reynolds-Smolensky, reranking
+assert reldif(FR[1, 1], FC[1, 3] - FC[5, 3]) < 1e-12
+assert reldif(FR[2, 1], FC[1, 3] - FC[5, 5]) < 1e-12
+assert reldif(FR[3, 1], FC[5, 3] - FC[5, 5]) < 1e-12
+assert abs(FR[1, 1] - (FR[2, 1] - FR[3, 1])) < 1e-14
+* total, per cent of market income, coverage and coverage of the poor
+generate double wsv = w * svc
+quietly summarize wsv, meanonly
+assert reldif(FI[5, 1], r(sum)) < 1e-12
+local tsv = r(sum)
+generate double wym = w * ym
+quietly summarize wym, meanonly
+assert reldif(FI[5, 3], 100 * `tsv' / r(sum)) < 1e-12
+generate double cov = svc > 0
+quietly summarize cov [aweight = pw]
+assert reldif(FI[5, 9], r(mean)) < 1e-12
+quietly summarize cov [aweight = pw] if c1 < 10
+assert reldif(FI[5, 11], r(mean)) < 1e-12
+* marginal contribution of direct taxes to the Gini of final income, and of
+* the transfer to the headcount
+capture program drop _gini_pp
+program define _gini_pp, rclass
+    args v wt
+    tempvar cw cl tr
+    sort `v'
+    quietly summarize `wt', meanonly
+    local W = r(sum)
+    quietly generate double `cw' = sum(`wt') / `W'
+    quietly generate double `cl' = sum(`wt' * `v')
+    quietly replace `cl' = `cl' / `cl'[_N]
+    quietly generate double `tr' = (`cw' - cond(_n == 1, 0, `cw'[_n - 1])) * (`cl' + cond(_n == 1, 0, `cl'[_n - 1]))
+    quietly summarize `tr', meanonly
+    return scalar gini = 1 - r(sum)
+end
+_gini_pp c5 pw
+local g5 = r(gini)
+assert reldif(`g5', FC[5, 3]) < 1e-12
+generate double wo = c5 + dtx / size
+_gini_pp wo pw
+assert reldif(FI[1, 13], r(gini) - `g5') < 1e-10
+replace wo = c5 - gov / size
+generate double p5 = c5 < 10
+generate double pwo = wo < 10
+quietly summarize p5 [aweight = pw]
+local h5 = r(mean)
+quietly summarize pwo [aweight = pw]
+assert abs(FI[2, 15] - (r(mean) - `h5')) < 1e-12
+* fiscal impoverishment: poor in consumable income and worse off than with
+* market income
+generate double fimp = (c4 < c1) & (c4 < 10)
+quietly summarize fimp [aweight = pw]
+assert abs(FR[4, 1] - r(mean)) < 1e-12
+* the shares of each instrument by decile of market income add up to 1
+mata: st_numscalar("dmax", max(abs(colsum(st_matrix("FS")) :- 1)))
+assert dmax < 1e-12
+drop c1-c5 F z_* tg wsv wym cov wo p5 pwo fimp
+* in the simulation: transfers fixed in real terms are deflated by the
+* household's price index
+assert abs((fz_yd - fz_yn) - gov / fz_price) < 1e-9 * cons
+* Doubling the numeraire changes no real income or instrument
+cge_microsim `ms' sim(double) line(10) `fis' nodisplay
+matrix FC2 = r(concepts)
+matrix FI2 = r(instruments)
+mata: A_ = st_matrix("FC2"); st_numscalar("dmax", max(abs(A_[., (1, 3, 5, 7, 9, 11, 13)] - A_[., (2, 4, 6, 8, 10, 12, 14)]) :/ (1 :+ abs(A_[., (1, 3, 5, 7, 9, 11, 13)]))))
+assert dmax < 1e-10
+mata: A_ = st_matrix("FI2"); st_numscalar("dmax", max(abs(A_[., (1, 3, 5, 7, 9, 11, 13, 15)] - A_[., (2, 4, 6, 8, 10, 12, 14, 16)]) :/ (1 :+ abs(A_[., (1, 3, 5, 7, 9, 11, 13, 15)]))))
+assert dmax < 1e-10
+* the dataset: tables fiscal and fiscalq
+preserve
+cge_microsim `ms' sim(notariff) line(10) `fis' clear nodisplay
+quietly count if table == "fiscal"
+assert r(N) == 5 * (3 + 4) + 5 * 8 + 4
+quietly count if table == "fiscalq"
+assert r(N) == 5 * 10 * 2
+quietly summarize base if table == "fiscal" & measure == "kakwani" & channel == "gov"
+assert r(mean) == FI[2, 7]
+restore
+* the table
+cge_microsim `ms' sim(notariff) line(10) `fis'
+* Errors
+capture noisily cge_microsim `ms' sim(notariff) transfers(gov) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `ms' sim(notariff) market(ym) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `ms' sim(notariff) market(ym) transfers(gov) itax(gov) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `ms' sim(notariff) market(ym) inkind(svc:com_xx) nodisplay
+assert _rc == 111
+capture noisily cge_microsim `ms' sim(notariff) market(ym) inkind(svc:shi) nodisplay
+assert _rc == 459
+replace sbs = -1 in 3
+capture noisily cge_microsim `ms' sim(notariff) market(ym) subsidies(sbs) nodisplay
+assert _rc == 459
+replace sbs = 0.02 * food in 3
+drop ym dtx itx sbs svc
+
+* In-kind health benefits follow the model's health spending: government
+* purchases of health services, and the health insurance fund's purchases
+cge_synthetic, clear health
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) ///
+    imptax(tax_imp) insurance(shi)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock qg, elements(com_hlt) scale(1.3)
+quietly cge_solve, name(hlt) tolerance(1e-12)
+preserve
+quietly cge_results, sim(hlt) clear nodisplay
+foreach v in PQ QG {
+    quietly summarize value if variable == "`v'" & element1 == "com_hlt"
+    local `v'1 = r(mean)
+    quietly summarize base if variable == "`v'" & element1 == "com_hlt"
+    local `v'0 = r(mean)
+}
+restore
+* the insurance fund's purchases at the prices of the scenario
+preserve
+quietly cge_results, sim(hlt) clear nodisplay
+keep if inlist(variable, "PQ", "QSHI")
+keep variable element1 base value
+quietly reshape wide base value, i(element1) j(variable) string
+generate double n1 = valuePQ * valueQSHI
+generate double n0 = basePQ * baseQSHI
+quietly summarize n1, meanonly
+local shi1 = r(sum)
+quietly summarize n0, meanonly
+local shi0 = r(sum)
+restore
+clear
+set seed 5
+quietly set obs 300
+generate str3 group = "hhd"
+generate double size = 1 + floor(5 * runiform())
+generate double ym = 50 + 100 * runiform()
+generate double cons = 0.9 * ym
+generate double hb = cond(runiform() < 0.6, 10 * runiform(), 0)
+generate double ins = cond(runiform() < 0.3, 6 * runiform(), 0)
+cge_microsim, sim(hlt) group(group) consumption(cons) size(size) market(ym) inkind(hb:com_hlt ins:shi) ///
+    generate(h) nodisplay
+matrix HI = r(instruments)
+assert abs((h_yf - h_yc) - (hb * (`PQ1' * `QG1') / (`PQ0' * `QG0') + ins * `shi1' / `shi0') / h_price) < 1e-9 * ym
+* benefits per person by decile, and their concentration in market income
+assert HI[1, 1] < . & HI[1, 5] < . & HI[2, 5] < .
