@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.3  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -21,11 +21,12 @@ general equilibrium (CGE) models from a social accounting matrix (SAM), entirely
 in Stata and Mata. {cmd:cge} displays the package version and its commands.
 
 {pstd}
-The model is documented equation by equation in docs/model_spec.md in the
-package repository: CES or Cobb-Douglas value added, Leontief intermediate
+The model is documented equation by equation in the cge-stata Reference Manual
+(docs/manual/cge-stata-manual.pdf in the package repository), which also
+describes every command with examples: CES or Cobb-Douglas value added, Leontief intermediate
 inputs, CET exports, Armington imports, households with Cobb-Douglas demand,
 government, savings-investment and the rest of the world, with selectable
-closures. Fiscal instruments (from version 0.3.1, Section 12) include VAT with
+closures. Fiscal instruments (from version 0.3.1) include VAT with
 input credits, closures in which a chosen tax replaces lost revenue, and public
 debt with interest.
 

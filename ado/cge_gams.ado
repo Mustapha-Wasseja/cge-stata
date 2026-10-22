@@ -1,4 +1,4 @@
-*! cge_gams.ado  v0.6.2  2026-10-21
+*! cge_gams.ado  v0.6.4  2026-10-22
 *! cge-stata: write the model and a scenario as a GAMS program, and
 *! optionally solve it in GAMS and compare the results (docs/gams.md)
 *!
@@ -88,6 +88,8 @@ program define cge_gams, rclass
             quietly findfile `f'
             quietly copy `"`r(fn)'"' `"`dir'/`f'"', replace
         }
+        * The path that findfile leaves in r() is not a result
+        mata: st_rclear()
         display as text "Files: " as result "`written'" _c
         if "`dynamic'" != "" display as text " and the scenario files of each period"
         else display

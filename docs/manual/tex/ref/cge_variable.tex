@@ -80,7 +80,7 @@ fixes the expression that defines it, and \argu{variable}, which the closure
 fixed, adjusts instead; \manref{cge_shock} can then change its value. A
 variable given a value adds one free variable for each element and no
 equation, so the closure is not square until \manref{cge_equation} adds as
-many equations.
+many equations; until then \manref{cge_solve} stops with error 459.
 
 Indexes name the sets of the model: \cmd{a} activities, \cmd{c} commodities,
 \cmd{f} factors, \cmd{h} households, \cmd{d} households and enterprises,
@@ -125,7 +125,8 @@ and the rise in import prices lowers employment by about 5 per cent.
 \cgesubsec{Example 4: a variable that equations determine}
 
 A variable given a value has no equation, and the closure is then not square,
-as \manref{cge_check} shows:
+as \manref{cge_check} shows; \manref{cge_solve} stops with error 459 before it
+solves:
 \stlog{var_value}
 \manref{cge_equation} gives an example that adds the equation.
 

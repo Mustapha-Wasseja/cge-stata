@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.4  20oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -17,8 +17,8 @@
 {title:Description}
 
 {pstd}
-{cmd:cge_report} computes the standard report measures of docs/model_spec.md,
-Section 9, for one or more simulations and displays them as percentage changes
+{cmd:cge_report} computes the standard report measures of the Reference Manual
+({it:Reporting measures and welfare}) for one or more simulations and displays them as percentage changes
 from the base, side by side. The tables are:
 
 {p2colset 9 24 26 2}{...}
@@ -56,8 +56,9 @@ percentage changes.
 {title:Options}
 
 {phang}
-{opt sims(names)} lists the simulations; {cmd:_all} selects every stored
-simulation. The default is the most recent one. At most six are displayed;
+{opt sims(names)} lists the simulations; {cmd:_all} (or {cmd:all}) selects
+every stored simulation. The default is the last one stored (a simulation
+solved again under its own name keeps its place). At most six are displayed;
 all are saved.
 
 {phang}
@@ -87,7 +88,19 @@ simulation; any other file is saved as a Stata dataset in the format of
 
 {title:Examples}
 
-{phang2}{cmd:. cge_report, sims(base_shock donor_exit)}{p_end}
+{pstd}Setup: two simulations of the SYNTHETIC SAM of {helpb cge_synthetic}{p_end}
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+{phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+{phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+{phang2}{cmd:. cge_shock, reset}{p_end}
+{phang2}{cmd:. cge_shock qg, scale(1.1)}{p_end}
+{phang2}{cmd:. cge_solve, name(gov_up)}{p_end}
+
+{pstd}Report{p_end}
+{phang2}{cmd:. cge_report, sims(notariff gov_up)}{p_end}
 {phang2}{cmd:. cge_report, sims(_all) tables(all) saving(results.xlsx, replace)}{p_end}
 {phang2}{cmd:. cge_report, clear nodisplay}{p_end}
 

@@ -139,3 +139,11 @@ capture cge_microsim, sim(notariff) group(group) consumption(cons) generate(g) n
 assert _rc == 110
 capture cge_microsim, sim(nosuchsim) group(group) consumption(cons) nodisplay
 assert _rc == 111
+
+* A poverty line must be positive (version 0.6.4)
+capture noisily cge_microsim, sim(notariff) group(group) consumption(cons) line(0) nodisplay
+assert _rc == 198
+capture noisily cge_microsim, sim(notariff) group(group) consumption(cons) line(-1) nodisplay
+assert _rc == 198
+quietly cge_microsim, sim(notariff) group(group) consumption(cons) nodisplay
+assert r(fgt0_base) == .

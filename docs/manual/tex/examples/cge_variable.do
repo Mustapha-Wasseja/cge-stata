@@ -41,4 +41,6 @@ list variable element1 base value if inlist(variable, "RW", "W", "QFS") & elemen
 cge_variable LAM, value(1)
 capture noisily cge_check
 di as err "r(" _rc ");"
+capture noisily cge_solve, name(unpaired)
+di as err "r(" _rc ");"
 *<<

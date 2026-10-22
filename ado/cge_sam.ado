@@ -1,4 +1,4 @@
-*! cge_sam.ado  v0.3.0  2026-10-18
+*! cge_sam.ado  v0.6.4  2026-10-22
 *! cge-stata: read a social accounting matrix (SAM)
 *! Reads a SAM from the data in memory or from a file, wide or long, and
 *! checks its structure (docs/sam_tools.md, Section 1)
@@ -83,6 +83,8 @@ program define cge_sam, rclass
     confirm string variable `labels'
     quietly ds `labels', not
     local accounts `r(varlist)'
+    * The variable list of ds is not a result of this command
+    mata: st_rclear()
     confirm numeric variable `accounts'
 
     mata: _cge_sam("`labels'", "`accounts'")

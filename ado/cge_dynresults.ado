@@ -1,4 +1,4 @@
-*! cge_dynresults.ado  v0.2.0  2026-10-16
+*! cge_dynresults.ado  v0.6.4  2026-10-22
 *! cge-stata: the results of a dynamic run as a dataset, one observation per
 *! period and variable element, optionally compared with a baseline run
 *!
@@ -10,8 +10,11 @@ program define cge_dynresults, rclass
     syntax , RUN(name) CLEAR [BASEline(name)]
 
     _cge_load
+    * The data in memory are kept if the run cannot be loaded (from version 0.6.4)
+    preserve
     drop _all
     mata: _cge_dyn_data("`run'", "`baseline'")
     sort period variable element1 element2
+    restore, not
     return local run "`run'"
 end

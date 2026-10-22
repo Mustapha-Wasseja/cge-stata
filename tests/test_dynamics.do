@@ -122,4 +122,50 @@ assert _rc == 111
 capture cge_dynresults, run(nosuchrun) clear
 assert _rc == 111
 
+* The data in memory are kept when a run cannot be loaded (version 0.6.4)
+preserve
+clear
+set obs 7
+generate x = _n
+capture cge_dynresults, run(nosuchrun) clear
+assert _rc == 111 & _N == 7
+restore
+
+* A run that fails stores no period and leaves the model, its shocks and an
+* earlier run of the same name as they were; a run solved again replaces
+* every period of the earlier one (version 0.6.4)
+capture program drop _bad_shock
+program define _bad_shock
+    args t
+    if `t' == 1 cge_shock tm, value(0)
+    if `t' >= 2 cge_shock trdr, elements(nosuch) value(0)
+end
+quietly cge_results, sim(exit1) nodisplay
+matrix _ev1 = r(ev)
+cge_shock tm, value(0)
+quietly cge_solve, name(pre)
+quietly cge_results, sim(pre) nodisplay
+matrix _evpre = r(ev)
+capture noisily cge_dynamic, name(exit) periods(0/4) `common' baseline(health) shocks(_bad_shock)
+assert _rc == 111
+quietly cge_results, sim(exit1) nodisplay
+assert mreldif(r(ev), _ev1) == 0
+capture cge_dynamic, name(fresh) periods(0/4) `common' baseline(health) shocks(_bad_shock)
+assert _rc == 111
+capture cge_results, sim(fresh1) nodisplay
+assert _rc == 111
+quietly cge_solve, name(post)
+quietly cge_results, sim(post) nodisplay
+assert mreldif(r(ev), _evpre) == 0
+cge_shock, reset
+cge_dynamic, name(exit) periods(0/2) `common' baseline(health) shocks(_donor_exit)
+assert "`r(sims)'" == "exit0 exit1 exit2"
+capture cge_results, sim(exit4) nodisplay
+assert _rc == 111
+cge_dynresults, run(exit) clear
+quietly summarize period
+assert r(min) == 0 & r(max) == 2
+matrix drop _ev1 _evpre
+program drop _bad_shock
+
 program drop _compare_period _compare_tfp _donor_exit

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.4  20oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -24,11 +24,15 @@
 {cmd:cge_dynamic} solves the calibrated model for a sequence of periods. The
 first period in {opt periods()} is the calibrated base; each later period is
 an equilibrium given stocks and exogenous values updated from the period
-before (docs/model_spec.md, Section 10). Agents do not look ahead. Each period
+before (Reference Manual, {it:Recursive dynamics}). Agents do not look ahead. Each period
 is stored as the simulation {it:name}{it:period}, for example {cmd:base2025},
 so {helpb cge_report}, {helpb cge_results} and {helpb cge_save} work with it.
 The run uses the current closure and starts from the base; the parameters and
-fixed values of the model are restored when it ends.
+fixed values of the model are restored when it ends. A run solved again
+replaces every period of the earlier run of that name. If a period cannot be
+solved, or the {opt shocks()} program fails, the run stops and nothing is
+stored: the model, its shocks and its stored simulations are as they were
+before the run (from version 0.6.4).
 
 {pstd}
 Before each period after the first, in this order:
@@ -102,8 +106,9 @@ unemployment follow from labour demand.
 efficiency growth; choose one. {opt tfp()} takes one rate or one per activity.
 {opt gdpgrowth()} takes one target or one per period after the first, and
 reports the efficiency factor of each period. {opt baseline()} names a run
-solved with {opt gdpgrowth()} and reuses its efficiency factors, so that a
-policy scenario does not change efficiency.
+solved with {opt gdpgrowth()} (or itself with {opt baseline()}) and reuses its
+efficiency factors, so that a policy scenario does not change efficiency. The
+baseline must have every period of this run, and may have more.
 
 {phang}
 {opt population(#)}, {opt govgrowth(#)} and {opt foreigngrowth(#)} set the
@@ -112,7 +117,7 @@ growth rate is taken to hold at the base death rate.
 
 {phang}
 {opt deathfactors(factors)}, {opt deathshare(#)} and {opt workingage(#)}
-(from version 0.3.4; docs/model_spec.md, Section 15.4) make labour respond to
+(from version 0.3.4; Reference Manual, {it:Health}) make labour respond to
 deaths. {opt deathfactors()} lists the labour factors, which may not be
 capital; {opt deathshare()} is the share of deaths at working ages and
 {opt workingage()} the working-age share of the population (default 1). Each
@@ -134,13 +139,22 @@ period; the default tolerance is 1e-12.
 
 {title:Examples}
 
-{pstd}A baseline calibrated to 5 per cent growth, and a donor exit from 2022:{p_end}
+{pstd}Setup: the SYNTHETIC SAM with a health sector and a social health
+insurance fund, which donors abroad help to finance{p_end}
 
+{phang2}{cmd:. cge_synthetic, clear health}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
 {phang2}{cmd:. cge_closure, factors(cap:specific)}{p_end}
+
+{pstd}A baseline calibrated to 5 per cent growth, and an end to the donors'
+contributions to the insurance fund ({cmd:trshir}) from 2022:{p_end}
+
 {phang2}{cmd:. cge_dynamic, name(base) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.03) population(0.025) gdpgrowth(0.05)}{p_end}
 {phang2}{cmd:. program define donor_exit}{p_end}
 {phang2}{cmd:  1.     args t}{p_end}
-{phang2}{cmd:  2.     if `t' >= 2022 cge_shock trdr, elements(npish) value(0)}{p_end}
+{phang2}{cmd:  2.     if `t' >= 2022 cge_shock trshir, value(0)}{p_end}
 {phang2}{cmd:  3. end}{p_end}
 {phang2}{cmd:. cge_dynamic, name(exit) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.03) population(0.025) baseline(base) shocks(donor_exit)}{p_end}
 {phang2}{cmd:. cge_dynresults, run(exit) baseline(base) clear}{p_end}

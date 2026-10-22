@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.4  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -19,7 +19,7 @@
 
 {pstd}
 {cmd:cge_gams} writes the calibrated model and one scenario as a GAMS program
-in {it:folder} (from version 0.4.3; docs/gams.md). Anyone with GAMS can then
+in {it:folder} (from version 0.4.3; Reference Manual, {it:The GAMS implementation}). Anyone with GAMS can then
 solve the model with PATH, CONOPT, KNITRO, IPOPT or another solver, check the
 results of {cmd:cge-stata}, or extend the equations.
 
@@ -50,6 +50,7 @@ Files written:
 {p2col:{cmd:cge_shock_par.inc}}parameter changes and the closure{p_end}
 {p2col:{cmd:cge_shock_var.inc}}changes to fixed variables{p_end}
 {p2col:{cmd:cge_constraints.inc}}constraints, as complementarity pairs (from version 0.4.4){p_end}
+{p2col:{cmd:cge_user.inc}, {cmd:cge_user_write.inc}}user variables and equations, and their results (from version 0.6.1){p_end}
 {p2colreset}{...}
 
 {pstd}
@@ -76,8 +77,8 @@ dynamic runs through their labour supply, is not a GAMS parameter.
 {phang}
 {opt dynamic(name)} (from version 0.5.3) exports every period of a dynamic run
 of {helpb cge_dynamic}. Each period's changes from the period before, to
-parameters and to fixed variables, are written to
-{cmd:cge_}{it:period}{cmd:_par.inc} and {cmd:cge_}{it:period}{cmd:_var.inc}, and
+parameters and to fixed variables, are written to files named after the
+period's simulation, for example {cmd:cge_dn1_par.inc} and {cmd:cge_dn1_var.inc}, and
 the driver solves the periods in order, each from the solution of the one
 before. With {opt compare}, every period is compared with Stata's. Runs with
 constraints are not exported.
@@ -119,9 +120,9 @@ alone it compares results that GAMS wrote earlier.
 path.
 
 {phang}
-{opt solver(name)} chooses the solver; the default is {cmd:path}. An option
-file with tolerances scaled to the size of the SAM is written for PATH,
-CONOPT, IPOPT and KNITRO; other solvers use their defaults.
+{opt solver(name)} chooses the solver; the default is {cmd:path}. When it runs,
+the GAMS program writes an option file with tolerances scaled to the size of
+the SAM for PATH, CONOPT, IPOPT and KNITRO; other solvers use their defaults.
 
 {phang}
 {opt type(cns|nlp|mcp)} chooses the GAMS model type:
@@ -149,7 +150,8 @@ solver and type can also be set when GAMS is run, for example
 {pstd}Write the model and the scenario, to solve in GAMS later{p_end}
 {phang2}{cmd:. cge_gams using gams_notariff, sim(notariff)}{p_end}
 
-{pstd}Solve it in GAMS with PATH, then with CONOPT, and compare with Stata{p_end}
+{pstd}Solve it in GAMS with PATH, then with CONOPT, and compare with Stata;
+{cmd:gams()} gives the path of your GAMS installation{p_end}
 {phang2}{cmd:. cge_gams using gams_notariff, sim(notariff) replace run compare gams(C:/GAMS/54/gams.exe)}{p_end}
 {phang2}{cmd:. cge_gams using gams_notariff, sim(notariff) noexport run compare solver(conopt) gams(C:/GAMS/54/gams.exe)}{p_end}
 

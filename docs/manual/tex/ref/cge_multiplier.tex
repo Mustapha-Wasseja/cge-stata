@@ -64,7 +64,9 @@ default exogenous, for example an enterprise.
 \item[\opt{decomp}{ose}] adds the decomposition of each multiplier into
 transfer, open-loop and closed-loop effects. It requires the SAM to have no
 flows among the blocks other than those of the circular flow; the command lists
-the flows that break the structure if it does.
+the flows that break the structure if it does. With \opt{inj}{ect()},
+\opt{decomp}{ose} is ignored, and the effects of the injection are shown
+without it.
 
 \item[\optarg{inj}{ect}{\argu{account}\texttt{:}\argu{value} \dots}] gives
 injections into endogenous accounts, separated by spaces, for example

@@ -1,4 +1,4 @@
-*! cge_save.ado  v0.1.15  2026-10-16
+*! cge_save.ado  v0.6.4  2026-10-22
 *! cge-stata: save the model in memory, with its simulations, to a file
 *!
 *! Author: Mustapha Wasseja
@@ -10,7 +10,10 @@ program define cge_save, rclass
 
     _cge_load
     local fn `"`using'"'
-    if strpos(`"`fn'"', ".") == 0 local fn `"`fn'.cgem"'
+    * The default extension, when the file name has none (a period in a folder name
+    * does not count, from version 0.6.4)
+    mata: st_local("ext", pathsuffix(st_local("fn")))
+    if `"`ext'"' == "" local fn `"`fn'.cgem"'
     mata: _cge_save(`"`fn'"', ("`replace'" != ""))
     return local filename `"`fn'"'
 end

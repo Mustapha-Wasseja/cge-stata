@@ -240,7 +240,7 @@ quietly import excel using "`xl'.xlsx", sheet("accounts") firstrow allstring cle
 assert role == "government dirtax saltax" if account == "gov"
 assert role == "activities" & pair == "com" + substr(account, 4, .) if substr(account, 1, 4) == "act_"
 quietly import excel using "`xl'.xlsx", sheet("roles") firstrow allstring clear
-assert _N == 21
+assert _N == 27
 restore
 cge_map using "`xl'.xlsx"
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
@@ -388,3 +388,33 @@ foreach f in "`ras'.csv" "`tmpl'.csv" "`tmpl2'.csv" "`tmpl3'.csv" "`tmpl4'.csv" 
     "`w'.csv" "`dta'.dta" "`lab'.csv" "`big'.csv" "`bigt'.csv" {
     capture erase `f'
 }
+
+* ---------------------------------------------------------------------
+* Version 0.6.4: cge_sam returns only its own results; the roles sheet of an
+* Excel template lists every role; a template group may not take the label of
+* an account outside the group
+* ---------------------------------------------------------------------
+cge_synthetic, clear
+cge_sam, labels(account)
+assert "`r(varlist)'" == "" & r(N_accounts) == 15
+tempfile xr tc
+cge_template using "`xr'.xlsx", replace
+preserve
+import excel using "`xr'.xlsx", sheet(roles) firstrow clear
+foreach r in activities insurance vattax domesticmargins importmargins exportmargins factortax factorincometax {
+    quietly count if role == "`r'"
+    assert r(N) == 1
+}
+restore
+cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_template using "`tc'.csv", replace
+preserve
+quietly import delimited using "`tc'.csv", varnames(1) stringcols(_all) clear
+replace group = "ent" if account == "npi"
+quietly export delimited using "`tc'.csv", replace
+restore
+capture noisily cge_aggregate using "`tc'.csv"
+assert _rc == 198
+capture erase "`xr'.xlsx"
+capture erase "`tc'.csv"

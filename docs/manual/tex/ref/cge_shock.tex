@@ -60,7 +60,9 @@ Exactly one of \opt{sc}{ale()} and \opt{val}{ue()} is required, except with
 \begin{optdesc}
 \item[\optarg{el}{ements}{list}] lists the elements to change: commodities,
 activities, factors, or households and enterprises, as the parameter or
-variable requires. The default is every element, as is \cmd{elements(all)}. For
+variable requires; for a variable added by \manref{cge_variable}, the
+elements of the set of its index, such as institutions for an index \cmd{i}.
+The default is every element, as is \cmd{elements(all)}. For
 a variable indexed by factor and activity, $\V{QF}_{fa}$ or
 $\V{WFDIST}_{fa}$, the list names factors, and every activity of each factor is
 changed. A parameter or variable without index takes no elements.

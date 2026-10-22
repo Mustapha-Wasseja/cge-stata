@@ -131,4 +131,21 @@ assert r(max_residual) < 1e-12
 capture cge_use using "`r1'"
 assert _rc == 610
 
+* Version 0.6.4: cge_results stores its results with nodisplay too; .cgem is
+* added to a file name without an extension, in a folder whose name has a period
+quietly do setup_synthetic.do
+cge_shock tm, value(0)
+quietly cge_solve, name(nt)
+cge_results, sim(nt) nodisplay
+assert "`r(sim)'" == "nt"
+confirm matrix r(ev)
+local d "`c(tmpdir)'/cge.test.064"
+capture mkdir "`d'"
+cge_save using "`d'/model", replace
+confirm file "`d'/model.cgem"
+cge_use using "`d'/model"
+assert "`r(filename)'" == "`d'/model.cgem"
+erase "`d'/model.cgem"
+capture rmdir "`d'"
+
 program drop _compare_report

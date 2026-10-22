@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.1  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -29,7 +29,7 @@
 
 {pstd}
 {cmd:cge_variable} and {cmd:cge_equation} (from version 0.6.1;
-docs/model_spec.md, Section 19) add variables and equations to the calibrated
+Reference Manual, {it:User variables and equations}) add variables and equations to the calibrated
 model. Stata compiles them for its solver, and {helpb cge_gams} writes them
 into the GAMS program, so that GAMS solves the same model.
 
@@ -66,7 +66,7 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, and:
 
 {p2colset 9 34 36 2}{...}
 {p2col:{it:VAR} or {it:VAR}{cmd:(}{it:e}[{cmd:,} {it:e2}]{cmd:)}}a model or user variable, at an element such as {cmd:com_hlt} or the index of the equation or of a sum{p_end}
-{p2col:{it:par}{cmd:(}{it:e}{cmd:)}}a parameter that {helpb cge_shock} changes, such as {cmd:tv(c)} or {cmd:trgr}, at its current value{p_end}
+{p2col:{it:par}{cmd:(}{it:e}{cmd:)}}a parameter at its current value: {cmd:tm}, {cmd:te}, {cmd:tq}, {cmd:ta}, {cmd:tv}, {cmd:kappa}, {cmd:pwm}, {cmd:pwe}, {cmd:ad}, {cmd:af}, {cmd:qg}, {cmd:qinv}, {cmd:trdg}, {cmd:trdr}, {cmd:trfr}, {cmd:trgr}, {cmd:trrg}, {cmd:trgg}, {cmd:tshi}, {cmd:qshi}, {cmd:trshi}, {cmd:trshir}, {cmd:rd}, {cmd:rf}, {cmd:ddebt}, {cmd:fdebt}, {cmd:qlf}, {cmd:wmin}, {cmd:wref}, {cmd:sick}, {cmd:tfy} or {cmd:hs0}, for example {cmd:tv(c)} or {cmd:trgr}{p_end}
 {p2col:{cmd:base(}{it:VAR}[{cmd:(}{it:e}{cmd:)}]{cmd:)}}the base value of a variable{p_end}
 {p2col:{cmd:sum(}{it:i}{cmd:,} {it:expression}{cmd:)}}the sum over the set of index {it:i}{p_end}
 {p2colreset}{...}

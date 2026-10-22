@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.5.2  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -24,9 +24,14 @@
 
 {pstd}
 {cmd:cge_calibrate} computes the base values of all variables and the model
-parameters from the mapped SAM (docs/model_spec.md, Section 7), sets the
+parameters from the mapped SAM (Reference Manual, {it:Calibration}), sets the
 default closure and checks that the base solves every equation (benchmark
 replication). It stops with an error if replication fails.
+
+{pstd}
+Calibrating again starts the model afresh from the mapped SAM: shocks, swaps,
+constraints and stored simulations are removed, and user variables and
+equations are compiled again.
 
 {pstd}
 Elasticities have no defaults; they are part of the model specification and
@@ -44,8 +49,8 @@ Cobb-Douglas form.
 
 {phang}
 {opt sigmaq(numlist)} gives the elasticity of substitution between imports and
-domestic goods (Armington), one value or one per commodity. Version 0.1 requires
-values different from 1 for imported commodities.
+domestic goods (Armington), one value or one per commodity. Values must differ
+from 1 for commodities that have both imports and domestic sales.
 
 {phang}
 {opt sigmat(numlist)} gives the elasticity of transformation between exports
@@ -53,7 +58,7 @@ and domestic sales (CET), one value or one per commodity. For a commodity whose
 exports are at least its domestic output (re-exports, or exports supplied from
 inventories), exports are drawn from composite supply instead, and its
 {opt sigmat()} value is the price elasticity of those exports
-(docs/model_spec.md, equation T9); calibration lists such commodities.
+(Reference Manual, equation T9); calibration lists such commodities.
 
 {phang}
 {opt fquantities(matname)} supplies base factor quantities, for example
@@ -69,7 +74,7 @@ of whichever input becomes dearer. Activities without intermediate inputs keep
 the Leontief nest.
 
 {phang}
-{opt nests(spec)} (from version 0.5.1; docs/model_spec.md, Section 17.2)
+{opt nests(spec)} (from version 0.5.1; Reference Manual, {it:Factor taxes, nests and output aggregation})
 defines nests of value added, separated by commas, each as a name followed by
 a colon and its members, factors or commodities, for example
 {cmd:nests(labour: lab_hi lab_lo, ke: cap com_ene)}. Each nest is a CES or
@@ -86,7 +91,7 @@ one value for every nest, or {it:nest}{cmd::}{it:value} pairs. A value of 1
 selects the Cobb-Douglas form.
 
 {phang}
-{opt sigmaac(spec)} (from version 0.5.2; docs/model_spec.md, Section 17.3)
+{opt sigmaac(spec)} (from version 0.5.2; Reference Manual, {it:Factor taxes, nests and output aggregation})
 combines the outputs of a commodity from several activities by a CES
 function, as in the IFPRI standard model, instead of treating them as perfect
 substitutes: each activity is then paid its own price for the commodity
@@ -125,7 +130,7 @@ base. These options must be typed in full.
 {phang}
 {opt vatcredit(spec)} gives, for a model with a VAT account (see {helpb cge_map}),
 the share of the VAT on its inputs that each activity recovers as a credit
-(from version 0.3.1; docs/model_spec.md, Section 12.2): {it:activity}{cmd::}{it:share}
+(from version 0.3.1; Reference Manual, {it:Fiscal instruments}): {it:activity}{cmd::}{it:share}
 pairs or one share for all, between 0 and 1. The default, 1, is full credit, so
 that VAT falls on final demand only; 0 is an exempt or unregistered activity,
 which bears VAT on its inputs. The VAT rate of each commodity is calibrated so
@@ -135,7 +140,7 @@ the uses are their SAM values divided by one plus the VAT they bear.
 {phang}
 {opt debt(spec)} and {opt interest(spec)} give public debt at the start of the
 base year and its interest rates, as {cmd:domestic:}{it:#} and
-{cmd:foreign:}{it:#} (from version 0.3.1; Section 12.3). Domestic debt is in
+{cmd:foreign:}{it:#} (from version 0.3.1; Reference Manual, {it:Fiscal instruments}). Domestic debt is in
 SAM units, foreign debt in foreign currency (equal to SAM units at the base
 exchange rate). Interest is assumed to be recorded within the government's
 transfers to domestic institutions and abroad; it is separated from them, and
@@ -156,7 +161,7 @@ dynamic runs; by default the foreign share of the base debt.
 
 {phang}
 {opt exportonly(names)} lists commodities whose domestic output is all
-exported (from version 0.3.2; docs/model_spec.md, Section 13.3): exports, net
+exported (from version 0.3.2; Reference Manual, {it:Trade and household extensions}): exports, net
 of export taxes and export margins, must equal domestic output. Their output
 is then exported directly, at the export price, without domestic sales, and
 may pay export taxes. Without this option such a commodity's exports are drawn
@@ -166,13 +171,13 @@ exports equal domestic output.
 {phang}
 {opt exportdemand(spec)} gives elasticities of export demand,
 {it:commodity}{cmd::}{it:elasticity} pairs or one value for every commodity
-exported from domestic output (Section 13.2). The world export price then
+exported from domestic output (Reference Manual, {it:Trade and household extensions}). The world export price then
 falls as more is exported, instead of being fixed; a shock to {cmd:pwe}
 shifts world demand. The default is a small country, with an infinite
 elasticity.
 
 {pstd}
-{it:Labour-market regimes} (from version 0.3.3; docs/model_spec.md, Section 14)
+{it:Labour-market regimes} (from version 0.3.3; Reference Manual, {it:Labour-market regimes})
 
 {phang}
 {opt unemployment(spec)} gives base unemployment rates,
@@ -211,7 +216,7 @@ the real wage over the floor is mu. The solver finds which of the two holds;
 the calibration lists the labour force and the floor.
 
 {pstd}
-{it:Health outcomes} (from version 0.3.4; docs/model_spec.md, Section 15).
+{it:Health outcomes} (from version 0.3.4; Reference Manual, {it:Health}).
 Outcomes respond to health services per head relative to the base, {it:R} =
 {it:HS/HS0}, with constant elasticities. The elasticities are hypotheses
 about how services become health and should come from studies of the
@@ -243,15 +248,40 @@ it changes the growth of the population and, with {opt deathfactors()} of
 
 {title:Example}
 
+{pstd}Setup: the SYNTHETIC SAM of {helpb cge_synthetic}, mapped as in {helpb cge_map}{p_end}
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{pstd}One elasticity for all, or one per activity and per commodity{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)}{p_end}
+
+{pstd}Linear expenditure demand, and a CES nest of value added and intermediate inputs{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) sigmaa(0 0.5 1)}{p_end}
-{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
-{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) vatcredit(act_agr:0 act_ser:0.5)}{p_end}
-{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) debt(domestic:100 foreign:40) interest(domestic:0.05 foreign:0.03)}{p_end}
+
+{pstd}Unemployment with a wage curve, or a minimum wage{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) minwage(lab:0.95)}{p_end}
+
+{pstd}VAT credits, with the SAM that has a VAT account{p_end}
+{phang2}{cmd:. cge_synthetic, clear vat}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vattax(tax_vat)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) vatcredit(act_agr:0 act_ser:0.5)}{p_end}
+
+{pstd}Public debt and its interest, with the SAM whose government pays transfers abroad{p_end}
+{phang2}{cmd:. cge_synthetic, clear institutions}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd npi) enterprises(ent) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) debt(domestic:100 foreign:40) interest(domestic:0.05 foreign:0.03)}{p_end}
+
+{pstd}Health outcomes, with the SAM that has a health sector and an insurance fund{p_end}
+{phang2}{cmd:. cge_synthetic, clear health}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) sickdays(lab:0.05) sickelas(-0.4) mortality(0.01) mortelas(-0.3)}{p_end}
 
 {pstd}Nests of value added: two labour types, and capital with energy{p_end}

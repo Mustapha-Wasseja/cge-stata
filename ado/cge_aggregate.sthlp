@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -20,7 +20,7 @@
 
 {pstd}
 {cmd:cge_aggregate} merges accounts of the SAM in memory into groups and starts
-a new model from the result (docs/sam_tools.md, Section 4). The groups are
+a new model from the result (Reference Manual, {it:SAM tools}). The groups are
 given in the {cmd:group} column of a template written by {helpb cge_template},
 or in {opt groups()}. Accounts not in a group keep their label.
 
@@ -28,7 +28,9 @@ or in {opt groups()}. Accounts not in a group keep their label.
 Every cell of the new SAM is the sum of the cells it merges, so totals add up
 and each group's balance is the sum of its members' balances. A group takes
 the position of its first member. Group labels must be valid Stata names; a
-group may take the label of one of its members but not of another account.
+group may take the label of one of its members but not of another account,
+whether the groups come from {opt groups()} or from a template (from version
+0.6.4 for templates).
 
 {pstd}
 Flows among the members of a group become a diagonal cell of the group, and
@@ -63,6 +65,7 @@ by the diagonal cells, and balances do not change.
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
 {phang2}{cmd:. cge_aggregate, groups(act_nag: act_man act_ser, com_nag: com_man com_ser, hh: hhd npi)}{p_end}
 
+{pstd}The groups of a template written by {helpb cge_template} and filled in{p_end}
 {phang2}{cmd:. cge_aggregate using sam_roles.xlsx}{p_end}
 
 

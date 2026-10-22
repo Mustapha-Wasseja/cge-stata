@@ -136,6 +136,11 @@ equation that no free variable can satisfy, or a SAM with a very small flow
 that the shock must expand many times. Equations with no free variable, and
 free variables in no equation, are listed when there are any.
 
+Before it solves, \cmd{cge_solve} checks that the system is square, with as
+many free variables as equations. If it is not, for example after a variable
+added by \cmd{cge_variable, value()} without the equation that determines it,
+the command stops with error 459; \manref{cge_variable} shows an example.
+
 \cgesubsec{Constraints}
 
 With constraints set by \manref{cge_constraint}, \cmd{cge_solve} first solves

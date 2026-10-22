@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.0  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -24,7 +24,7 @@ A {it:measure} is a measure of {helpb cge_report}: {it:table measure}
 {title:Description}
 
 {pstd}
-{cmd:cge_optimize} (from version 0.6.0; docs/model_spec.md, Section 18)
+{cmd:cge_optimize} (from version 0.6.0; Reference Manual, {it:Policy optimisation})
 chooses the values of a few instruments to maximise or minimise a report
 measure, or to reach targets for report measures. It solves the model at
 every trial value, starting from the solution of the trial before, inside a
@@ -66,7 +66,7 @@ it.
 {opt lower(spec)} and {opt upper(spec)} give bounds as
 {it:instrument}{cmd::}{it:value} pairs, for example
 {cmd:lower(tm(com_man):0) upper(tm(com_man):0.2)}. An instrument's current
-value must lie within its bounds.
+value must lie strictly within its bounds.
 
 {phang}
 {opt name(name)} names the simulation that holds the optimum; the default is

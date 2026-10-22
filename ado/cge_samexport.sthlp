@@ -18,7 +18,7 @@
 {pstd}
 {cmd:cge_samexport} writes the SAM of the current model, as read, aggregated or
 balanced, to a {cmd:.csv}, {cmd:.dta}, {cmd:.xls} or {cmd:.xlsx} file, or with
-{opt clear} loads it as data (docs/sam_tools.md, Section 2).
+{opt clear} loads it as data (Reference Manual, {it:SAM tools}).
 
 {pstd}
 Wide output has a variable {cmd:account} and one variable per account. A
@@ -40,7 +40,7 @@ unchanged.
 
 {phang}
 {opt mapped} writes the SAM after the layout rewrites of {helpb cge_map}
-(docs/model_spec.md, Section 7.0), including internal tax accounts.
+(Reference Manual, {it:Calibration}), including internal tax accounts.
 
 {phang}
 {opt clear} replaces the data in memory with the SAM. It may be combined with

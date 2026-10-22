@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.2.1  16oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 24 26 2}{...}
@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_sensitivity}{cmd:,} {opt scen:ario(program)} {opt draw:s(#)} [{opt seed(#)} {opt spr:ead(#)}
-{opt dist:ribution(uniform|triangular)} {opt common} {opt vary(list)} {opt tab:les(list)}
+{opt dist:ribution(uniform|triangular)} {opt common} {opt var:y(list)} {opt tab:les(list)}
 {opt clear} {opt sav:ing(filename[, replace])} {opt nod:isplay}]
 
 

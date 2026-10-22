@@ -190,6 +190,14 @@ cge_shock fdebt, scale(0.5)
 cge_solve, name(debt_relief) tolerance(1e-12)
 _compare_reference debt_relief
 _compare_report debt_relief
+* The Excel report has a sheet for the debt table (version 0.6.4)
+tempfile xd
+quietly cge_report, sims(debt_rate_up debt_relief) tables(all) saving("`xd'.xlsx", replace) nodisplay
+preserve
+import excel using "`xd'.xlsx", sheet(debt) firstrow clear
+assert _N > 0
+restore
+capture erase "`xd'.xlsx"
 cge_shock, reset
 cge_closure, numeraire(dpi)
 cge_shock tm, value(0)

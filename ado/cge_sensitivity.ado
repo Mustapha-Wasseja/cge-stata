@@ -1,4 +1,4 @@
-*! cge_sensitivity.ado  v0.2.1  2026-10-16
+*! cge_sensitivity.ado  v0.6.4  2026-10-22
 *! cge-stata: sensitivity of a scenario's results to the elasticities
 *! Monte Carlo draws of the elasticities; the model is recalibrated for each
 *!
@@ -57,6 +57,8 @@ program define cge_sensitivity, rclass
         if mod(`d', 10) == 0 & `d' > 0 display as text "  " as result `d' as text " draws done"
     }
     quietly cge_use using "`model'"
+    * The results of restoring the model are not results of this command
+    mata: st_rclear()
 
     local show = ("`nodisplay'" == "")
     if "`clear'" != "" {

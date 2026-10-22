@@ -1,4 +1,4 @@
-*! cge_results.ado  v0.1.0  2026-10-12
+*! cge_results.ado  v0.6.4  2026-10-22
 *! cge-stata: report the results of a simulation
 *! Displays a summary and optionally loads or saves all results as a dataset
 *!
@@ -10,7 +10,9 @@ program define cge_results, rclass
     syntax [, SIM(name) CLEAR SAVing(string) NODisplay]
 
     _cge_load
+    * The summary's results are stored with or without the display (from version 0.6.4)
     if "`nodisplay'" == "" mata: _cge_results_show("`sim'")
+    else quietly mata: _cge_results_show("`sim'")
 
     if `"`saving'"' != "" {
         preserve

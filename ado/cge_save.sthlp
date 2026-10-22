@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.2  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -23,7 +23,7 @@ rebuilt in a later session. A model may be saved at any stage after
 {helpb cge_sam}.
 
 {pstd}
-The default extension is {cmd:.cgem}. Each item is stored with its name, so a
+The extension {cmd:.cgem} is added when the file name has none. Each item is stored with its name, so a
 newer version of {bf:cge-stata} can read files saved by an older one. The
 dataset in memory is not saved.
 

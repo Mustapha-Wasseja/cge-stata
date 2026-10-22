@@ -35,6 +35,7 @@ same file that the package's independent check has used since version 0.1.16
 | `cge_shock_par.inc` | parameter changes and the closure |
 | `cge_shock_var.inc` | changes to fixed variables |
 | `cge_constraints.inc` | constraints, as complementarity pairs, and model `cgecon` (from version 0.4.4) |
+| `cge_user.inc`, `cge_user_write.inc` | user variables and equations, and their results (from version 0.6.1) |
 
 The scenario is either the shocks and closure in memory (what the next
 `cge_solve` would solve) or, with `sim()`, those of a stored simulation.
@@ -54,11 +55,13 @@ the model status in the first row.
 **Dynamic runs** (from version 0.5.3). `cge_gams using dir, dynamic(run)`
 exports every period of a run of `cge_dynamic`. Each period's changes from
 the period before are written as ratios, to parameters
-(`cge_<period>_par.inc`, for example capital accumulation, population growth
-of subsistence quantities and the base of the health link, and growth of
-government and foreign flows) and to fixed variables (`cge_<period>_var.inc`).
-The driver solves the base and then the periods in order, each from the
-solution of the period before, and writes `cge_<period>.csv` for each:
+(for example capital accumulation, population growth of subsistence
+quantities and the base of the health link, and growth of government and
+foreign flows) and to fixed variables, in files named after the period's
+simulation: `cge_dn1_par.inc` and `cge_dn1_var.inc` for the simulation
+`dn1`. The driver solves the base and then the periods in order, each from
+the solution of the period before, and writes `cge_dn1.csv` and so on for
+each:
 
 ```
 $include cge_model.gms
@@ -154,7 +157,8 @@ model `cgebase`, the scenario as `cgecon`.
 
 Convergence tolerances are absolute, so they are scaled to the largest SAM
 cell, within what double precision allows (`ptol`, the larger of 1e-11 and
-1e-13 times the largest cell). An option file is written for four solvers:
+1e-13 times the largest cell). When it runs, the GAMS program writes an
+option file for four solvers:
 
 | Solver | Option file | Settings |
 |---|---|---|

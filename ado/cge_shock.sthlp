@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.5.0  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -110,8 +110,9 @@ the closure leaves free is an error.
 {title:Options}
 
 {phang}
-{opt elements(list)} lists the commodities, activities, factors or households
-to change; the default is all. For variables indexed by factor and activity
+{opt elements(list)} lists the commodities, activities, factors, households
+and enterprises (for {cmd:trdg} and {cmd:trdr}), or other elements of the set
+of a variable, to change; the default, or {cmd:elements(all)}, is all. For variables indexed by factor and activity
 ({cmd:QF}, {cmd:WFDIST}), the list names factors.
 
 {phang}
@@ -126,11 +127,18 @@ to change; the default is all. For variables indexed by factor and activity
 
 {title:Examples}
 
+{pstd}Setup: the SYNTHETIC SAM of {helpb cge_synthetic}, mapped as in {helpb cge_map}{p_end}
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
+{pstd}Shocks{p_end}
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
 {phang2}{cmd:. cge_shock pwm, elements(com_man) scale(1.1)}{p_end}
 {phang2}{cmd:. cge_shock QFS, elements(lab) scale(1.05)}{p_end}
 {phang2}{cmd:. cge_shock qg, elements(com_ser) scale(1.2)}{p_end}
-{phang2}{cmd:. cge_shock trdr, elements(npi) value(0)}{p_end}
+{phang2}{cmd:. cge_shock trdr, elements(hhd) scale(0.5)}{p_end}
 {phang2}{cmd:. cge_shock, reset}{p_end}
 
 

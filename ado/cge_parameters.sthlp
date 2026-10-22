@@ -18,8 +18,8 @@
 {pstd}
 {cmd:cge_parameters} replaces the data in memory with the model's parameters,
 one observation per parameter element, with the variables {cmd:parameter},
-{cmd:element1}, {cmd:element2} and {cmd:value}. Parameter names follow
-docs/model_spec.md, Section 4, as they are named in the Mata library: for
+{cmd:element1}, {cmd:element2} and {cmd:value}. Parameter names are those
+of the Reference Manual ({it:Notation and the social accounting matrix}), as they are named in the Mata library: for
 example {cmd:ica} (intermediate input coefficients), {cmd:dva} and {cmd:ad}
 (value-added shares and efficiency), {cmd:beta} and {cmd:gamma} (household
 demand), {cmd:shif} (factor income shares) and {cmd:tm}, {cmd:te}, {cmd:tq},

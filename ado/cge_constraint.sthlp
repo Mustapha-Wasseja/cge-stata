@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.4  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 23 25 2}{...}
@@ -27,7 +27,7 @@
 {cmd:cge_constraint} puts a bound on one element of a model variable, such as
 imports of a commodity or the output of an activity, and pairs it with an
 adjusting variable, which the closure fixes and which may move in one
-direction only (from version 0.4.4; docs/model_spec.md, Section 16). In
+direction only (from version 0.4.4; Reference Manual, {it:Bounds and complementarity}). In
 every solution one of two things holds:
 
 {phang2}o  the limited variable is within its bound and the adjusting variable is at its fixed level; or{p_end}
@@ -130,7 +130,7 @@ solution. {opt clear} removes them, and sends every rent to the government.
 
 {synoptset 20 tabbed}{...}
 {p2col 5 20 24 2: Scalars}{p_end}
-{synopt:{cmd:r(N_constraints)}}number of constraints{p_end}
+{synopt:{cmd:r(N_constraints)}}number of constraints (also after adding one, and 0 after {opt clear}){p_end}
 {synopt:{cmd:r(N_binding)}}number binding in the last solution ({opt list}){p_end}
 
 
@@ -139,7 +139,7 @@ solution. {opt clear} removes them, and sends every rent to the government.
 {pstd}
 The minimum real wage of {helpb cge_closure}'s {cmd:minwage} closure is a
 complementarity condition of the same kind, with its own calibration
-(docs/model_spec.md, Section 14.3). The Python reference finds the regimes
+(Reference Manual, {it:Labour-market regimes}). The Python reference finds the regimes
 by an active-set method, and GAMS ({helpb cge_gams}) solves them as a mixed
 complementarity problem with PATH; the three agree on every test case.
 

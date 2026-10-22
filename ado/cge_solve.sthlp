@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.3  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -10,7 +10,8 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt trace} {opt full}]
+{cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt step:s(#)} {opt trace}
+{opt diag:nose} {opt full}]
 
 
 {title:Description}
@@ -46,7 +47,9 @@ are reused for further Newton steps while each step at least halves the
 residual. If Newton fails, it is tried again with central differences, then
 Powell's hybrid method ({cmd:solvenl()}), followed by Newton steps to polish
 the result. {cmd:cge_solve} exits with error 430 if the
-model does not converge.
+model does not converge, and with error 459 if the system is not square, for
+example after a variable added with {cmd:cge_variable, value()} without the
+equation that determines it.
 
 {pstd}
 With constraints ({helpb cge_constraint}, from version 0.4.4), the

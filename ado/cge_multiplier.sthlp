@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.1  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 23 25 2}{...}
@@ -18,7 +18,7 @@
 
 {pstd}
 {cmd:cge_multiplier} computes the accounting multipliers of the SAM mapped by
-{helpb cge_map} (from version 0.4.1; docs/sam_tools.md, Section 6): the effect
+{helpb cge_map} (from version 0.4.1; Reference Manual, {it:SAM tools}): the effect
 of a unit injection into one account on the incomes of all the endogenous
 accounts, the accounts whose spending the SAM explains, with prices fixed
 (Pyatt and Round 1979). It needs no calibration.
@@ -64,7 +64,9 @@ government, to the institutions block.
 enterprise.
 
 {phang}
-{opt decompose} adds the decomposition.
+{opt decompose} adds the decomposition. It requires the SAM to have no
+flows among the blocks other than those of the circular flow, and is ignored
+with {opt inject()}, whose effects are shown without it.
 
 {phang}
 {opt inject(spec)} gives injections into endogenous accounts,

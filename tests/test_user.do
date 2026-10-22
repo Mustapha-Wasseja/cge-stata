@@ -174,3 +174,24 @@ cge_variable XX = CPI
 capture noisily cge_variable XX = CPI
 assert _rc == 110
 cge_equation, clear
+
+* ---------------------------------------------------------------------
+* Version 0.6.4: a variable without its equation leaves the system without a
+* square Jacobian, and cge_solve stops with error 459; a user variable
+* indexed by institutions is shocked over that set
+* ---------------------------------------------------------------------
+quietly do setup_synthetic.do
+cge_variable LAM, value(1)
+capture noisily cge_solve, name(unpaired)
+assert _rc == 459
+cge_equation lam: QG(com_ser) = LAM * base(QG(com_ser))
+cge_solve, name(paired)
+assert r(converged) == 1
+cge_variable UI(i), value(1)
+cge_equation ui(i): UI(i) = 1
+* gov is an element of the set of i: the shock fails only because UI is free
+capture noisily cge_shock UI, elements(gov) value(2)
+assert _rc == 459
+capture noisily cge_shock UI, elements(nosuch) value(2)
+assert _rc == 111
+cge_equation, clear

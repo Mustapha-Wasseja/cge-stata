@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.6  14oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -16,8 +16,8 @@
 {title:Description}
 
 {pstd}
-{cmd:cge_check} runs the validation checks of docs/model_spec.md, Section 8, and
-reports each as {cmd:[ok]} or {cmd:[fail]} with the value tested:
+{cmd:cge_check} runs the validation checks of the Reference Manual ({it:Validation checks})
+and reports each as {cmd:[ok]} or {cmd:[fail]} with the value tested:
 
 {p 8 12 2}- SAM balance;{p_end}
 {p 8 12 2}- benchmark replication: the base solves every equation;{p_end}
@@ -39,7 +39,8 @@ do not depend on the units of the SAM.
 {title:Options}
 
 {phang}
-{opt sim(name)} selects the simulation; the default is the most recent one.
+{opt sim(name)} selects the simulation; the default is the last one stored (a
+simulation solved again under its own name keeps its place).
 
 {phang}
 {opt homogeneity} adds the homogeneity check.

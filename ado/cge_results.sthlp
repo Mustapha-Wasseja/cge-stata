@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.0  12oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -27,13 +27,14 @@ variation at base prices; and the Walras and GDP identity checks.
 With {opt clear} or {opt saving()}, all results are written as a dataset with
 one observation per variable element and the variables {cmd:variable},
 {cmd:element1}, {cmd:element2}, {cmd:base} and {cmd:value}. Variable names
-follow docs/model_spec.md, Section 3.
+are those of the Reference Manual ({it:Notation and the social accounting matrix}).
 
 
 {title:Options}
 
 {phang}
-{opt sim(name)} selects the simulation; the default is the most recent one.
+{opt sim(name)} selects the simulation; the default is the last one stored (a
+simulation solved again under its own name keeps its place).
 
 {phang}
 {opt clear} replaces the data in memory with the results.

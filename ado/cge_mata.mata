@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.6.3  2026-10-21
+*! cge_mata.mata  v0.6.4  2026-10-22
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -194,7 +194,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.6.3")
+    return("0.6.4")
 }
 
 // =====================================================================
@@ -1274,6 +1274,18 @@ void _cge_aggregate_template(real scalar netdiag)
     AT = _cge_index(T[., 1])
     group = J(rows(L), 1, "")
     for (k = 1; k <= rows(L); k++) group[k] = T[asarray(AT, L[k]), 4]
+    // A group may take the label of one of its members, but not of another
+    // account, as with groups() (from version 0.6.4)
+    for (k = 1; k <= rows(L); k++) {
+        if (group[k] != "" & group[k] != L[k]) {
+            j = _cge_find(L, group[k])
+            if (j) {
+                if (group[j] != group[k]) {
+                    _cge_fail("template: group " + group[k] + " has the label of an account that is not one of its members", 198)
+                }
+            }
+        }
+    }
     // Roles within each group
     G = asarray_create()
     for (k = 1; k <= rows(L); k++) {
@@ -4106,8 +4118,8 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
         pos = _cge_vpos(M, k)
     }
     else if (strlen(set) == 1) {
-        idx = _cge_elements((set == "A" ? M.A : (set == "C" ? M.C : (set == "F" ? M.F :
-              (set == "D" ? M.D : M.H)))), elems, "elements")
+        // the elements of the variable's set, user variables included (from version 0.6.4)
+        idx = _cge_elements(_cge_setlab(M, set), elems, "elements")
         pos = M.voff[k] :+ idx
     }
     else if (set == "FA") {
@@ -5272,6 +5284,14 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     real scalar rc, iter2
 
     S = _cge_sys_make(M, !full)
+    // A user variable or equation without its pair leaves the system without a
+    // square Jacobian (from version 0.6.4)
+    if (rows(S.free) != S.neq) {
+        errprintf("the system is not square: %f free variables, %f equations\n", rows(S.free), S.neq)
+        errprintf("a variable added with cge_variable, value() needs an equation from cge_equation,\n")
+        errprintf("and each user equation needs a free variable\n")
+        exit(459)
+    }
     z = start[S.free] :/ M.xscale[S.free]
     method = "newton"
     conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter, err)
@@ -6513,6 +6533,7 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
     string rowvector tok, pair
     real colvector idx, s
     real scalar j, f, T
+    pointer() scalar q
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -6614,6 +6635,10 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
             }
         }
     }
+
+    // The model as it was, restored if the run fails (from version 0.6.4)
+    if ((q = findexternal("cge__dyn_model")) == NULL) q = crexternal("cge__dyn_model")
+    *q = _cge_load()
 
     // The run starts from the base; shocks set before it are kept aside, but
     // constraints are kept (from version 0.4.4)
@@ -6784,19 +6809,69 @@ void _cge_dyn_solve(real scalar period, real scalar first)
     printf("\n")
 }
 
-// Restore the parameters and fixed values the model had before the run
+// At the end of a run that solved every period: restore the parameters and
+// fixed values the model had before the run, and drop the periods of an
+// earlier run of the same name that this run did not solve again
 void _cge_dyn_end()
 {
     struct cge_model scalar M
     struct cge_dyn scalar D
     pointer() scalar q
+    real colvector keep
+    real scalar k
     if ((q = findexternal("cge__dyn")) == NULL) return
     D = *q
     M = _cge_load()
     M.p = D.psave
     M.xcur = D.xsave
+    keep = J(rows(M.simname), 1, 1)
+    for (k = 1; k <= rows(M.simname); k++) {
+        if (M.simrun[k] == D.name) keep[k] = anyof(D.periods, M.simper[k])
+    }
+    if (!all(keep)) _cge_sims_keep(M, select((1::rows(keep)), keep))
     _cge_store(M)
     rmexternal("cge__dyn")
+    if (findexternal("cge__dyn_model") != NULL) rmexternal("cge__dyn_model")
+}
+
+// When a run fails: the model as it was before the run, so that no period is
+// stored and an earlier run of the same name is kept as it was (from version
+// 0.6.4)
+void _cge_dyn_abort()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__dyn_model")) != NULL) {
+        _cge_store(*q)
+        rmexternal("cge__dyn_model")
+    }
+    if (findexternal("cge__dyn") != NULL) rmexternal("cge__dyn")
+}
+
+// Keep only the stored simulations s, in that order (from version 0.6.4)
+void _cge_sims_keep(struct cge_model scalar M, real colvector s)
+{
+    struct cge_par rowvector sp
+    real scalar j
+    sp = cge_par(1, rows(s))
+    for (j = 1; j <= rows(s); j++) sp[j] = M.simp[s[j]]
+    M.simp = sp
+    if (rows(s) == 0) {
+        M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = J(0, 1, "")
+        M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
+        M.simx = J(rows(M.simx), 0, .)
+        return
+    }
+    M.simname = M.simname[s]
+    M.simclosure = M.simclosure[s]
+    M.simmethod = M.simmethod[s]
+    M.simx = M.simx[., s']
+    M.simconv = M.simconv[s]
+    M.simiter = M.simiter[s]
+    M.simres = M.simres[s]
+    M.simrun = M.simrun[s]
+    M.simper = M.simper[s]
+    M.simlam = M.simlam[s]
+    M.simcons = M.simcons[s]
 }
 
 // Names of the simulations of a dynamic run, in period order
@@ -7731,6 +7806,9 @@ void _cge_mult(string scalar s_endo, string scalar s_exo, string scalar s_inj, r
     if (hasmissing(Ma)) {
         _cge_fail("I - A is singular: some payments among the endogenous accounts never leak to an exogenous account; make one of them exogenous", 459)
     }
+    // The effects of injections are shown without the decomposition, which
+    // therefore does not need the circular structure (from version 0.6.4)
+    if (s_inj != "") decomp = 0
     if (decomp) {
         B1 = blk * J(1, n, 1)
         B2 = J(n, 1, 1) * blk'

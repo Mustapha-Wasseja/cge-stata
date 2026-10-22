@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.5  20oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 25 27 2}{...}
@@ -16,7 +16,7 @@
 
 {p 4 4 2}
 {it:parameter} is a {helpb cge_calibrate} option: {cmd:sigmaq}, {cmd:sigmat},
-{cmd:sigmava}, {cmd:incelas}, {cmd:frisch}, {cmd:wagecurve} or
+{cmd:sigmava}, {cmd:incelas}, {cmd:frisch}, {cmd:wagecurve}, {cmd:sickelas} or
 {cmd:mortelas}.
 
 
@@ -25,7 +25,7 @@
 {pstd}
 {cmd:cge_elasticities} lists, loads or turns into {helpb cge_calibrate}
 options the entries of the package's elasticity library (from version
-0.3.5; docs/elasticities.md). Each entry is a published estimate, with its
+0.3.5; Reference Manual, {it:The elasticity library}). Each entry is a published estimate, with its
 source, the table and page where it is printed, its definition and the check
 made when it was read from the source. Elasticities have no defaults in
 {helpb cge_calibrate}; the library documents where values come from, and
@@ -87,7 +87,9 @@ and source details.
 {opt values} returns the values for {helpb cge_calibrate} in {cmd:r(values)},
 in the order of the model's commodities ({cmd:sigmaq}, {cmd:sigmat},
 {cmd:incelas}) or activities ({cmd:sigmava}) after {helpb cge_map}, or as one
-number. Each element takes the single selected entry, or the entry of the
+number. A {cmd:wagecurve} value is one number, which {helpb cge_calibrate}
+takes as {it:factor}{cmd::}{it:value}, for example
+{cmd:wagecurve(lab:`r(values)')}. Each element takes the single selected entry, or the entry of the
 category that {opt map()} or {opt others()} gives it; if more than one entry
 matches an element, the command stops and lists them. The entries used, their
 definitions and notes are displayed.
@@ -103,6 +105,11 @@ category to those not listed.
 
 {phang2}{cmd:. cge_elasticities sigmaq, country(TGO SLE BWA)}{p_end}
 {phang2}{cmd:. cge_elasticities incelas, country(TGO) clear}{p_end}
+
+{pstd}Values for the SYNTHETIC SAM with a health sector, mapped as in {helpb cge_map}{p_end}
+{phang2}{cmd:. cge_synthetic, clear health}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
 {phang2}{cmd:. cge_elasticities sigmaq, country(TGO) values}{p_end}
 {phang2}{cmd:. local sq `r(values)'}{p_end}
 {phang2}{cmd:. cge_elasticities incelas, country(TGO) values map(com_agr:food com_hlt:health) others(other)}{p_end}

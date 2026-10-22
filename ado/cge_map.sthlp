@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.5.0  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -20,7 +20,9 @@
 {cmd:cge_map using} {it:template} [{cmd:,} {opt vatshare(spec)} {opt sheet(string)} {opt report(filename)} {opt replace}]
 
 {pstd}
-Options must be typed in full.
+Options must be typed in full, except {opt vats:hare()},
+{opt domestic:margins()}, {opt import:margins()}, {opt export:margins()},
+{opt factort:ax()} and {opt factorinc:ometax()}, which may be abbreviated as shown.
 
 
 {title:Description}
@@ -28,7 +30,7 @@ Options must be typed in full.
 {pstd}
 {cmd:cge_map} assigns the accounts of the SAM read by {helpb cge_sam} to the roles
 of the model and checks the SAM against the flows the model represents
-(docs/model_spec.md, Section 7.0). It looks for:
+(Reference Manual, {it:Calibration}). It looks for:
 
 {p 8 12 2}- accounts that are not balanced;{p_end}
 {p 8 12 2}- accounts with flows but no role;{p_end}
@@ -44,8 +46,8 @@ at once.
 
 {pstd}
 Before the checks, layouts common in national SAMs are rewritten into the
-model's layout, and the amounts moved are displayed (docs/model_spec.md,
-Section 7.0). Exports recorded as sales by an activity to the rest of the world
+model's layout, and the amounts moved are displayed (Reference Manual,
+{it:Calibration}). Exports recorded as sales by an activity to the rest of the world
 are moved to the commodity paired with the activity. Margins netted out of the
 activities listed in {opt margins()} are moved to their output. Stock-change
 accounts listed in {opt stocks()} are merged into savings-investment. Taxes paid
@@ -55,7 +57,7 @@ see the tax options below. The SAM in memory is not changed.
 
 {pstd}
 With {cmd:using}, the roles are read from a template written by
-{helpb cge_template} and filled in (docs/sam_tools.md, Section 3). Each
+{helpb cge_template} and filled in (Reference Manual, {it:SAM tools}). Each
 account's {cmd:role} names the options that list it; activities are paired with
 the commodities in the {cmd:pair} column or, where it is blank, with the
 commodity whose column pays them most. If the SAM was aggregated with the same
@@ -72,8 +74,8 @@ accounts, paired by position: each activity's primary commodity, used when
 rewriting national-accounts layouts. An activity may also produce other
 commodities, in fixed proportions taken from the SAM. Each activity needs a
 paired commodity. Commodities without a producing activity, such as commodities
-that are imported only, are listed after the paired ones. An activity account
-with no flows at all is left out.
+that are imported only, are listed after the paired ones. An account with no
+flows at all needs no role.
 
 {phang}
 {opt factors()} and {opt households()} list the factor and household accounts.
@@ -96,14 +98,13 @@ transport margins from commodities (the margin account's row, the commodities'
 columns) and spend them on margin services (commodity rows, the margin
 account's column). A margin account may have no other flows. Margins enter the
 model as a fixed quantity of services per unit of each commodity's composite
-supply, and their cost enters the commodity's price (docs/model_spec.md,
-equations P3 and T8).
+supply, and their cost enters the commodity's price (Reference Manual, equations P3 and T8).
 
 {phang}
 {opt domesticmargins()}, {opt importmargins()} and {opt exportmargins()} list
 margin accounts whose margins are paid per unit of domestic sales, of imports
 and of exports, when the SAM separates them (from version 0.3.2;
-docs/model_spec.md, Section 13.4). Domestic buyers then pay the producer price
+Reference Manual, {it:Trade and household extensions}). Domestic buyers then pay the producer price
 plus domestic margins; the import price includes import margins; exporters
 receive the world price less export taxes and export margins. A commodity
 paying such margins must have domestic sales, imports or exports respectively.
@@ -123,7 +124,7 @@ buy commodities and save; it may have no other flows. Contributions enter the
 model as a fixed rate on each factor's income, taken before that income is
 distributed to institutions. The fund buys a fixed basket of commodities,
 scaled so that it spends its revenue less a fixed share saved
-(docs/model_spec.md, equations I2 and I12 to I14). A donor-funded non-profit
+(Reference Manual, equations I2 and I12 to I14). A donor-funded non-profit
 institution that buys health services is mapped as a household instead.
 
 {phang}
@@ -131,7 +132,7 @@ institution that buys health services is mapped as a household instead.
 revenue the SAM nets out of their output by recording a negative use of their
 own product. That negative cell is moved to the activity's output, so the
 margins enter the model as the producing activities' purchases of trade and
-transport services, as the SAM records them (docs/model_spec.md, Section 7.0).
+transport services, as the SAM records them (Reference Manual, {it:Calibration}).
 The activity's own use of its product cannot be separated from the netted
 margins and becomes zero. Naming an activity without a negative use of its own
 product is an error.
@@ -151,23 +152,21 @@ must not be mapped to other roles.
 tariffs, export taxes and activity taxes. A tax that is not mapped is zero.
 If a SAM records a tax as a direct payment to the government, name the
 government account in the tax option, for example {cmd:saltax(gov)}: the
-government row's cells in the paying columns (households for {opt dirtax()},
+government row's cells in the paying columns (households and enterprises for {opt dirtax()},
 commodities for {opt saltax()}, {opt imptax()} and {opt exptax()}, activities
 for {opt acttax()}) are routed through an internal tax account. At most one of
 {opt saltax()}, {opt imptax()}, {opt exptax()} and {opt vattax()} may name the
 government account.
 
-{phang}
 {pstd}
 A household's payment to an activity, {it:SAM}(activity, household), is home
-consumption of own produce (from version 0.3.2; docs/model_spec.md, Section
-13.1): it is valued at the activity's price, without taxes or margins, and the
+consumption of own produce (from version 0.3.2; Reference Manual, {it:Trade and household extensions}): it is valued at the activity's price, without taxes or margins, and the
 activity's other output is sold to commodities.
 
 {phang}
 {opt vattax(name)} names the account that collects value added tax (VAT) from
 the commodities, net of input credits, and pays it to the government (from
-version 0.3.1; docs/model_spec.md, Section 12.2). VAT is then a tax on final
+version 0.3.1; Reference Manual, {it:Fiscal instruments}). VAT is then a tax on final
 demand, at a rate by commodity, with credits for the VAT on inputs in the
 shares given by {helpb cge_calibrate}'s {opt vatcredit()}; exports and margin
 services are zero-rated.
@@ -181,8 +180,8 @@ for every commodity, between 0 and 1. Commodities not listed have share 0.
 by a shock to {cmd:tv}. {opt vattax()} and {opt vatshare()} may not be combined.
 
 {phang}
-{opt factortax(account:factor ...)} (from version 0.5.0; docs/model_spec.md,
-Section 17.1) names accounts of taxes on the use of factors, such as payroll
+{opt factortax(account:factor ...)} (from version 0.5.0; Reference Manual,
+{it:Factor taxes, nests and output aggregation}) names accounts of taxes on the use of factors, such as payroll
 taxes on labour or taxes on capital, which activities pay and which pass the
 revenue to the government. Each account is followed by the factor whose use
 it taxes. The rate on each factor in each activity is the tax over the
@@ -211,6 +210,10 @@ problems are found.
 
 {title:Examples}
 
+{pstd}The SYNTHETIC SAM of {helpb cge_synthetic}:{p_end}
+
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
 {phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
 
 {pstd}
@@ -233,6 +236,7 @@ Health services and a social health insurance fund:
 From a template, filled in Excel:
 
 {phang2}{cmd:. cge_template using roles.xlsx}{p_end}
+{phang2}{it:(fill in the roles in Excel)}{p_end}
 {phang2}{cmd:. cge_map using roles.xlsx}{p_end}
 
 {pstd}
@@ -241,6 +245,8 @@ VAT, as a separate account or as shares of the sales tax:
 {phang2}{cmd:. cge_synthetic, clear vat}{p_end}
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
 {phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vattax(tax_vat)}{p_end}
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
 {phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vatshare(com_man:0.5 com_ser:1)}{p_end}
 
 
@@ -249,7 +255,13 @@ VAT, as a separate account or as shares of the sales tax:
 {synoptset 22 tabbed}{...}
 {p2col 5 22 26 2: Scalars}{p_end}
 {synopt:{cmd:r(N_negative_sales)}}number of negative sales of commodities by activities{p_end}
-{synopt:{cmd:r(vat_moved)}}VAT moved out of the sales tax by {opt vatshare()}{p_end}
+{synopt:{cmd:r(vat_moved)}}VAT moved out of the sales tax by {opt vatshare()} (0 without it){p_end}
+{synopt:{cmd:r(exports_moved)}}exports recorded as sales by activities, moved to their commodities{p_end}
+{synopt:{cmd:r(margins_moved)}}margins moved to the output of margin activities ({opt margins()}){p_end}
+{synopt:{cmd:r(territorial_imports)}}residents' purchases abroad moved to household payments to the rest of the world ({opt territorial()}){p_end}
+{synopt:{cmd:r(territorial_exports)}}non-residents' purchases moved to transfers from the rest of the world ({opt territorial()}){p_end}
+{synopt:{cmd:r(stocks_merged)}}changes in inventories merged into savings-investment ({opt stocks()}){p_end}
+{synopt:{cmd:r(taxes_rerouted)}}taxes paid directly to the government, routed through internal tax accounts (VAT not included){p_end}
 {p2col 5 22 26 2: Macros}{p_end}
 {synopt:{cmd:r(command)}}with a template, the equivalent {cmd:cge_map} command{p_end}
 

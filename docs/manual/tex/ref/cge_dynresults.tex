@@ -44,8 +44,8 @@ line dev_pct period if variable == "EH" & element1 == "hh_ru_p"
 \manref{cge_dynamic}.
 
 \item[\opt{}{clear}] is required: the data in memory are replaced. They are
-dropped before the run is read, so they are lost even if the command then
-fails, for example because no run has the name given.
+kept if the run cannot be loaded, for example because no run has the name
+given.
 
 \item[\optarg{base}{line}{name}] names a baseline run to compare with. It
 must have every period of \cmd{run()}; it may have more.

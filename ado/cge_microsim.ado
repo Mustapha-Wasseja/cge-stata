@@ -1,4 +1,4 @@
-*! cge_microsim.ado  v0.2.2  2026-10-16
+*! cge_microsim.ado  v0.6.4  2026-10-22
 *! cge-stata: pass a simulation to household survey data (model_spec.md,
 *! Section 11): consumption, prices, poverty and inequality by household
 *!
@@ -9,7 +9,14 @@ program define cge_microsim, rclass
     version 13.0
     syntax [if] [in] [pweight aweight fweight iweight], SIM(name) GROUP(varname)   ///
         CONSumption(varname numeric) [SIZE(varname numeric) INCome(string)          ///
-        BUDget(string) LINE(real -1) GENerate(name) REPLACE NODisplay]
+        BUDget(string) LINE(numlist max=1) GENerate(name) REPLACE NODisplay]
+    * A poverty line, when given, must be positive (from version 0.6.4);
+    * without one, no poverty measures are computed
+    if "`line'" == "" local line .
+    else if `line' <= 0 {
+        display as error "line() must be a positive poverty line per person"
+        exit 198
+    }
 
     marksample touse, novarlist
     * Survey weights of any type are used as proportional household weights

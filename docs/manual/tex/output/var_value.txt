@@ -13,3 +13,10 @@ Simulation realwage:
 1 check(s) failed
 
 r(9);
+
+. cge_solve, name(unpaired)
+the system is not square: 75 free variables, 74 equations
+a variable added with cge_variable, value() needs an equation from cge_equation,
+and each user equation needs a free variable
+
+r(459);

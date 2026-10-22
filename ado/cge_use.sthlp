@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.2  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -18,7 +18,7 @@
 {pstd}
 {cmd:cge_use} replaces the model in memory with one saved by {helpb cge_save},
 including its closure, current shocks and stored simulations. The dataset in
-memory is not changed. The default extension is {cmd:.cgem}. Items saved by a
+memory is not changed. The extension {cmd:.cgem} is added when the file name has none. Items saved by a
 version that the current one no longer uses are ignored, with a note.
 
 {pstd}

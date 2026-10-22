@@ -101,5 +101,8 @@ capture cge_sensitivity, scenario(_tariff_cut) draws(2) vary(va zz)
 assert _rc == 198
 capture cge_sensitivity, scenario(_tariff_cut) draws(0)
 assert _rc == 198
+* Only the command's own results are returned (version 0.6.4)
+quietly cge_sensitivity, scenario(_tariff_cut) draws(2) spread(0.2) nodisplay
+assert r(N_draws) == 2 & "`r(filename)'" == "" & "`r(saved_by)'" == ""
 
 program drop _tariff_cut

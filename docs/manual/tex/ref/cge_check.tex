@@ -12,7 +12,7 @@ exits with error 9 if any check fails.
 
 \cgesec{Quick start}
 
-Run the checks of the base and of the most recent simulation
+Run the checks of the base and of the last simulation stored
 \begin{stcode}
 cge_check
 \end{stcode}
@@ -34,7 +34,7 @@ cge_check, sim(notariff) perturb(0.1) seed(2026)
 
 \begin{opttable}
 \optgroup{Main}
-\optarg{}{sim}{name} & simulation to check; default the most recent\\
+\optarg{}{sim}{name} & simulation to check; default the last one stored\\
 \opt{hom}{ogeneity} & add the homogeneity check\\
 \optarg{pert}{urb}{\#} & add the perturbed-start check, with starting values within $\pm\#$ times the base\\
 \optarg{}{seed}{\#} & random-number seed for \cmd{perturb()}; default \texttt{12345}\\
@@ -44,8 +44,9 @@ cge_check, sim(notariff) perturb(0.1) seed(2026)
 
 \begin{optdesc}
 \item[\optarg{}{sim}{name}] selects the simulation whose solution, Walras's law
-and GDP identity are checked. The default is the most recent simulation. The
-other checks do not depend on the simulation.
+and GDP identity are checked. The default is the last simulation stored; a
+simulation solved again under its own name keeps its place. The other checks
+do not depend on the simulation.
 
 \item[\opt{hom}{ogeneity}] adds the homogeneity check: doubling every fixed
 nominal value, under the current closure and the base parameters, must double

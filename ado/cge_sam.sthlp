@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -27,7 +27,7 @@ Long data: one observation per cell
 {pstd}
 {cmd:cge_sam} reads a social accounting matrix (SAM) and starts a new model. The
 SAM is taken from the data in memory or, with {cmd:using}, from a {cmd:.csv},
-{cmd:.dta}, {cmd:.xls} or {cmd:.xlsx} file (docs/sam_tools.md, Section 1).
+{cmd:.dta}, {cmd:.xls} or {cmd:.xlsx} file (Reference Manual, {it:SAM tools}).
 Cell ({it:r}, {it:c}) is a payment from column account {it:c} to row account
 {it:r}. Blank cells are treated as zero and counted in {cmd:r(N_blank)}.
 
@@ -91,6 +91,8 @@ wide data. The default is the first string variable.
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
+
+{pstd}A SAM of your own, from an Excel sheet, a CSV file, or a dataset of cells{p_end}
 {phang2}{cmd:. cge_sam using mysam.xlsx, sheet("SAM") labels(account) clear}{p_end}
 {phang2}{cmd:. cge_sam using large_sam.csv}{p_end}
 {phang2}{cmd:. cge_sam using sam_cells.dta, long(row column value) clear}{p_end}

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.2  20oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -20,7 +20,7 @@
 
 {pstd}
 {cmd:cge_template} writes a template with one row per account of the SAM in
-memory (docs/sam_tools.md, Section 3). Fill it in, in Excel or any editor, and
+memory (Reference Manual, {it:SAM tools}). Fill it in, in Excel or any editor, and
 use it with {helpb cge_map} {cmd:using} to map the SAM and with
 {helpb cge_aggregate} {cmd:using} to merge accounts. A template is easier to
 check and to keep than a long {cmd:cge_map} command, and it has no limit on the
@@ -51,8 +51,10 @@ mapping; otherwise they are blank. An Excel template also has a sheet
 {cmd:importmargins}, {cmd:exportmargins}, {cmd:factortax} or {cmd:factorincometax}
 (from version 0.5.0), in either case; the
 singular forms {cmd:activity}, {cmd:commodity}, {cmd:factor}, {cmd:household},
-{cmd:enterprise}, {cmd:margin}, {cmd:marginaccount}, {cmd:stock} and {cmd:vat} are
-also accepted. VAT shares of the sales tax are not a role: give them with
+{cmd:enterprise}, {cmd:margin}, {cmd:marginaccount}, {cmd:stock}, {cmd:vat},
+{cmd:domesticmargin}, {cmd:importmargin} and {cmd:exportmargin} are also
+accepted, and several roles are separated by spaces or commas. An Excel
+template's sheet {cmd:roles} lists every entry. VAT shares of the sales tax are not a role: give them with
 {cmd:cge_map using}'s {opt vatshare()} option. An account may have several roles where {cmd:cge_map} allows it:
 {cmd:activities margins} for a margin activity, {cmd:government saltax} when
 sales taxes are paid to the government account. Leave the role blank only for
@@ -79,6 +81,7 @@ group with its members' role.
 
 {title:Example}
 
+{pstd}A SAM of your own, from a CSV file{p_end}
 {phang2}{cmd:. cge_sam using national_sam.csv, clear}{p_end}
 {phang2}{cmd:. cge_template using sam_roles.xlsx}{p_end}
 {pstd}(fill in roles, pairs and groups in Excel){p_end}

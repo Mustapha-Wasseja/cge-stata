@@ -1,4 +1,4 @@
-*! cge_dynamic.ado  v0.3.4  2026-10-20
+*! cge_dynamic.ado  v0.6.4  2026-10-22
 *! cge-stata: solve a recursive dynamic run (model_spec.md, Section 10)
 *! Each period is stored as the simulation <name><period>
 *!
@@ -31,21 +31,24 @@ program define cge_dynamic, rclass
         `sensitivity', `"`growth'"', "`tfp'", "`gdpgrowth'", "`baseline'", `population',   ///
         `govgrowth', `foreigngrowth', `tolerance', `iterate', "`deathfactors'", `deathshare', ///
         `workingage')
+    * A run that fails leaves the model, and its stored simulations, as they
+    * were before the run (from version 0.6.4)
     local first 1
     foreach t of numlist `periods' {
         if !`first' {
             capture noisily mata: _cge_dyn_advance()
             if _rc {
                 local rc = _rc
-                mata: _cge_dyn_end()
+                mata: _cge_dyn_abort()
+                display as error "period `t' failed; run `name' not stored"
                 exit `rc'
             }
             if "`shocks'" != "" {
                 capture noisily `shocks' `t'
                 if _rc {
                     local rc = _rc
-                    mata: _cge_dyn_end()
-                    display as error "shocks(): `shocks' `t' failed"
+                    mata: _cge_dyn_abort()
+                    display as error "shocks(): `shocks' `t' failed; run `name' not stored"
                     exit `rc'
                 }
             }
@@ -53,7 +56,8 @@ program define cge_dynamic, rclass
         capture noisily mata: _cge_dyn_solve(`t', `first')
         if _rc {
             local rc = _rc
-            mata: _cge_dyn_end()
+            mata: _cge_dyn_abort()
+            display as error "period `t' failed; run `name' not stored"
             exit `rc'
         }
         local first 0

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -20,7 +20,7 @@
 {pstd}
 {cmd:cge_balance} makes the SAM in memory balanced, so that every account's row
 total equals its column total, and starts a new model from the result
-(docs/sam_tools.md, Section 5). Both methods keep the sign of every cell, every
+(Reference Manual, {it:SAM tools}). Both methods keep the sign of every cell, every
 zero cell and the cells listed in {opt fixed()}, and both minimise the same
 measure of the information added to the SAM (Junius and Oosterhaven 2003;
 Lenzen, Wood and Gallego 2007),
@@ -72,7 +72,9 @@ fixed and which method was used with any results.
 {phang}
 {opt targets(average|rows|columns)} sets the RAS targets of accounts not in
 {opt totals()}: the average of row and column totals (the default), the row
-totals or the column totals.
+totals or the column totals. With {cmd:method(ce)}, which estimates the
+totals that are not given, only {cmd:targets(average)} is accepted, and it has
+no effect.
 
 {phang}
 {opt totals(account:value ...)} gives known account totals: targets for RAS,
@@ -139,8 +141,8 @@ McDougall, R. A. (1999). Entropy theory and RAS are friends. GTAP Working Paper
 
 {phang}
 Robinson, S., A. Cattaneo and M. El-Said (2001). Updating and estimating a
-social accounting matrix using cross entropy methods. {it:Economic Systems
-Research} 13(1): 47-64.
+social accounting matrix using cross entropy methods.
+{it:Economic Systems Research} 13(1): 47-64.
 
 
 {title:Also see}

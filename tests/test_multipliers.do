@@ -148,3 +148,15 @@ cge_synthetic, clear
 quietly cge_sam, labels(account)
 capture noisily cge_multiplier
 assert _rc == 459
+
+* inject() with decompose: the decomposition, which the effects of an
+* injection do not use, no longer needs the circular structure (version 0.6.4)
+cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+capture noisily cge_multiplier, endogenous(tax_sal) decompose
+assert _rc == 459
+cge_multiplier, endogenous(tax_sal) decompose inject(com_ser:10)
+assert r(injection) == 10

@@ -77,6 +77,9 @@ assert r(base_maxdiff) < 1e-14
 assert r(maxdiff) < 1e-10
 assert r(N_compared) == 108
 assert abs(r(walras)) < 1e-9
+* An export and a comparison in one call return no file path (version 0.6.4)
+cge_gams using "`dir'", sim(closures) replace compare
+assert "`r(fn)'" == "" & r(maxdiff) < 1e-10
 * The GAMS solution as a simulation (version 0.6.2): it solves the model in
 * Stata and agrees with Stata's solution
 cge_gams using "`dir'", sim(closures) noexport import(closures_gams)

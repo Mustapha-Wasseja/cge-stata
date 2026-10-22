@@ -568,8 +568,8 @@ the mapping report lists such cells as a note, and each activity's output and
 each commodity's domestic output must still be positive). In version 0.1 every activity needs
 positive output and value added. Every commodity needs domestic output or
 imports. Before version 0.1.7 every commodity needed domestic sales, and before
-version 0.1.8 exports could not exceed domestic output. An activity with no
-flows at all is left out of the mapping.
+version 0.1.8 exports could not exceed domestic output. An account with no
+flows at all needs no role.
 
 #### Layouts rewritten before the checks (from version 0.1.1)
 
@@ -873,8 +873,9 @@ Before period $t \geq 1$, in this order:
 2. **Other factors.** $QFS_{f,t} = (1+g_f)\,QFS_{f,t-1}$ for a mobile factor;
    $QF_{fa,t} = (1+g_f)\,QF_{fa,t-1}$ for an activity-specific one. The
    supply of an unemployed factor is endogenous, so $g_f$ must be zero.
-3. **Population.** $\gamma_{ch,t} = (1+g_P)\,\gamma_{ch,t-1}$ and
-   $HS^0_t = (1+g_P)\,HS^0_{t-1}$: subsistence consumption grows with the
+3. **Population.** $\gamma_{ch,t} = (1+g_P)\,\gamma_{ch,t-1}$ (and
+   $\gamma^h_{ah}$ alike), $HS^0_t = (1+g_P)\,HS^0_{t-1}$ and the population
+   index $POP_t = (1+g_P)\,POP_{t-1}$: subsistence consumption grows with the
    population, and the health link compares health services per head. With
    a mortality rate (from version 0.3.4), $g_P$ becomes $g_{P,t}$ of Section
    15.4, and factors that lose workers to deaths grow at $g_{f,t}$.
@@ -928,9 +929,11 @@ so that it follows its own income and its group's direct tax and savings
 rates. A household with no income in the components given, or every
 household when no components are given, follows its group's consumption:
 $C^1_i = C^0_i\,EH_h/EH^0_h$. The household's price index is
-$$P_i = \sum_c s_{ic}\,\frac{PQ_c}{PQ^0_c},$$
-with $s_{ic}$ its survey budget shares when budget items are mapped to
-commodities, and the group's base shares $PQ^0_c\,QH^0_{ch}/EH^0_h$ otherwise.
+$$P_i = \sum_c s_{ic}\,\frac{PH_c}{PH^0_c},$$
+at the prices households pay, including VAT, with $s_{ic}$ its survey budget
+shares when budget items are mapped to commodities, and the group's base
+shares $PH^0_c\,QH^0_{ch}/EH^0_h$ otherwise (home consumption, Section 13.1,
+enters the group's shares at $PA_a$).
 Real consumption is $R_i = C^1_i / P_i$; this is a first-order (Laspeyres)
 approximation for LES households. With household size $n_i$ and weight $w_i$,
 poverty measures use consumption per person, $r_i = R_i/n_i$ (base
@@ -984,7 +987,7 @@ commodity columns, $SAM(vat, c)$, net of credits, and whose column pays the
 government (`cge_map` option `vattax()`). When the SAM records VAT within
 the sales tax account, the option `vatshare()` gives the VAT share of each
 commodity's sales tax; that share of $SAM(tax_{sal}, c)$ is moved to an
-internal account `_vattax` before the checks (as for taxes paid directly to
+internal account `_vatshare` before the checks (as for taxes paid directly to
 the government, Section 7.0). VAT cells may be negative. The flows added to
 Section 7.0 are commodity to VAT account, and VAT account to government.
 
@@ -1544,7 +1547,7 @@ variable the closure fixes.
 solution of the trial before. Instruments are measured as $u = u^0 + s\,z$,
 with $s$ the scale of each instrument. With targets alone, as many as
 instruments, the residuals $r_j = (g_j - \bar g_j)/|\bar g_j|$ are solved by
-Newton's method, with a Jacobian from central differences (step $10^{-5}$ in
+Newton's method, with a Jacobian from central differences (step $10^{-5}\max(1, |z_k|)$ in
 $z$) and steps halved until the residuals fall. With an objective, a
 projected Newton method maximises $f/\max(1, |f^0|)$: the gradient and
 Hessian come from central differences, an instrument at a bound whose

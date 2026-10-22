@@ -11,6 +11,9 @@ stored as a simulation named after the run and the period, such as
 \manref{cge_dynresults}, \manref{cge_save} and \manref{cge_gams} work with it.
 The run uses the current closure and starts from the base; the parameters and
 fixed values that the model had before the run are restored when it ends.
+If a period cannot be solved, or the \opt{shock}{s()} program fails, the run
+stops and nothing is stored: the model, its shocks and its stored simulations
+are as they were before the run.
 
 \cgesec{Quick start}
 
@@ -83,7 +86,8 @@ of \cmd{tfp()}, \cmd{gdpgrowth()} and \cmd{baseline()} may be specified.
 \item[\optarg{}{name}{name}] names the run. Each period is stored as the
 simulation \argu{name} followed by the period, for example \cmd{base2025}, so
 \argu{name} with each period must form a valid Stata name of at most 32
-characters. Simulations of the same name are replaced.
+characters. Simulations of the same name are replaced, and a run solved again
+replaces every period of the earlier run of that name.
 
 \item[\optarg{per}{iods}{numlist}] lists the periods: at least two integers,
 zero or positive, in ascending order, for example \cmd{periods(2018/2030)} or
@@ -97,7 +101,7 @@ exogenous values have been updated and before efficiency is set. It may apply
 any shock with \manref{cge_shock}, for example to cancel debt with
 \cmd{cge_shock fdebt}. Shocks persist in later periods, so a shock with
 \cmd{scale()} should be applied in one period only. If the program fails, the
-run stops.
+run stops, and nothing is stored.
 
 \item[\optarg{cap}{ital}{factors}] lists the factors that accumulate capital.
 Each must be mobile or specific to each activity in the closure, not

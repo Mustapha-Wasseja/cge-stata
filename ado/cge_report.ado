@@ -1,4 +1,4 @@
-*! cge_report.ado  v0.2.0  2026-10-16
+*! cge_report.ado  v0.6.4  2026-10-22
 *! cge-stata: standard report tables for one or more simulations
 *! Macroeconomic aggregates, government, institutions, factors, activities,
 *! commodities, health and welfare (model_spec.md, Section 9)
@@ -56,7 +56,7 @@ program define cge_report, rclass
             }
             quietly levelsof table, local(tabs) clean
             * Sheets in the order of the report
-            foreach t in macro government institutions factors activities commodities health welfare {
+            foreach t in macro government debt institutions factors activities commodities health welfare {
                 if strpos(" `tabs' ", " `t' ") == 0 continue
                 quietly export excel table measure element base v* p* if table == "`t'" ///
                     using `"`file'"', sheet("`t'") sheetreplace firstrow(varlabels)

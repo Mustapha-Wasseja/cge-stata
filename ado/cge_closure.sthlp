@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.5  21oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -18,7 +18,7 @@
 {title:Description}
 
 {pstd}
-{cmd:cge_closure} sets the closure (docs/model_spec.md, Section 6) and checks
+{cmd:cge_closure} sets the closure (Reference Manual, {it:Closures}) and checks
 that the model has as many free variables as equations. Options not specified
 keep their current setting. Without options, the current closure is displayed.
 {helpb cge_calibrate} sets the default closure, listed first below.
@@ -33,7 +33,7 @@ savings; or {cmd:fixexr}, a fixed exchange rate with flexible foreign savings.
 {phang}
 {opt government()}: {cmd:flexgsav}, fixed tax rates with flexible government
 savings; or {cmd:fixgsav}, fixed government savings, with one tax adjusting
-(from version 0.3.1; docs/model_spec.md, Section 12.1): direct tax rates
+(from version 0.3.1; Reference Manual, {it:Fiscal instruments}): direct tax rates
 ({cmd:fixgsav} or {cmd:fixgsav direct}, scaled by {cmd:TINSADJ}), sales tax
 rates ({cmd:fixgsav sales}, {cmd:TQADJ}), import tariffs ({cmd:fixgsav import},
 {cmd:TMADJ}) or VAT rates ({cmd:fixgsav vat}, {cmd:TVADJ}). The adjusting tax
@@ -61,8 +61,8 @@ mobile across activities), {cmd:specific} (fixed in each activity),
 {cmd:minwage}. Factors not listed are mobile.
 
 {pmore}
-{cmd:wagecurve} and {cmd:minwage} (from version 0.3.3; docs/model_spec.md,
-Section 14) need a labour force, from {helpb cge_calibrate} with
+{cmd:wagecurve} and {cmd:minwage} (from version 0.3.3; Reference Manual,
+{it:Labour-market regimes}) need a labour force, from {helpb cge_calibrate} with
 {opt unemployment()} or {opt minwage()}. Under both, the wage and employment
 are endogenous and the labour force is fixed. With {cmd:wagecurve}
 (and {opt wagecurve()} at calibration) the real wage falls as the
@@ -97,10 +97,23 @@ such a closure is singular, and {cmd:cge_closure} names the equation.
 
 {title:Example}
 
+{pstd}Setup: the SYNTHETIC SAM of {helpb cge_synthetic}, mapped as in {helpb cge_map}{p_end}
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
+{pstd}A fixed exchange rate, investment-driven savings, unemployment at a fixed wage and sector-specific capital{p_end}
 {phang2}{cmd:. cge_closure, external(fixexr) savinv(investment) factors(lab:unemployed cap:specific)}{p_end}
-{phang2}{cmd:. cge_closure, factors(lab:wagecurve)}{p_end}
-{phang2}{cmd:. cge_closure, factors(lab:minwage cap:specific)}{p_end}
+
+{pstd}Fixed government savings, with government consumption adjusting{p_end}
 {phang2}{cmd:. cge_closure, swap(GSAV GADJ)}{p_end}
+
+{pstd}A wage curve, and a minimum wage, which need a labour force from {helpb cge_calibrate}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)}{p_end}
+{phang2}{cmd:. cge_closure, factors(lab:wagecurve)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) minwage(lab:0.95)}{p_end}
+{phang2}{cmd:. cge_closure, factors(lab:minwage cap:specific)}{p_end}
 
 
 {title:Stored results}

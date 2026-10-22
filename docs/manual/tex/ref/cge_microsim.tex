@@ -111,8 +111,8 @@ budget shares; without \cmd{budget()}, or for a household whose items sum to
 zero, it uses its group's base budget shares, including home consumption.
 
 \item[\optarg{}{line}{\#}] is the poverty line per person, in the units of
-consumption. Without it, or with a line that is not positive, no poverty
-measures are computed.
+consumption, and must be positive. Without it, no poverty measures are
+computed.
 
 \item[\optarg{gen}{erate}{prefix}] adds the variables \argu{prefix}\cmd{_nom}
 (new nominal consumption), \argu{prefix}\cmd{_price} (the household's price

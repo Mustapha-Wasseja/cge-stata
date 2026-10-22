@@ -1,4 +1,4 @@
-*! cge_template.ado  v0.3.0  2026-10-18
+*! cge_template.ado  v0.6.4  2026-10-22
 *! cge-stata: write a template that maps SAM accounts to model roles and
 *! groups them for aggregation (docs/sam_tools.md, Section 3)
 *!
@@ -45,8 +45,8 @@ end
 * The valid entries of the role column, for the roles sheet
 program define _cge_roles_data
     drop _all
-    set obs 21
-    generate str14 role = ""
+    set obs 27
+    generate str16 role = ""
     generate str90 meaning = ""
     local k = 0
     foreach line in ///
@@ -68,6 +68,12 @@ program define _cge_roles_data
         "marginaccounts|a margin account paid by commodities" ///
         "stocks|a stock-change account, merged into savings-investment" ///
         "insurance|the social health insurance fund (one account)" ///
+        "vattax|the VAT account, or the government account if VAT is paid to it" ///
+        "domesticmargins|a margin account paid per unit of domestic sales" ///
+        "importmargins|a margin account paid per unit of imports" ///
+        "exportmargins|a margin account paid per unit of exports" ///
+        "factortax|an account of taxes on the use of a factor; the pair column names the factor" ///
+        "factorincometax|the account of taxes on factor income" ///
         "(blank)|no role: allowed only for an account without flows" ///
         "pair column|for an activity, its paired commodity; blank for the commodity it sells most" ///
         "group column|for aggregation, the account it is merged into; blank to keep it" {

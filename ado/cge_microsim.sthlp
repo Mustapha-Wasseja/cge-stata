@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.2  20oct2026}{...}
+{* *! version 0.6.4  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -23,8 +23,8 @@ all are used as proportional household weights.
 
 {pstd}
 {cmd:cge_microsim} passes the results of a simulation to the household survey
-in memory, top-down and without feedback to the model (docs/model_spec.md,
-Section 11). Each survey household belongs to a CGE household group and keeps
+in memory, top-down and without feedback to the model (Reference Manual,
+{it:The link to household surveys}). Each survey household belongs to a CGE household group and keeps
 its own income composition and budget shares.
 
 {phang2}- Each income component changes as the CGE says that source changes for
@@ -92,7 +92,8 @@ household's price index then uses its own budget shares; otherwise, its
 group's base budget shares, including home consumption.
 
 {phang}
-{opt line(#)} is the poverty line, per person, in the units of consumption.
+{opt line(#)} is the poverty line, per person, in the units of consumption; it
+must be positive.
 
 {phang}
 {opt generate(prefix)} creates {it:prefix}{cmd:_nom} (nominal consumption),
@@ -106,8 +107,29 @@ consumption per person). {opt replace} allows them to be replaced.
 
 {title:Example}
 
-{phang2}{cmd:. use survey, clear}{p_end}
-{phang2}{cmd:. cge_microsim [pweight = hhweight], sim(donor_exit) group(cge_group) consumption(cons) size(hhsize) income(wage:lab_f casual:lab_i profit:cap remit:row grants:gov) budget(food:c_food medicine:c_phar clinic:c_hlth) line(1200) generate(de)}{p_end}
+{pstd}Setup: a tariff removal in the SYNTHETIC SAM of {helpb cge_synthetic}{p_end}
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+{phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+{phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+
+{pstd}A SYNTHETIC survey of 1,000 households, all in the CGE household {cmd:hhd}{p_end}
+{phang2}{cmd:. clear}{p_end}
+{phang2}{cmd:. set seed 2026}{p_end}
+{phang2}{cmd:. set obs 1000}{p_end}
+{phang2}{cmd:. generate str3 group = "hhd"}{p_end}
+{phang2}{cmd:. generate double hhsize = 1 + floor(6 * runiform())}{p_end}
+{phang2}{cmd:. generate double weight = 100 + 50 * runiform()}{p_end}
+{phang2}{cmd:. generate double wage = exp(rnormal(5, 0.7)) * hhsize}{p_end}
+{phang2}{cmd:. generate double profit = cond(runiform() < 0.3, exp(rnormal(5, 1)), 0)}{p_end}
+{phang2}{cmd:. generate double cons = 0.9 * (wage + profit)}{p_end}
+{phang2}{cmd:. generate double food = 0.5 * cons}{p_end}
+{phang2}{cmd:. generate double goods = 0.5 * cons}{p_end}
+
+{pstd}Consumption and poverty after the tariff removal, by household{p_end}
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) budget(food:com_agr goods:com_man) line(100) generate(nt)}{p_end}
 
 
 {title:Stored results}

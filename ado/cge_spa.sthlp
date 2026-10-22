@@ -20,8 +20,7 @@
 {pstd}
 {cmd:cge_spa} decomposes the accounting multiplier of account {opt to()} with
 respect to an injection into account {opt from()} into the paths along which
-the injection travels through the SAM (from version 0.4.2; docs/sam_tools.md,
-Section 7; Defourny and Thorbecke 1984). The SAM is the one mapped by
+the injection travels through the SAM (from version 0.4.2; Reference Manual, {it:SAM tools}; Defourny and Thorbecke 1984). The SAM is the one mapped by
 {helpb cge_map}, and the endogenous accounts are those of
 {helpb cge_multiplier}.
 
