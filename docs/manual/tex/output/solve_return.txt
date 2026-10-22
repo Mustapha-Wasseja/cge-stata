@@ -2,11 +2,13 @@
 
 scalars:
            r(N_solved) =  69
-             r(walras) =  -7.34533617024e-13
-       r(max_residual) =  7.45359329812e-13
-         r(iterations) =  11
+             r(walras) =  1.44286592302e-15
+       r(max_residual) =  1.01506105109e-15
+         r(iterations) =  9
           r(converged) =  1
               r(steps) =  0
+        r(N_collapsed) =  0
+            r(broyden) =  9
           r(jacobians) =  1
 
 macros:

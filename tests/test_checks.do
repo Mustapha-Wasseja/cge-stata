@@ -18,15 +18,23 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6 & r(groups) < r(columns)
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_closure, external(fixexr) savinv(investment) factors(cap:specific)
 mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
-* Newton with one-sided differences (version 0.6.3) and with central ones
-* reach the same solution
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+* Newton with the exact Jacobian and Broyden's updates (version 0.7.0) and
+* with central differences reach the same solution; so do one-sided
+* differences (version 0.6.3) and the exact Jacobian without the updates
 mata: _cge_newtoncheck()
-assert r(converged_onesided) == 1 & r(converged_central) == 1 & r(maxdiff) < 1e-8
+assert r(converged1) == 1 & r(converged2) == 1 & r(maxdiff) < 1e-8
+assert r(jacobians1) == 1 & r(broyden1) > 0
+mata: _cge_newtoncheck(2, 3)
+assert r(converged1) == 1 & r(converged2) == 1 & r(maxdiff) < 1e-8
 quietly do setup_synthetic.do
 cge_shock tm, value(0)
 quietly cge_solve, name(notariff)
@@ -178,6 +186,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_check, homogeneity perturb(0.1)
 assert r(failures) == 0
 cge_shock pwm, elements(com_fuel) scale(1.25)
@@ -237,6 +247,8 @@ foreach layout in institutions margins territorial multiproduct nonimported {
     assert r(maxdiff) < 1e-6
     mata: _cge_jaccheck(0, 1)
     assert r(maxdiff) < 1e-5
+    mata: _cge_jexall()
+    assert r(maxdiff) < 1e-6
 }
 
 * ---------------------------------------------------------------------
@@ -415,6 +427,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_shock pwm, scale(1.1)
 quietly cge_solve, name(nest_pwm)
 cge_check, homogeneity perturb(0.1)
@@ -433,6 +447,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_shock pwm, scale(1.1)
 quietly cge_solve, name(les_pwm)
 cge_check, homogeneity perturb(0.1)
@@ -481,6 +497,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_solve, name(shi_up)
 cge_check, homogeneity perturb(0.1)
 assert r(failures) == 0
@@ -489,6 +507,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_results, sim(shi_up) clear nodisplay
 assert value > base if variable == "QSHI" & element1 == "com_hlt"
 assert value > base if variable == "YIF" & element1 == "shi" & element2 == "lab"
@@ -516,6 +536,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_solve, name(eff_up)
 cge_check, homogeneity perturb(0.1)
 assert r(failures) == 0
@@ -524,6 +546,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_results, sim(eff_up) clear nodisplay
 quietly count if variable == "EFF"
 assert r(N) == 1
@@ -582,6 +606,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6 & r(columns) < `neq'
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(1)
 assert r(maxdiff) < 1e-6 & r(columns) == `neq'
 cge_solve, name(reduced) tolerance(1e-12)

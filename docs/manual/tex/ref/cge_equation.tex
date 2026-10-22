@@ -187,9 +187,10 @@ the equation element is
 \begin{equation*}
 \ell_e(x) - r_e(x) = 0,
 \end{equation*}
-a row of the block \cmd{U} of the system. Its derivatives are found by
-differences, grouped with those of the other equations over a Jacobian
-pattern built from the variables that each equation element contains.
+a row of the block \cmd{U} of the system. Its derivatives are exact, from
+version 0.7.0: the postfix form of each side is differentiated in forward
+mode, with respect to the variables that the equation element contains
+(section~\ref{sec:jacobian}).
 \Chapref{chap:user} describes the compilation and the GAMS program, in which
 GAMS differentiates the same equations itself.
 

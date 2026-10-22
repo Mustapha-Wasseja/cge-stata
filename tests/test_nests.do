@@ -41,6 +41,9 @@ quietly cge_sam, labels(account)
 cge_map, `nmap'
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) `nests'
 assert r(max_residual) < 1e-12
+* the exact Jacobian (version 0.7.0)
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_solve, name(base) tolerance(1e-12)
 quietly cge_results, sim(base) clear nodisplay
 * each nest at its members' costs: labour types with the payroll tax, capital and energy

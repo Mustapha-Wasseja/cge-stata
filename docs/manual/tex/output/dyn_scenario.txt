@@ -9,7 +9,7 @@
 Period 0: solved in 0 iteration(s)
 Period 1: solved in 7 iteration(s); efficiency factor 1.0223831984
 Parameter tm changed for 3 element(s)
-Period 2: solved in 10 iteration(s); efficiency factor 1.0213821436
+Period 2: solved in 9 iteration(s); efficiency factor 1.0213821436
 Period 3: solved in 7 iteration(s); efficiency factor 1.0204080406
 Period 4: solved in 7 iteration(s); efficiency factor 1.0194645412
 Dynamic run lib stored as simulations: lib0 lib1 lib2 lib3 lib4

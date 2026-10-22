@@ -8,5 +8,5 @@ Closure
   factor cap           mobile
 
 . cge_solve, name(notariff_direct)
-Simulation notariff_direct solved in 9 iteration(s) (newton)
-Largest scaled residual  3.46e-11; WALRAS = -1.44e-11
+Simulation notariff_direct solved in 7 iteration(s) (newton)
+Largest scaled residual  7.70e-14; WALRAS = -3.37e-13

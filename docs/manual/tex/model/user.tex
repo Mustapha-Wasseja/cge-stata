@@ -45,10 +45,12 @@ another closure rule that the standard closures do not offer.
 Each equation is written out for every element of its set, and each sum over
 the elements of its set, then compiled to postfix order: numbers, variables
 (positions in the stacked vector of variables), parameters, operators and
-functions. Stata evaluates the postfix rows at every point. Their derivatives
-are found by grouped differences (section~\ref{sec:jacobian}), from a Jacobian
-pattern built from the variables that each element of an equation uses. The
-equations form a block \cmd{U} of the system. They are saved with the model
+functions. Stata evaluates the postfix rows at every point. From version
+0.7.0 their derivatives are exact, by forward differentiation of the postfix
+rows (section~\ref{sec:jacobian}): each value on the stack carries its
+derivatives with respect to the variables that the element uses. Before, they
+were found by grouped differences. The equations form a block \cmd{U} of the
+system. They are saved with the model
 and compiled again when it is calibrated again.
 
 \textbf{GAMS.} \manref{cge_gams} writes the user variables (\cmd{U_NAME}, with

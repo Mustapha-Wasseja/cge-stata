@@ -11,5 +11,5 @@ Closure
 Parameter tm changed for 3 element(s)
 
 . cge_solve, name(notariff)
-Simulation notariff solved in 9 iteration(s) (newton)
-Largest scaled residual  3.46e-11; WALRAS = -1.44e-11
+Simulation notariff solved in 7 iteration(s) (newton)
+Largest scaled residual  7.70e-14; WALRAS = -3.37e-13

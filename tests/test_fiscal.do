@@ -44,6 +44,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(1)
 assert r(maxdiff) < 1e-6
 cge_shock tv, scale(1.2)
@@ -62,6 +64,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_solve, name(vat_tariff_removal_vat) tolerance(1e-12)
 _compare_reference vat_tariff_removal_vat
 _compare_report vat_tariff_removal_vat
@@ -72,6 +76,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_solve, name(vat_rate_cut_import) tolerance(1e-12)
 _compare_reference vat_rate_cut_import
 * The instrument cannot be shocked while it adjusts
@@ -88,6 +94,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_solve, name(rep_tariff_removal_sales) tolerance(1e-12)
 _compare_reference rep_tariff_removal_sales
 _compare_report rep_tariff_removal_sales
@@ -133,6 +141,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_check, sim(vintro_vat10) homogeneity
 * vatcredit() needs a VAT account; vattax() and vatshare() exclude each other
 cge_synthetic, clear

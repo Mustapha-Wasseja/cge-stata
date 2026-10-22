@@ -32,6 +32,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(1)
 assert r(maxdiff) < 1e-6
 _standard_simulations trade_
@@ -105,6 +107,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 _standard_simulations home_
 _compare_report home_tariff_removal
 cge_shock, reset

@@ -24,41 +24,42 @@ the closure.
 
 \section{Performance}\label{sec:performance}
 
-The solver works on a reduced system and computes the Jacobian by groups of
-columns (chapter~\ref{chap:solution}). On a Windows laptop, synthetic SAMs of
+The solver works on a reduced system with an exact Jacobian and Broyden's
+updates (chapter~\ref{chap:solution}). On a Windows laptop, synthetic SAMs of
 increasing size solved a removal of all import tariffs (elasticities 0.8, 2
-and 2) in these times, in Stata 13.1/IC, in StataNow/MP 19.5 on four cores, and
-in GAMS with PATH (version 0.6.3):
+and 2) in these times, in Stata 13.1/IC and in StataNow/MP 19.5 on four cores
+with version 0.7.0, and in GAMS with PATH:
 
 \begin{cgetable}{rrrrrrr}
 \toprule
 Activities & Accounts & Equations & Solved (reduced) & Stata 13.1/IC (s) & StataNow/MP 19.5 (s) & GAMS (s)\\
 \midrule\endhead
 \bottomrule\endlastfoot
-40 & 95 & 1,814 & 711 & 0.4 & 0.5 & 1.8\\
-80 & 180 & 5,446 & 1,407 & 2.7 & 2.7 & 1.8\\
-120 & 260 & 10,555 & 2,045 & 5.0 & 3.5 & 2.0\\
-160 & 350 & 18,483 & 2,757 & 6.0 & 5.6 & 2.5\\
-200 & 430 & 26,858 & 3,418 & 37.8 & 32.3 & 2.6\\
-250 & 530 & 40,190 & 4,254 & 95.8 & 71.7 & 4.7\\
+40 & 95 & 1,814 & 711 & 0.5 & 0.5 & 1.8\\
+80 & 180 & 5,446 & 1,407 & 2.6 & 1.8 & 1.8\\
+120 & 260 & 10,555 & 2,045 & 3.2 & 3.3 & 2.0\\
+160 & 350 & 18,483 & 2,757 & 3.9 & 6.0 & 2.5\\
+200 & 430 & 26,858 & 3,418 & 14.5 & 14.0 & 2.6\\
+250 & 530 & 40,190 & 4,254 & 27.0 & 29.0 & 4.7\\
 \end{cgetable}
 
 The GAMS time is the whole run: GAMS calibrates the model from the SAM, solves
 the base and then the scenario. Times vary from run to run with other work on
 the machine, by as much as 40 per cent; they show orders of magnitude.
 
-Most of Stata's time goes into evaluating the model's equations to build the
-Jacobian by finite differences: with the central differences used before
-version 0.6.3, about four fifths of the solve of the 200-activity model in
-Stata 13.1/IC. The one-sided differences of version 0.6.3 halve these
-evaluations, and shortened that solve by about a third in Stata 13.1/IC and by
-almost half in StataNow/MP. Four cores of StataNow/MP made the solve about 1.6
-times faster than one core. GAMS uses analytic derivatives and a sparse
-solver, and its time barely grows over this range. For models with more than
-about 2,000 equations in the reduced system, export the scenario to GAMS and
-bring the solution back with \cmd{cge_gams ..., import()}
-(\secref{sec:gams-import}); the solution is checked against the model's
-equations in Stata. Calibration and mapping are fast compared with solving.
+Until version 0.7.0 most of Stata's time went into evaluating the model's
+equations to build the Jacobian by finite differences, about four fifths of
+the solve of the 200-activity model. The exact Jacobian and Broyden's updates
+of version 0.7.0 cut the solve of the 250-activity model from 96 to 27
+seconds in Stata 13.1/IC and from 72 to 29 in StataNow/MP 19.5 (the GAMS times
+are those of version 0.6.3, for the same models). The dense LU factorisation
+of the Jacobian is now most of a large solve: in Stata 13.1/IC, 11.4 of the
+seconds for the 250-activity model, against 3.6 for building four exact
+Jacobians. GAMS uses a sparse solver, and its time barely grows over this
+range. For models with several thousand equations in the reduced system,
+export the scenario to GAMS and bring the solution back with \cmd{cge_gams
+..., import()} (\secref{sec:gams-import}); the solution is checked against
+the model's equations in Stata. Calibration and mapping are fast compared with solving.
 Stata/IC holds at most 2,048 variables, but \manref{cge_sam} reads larger SAMs
 directly from CSV files or from long data.
 

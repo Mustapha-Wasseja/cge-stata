@@ -147,12 +147,23 @@ assert _rc == 198
 * ---------------------------------------------------------------------
 * 3. Diagnostics
 * ---------------------------------------------------------------------
-* Government purchases ten times larger cannot be supplied
+* Government purchases ten times larger: with savings-driven investment the
+* equations are solved with negative investment and output near zero, which
+* cge_solve reports (version 0.7.0); with fixed investment they cannot be
 quietly cge_shock, reset
 cge_shock qg, scale(10)
+cge_solve, name(collapse)
+assert r(converged) == 1 & r(N_collapsed) > 0
+quietly cge_closure, savinv(investment)
 capture noisily cge_solve, name(toolarge)
 assert _rc == 430 & r(converged) == 0
-assert "`r(diag_block)'" == "I7" & r(diag_N_empty_rows) == 0
+assert "`r(diag_block)'" != "" & r(diag_N_empty_rows) == 0
+quietly cge_closure, savinv(savings)
+* an ordinary solution has no collapsed values
+quietly cge_shock, reset
+cge_shock tm, value(0)
+quietly cge_solve, name(ordinary)
+assert r(N_collapsed) == 0
 * on request, after a solve that converges
 quietly cge_shock, reset
 cge_shock tm, value(0)

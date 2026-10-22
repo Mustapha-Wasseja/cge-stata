@@ -32,29 +32,59 @@ shortened. The solve has converged when $\max_i |F_i| < \tau$, the tolerance
 (\texttt{1e-10} by default), over every equation of the model, including the
 definitions left out of the reduced system (section~\ref{sec:reduced}).
 
-The LU factors of a Jacobian are reused for further steps while each full
-step at least halves $\lVert F\rVert$, a chord method; otherwise, or after a
-step shortened by the line search, a new Jacobian is computed. Near a
-solution Newton's method with a new Jacobian at each step converges
-quadratically, and the chord method linearly; each chord step costs one
-evaluation of the equations and two triangular solves, against a Jacobian and
-a factorisation for a Newton step, so for large models it is much faster.
+From version 0.7.0, after each Newton step, full or shortened by the line
+search, further steps use Broyden's updates \citep{broyden1965}. With $s$ the
+step and $y = F(z + s) - F(z)$, Broyden's good method replaces the Jacobian
+$B$ by
+\begin{equation*}
+B_+ = B + \frac{(y - B s)\, s'}{s' s},
+\end{equation*}
+which agrees with the change in the residuals along the step. By the
+Sherman--Morrison formula its inverse $H$ becomes
+\begin{equation*}
+H_+ = (I + a\, s')\, H, \qquad a = \frac{s - H y}{s' H y}
+\end{equation*}
+\citep[chapter~7]{kelley1995}, so $H$ is kept as the LU factors of the last
+Jacobian times the factors $(I + a_k s_k')$ of the updates since, and the next
+direction is $d_+ = -H_+ F(z + s)$. As $H F(z) = -d$ for the direction $d$ of
+the last step, $H y = H F(z + s) + d$ needs a single solve with the LU
+factors: a Broyden step costs one evaluation of the equations, two triangular
+solves and a few inner products. It is taken with a line search of at most
+two halvings; a new Jacobian is computed when that fails, after a step that
+reduces $\lVert F\rVert$ by less than a tenth, and after 30 updates. Newton's
+method with a new Jacobian at each step converges quadratically near a
+solution, and Broyden's method superlinearly, with far fewer Jacobians and
+factorisations; far from a solution, where the line search shortens the
+Newton steps, the updates also save Jacobians. Before version 0.7.0 the
+factors of a Jacobian were reused without updates while each full step at
+least halved $\lVert F\rVert$, a chord method, which converges only
+linearly.
+
+Once the tolerance is met, up to three more steps with the same factors are
+taken while each halves $\lVert F\rVert$, toward a thousandth of the
+tolerance. A solution far inside the tolerance varies smoothly with the
+shocks, which \manref{cge_optimize} and \manref{cge_sensitivity} rely on.
+\manref{cge_optimize}, whose solves start from the solution before, takes
+steps with the factors but without Broyden's updates: from a nearby start a
+Newton step and such steps reach far below the tolerance.
 
 \section{The reduced system}\label{sec:reduced}
 
 Some equations are explicit definitions: a variable equals an expression in
-other variables, and the variable appears in none of the equations whose rows
-have exact derivatives (section~\ref{sec:jacobian}). Such definitions are left
-out of the Newton system, and their variables are computed from the other
-variables before each evaluation of the residuals. They are
-\eqref{eq:P1}, \eqref{eq:P2} and \eqref{eq:P6} (import and export prices and
-the price of intermediate input), \eqref{eq:Q5} (intermediate demand),
-\eqref{eq:Q6} (output by commodity), \eqref{eq:I5} (household demand),
-\eqref{eq:T8} (demand for margin services), \eqref{eq:I13} (the purchases of
-the health insurance fund) and \eqref{eq:H2} (factor efficiency). A definition
-is left out only when its equation elements are exactly the existing elements
-of its variable. Variables computed from their definitions cannot be fixed by
-the closure (\secref{sec:swaps}).
+other variables. Such definitions are left out of the Newton system, and their
+variables are computed from the other variables before each evaluation of the
+residuals. They are \eqref{eq:P1}, \eqref{eq:P2} and \eqref{eq:P6} (import and
+export prices and the price of intermediate input), \eqref{eq:Q5}
+(intermediate demand), \eqref{eq:Q6} (output by commodity), \eqref{eq:I5}
+(household demand), \eqref{eq:T8} (demand for margin services),
+\eqref{eq:I13} (the purchases of the health insurance fund), \eqref{eq:H2}
+(factor efficiency) and \eqref{eq:H3} (days worked). With VAT, government
+revenue \eqref{eq:I8} depends on intermediate and household demand and on the
+fund's purchases, and \eqref{eq:P6}, \eqref{eq:Q5}, \eqref{eq:I5} and
+\eqref{eq:I13} stay in the system. A definition is left out only when its
+equation elements are exactly the existing elements of its variable.
+Variables computed from their definitions cannot be fixed by the closure
+(\secref{sec:swaps}).
 
 The left-out equations still hold exactly at every point. Intermediate and
 household demand grow with the square of the number of sectors, so most of a
@@ -66,47 +96,68 @@ left-out variable by the variables of its definition.
 
 \section{The Jacobian}\label{sec:jacobian}
 
-The equations that involve many variables, the price indexes \eqref{eq:P8}
-and \eqref{eq:P9}, factor income \eqref{eq:I1}, government revenue and
-spending \eqref{eq:I8} and \eqref{eq:I9}, factor markets \eqref{eq:S1}, the
-balance of payments \eqref{eq:S3}, the savings--investment balance
-\eqref{eq:S5}, commodity markets \eqref{eq:S2} and activity prices
-\eqref{eq:P7}, have exact derivatives. In the reduced system these are total
-derivatives through the left-out variables. The other rows are sparse. Their
-pattern follows from the equations and is built at calibration, and their
-derivatives are finite differences taken over groups of columns that share no
-row \citep{curtis1974}: the columns are coloured greedily, the most connected
-first, so that one evaluation of the equations gives the derivatives of every
-column of a group. For a group $G$, with $e_G$ the vector with ones in the
-columns of $G$,
-\begin{equation*}
-J_{ij} \approx \frac{F_i(z + h \odot e_G) - F_i(z)}{h_j}, \qquad j \in G,
-\qquad h_j = 10^{-7} \max(1, |z_j|),
-\end{equation*}
-one-sided differences that use the residuals at $z$, which Newton's method has
-already computed. Their error, measured against column-by-column central
-differences, is between $3 \times 10^{-7}$ and $10^{-6}$ in the test models,
-too small to change the Newton steps in those models; the test suite checks
-that Newton's method reaches the same solution with both kinds of
-differences. When Newton's method fails with them it
-is tried again from the start with central differences,
-\begin{equation*}
-J_{ij} \approx \frac{F_i(z + h \odot e_G) - F_i(z - h \odot e_G)}{2 h_j}, \qquad h_j = 10^{-6} \max(1, |z_j|),
-\end{equation*}
-whose error is about $10^{-10}$ but which need two evaluations of the
-equations for each group. The diagnostics (section~\ref{sec:diagnostics}) use
-central differences.
+From version 0.7.0 the Jacobian is exact. The derivatives of every equation
+block of chapter~\ref{chap:equations} are written out from its equation, as
+entries $(i, j, \partial r_i / \partial x_j)$ of a sparse matrix; an entry
+that arises more than once, such as the derivative of the value of composite
+supply \eqref{eq:P3} with respect to the commodity's own price, which enters
+the equation in several terms, is summed. The entries are scaled as the system,
+$J_{ij} = (\partial r_i / \partial x_j)\, s_j / e_i$, and written into a dense
+matrix for the LU factorisation.
 
-On a 240-account SAM with 4,439 equations, computing the Jacobian column by
-column took about 250 seconds per Newton iteration in Stata 13/IC, against a
-dense LU solve of under 3 seconds; the grouped Jacobian takes a few seconds.
-Most of the time of a large solve is spent evaluating the equations for the
-Jacobian (\secref{sec:performance}).
+In the reduced system the variables of the left-out definitions are
+eliminated by the chain rule. Each left-out definition is an equation
+$D_k(d_k, y) = 0$ in its variable $d_k$ and other variables $y$, such as
+$\mathit{QINT}_{ca} - \mathit{ica}_{ca}\,\mathit{QINTA}_a = 0$ or, for household
+demand \eqref{eq:I5}, $\mathit{PH}_c\, \mathit{QH}_{ch} - \mathit{PH}_c\,
+\gamma_{ch} - \beta_{ch}\, \mathit{SN}_h = 0$. Its derivatives give
+\begin{equation*}
+\frac{\partial d_k}{\partial y_j} = -\frac{\partial D_k / \partial y_j}{\partial D_k / \partial d_k},
+\end{equation*}
+and each entry of another row with respect to $d_k$ is replaced by its
+products with these derivatives:
+\begin{equation*}
+\frac{d r_i}{d y_j} = \frac{\partial r_i}{\partial y_j} + \sum_k \frac{\partial r_i}{\partial d_k}\, \frac{\partial d_k}{\partial y_j}.
+\end{equation*}
+No left-out definition depends on another, so one substitution suffices.
+
+User equations (chapter~\ref{chap:user}) are differentiated by forward
+differentiation of their compiled postfix form: each value on the stack
+carries its derivatives with respect to the variables of the equation, which
+the operators combine by the rules of the derivative, for example $(ab)' =
+a'b + ab'$, $(a/b)' = a'/b - a b'/b^2$, $(a^b)' = a^b (b\, a'/a + \ln a\,
+b')$ (or $b\, a^{b-1} a'$ for an exponent without variables) and $(\ln a)' =
+a'/a$. The rows of constraints \eqref{eq:B1} have exact derivatives too.
+
+The test suite checks the exact Jacobian against central differences taken
+column by column, for the reduced and the full system, at the base, at
+solutions and at points with every free variable perturbed by up to 3 per
+cent, in every SAM layout and with every feature of the model; the largest
+difference, about $10^{-7}$, is the error of the differences themselves. Building the
+Jacobian takes one pass over its entries, where finite differences needed an
+evaluation of all the equations for each group of columns (67 groups for the
+200-activity model of \secref{sec:performance}).
+
+Finite differences remain the fallback. Before version 0.7.0 the Jacobian
+was built by them for the rows with few variables, over groups of columns
+that share no row \citep{curtis1974}: the columns are coloured greedily, the
+most connected first, so that one evaluation of the equations gives the
+derivatives of every column of a group. For a group $G$, with $e_G$ the
+vector with ones in the columns of $G$,
+\begin{equation*}
+J_{ij} \approx \frac{F_i(z + h \odot e_G) - F_i(z - h \odot e_G)}{2 h_j}, \qquad j \in G,
+\qquad h_j = 10^{-6} \max(1, |z_j|),
+\end{equation*}
+central differences, whose error is about $10^{-10}$; version 0.6.3 used
+one-sided differences, with $h_j = 10^{-7} \max(1, |z_j|)$ and one
+evaluation for each group. When Newton's method fails with the exact
+Jacobian, it is tried again from the start with central differences and
+without Broyden's updates.
 
 \section{Fallbacks and continuation}\label{sec:continuation}
 
-If Newton's method fails with both kinds of differences, Powell's hybrid
-method is tried (Mata's \cmd{solvenl()}, technique \cmd{broydenpowell}),
+If Newton's method fails with the exact Jacobian and with central
+differences, Powell's hybrid method is tried (Mata's \cmd{solvenl()}, technique \cmd{broydenpowell}),
 followed by Newton steps to polish the result.
 
 If that fails too, the shock is applied by continuation: the model is solved
@@ -120,6 +171,14 @@ $n = 4$ steps and then in $n = 16$. A shock that defeats continuation is often
 one that the economy cannot absorb.
 
 \section{Diagnostics}\label{sec:diagnostics}
+
+A solution of the equations need not be an equilibrium that makes economic
+sense. From version 0.7.0, after a solve that converges, \manref{cge_solve}
+notes any quantity, price, income or scaling factor of demand that is
+negative or below one millionth of its positive base value, and stores their
+number in \res{r(N_collapsed)}. With savings-driven investment, for example,
+a tenfold rise in government purchases is absorbed by negative investment,
+with the output of two activities near zero (\manref{cge_solve}).
 
 After a failure, or on request, \manref{cge_solve} displays:
 \begin{itemize}

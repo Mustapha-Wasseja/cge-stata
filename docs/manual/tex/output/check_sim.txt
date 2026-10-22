@@ -7,9 +7,9 @@
   [ok]   benchmark replication (largest scaled residual)       3.55e-16
   [ok]   closure is square (free variables minus equations)    0.00e+00
 Simulation notariff:
-  [ok]     solution (largest scaled residual)                  8.13e-11
-  [ok]     Walras's law (WALRAS)                               9.43e-11
-  [ok]     GDP identity (expenditure minus income)             1.48e-10
-  [ok]   homogeneity (largest relative deviation)              2.49e-15
-  [ok]   perturbed start returns the base (largest deviation)  1.26e-12
+  [ok]     solution (largest scaled residual)                  4.49e-14
+  [ok]     Walras's law (WALRAS)                               1.56e-14
+  [ok]     GDP identity (expenditure minus income)             6.82e-13
+  [ok]   homogeneity (largest relative deviation)              5.33e-15
+  [ok]   perturbed start returns the base (largest deviation)  2.00e-14
 All checks passed

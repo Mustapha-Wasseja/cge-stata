@@ -525,8 +525,8 @@ definitions in the reduced system (Section 4 of design.md) cannot be fixed.
 Variable and equation counts must be checked for every closure: the number of
 free variables must equal the number of equations. From version 0.4.5 a
 closure is also rejected if an equation is left with no free variable, which
-would make the Jacobian singular (a structural check over the rows found by
-central differences).
+would make the Jacobian singular (a structural check over the pattern of
+the Jacobian).
 
 ## 7. Calibration
 
@@ -1595,9 +1595,10 @@ $10^{-9}$).
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
 numbers, variables (positions in the stacked vector), parameters, operators
-and functions. Stata evaluates the postfix rows at every point; their
-derivatives are found by grouped differences, from a Jacobian pattern built
-from the variables each equation element uses. The equations are a block `U`
+and functions. Stata evaluates the postfix rows at every point; from
+version 0.7.0 their derivatives are exact, by forward differentiation of the
+postfix rows (`_cge_u_dvalue`), with respect to the variables each equation
+element uses. The equations are a block `U`
 of the system; they are saved with the model and compiled again when it is
 calibrated again.
 

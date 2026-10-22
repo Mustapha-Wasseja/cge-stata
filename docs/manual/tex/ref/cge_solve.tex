@@ -66,8 +66,8 @@ solution the start of the next. The default, \cmd{steps(0)}, does so only after
 a direct solve fails, first in 4 steps and then in 16; \cmd{steps(1)} never
 does.
 
-\item[\opt{}{trace}] displays the largest scaled residual and the number of
-Jacobians computed at each iteration.
+\item[\opt{}{trace}] displays the largest scaled residual, the number of
+Jacobians computed and the number of Broyden updates at each iteration.
 
 \item[\opt{diag}{nose}] displays the diagnostics described below after a solve
 that converges. They are always displayed after a solve that fails.
@@ -90,7 +90,7 @@ it is used.
 
 The synthetic SAM is mapped and calibrated with uniform elasticities:
 \stlog{solve_setup}
-Removing every import tariff and solving takes nine Newton iterations:
+Removing every import tariff and solving takes seven iterations:
 \stlog{solve_notariff}
 The largest scaled residual, over every equation of the model, is below the
 default tolerance of \texttt{1e-10}. \cmd{WALRAS} is the slack of the
@@ -105,14 +105,16 @@ every solution. The simulation can now be reported:
 \cgesubsec{Example 2: convergence}
 
 With \opt{}{trace}, the residual is displayed at each iteration. One Jacobian
-was computed and its LU factors were reused at every later step, because each
-step reduced the residual by a factor of about ten:
+was computed, exactly, and every later step used its LU factors with
+Broyden's updates, because each step at least halved the residual:
 \stlog{solve_trace}
 Newton's method converges quadratically near a solution when the Jacobian is
-recomputed at each step. Reusing the factors of one Jacobian (a chord method)
-converges linearly, but each step costs only one evaluation of the equations
-and two triangular solves, so for large models it is much faster. A new
-Jacobian is computed whenever a step fails to halve the residual.
+recomputed at each step. Broyden's updates correct the Jacobian along each
+step at the cost of a few inner products, and converge superlinearly; each
+step costs one evaluation of the equations and two triangular solves, against
+a Jacobian and a factorisation for a Newton step, so for large models they
+are much faster. A new Jacobian is computed whenever a step fails to halve
+the residual (section~\ref{sec:newton}).
 
 The results are returned in \cmd{r()}:
 \stlog{solve_return}
@@ -120,17 +122,28 @@ The results are returned in \cmd{r()}:
 method solved, 69 of the model's 93: the others are explicit definitions,
 computed from the variables of the reduced system (section~\ref{sec:reduced}).
 
-\cgesubsec{Example 3: a shock the model cannot absorb}
+\cgesubsec{Example 3: a solution that makes no economic sense}
 
-A tenfold rise in government purchases is far outside the range of the base:
+A tenfold rise in government purchases is far outside the range of the base.
+With savings-driven investment the equations can still be solved:
+\stlog{solve_collapse}
+The solution satisfies every equation, but the economy has absorbed the
+purchases by negative investment, and the agricultural and manufacturing
+activities have all but stopped. \cmd{cge_solve} notes such values, negative
+or below one millionth of their base, and stores their number in
+\res{r(N_collapsed)}; a solution with collapsed values should be checked
+before it is reported.
+
+\cgesubsec{Example 4: a shock the model cannot absorb}
+
+With investment fixed, the same rise cannot be supplied:
 \stlog{solve_fail}
 The direct solve failed, and so did continuation in 4 and in 16 steps.
 \cmd{cge_solve} then stops with error 430 and displays the diagnostics: the
 equations with the largest scaled residuals at the last point, by block and
 element, and the smallest pivot of the Jacobian relative to the largest, with
 the variable it belongs to. A small pivot means that the Jacobian is close to
-singular at the last point; here it belongs to the producer price of
-manufactures, \cmd{PX(com_man)}. Such a failure is usually a property of the shock, the closure or the SAM, not
+singular at the last point. Such a failure is usually a property of the shock, the closure or the SAM, not
 of the solver: a shock that the economy cannot absorb, a closure with an
 equation that no free variable can satisfy, or a SAM with a very small flow
 that the shock must expand many times. Equations with no free variable, and
@@ -167,6 +180,8 @@ to the tolerance, and the test suite checks that they do.
 \res{r(max_residual)} & largest scaled residual, over every equation\\
 \res{r(N_solved)} & number of equations in the system solved\\
 \res{r(jacobians)} & number of Jacobians computed\\
+\res{r(broyden)} & number of steps with Broyden's updates\\
+\res{r(N_collapsed)} & number of values of a solution that are negative or below one millionth of their base value\\
 \res{r(walras)} & value of the slack variable \cmd{WALRAS}\\
 \res{r(steps)} & steps of continuation (0 for a direct solve)\\
 \res{r(N_constraints)} & number of constraints, if any\\
@@ -201,22 +216,32 @@ $1, \tfrac12, \tfrac14, \dots$ such that
 \begin{equation*}
 \lVert F(z + \lambda\,\Delta z)\rVert \le (1 - 10^{-4}\lambda)\,\lVert F(z)\rVert .
 \end{equation*}
-The LU factors of $J$ are reused for later steps while each full step at least
-halves $\lVert F\rVert$. The solve has converged when
-$\max_i |F_i| < \text{\texttt{tolerance()}}$, over every equation of the model,
-including those left out of the reduced system.
-
-The Jacobian combines exact derivatives for the equations with many variables
-with one-sided differences for the others, taken over groups of columns $G$
-that share no row:
+After each Newton step, later steps use the LU factors of the last
+Jacobian with Broyden's updates \citep{broyden1965, kelley1995}: after a step
+$s$, with $y$ the change in $F$, the inverse $H$ of the Jacobian becomes
 \begin{equation*}
-J_{ij} \approx \frac{F_i(z + h \odot e_G) - F_i(z)}{h_j}, \qquad j \in G,
-\qquad h_j = 10^{-7} \max(1, |z_j|),
+H_+ = (I + a\, s')\, H, \qquad a = \frac{s - H y}{s' H y},
+\end{equation*}
+and the next direction is $-H_+ F$, with a line search of at most two
+halvings. A new Jacobian is computed when that fails, after a step that
+reduces $\lVert F\rVert$ by less than a tenth, and after 30 updates. The solve has converged when $\max_i |F_i| <
+\text{\texttt{tolerance()}}$, over every equation of the model, including
+those left out of the reduced system; up to three more steps then bring the
+residual toward a thousandth of the tolerance.
+
+The Jacobian is exact: the derivatives of every equation are written out,
+user equations are differentiated in forward mode, and in the reduced system
+the variables of the left-out definitions $D_k(d_k, y) = 0$ are eliminated
+by the chain rule, with $\partial d_k / \partial y_j = -(\partial D_k /
+\partial y_j) / (\partial D_k / \partial d_k)$. If Newton fails, it is tried
+again with central differences over groups of columns that share no row,
+\begin{equation*}
+J_{ij} \approx \frac{F_i(z + h \odot e_G) - F_i(z - h \odot e_G)}{2 h_j}, \qquad j \in G,
+\qquad h_j = 10^{-6} \max(1, |z_j|),
 \end{equation*}
 where $e_G$ has ones in the columns of $G$ and $\odot$ is the elementwise
-product. If Newton fails, it is tried again with central differences, then
-Powell's hybrid method (\cmd{solvenl()}, technique \cmd{broydenpowell}),
-followed by Newton steps to polish the result.
+product, then Powell's hybrid method (\cmd{solvenl()}, technique
+\cmd{broydenpowell}), followed by Newton steps to polish the result.
 
 Continuation in $n$ steps solves the model for $k = 1, \dots, n$ with
 parameters and fixed values
@@ -227,8 +252,8 @@ between their base values $\theta^0$ and their shocked values $\theta^1$, each
 step starting from the solution of the step before.
 
 Chapter~\ref{chap:solution} gives the details: the reduced system, the
-equations with exact derivatives, the grouping of columns and the treatment of
-constraints.
+exact Jacobian, Broyden's updates, the grouping of columns for the differences
+and the treatment of constraints.
 
 \cgesec{Also see}
 

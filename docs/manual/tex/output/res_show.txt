@@ -18,4 +18,4 @@ Output of act_man                       140   -1.399
 Output of act_ser                       150    1.240
 ----------------------------------------------------
 Equivalent variation, hhd              6.137 ( 2.67% of consumption)
-WALRAS -9.43e-11; GDP identity gap -1.48e-10
+WALRAS -1.56e-14; GDP identity gap -6.82e-13

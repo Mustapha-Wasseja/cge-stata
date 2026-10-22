@@ -16,7 +16,7 @@ Closure
 . cge_dynamic, name(dn) periods(0/2) capital(cap) depreciation(0.05) rental(0.15) ///
 >     growth(lab:0.02) population(0.02) govgrowth(0.03)
 Period 0: solved in 0 iteration(s)
-Period 1: solved in 6 iteration(s)
+Period 1: solved in 7 iteration(s)
 Period 2: solved in 6 iteration(s)
 Dynamic run dn stored as simulations: dn0 dn1 dn2
 

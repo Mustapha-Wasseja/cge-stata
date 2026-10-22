@@ -105,16 +105,50 @@ cge_check, homogeneity perturb(0.1)
   model's equations are left out: 4,254 of 40,190 remain for a SAM with 250
   activities and 20 households. `cge_solve, full` keeps every equation; the
   test suite checks that both systems give the same solution and that both
-  grouped Jacobians equal the column-by-column ones.
+  exact Jacobians equal the column-by-column central differences.
 - From version 0.2.0 the market-clearing (S2) and activity-price (P7) rows
   also have exact derivatives (`_cge_dense2`). In the reduced system these are
   total derivatives through the left-out variables. Without them, each of
   these rows involves most activities or commodities, and the number of
   groups of central differences grows with the number of sectors.
 - LU factors are reused for further Newton steps while each step at least
-  halves the residual norm (a chord method). Otherwise a new Jacobian is
-  computed. Mata's `_lud()` returns $A = (LU)[p, .]$, so systems are solved with
-  the right-hand side permuted by `invorder(p)`.
+  halves the residual norm (before version 0.7.0 a chord method, from 0.7.0
+  with Broyden's updates). Otherwise a new Jacobian is computed. Mata's
+  `_lud()` returns $A = (LU)[p, .]$, so systems are solved with the right-hand
+  side permuted by `invorder(p)`.
+- From version 0.7.0 the Jacobian is exact (`_cge_jacobian_exact`).
+  `_cge_jtrip` writes the derivatives of every block as triplets (row,
+  column, value) of d(L - R)/dx in the stacked variables; the old exact rows
+  (`_cge_dense`) are reused for P8, P9, I1, I8, I9, S1, S3 and S5. User
+  equations are differentiated in forward mode (`_cge_u_dvalue`). In the
+  reduced system, each left-out variable d of a definition row D is replaced
+  in the other rows by its dependencies y, with dd/dy = -(dD/dy) / (dD/dd)
+  from the triplets of D (implicit differentiation; no left-out definition
+  depends on another). Duplicates are summed with `panelsum()` after sorting
+  by position, and the entries are written into the dense matrix row by row.
+  `_cge_jexcheck()` and `_cge_jexall()` compare it with column-by-column
+  central differences, at the current point, a simulation's solution or a
+  perturbed point. Mata pitfall: a column vector `:*` a row vector is not
+  c-conformable; outer products need `*`.
+- Broyden's updates (from version 0.7.0): after each Newton step, full or
+  shortened by the line search, the inverse Jacobian is updated as
+  H+ = (I + a s') H, a = (s - Hy)/(s'Hy) (good method, Sherman-Morrison),
+  stored as the LU factors times the factors (I + a s'); H y = H F+ + d uses
+  the last direction d, so each step needs one LU solve (`_cge_hsolve`).
+  Broyden steps take a line search of at most two halvings; a new Jacobian
+  after a failure, a step that reduces the norm by less than a tenth, or 30
+  updates. A first version took Broyden steps only after full Newton steps
+  (Kelley's compact form, steps that halve the residual): on the
+  250-activity benchmark it needed 6 Jacobians, the damped form 4, because
+  the first Newton steps are shortened by the line search. The LU
+  factorisation is now most of the time of a large solve. After convergence up to
+  three more steps toward tol/1000 (a solution just inside the tolerance made
+  `cge_optimize` fail to converge in a test case). `cge_optimize` solves
+  with mode 3 (exact Jacobian, chord steps): from a warm start Broyden's
+  updates do not help, and 293 solves against 591 were needed in that case.
+  `_cge_newton()` modes: 0 exact + Broyden (default), 1 central differences,
+  2 one-sided differences, 3 exact without the updates; `_cge_newtoncheck(m1,
+  m2)` compares two of them.
 - From version 0.6.3 Newton's Jacobian uses one-sided differences, with step
   $10^{-7} \max(1, |z|)$ in the scaled variables: the residuals at the
   current point are already known, so each group of columns needs one
@@ -122,8 +156,8 @@ cge_check, homogeneity perturb(0.1)
   about $4 \times 10^{-7}$ (central differences: about $10^{-10}$), too
   small to change the Newton steps in the test models. If Newton fails, it
   is tried again from the start with central differences, before Powell's
-  method. The diagnostics and the test hook `_cge_jaccheck()` keep central
-  differences.
+  method. From version 0.7.0 the diagnostics use the exact Jacobian; the test
+  hook `_cge_jaccheck()` keeps the grouped differences, still the fallback.
 - Recursive dynamics (from version 0.2.0) solve each period with the static
   solver, starting from the previous period's solution. The state of a run is
   kept in a separate structure (`cge_dyn`, external `cge__dyn`) while
@@ -182,6 +216,7 @@ two implementations together without requiring Stata in continuous integration.
 | 0.3.3 | Labour-market regimes (model_spec.md, Section 14): a labour force from the base unemployment rate (cge_calibrate unemployment()); a wage curve (wagecurve()); a minimum real wage with the regime found by the solver, through a smoothed Fischer-Burmeister condition (minwage(), smoothing()); factor closures wagecurve and minwage; shocks to the labour force, minimum wage and reference wage; the labour force and unemployment rate in reports, with rates in percentage points; labour-force growth in dynamic runs (done) |
 | 0.3.4 | Health outcomes and demography (model_spec.md, Section 15): working time lost to illness and a death rate responding to health services per head with constant elasticities (cge_calibrate sickdays(), sickelas(), mortality(), mortelas()); days worked as per-worker efficiency (DW, equation H3); deaths changing population and labour growth from the next period in dynamic runs (cge_dynamic deathfactors(), deathshare(), workingage()); shocks sick and mort; health report rows (done) |
 | 0.3.5 | Elasticity library (docs/elasticities.md): 531 published entries -- aggregate Armington and CET for 51 African countries, income elasticities for 47, a Frisch parameter, capital-labour substitution, wage-curve and health-outcome elasticities -- with source, location and check; built and checked from the source documents (tools/elasticities); cge_elasticities to list, load and return calibration options, with user files (done) |
+| 0.7.0 | Faster solves: the exact Jacobian (derivatives of every block as triplets, the old exact rows reused, forward differentiation of user equations, chain rule through the left-out definitions of the reduced system, checked against column-by-column central differences at the base, at solutions and at perturbed points in every layout); Newton's method continues after each step, full or shortened, with Broyden's good updates of the inverse Jacobian in product form, and polishes a converged solution toward tol/1000; cge_optimize solves without the updates; cge_solve notes collapsed solutions (r(N_collapsed)); the 250-activity benchmark 27 s instead of 96 in Stata 13.1/IC, 29 instead of 72 in StataNow/MP 19.5 (done) |
 | 0.6.4 | Help files and fixes: every help file checked against its command, references to developer documents replaced by the Reference Manual; cge_solve checks that the system is square (error 459, as after cge_variable value() without an equation); cge_shock uses the set of a user variable's index; the roles sheet of cge_template lists every role; template groups may not take the label of an account outside the group; cge_report writes the debt sheet; cge_dynresults keeps the data in memory on failure; cge_save and cge_use add .cgem when the file name has no extension, whatever the folder names; cge_microsim requires a positive poverty line; cge_results stores its results with nodisplay; cge_multiplier ignores decompose with inject(); cge_sam, cge_gams and cge_sensitivity return only their own results; a dynamic run that fails stores nothing and leaves the model, its shocks and an earlier run of the same name as they were, and a run solved again replaces every period of the earlier one (before, a failed rerun could mix periods of two runs); the help examples run on the shipped SYNTHETIC data (the cge_dynamic example used an account of a country SAM), and two SMCL faults in the cge_map and cge_balance help are fixed; tests for each fix (done) |
 | Manual | The user manual rewritten as the cge-stata Reference Manual (docs/manual/cge-stata-manual.pdf), typeset from LaTeX in the form of Stata's manuals: a user's guide with a worked example; the model's notation, every equation, the closures, calibration, solution method, checks, reporting measures and extensions, and the methods of the commands; and an entry for each command with its syntax, options, examples and their output, stored results, and methods and formulas. tools/build_manual.py builds it and runs its examples in Stata, keeping only the marked output and refusing output that names a path, a user or a licence (done) |
 | 0.6.3 | Faster solves: Newton's Jacobian from one-sided differences (one evaluation of the equations per group of columns instead of two; step 1e-7), with a second Newton attempt with central differences before Powell's method; the 200-activity benchmark solves about a third faster in Stata 13.1/IC and almost half in StataNow/MP 19.5, with the same iterations and solutions; tests check the one-sided Jacobian against the column-by-column one and both kinds of Newton against each other, also across the switch of a minimum-wage regime (done) |

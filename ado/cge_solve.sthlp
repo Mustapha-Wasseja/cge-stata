@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.7.0  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -29,24 +29,23 @@ works on a reduced system. Explicit definitions are left out of the Newton
 system and their variables computed directly from the others:
 intermediate demand, household demand, import and export prices, the price of
 intermediate input, output by commodity, margin demand, the purchases of the
-health insurance fund and factor efficiency. Their equations still hold
+health insurance fund, factor efficiency and days worked. Their equations still hold
 exactly. Intermediate and household demand grow with the square of the number
 of sectors, so the reduced system is much smaller for large SAMs: for a SAM
 with 250 activities and 20 households, 4,254 of 40,190 equations.
 
 {pstd}
-The Jacobian combines exact derivatives for the equations with many variables
-with finite differences for the others. The exact rows are the price indexes,
-factor incomes and supplies, government revenue and spending, the balance of
-payments, the savings-investment balance, commodity market clearing and
-activity prices. The finite differences are taken over groups of variables
-that appear in no common equation; from version 0.6.3 they are one-sided, with
-one evaluation of the equations for each group instead of two, which shortens
-the solve of large models by a third to a half. The LU factors of a Jacobian
-are reused for further Newton steps while each step at least halves the
-residual. If Newton fails, it is tried again with central differences, then
-Powell's hybrid method ({cmd:solvenl()}), followed by Newton steps to polish
-the result. {cmd:cge_solve} exits with error 430 if the
+From version 0.7.0 the Jacobian is exact: the derivatives of every equation of
+the model are written out, user equations ({helpb cge_equation}) are
+differentiated in forward mode, and in the reduced system the variables of
+the left-out definitions are eliminated by the chain rule. After each Newton
+step, further steps use the LU factors of that Jacobian with Broyden's
+updates, with a short line search; a new Jacobian is computed when such a
+step fails or reduces the residual little. Once the tolerance is met, up to three more such steps
+bring the residual toward a thousandth of the tolerance. If Newton fails, it
+is tried again with a Jacobian from central differences, then Powell's hybrid
+method ({cmd:solvenl()}), followed by Newton steps to polish the result.
+{cmd:cge_solve} exits with error 430 if the
 model does not converge, and with error 459 if the system is not square, for
 example after a variable added with {cmd:cge_variable, value()} without the
 equation that determines it.
@@ -57,6 +56,14 @@ complementarity conditions are first solved in a smoothed form, which finds
 whether each constraint binds; the model is then solved again with the exact
 conditions, changing the regime of any constraint whose other condition
 fails. The regimes are displayed and stored with the simulation.
+
+{pstd}
+A solution of the equations need not make economic sense. From version
+0.7.0, after a solve that converges, {cmd:cge_solve} notes any quantity,
+price, income or scaling factor of demand that is negative or below one
+millionth of its positive base value, such as negative investment after a
+shock far outside the range of the base, and stores their number in
+{cmd:r(N_collapsed)}.
 
 {pstd}
 From version 0.4.5, a solve that fails is tried again by continuation: the
@@ -105,6 +112,8 @@ does so only after a direct solve fails; {cmd:steps(1)} never does.
 {synopt:{cmd:r(max_residual)}}largest scaled residual, over every equation{p_end}
 {synopt:{cmd:r(N_solved)}}number of equations in the system solved{p_end}
 {synopt:{cmd:r(jacobians)}}number of Jacobians computed{p_end}
+{synopt:{cmd:r(broyden)}}number of steps with Broyden's updates{p_end}
+{synopt:{cmd:r(N_collapsed)}}number of values of a solution that are negative or below one millionth of their base value{p_end}
 {synopt:{cmd:r(walras)}}value of the WALRAS slack variable{p_end}
 {synopt:{cmd:r(steps)}}steps of continuation (0 for a direct solve){p_end}
 {synopt:{cmd:r(N_constraints)}}number of constraints, if any{p_end}

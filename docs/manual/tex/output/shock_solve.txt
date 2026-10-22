@@ -1,6 +1,6 @@
 . cge_solve, name(lab_up)
 Simulation lab_up solved in 7 iteration(s) (newton)
-Largest scaled residual  5.29e-11; WALRAS = -1.49e-10
+Largest scaled residual  1.79e-14; WALRAS =  6.32e-13
 
 . quietly cge_results, sim(lab_up) clear nodisplay
 

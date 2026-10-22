@@ -71,6 +71,8 @@ mata: _cge_jaccheck()
 assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(0, 1)
 assert r(maxdiff) < 1e-5
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 mata: _cge_jaccheck(1)
 assert r(maxdiff) < 1e-6
 _labour_simulations wc_
@@ -153,7 +155,10 @@ _compare_report mwnb_pwm_up50
 * Newton with one-sided and with central differences across the switch to
 * the floor (version 0.6.3)
 mata: _cge_newtoncheck()
-assert r(converged_onesided) == 1 & r(converged_central) == 1 & r(maxdiff) < 1e-8
+assert r(converged1) == 1 & r(converged2) == 1 & r(maxdiff) < 1e-8
+* and at the solution, at the kink and around it
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_shock, reset
 _urate mwnb_pwm_up50
 assert r(u) > 5 & reldif(r(rw), 0.95) < 1e-8

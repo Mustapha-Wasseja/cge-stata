@@ -1,7 +1,7 @@
 . return list
 
 scalars:
-           r(gini_sim) =  .3632654507489664
+           r(gini_sim) =  .3632654507489588
           r(gini_base) =  .3632179401351559
            r(fgt0_sim) =  .2690883392367442
           r(fgt0_base) =  .2674509902763488

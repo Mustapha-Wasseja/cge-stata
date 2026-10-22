@@ -5,8 +5,8 @@ Parameter tm changed for 3 element(s)
 Constraint QM(com_man) <= 61.2, RM(com_man) up, rents to gov: not solved
 
 . cge_solve, name(quota)
-Simulation quota solved in 23 iteration(s) (newton)
-Largest scaled residual  9.43e-14; WALRAS =  7.62e-14
+Simulation quota solved in 11 iteration(s) (newton)
+Largest scaled residual  4.97e-14; WALRAS =  1.55e-14
 Constraints
   QM(com_man) <= 61.2, RM(com_man) up, rents to gov: binding
       QM(com_man) =         61.2;  RM(com_man) =  .0570352246

@@ -98,7 +98,14 @@ quietly cge_sam, labels(account)
 quietly cge_map, `stdmap'
 quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 cge_variable ZZ = exp(ln(CPI) * 2) - CPI ^ 2 + -1 * -1
+* the exact Jacobian of user equations (version 0.7.0)
+cge_variable YY = sum(c, PQ(c) ^ 1.5 * QG(c) / sqrt(QQ(c))) + EXR ^ CPI - ln(YG) * tm(com_man)
+cge_variable XR(c) = PQ(c) * QQ(c) / (1 + QM(c)) - exp(-PD(c))
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_solve, name(zz) tolerance(1e-12)
+mata: _cge_jexcheck(0, "zz")
+assert r(maxdiff) < 1e-6
 quietly cge_results, sim(zz) clear nodisplay
 quietly summarize value if variable == "ZZ"
 assert reldif(r(mean), 1) < 1e-12

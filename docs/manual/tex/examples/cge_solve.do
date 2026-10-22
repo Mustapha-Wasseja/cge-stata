@@ -21,9 +21,14 @@ cge_solve, name(notariff) tolerance(1e-12) trace
 return list
 *<<
 
-*>> solve_fail
+*>> solve_collapse
 cge_shock, reset
 cge_shock qg, scale(10)
-capture noisily cge_solve, name(qg10)
+cge_solve, name(qg10)
+*<<
+
+*>> solve_fail
+cge_closure, savinv(investment)
+capture noisily cge_solve, name(qg10fixed)
 di as err "r(" _rc ");"
 *<<

@@ -1,11 +1,11 @@
 . display r(converged), r(N_evaluations), r(iterations), r(objective)
-1 67 5 .76793612
+1 32 5 .76793612
 
 . matrix list r(instruments)
 
 symmetric r(instruments)[1,1]
     tm_com_man
-r1   .30322435
+r1   .30322412
 
 . cge_report, sims(optimum) tables(government welfare)
 

@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.6.4  2026-10-22
+*! cge_mata.mata  v0.7.0  2026-10-22
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -194,7 +194,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.6.4")
+    return("0.7.0")
 }
 
 // =====================================================================
@@ -5068,6 +5068,1091 @@ real matrix _cge_jacobian_full(struct cge_model scalar M, struct cge_par scalar 
     return(Jac)
 }
 
+// =====================================================================
+// Exact Jacobian (from version 0.7.0; Reference Manual, Solution)
+// =====================================================================
+//
+// The derivatives of every equation block are written out below as entries
+// of d(L - R)/dx, x the stacked variables, in the form of the equations of
+// _cge_eq. User equations are differentiated by forward differentiation of
+// their postfix rows. In the reduced system, the variables of the explicit
+// definitions left out (_cge_derive) are eliminated by the chain rule.
+
+// Entries of a sparse matrix: row, column and value
+struct cge_trip {
+    real colvector r, c, v
+    real scalar    n
+}
+
+void _cge_tinit(struct cge_trip scalar T)
+{
+    T.r = J(4096, 1, .)
+    T.c = T.r
+    T.v = T.r
+    T.n = 0
+}
+
+// Append entries, read row by row; an r, c or v with one element is repeated
+void _cge_tadd(struct cge_trip scalar T, real matrix r, real matrix c, real matrix v)
+{
+    real colvector rr, cc, vv
+    real scalar k, cap
+    if (rows(r) * cols(r) == 0 | rows(c) * cols(c) == 0 | rows(v) * cols(v) == 0) return
+    rr = colshape(r, 1)
+    cc = colshape(c, 1)
+    vv = colshape(v, 1)
+    k = max((rows(rr), rows(cc), rows(vv)))
+    if (rows(rr) == 1) rr = J(k, 1, rr)
+    if (rows(cc) == 1) cc = J(k, 1, cc)
+    if (rows(vv) == 1) vv = J(k, 1, vv)
+    if (rows(rr) != k | rows(cc) != k | rows(vv) != k) {
+        _cge_fail("cge internal error: Jacobian entries are not conformable", 3200)
+    }
+    if (T.n + k > rows(T.r)) {
+        cap = max((2 * rows(T.r), T.n + k))
+        T.r = T.r \ J(cap - rows(T.r), 1, .)
+        T.c = T.c \ J(cap - rows(T.c), 1, .)
+        T.v = T.v \ J(cap - rows(T.v), 1, .)
+    }
+    T.r[|T.n + 1 \ T.n + k|] = rr
+    T.c[|T.n + 1 \ T.n + k|] = cc
+    T.v[|T.n + 1 \ T.n + k|] = vv
+    T.n = T.n + k
+}
+
+// Entries of d(L - R)/dx for elements e of block blk and elements j of
+// variable var, with values v; bo holds the offset of each block
+void _cge_jd(struct cge_model scalar M, struct cge_trip scalar T, real colvector bo, string scalar blk,
+             real matrix e, string scalar var, real matrix j, real matrix v)
+{
+    real scalar g, k
+    g = _cge_find(M.ename, blk)
+    k = _cge_vidx(M, var)
+    if (g == 0 | k == 0) _cge_fail("cge internal error: unknown block or variable in the Jacobian", 3498)
+    if (M.elen[g] == 0 | M.vrows[k] * M.vcols[k] == 0) return
+    if (rows(e) * cols(e) == 0 | rows(j) * cols(j) == 0 | rows(v) * cols(v) == 0) return
+    _cge_tadd(T, bo[g] :+ e, M.voff[k] :+ j, v)
+}
+
+// The rows of a dense matrix of derivatives (rows by stacked variable) as
+// entries of rows e of block blk
+void _cge_jdense(struct cge_model scalar M, struct cge_trip scalar T, real colvector bo, string scalar blk,
+                 real colvector e, real matrix G)
+{
+    real colvector i, j, v
+    _cge_nzv(G, i, j, v)
+    if (rows(i) == 0) return
+    _cge_tadd(T, bo[_cge_find(M.ename, blk)] :+ e[i], j, v)
+}
+
+// Row, column and value of the non-zero entries of X (row-major)
+void _cge_nzv(real matrix X, real colvector i, real colvector j, real colvector v)
+{
+    real colvector k, xv
+    i = J(0, 1, .)
+    j = i
+    v = i
+    if (rows(X) * cols(X) == 0) return
+    xv = colshape(X, 1)
+    k = selectindex(xv :!= 0)
+    if (rows(k) * cols(k) == 0) return
+    k = colshape(k, 1)
+    i = floor((k :- 1) :/ cols(X)) :+ 1
+    j = mod(k :- 1, cols(X)) :+ 1
+    v = xv[k]
+}
+
+// a where cond is not zero, else b, element by element; unlike
+// cond :* a + (1 :- cond) :* b, a missing value in the branch not taken
+// does not carry over
+real matrix _cge_ifel(real matrix cond, real matrix a, real matrix b)
+{
+    real colvector r, k, av
+    if (rows(b) * cols(b) == 0) return(b)
+    r = colshape(b, 1)
+    k = selectindex(colshape(cond, 1) :!= 0)
+    if (rows(k) * cols(k)) {
+        av = colshape(a, 1)
+        r[k] = av[k]
+    }
+    return(colshape(r, cols(b)))
+}
+
+// Row and column numbers of an nr x nc matrix
+real matrix _cge_rowi(real scalar nr, real scalar nc)
+{
+    if (nr * nc == 0) return(J(nr, nc, 0))
+    return((1::nr) * J(1, nc, 1))
+}
+
+real matrix _cge_coli(real scalar nr, real scalar nc)
+{
+    if (nr * nc == 0) return(J(nr, nc, 0))
+    return(J(nr, 1, 1) * (1..nc))
+}
+
+// Positions of the elements (i, k) of an nr x nc variable or block
+real matrix _cge_el(real matrix i, real matrix k, real scalar nc)
+{
+    return((i :- 1) :* nc :+ k)
+}
+
+// The entries of d(L - R)/dx of every equation element at x
+void _cge_jtrip(struct cge_model scalar M, struct cge_par scalar p, real colvector x, struct cge_trip scalar T)
+{
+    real matrix PA, PVA, PINTA, PX, PD, PE, PM, PQ, W, EXR, CPI
+    real matrix QA, QVA, QINTA, QF, QINT, QX, QD, QE, QM, QQ, QH, QG, QINV, QFS
+    real matrix YF, YI, EH, TINS, MPS, WFDIST, QT, QER, YSHI, EFF, HS
+    real matrix TQADJ, TMADJ, TVADJ, PWE, QHA, DW, RM, RE, RA, QNA, PNA, PXAC, QXAC
+    real matrix G, vint, IA, IF, IN, IC, eFA, eNA, eCA, eAC, eCH, eAH, eIF
+    real matrix qf, rho, top, cessum, qna, Gq, Gn, rhom, cdm, z, wage, ftax, P, Rt, Rn, pnqn, nsum
+    real matrix nested, qint, rf, rc, cdf, cdc, MF, MC, Own, Cross, Mem, ef, Ex, val, dq, m1, m2, m3, m4
+    real matrix pe, R3, Ns, R2, rsac, qxac, sxac, lxac, R6, R5, coef, outer, tmp, Sc, Rcd, Rces, rs, k2, ratio, Rc
+    real colvector bo, cA, cC, cF, cH, cD, cN, i, j, v, tq, tm, tv, PH, pwe, PDD, q3, z1, unemp, rwage, ub, s
+    real rowvector gl, gr
+    real colvector bm, g, h, sb
+    real rowvector rns
+    real scalar nA, nC, nF, nH, nD, nI, nN, f, gg, n, c, a, hh, k, kb, ncac, rr
+    real matrix utk, tk1, tk2
+    real colvector vpos
+
+    nA = M.n
+    nC = M.nC
+    nF = M.nF
+    nH = M.nH
+    nD = M.nD
+    nI = M.nI
+    nN = M.nN
+    bo = runningsum(M.elen) - M.elen
+    cA = (nA ? (1::nA) : J(0, 1, .))
+    cC = (nC ? (1::nC) : J(0, 1, .))
+    cF = (nF ? (1::nF) : J(0, 1, .))
+    cH = (nH ? (1::nH) : J(0, 1, .))
+    cD = (nD ? (1::nD) : J(0, 1, .))
+    cN = (nN ? (1::nN) : J(0, 1, .))
+
+    PA = _cge_v(M, x, 1);     PVA = _cge_v(M, x, 2);    PINTA = _cge_v(M, x, 3)
+    PX = _cge_v(M, x, 4);     PD = _cge_v(M, x, 5);     PE = _cge_v(M, x, 6)
+    PM = _cge_v(M, x, 7);     PQ = _cge_v(M, x, 8);     W = _cge_v(M, x, 9)
+    EXR = _cge_v(M, x, 10);   CPI = _cge_v(M, x, 11)
+    QA = _cge_v(M, x, 13);    QVA = _cge_v(M, x, 14);   QINTA = _cge_v(M, x, 15)
+    QF = _cge_v(M, x, 16);    QINT = _cge_v(M, x, 17);  QX = _cge_v(M, x, 18)
+    QD = _cge_v(M, x, 19);    QE = _cge_v(M, x, 20);    QM = _cge_v(M, x, 21)
+    QQ = _cge_v(M, x, 22);    QH = _cge_v(M, x, 23);    QG = _cge_v(M, x, 24)
+    QINV = _cge_v(M, x, 25);  QFS = _cge_v(M, x, 26);   YF = _cge_v(M, x, 27)
+    YI = _cge_v(M, x, 29);    EH = _cge_v(M, x, 30)
+    TINS = _cge_v(M, x, 35);  MPS = _cge_v(M, x, 36)
+    WFDIST = _cge_v(M, x, 41)
+    QT = _cge_v(M, x, 43);    QER = _cge_v(M, x, 44);   YSHI = _cge_v(M, x, 45)
+    EFF = _cge_v(M, x, 48);   HS = _cge_v(M, x, 49)
+    TQADJ = _cge_v(M, x, 50); TMADJ = _cge_v(M, x, 51); TVADJ = _cge_v(M, x, 52)
+    PWE = _cge_v(M, x, 53);   QHA = _cge_v(M, x, 54)
+    DW = _cge_v(M, x, 57)
+    RM = _cge_v(M, x, 58);    RE = _cge_v(M, x, 59);    RA = _cge_v(M, x, 60)
+    QNA = _cge_v(M, x, 61);   PNA = _cge_v(M, x, 62)
+    PXAC = _cge_v(M, x, 63);  QXAC = _cge_v(M, x, 64)
+
+    tq = p.tq :* TQADJ
+    tm = p.tm :* TMADJ
+    tv = p.tv :* TVADJ
+    PH = PQ :* (1 :+ tv)
+    vint = tv * (1 :- p.kappa)'
+    pwe = M.ced :* PWE + (1 :- M.ced) :* p.pwe
+    PDD = PD + p.icd' * PQ
+
+    // Element numbers: IA activity, IF factor of a factor x activity
+    // matrix; eFA its elements, and likewise for the other shapes
+    IA = _cge_coli(nF, nA)
+    IF = _cge_rowi(nF, nA)
+    eFA = _cge_el(IF, IA, nA)
+
+    // Rows with exact derivatives in earlier versions: price indexes P8, P9,
+    // factor incomes I1, government revenue and spending I8, I9, factor
+    // markets S1, balance of payments S3, savings-investment balance S5
+    G = _cge_dense(M, p, x)
+    _cge_jdense(M, T, bo, "P8", 1, G[1, .])
+    _cge_jdense(M, T, bo, "P9", 1, G[2, .])
+    _cge_jdense(M, T, bo, "I1", cF, G[|3, 1 \ 2 + nF, cols(G)|])
+    _cge_jdense(M, T, bo, "I8", 1, G[3 + nF, .])
+    _cge_jdense(M, T, bo, "I9", 1, G[4 + nF, .])
+    _cge_jdense(M, T, bo, "S1", cF, G[|5 + nF, 1 \ 4 + 2 * nF, cols(G)|])
+    _cge_jdense(M, T, bo, "S3", 1, G[5 + 2 * nF, .])
+    _cge_jdense(M, T, bo, "S5", 1, G[6 + 2 * nF, .])
+    G = J(0, 0, .)
+
+    // 5.1 Price block
+    _cge_jd(M, T, bo, "P1", cC, "PM", cC, 1)
+    _cge_jd(M, T, bo, "P1", cC, "TMADJ", 1, -p.pwm :* p.tm :* EXR)
+    _cge_jd(M, T, bo, "P1", cC, "RM", cC, -p.pwm :* EXR)
+    _cge_jd(M, T, bo, "P1", cC, "EXR", 1, -p.pwm :* (1 :+ tm :+ RM))
+    _cge_nzv(p.ici, i, j, v)
+    _cge_jd(M, T, bo, "P1", j, "PQ", i, -v)
+    _cge_jd(M, T, bo, "P2", cC, "PE", cC, 1)
+    _cge_jd(M, T, bo, "P2", cC, "PWE", cC, -M.ced :* (1 :- p.te :- RE) :* EXR)
+    _cge_jd(M, T, bo, "P2", cC, "RE", cC, pwe :* EXR)
+    _cge_jd(M, T, bo, "P2", cC, "EXR", 1, -pwe :* (1 :- p.te :- RE))
+    _cge_nzv(p.ice, i, j, v)
+    _cge_jd(M, T, bo, "P2", j, "PQ", i, v)
+    _cge_jd(M, T, bo, "P3", cC, "PQ", cC, (1 :- tq) :* QQ)
+    _cge_jd(M, T, bo, "P3", cC, "QQ", cC, PQ :* (1 :- tq) :- (p.icm' * PQ))
+    _cge_jd(M, T, bo, "P3", cC, "TQADJ", 1, -p.tq :* PQ :* QQ)
+    _cge_jd(M, T, bo, "P3", cC, "PD", cC, -M.cdo :* QD)
+    _cge_jd(M, T, bo, "P3", cC, "QD", cC, -M.cdo :* PDD)
+    _cge_jd(M, T, bo, "P3", cC, "PM", cC, -M.cm :* QM)
+    _cge_jd(M, T, bo, "P3", cC, "QM", cC, -M.cm :* PM)
+    _cge_nzv(p.icd, i, j, v)
+    if (rows(i)) _cge_jd(M, T, bo, "P3", j, "PQ", i, -M.cdo[j] :* QD[j] :* v)
+    _cge_nzv(p.icm, i, j, v)
+    if (rows(i)) _cge_jd(M, T, bo, "P3", j, "PQ", i, -v :* QQ[j])
+    _cge_jd(M, T, bo, "P4", cC, "PX", cC, QX)
+    _cge_jd(M, T, bo, "P4", cC, "QX", cC, PX)
+    _cge_jd(M, T, bo, "P4", cC, "PD", cC, -M.cdo :* QD)
+    _cge_jd(M, T, bo, "P4", cC, "QD", cC, -M.cdo :* PD)
+    _cge_jd(M, T, bo, "P4", cC, "PE", cC, -M.ce :* QE)
+    _cge_jd(M, T, bo, "P4", cC, "QE", cC, -M.ce :* PE)
+    _cge_jd(M, T, bo, "P5", cA, "PA", cA, 1)
+    ncac = any(M.cac)
+    _cge_nzv(p.theta :* (ncac ? 1 :- M.xac : J(nA, nC, 1)), i, j, v)
+    _cge_jd(M, T, bo, "P5", i, "PX", j, -v)
+    if (ncac) {
+        _cge_nzv(p.theta :* M.xac, i, j, v)
+        _cge_jd(M, T, bo, "P5", i, "PXAC", _cge_el(i, j, nC), -v)
+    }
+    _cge_jd(M, T, bo, "P6", cA, "PINTA", cA, 1)
+    _cge_nzv(p.ica :* (1 :+ vint), i, j, v)
+    _cge_jd(M, T, bo, "P6", j, "PQ", i, -v)
+    _cge_jd(M, T, bo, "P6", cA, "TVADJ", 1, -((p.ica :* (p.tv * (1 :- p.kappa)'))' * PQ))
+    _cge_jd(M, T, bo, "P7", cA, "PA", cA, (1 :- p.ta :- RA) :* QA)
+    _cge_jd(M, T, bo, "P7", cA, "QA", cA, PA :* (1 :- p.ta :- RA))
+    _cge_jd(M, T, bo, "P7", cA, "RA", cA, -PA :* QA)
+    _cge_jd(M, T, bo, "P7", cA, "PVA", cA, -QVA)
+    _cge_jd(M, T, bo, "P7", cA, "QVA", cA, -PVA)
+    _cge_jd(M, T, bo, "P7", cA, "PINTA", cA, -QINTA)
+    _cge_jd(M, T, bo, "P7", cA, "QINTA", cA, -PINTA)
+
+    // 5.2 Production block
+    _cge_jd(M, T, bo, "Q1", cA, "QVA", cA, 1)
+    _cge_jd(M, T, bo, "Q1", cA, "QA", cA, -p.iva)
+    _cge_jd(M, T, bo, "Q2", cA, "QINTA", cA, 1)
+    _cge_jd(M, T, bo, "Q2", cA, "QA", cA, -p.inta)
+    // Top nest, Cobb-Douglas or CES (Leontief rows are masked)
+    rs = p.rha + (p.rha :== 0)
+    Rcd = p.aa :* (QVA :^ p.dla) :* (QINTA :^ p.dlac)
+    Sc = p.dla :* (QVA :^ (-rs)) + p.dlac :* (QINTA :^ (-rs))
+    Rces = p.aa :* (Sc :^ (-1 :/ rs))
+    _cge_jd(M, T, bo, "Q1C", cA, "QA", cA, 1)
+    _cge_jd(M, T, bo, "Q1C", cA, "QVA", cA,
+            -_cge_ifel(M.cda, p.dla :* Rcd :/ QVA, (Rces :/ Sc) :* p.dla :* (QVA :^ (-rs :- 1))))
+    _cge_jd(M, T, bo, "Q1C", cA, "QINTA", cA,
+            -_cge_ifel(M.cda, p.dlac :* Rcd :/ QINTA, (Rces :/ Sc) :* p.dlac :* (QINTA :^ (-rs :- 1))))
+    k2 = 1 :/ (1 :+ p.rha)
+    ratio = (PINTA :/ PVA) :* (p.dla :/ p.dlac)
+    Rc = QINTA :* (ratio :^ k2)
+    _cge_jd(M, T, bo, "Q2C", cA, "PVA", cA, _cge_ifel(M.cda, QVA :* p.dlac, k2 :* Rc :/ PVA))
+    _cge_jd(M, T, bo, "Q2C", cA, "QVA", cA, _cge_ifel(M.cda, PVA :* p.dlac, J(nA, 1, 1)))
+    _cge_jd(M, T, bo, "Q2C", cA, "PINTA", cA, _cge_ifel(M.cda, -QINTA :* p.dla, -k2 :* Rc :/ PINTA))
+    _cge_jd(M, T, bo, "Q2C", cA, "QINTA", cA, _cge_ifel(M.cda, -PINTA :* p.dla, -(ratio :^ k2)))
+
+    // Value added (Q3), factor demand (Q4) and the nests (N1 to N3): the
+    // factors enter in efficiency units qf = af EFF DW QF
+    z1 = p.af :* EFF :* DW
+    z = z1 * J(1, nA, 1)
+    qf = M.fa :* (z :* QF) + (1 :- M.fa)
+    rho = (M.cd + (1 :- M.cd) :* p.rva)'
+    rhom = J(nF, 1, 1) * rho
+    cdm = J(nF, 1, 1) * M.cd'
+    top = M.fa :* (M.nestf :== 0)
+    cessum = colsum(top :* p.dva :* (qf :^ (-rhom)))
+    if (nN) {
+        qna = M.nn :* QNA + (1 :- M.nn)
+        cessum = cessum + colsum(M.nn :* p.dvn :* (qna :^ (-(J(nN, 1, 1) * rho))))
+    }
+    q3 = (p.ad' :* (cessum :^ (-1 :/ rho)))'
+    for (a = 1; a <= nA; a++) {
+        if (!M.cd[a]) continue
+        q3[a] = p.ad[a] * exp(colsum(top[., a] :* p.dva[., a] :* ln(qf[., a])) +
+                              (nN ? colsum(M.nn[., a] :* p.dvn[., a] :* ln(qna[., a])) : 0))
+    }
+    // dq3/dqf and dq3/dqna
+    Gq = _cge_ifel(cdm, (J(nF, 1, 1) * q3') :* top :* p.dva :/ qf,
+                   (J(nF, 1, 1) * (q3' :/ cessum)) :* top :* p.dva :* (qf :^ (-rhom :- 1)))
+    _cge_jd(M, T, bo, "Q3", cA, "QVA", cA, 1)
+    _cge_jd(M, T, bo, "Q3", IA, "QF", eFA, -Gq :* M.fa :* z)
+    _cge_jd(M, T, bo, "Q3", IA, "EFF", IF, -Gq :* M.fa :* (p.af :* DW) :* QF)
+    _cge_jd(M, T, bo, "Q3", IA, "DW", IF, -Gq :* M.fa :* (p.af :* EFF) :* QF)
+    if (nN) {
+        IN = _cge_rowi(nN, nA)
+        eNA = _cge_el(IN, _cge_coli(nN, nA), nA)
+        Gn = _cge_ifel(J(nN, 1, 1) * M.cd', (J(nN, 1, 1) * q3') :* M.nn :* p.dvn :/ qna,
+                       (J(nN, 1, 1) * (q3' :/ cessum)) :* M.nn :* p.dvn :* (qna :^ (-(J(nN, 1, 1) * rho) :- 1)))
+        _cge_jd(M, T, bo, "Q3", _cge_coli(nN, nA), "QNA", eNA, -Gn :* M.nn)
+    }
+
+    // Q4. Regimes of each factor and activity: 1 a factor at the top of CES
+    // value added, 2 at the top of Cobb-Douglas value added, 3 in a CES
+    // nest, 4 in a Cobb-Douglas nest
+    wage = W :* WFDIST
+    ftax = 1 :+ p.tf
+    P = (PVA :* QVA)'
+    nested = M.fa :* (M.nestf :> 0)
+    rns = (nN ? (p.rhn + (p.rhn :== 0))' : J(1, 0, .))
+    rf = J(nF, 1, 1)
+    cdf = J(nF, 1, 0)
+    for (f = 1; f <= nF; f++) {
+        if (!M.nestf[f]) continue
+        rf[f] = rns[M.nestf[f]]
+        cdf[f] = M.cdn[M.nestf[f]]
+    }
+    m1 = top :* (1 :- cdm)
+    m2 = top :* cdm
+    m3 = nested :* (1 :- cdf)
+    m4 = nested :* cdf
+    Rt = _cge_ifel(m1, (J(nF, 1, 1) * (P :/ cessum)) :* p.dva :* (qf :^ (-rhom :- 1)) :* z, J(nF, nA, 0))
+    if (nN) {
+        qint = M.ecell :* QINT + (1 :- M.ecell)
+        rc = J(nC, 1, 1)
+        cdc = J(nC, 1, 0)
+        MF = J(nN, nF, 0)
+        MC = J(nN, nC, 0)
+        for (f = 1; f <= nF; f++) {
+            if (M.nestf[f]) MF[M.nestf[f], f] = 1
+        }
+        for (c = 1; c <= nC; c++) {
+            if (!M.nestc[c]) continue
+            rc[c] = rns[M.nestc[c]]
+            cdc[c] = M.cdn[M.nestc[c]]
+            MC[M.nestc[c], c] = 1
+        }
+        nsum = MF * (nested :* p.dva :* (qf :^ (-(rf * J(1, nA, 1))))) + MC * (M.ecell :* p.dce :* (qint :^ (-(rc * J(1, nA, 1)))))
+        pnqn = PNA :* QNA
+        Rn = _cge_ifel(m3, ((MF' * pnqn) :/ (MF' * nsum :+ (M.nestf :== 0))) :* p.dva :* (qf :^ (-(rf * J(1, nA, 1)) :- 1)) :* z,
+                       J(nF, nA, 0))
+    }
+    else Rn = J(nF, nA, 0)
+    // The left-hand side: wage, with QF in the Cobb-Douglas regimes
+    _cge_jd(M, T, bo, "Q4", eFA, "W", IF, _cge_ifel(m2 + m4, WFDIST :* ftax :* QF, WFDIST :* ftax))
+    _cge_jd(M, T, bo, "Q4", eFA, "WFDIST", eFA, _cge_ifel(m2 + m4, (W * J(1, nA, 1)) :* ftax :* QF, (W * J(1, nA, 1)) :* ftax))
+    _cge_jd(M, T, bo, "Q4", eFA, "QF", eFA, (m2 + m4) :* wage :* ftax)
+    // The right-hand side in the Cobb-Douglas regimes
+    _cge_jd(M, T, bo, "Q4", eFA, "PVA", IA, -m2 :* p.dva :* (J(nF, 1, 1) * QVA'))
+    _cge_jd(M, T, bo, "Q4", eFA, "QVA", IA, -m2 :* p.dva :* (J(nF, 1, 1) * PVA'))
+    if (nN) {
+        // nest of each factor, as an element of PNA and QNA
+        ef = _cge_el((M.nestf :+ (M.nestf :== 0)) * J(1, nA, 1), IA, nA)
+        _cge_jd(M, T, bo, "Q4", eFA, "PNA", ef, -m4 :* p.dva :* (MF' * QNA))
+        _cge_jd(M, T, bo, "Q4", eFA, "QNA", ef, -m4 :* p.dva :* (MF' * PNA))
+        // CES nests: the nest's value
+        _cge_jd(M, T, bo, "Q4", eFA, "PNA", ef, -_cge_ifel(m3, Rn :/ (MF' * PNA :+ (M.nestf :== 0)), J(nF, nA, 0)))
+        _cge_jd(M, T, bo, "Q4", eFA, "QNA", ef, -_cge_ifel(m3, Rn :/ (MF' * QNA :+ (M.nestf :== 0)), J(nF, nA, 0)))
+    }
+    // CES value added: value added and its own aggregate
+    _cge_jd(M, T, bo, "Q4", eFA, "PVA", IA, -_cge_ifel(m1, Rt :/ (J(nF, 1, 1) * PVA'), J(nF, nA, 0)))
+    _cge_jd(M, T, bo, "Q4", eFA, "QVA", IA, -_cge_ifel(m1, Rt :/ (J(nF, 1, 1) * QVA'), J(nF, nA, 0)))
+    // Efficiency units: Rt and Rn are proportional to z
+    _cge_jd(M, T, bo, "Q4", eFA, "EFF", IF, -_cge_ifel(m1 + m3, (Rt + Rn) :/ (EFF * J(1, nA, 1)), J(nF, nA, 0)))
+    _cge_jd(M, T, bo, "Q4", eFA, "DW", IF, -_cge_ifel(m1 + m3, (Rt + Rn) :/ (DW * J(1, nA, 1)), J(nF, nA, 0)))
+    // Through qf: row (f, a) depends on qf(g, a) of the members of its aggregate
+    for (f = 1; f <= nF; f++) {
+        if (!any(m1[f, .]) & !any(m3[f, .])) continue
+        // own term and the term through the CES sum, by activity
+        if (any(m1[f, .])) {
+            Own = _cge_ifel(m1[f, .], Rt[f, .] :* (-rho :- 1) :/ qf[f, .], J(1, nA, 0))
+            Cross = _cge_ifel(m1[f, .], Rt[f, .] :* rho :/ cessum, J(1, nA, 0))
+            Ex = rho
+        }
+        else {
+            Ns = nsum[M.nestf[f], .]
+            Own = _cge_ifel(m3[f, .], Rn[f, .] :* (-rf[f] - 1) :/ qf[f, .], J(1, nA, 0))
+            Cross = _cge_ifel(m3[f, .], Rn[f, .] :* rf[f] :/ Ns, J(1, nA, 0))
+            Ex = J(1, nA, rf[f])
+        }
+        for (gg = 1; gg <= nF; gg++) {
+            // members of the aggregate of f: the top of value added, or f's nest
+            if (any(m1[f, .])) Mem = top[gg, .] :* p.dva[gg, .] :* (qf[gg, .] :^ (-Ex :- 1))
+            else Mem = (M.nestf[gg] == M.nestf[f]) :* nested[gg, .] :* p.dva[gg, .] :* (qf[gg, .] :^ (-Ex :- 1))
+            dq = (gg == f) :* Own + Cross :* Mem
+            if (!any(dq)) continue
+            _cge_jd(M, T, bo, "Q4", (f - 1) * nA :+ cA, "QF", (gg - 1) * nA :+ cA, -(dq :* M.fa[gg, .] :* z[gg, .])')
+            _cge_jd(M, T, bo, "Q4", (f - 1) * nA :+ cA, "EFF", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * DW[gg]) :* QF[gg, .])')
+            _cge_jd(M, T, bo, "Q4", (f - 1) * nA :+ cA, "DW", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * EFF[gg]) :* QF[gg, .])')
+        }
+        if (nN) {
+            if (any(m1[f, .])) {
+                // the nests at the top of CES value added
+                for (n = 1; n <= nN; n++) {
+                    dq = Cross :* M.nn[n, .] :* p.dvn[n, .] :* (qna[n, .] :^ (-rho :- 1))
+                    if (any(dq)) _cge_jd(M, T, bo, "Q4", (f - 1) * nA :+ cA, "QNA", (n - 1) * nA :+ cA, -(dq :* M.nn[n, .])')
+                }
+            }
+            else {
+                // the commodities in f's nest
+                for (c = 1; c <= nC; c++) {
+                    if (M.nestc[c] != M.nestf[f]) continue
+                    dq = Cross :* M.ecell[c, .] :* p.dce[c, .] :* (qint[c, .] :^ (-rf[f] - 1))
+                    if (any(dq)) _cge_jd(M, T, bo, "Q4", (f - 1) * nA :+ cA, "QINT", (c - 1) * nA :+ cA, -(dq :* M.ecell[c, .])')
+                }
+            }
+        }
+    }
+
+    // N1: quantity of each nest; N2: its price; N3: demand for each commodity in a nest
+    if (nN) {
+        for (n = 1; n <= nN; n++) {
+            rr = rns[n]
+            // N1
+            if (M.cdn[n]) R2 = p.an[n, .] :* exp(MF[n, .] * (nested :* p.dva :* ln(qf)) + MC[n, .] * (M.ecell :* p.dce :* ln(qint)))
+            else R2 = p.an[n, .] :* (nsum[n, .] :^ (-1 / rr))
+            _cge_jd(M, T, bo, "N1", (n - 1) * nA :+ cA, "QNA", (n - 1) * nA :+ cA, 1)
+            for (gg = 1; gg <= nF; gg++) {
+                if (M.nestf[gg] != n) continue
+                if (M.cdn[n]) dq = R2 :* nested[gg, .] :* p.dva[gg, .] :/ qf[gg, .]
+                else dq = (R2 :/ nsum[n, .]) :* nested[gg, .] :* p.dva[gg, .] :* (qf[gg, .] :^ (-rr - 1))
+                _cge_jd(M, T, bo, "N1", (n - 1) * nA :+ cA, "QF", (gg - 1) * nA :+ cA, -(dq :* M.fa[gg, .] :* z[gg, .])')
+                _cge_jd(M, T, bo, "N1", (n - 1) * nA :+ cA, "EFF", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * DW[gg]) :* QF[gg, .])')
+                _cge_jd(M, T, bo, "N1", (n - 1) * nA :+ cA, "DW", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * EFF[gg]) :* QF[gg, .])')
+            }
+            for (c = 1; c <= nC; c++) {
+                if (M.nestc[c] != n) continue
+                if (M.cdn[n]) dq = R2 :* M.ecell[c, .] :* p.dce[c, .] :/ qint[c, .]
+                else dq = (R2 :/ nsum[n, .]) :* M.ecell[c, .] :* p.dce[c, .] :* (qint[c, .] :^ (-rr - 1))
+                _cge_jd(M, T, bo, "N1", (n - 1) * nA :+ cA, "QINT", (c - 1) * nA :+ cA, -(dq :* M.ecell[c, .])')
+            }
+            // N2: Cobb-Douglas value added: PNA QNA = dvn P; CES: PNA = (P / cessum) dvn qna^(-rho - 1)
+            R2 = _cge_ifel(1 :- M.cd', (P :/ cessum) :* p.dvn[n, .] :* (qna[n, .] :^ (-rho :- 1)), J(1, nA, 0))
+            _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "PNA", (n - 1) * nA :+ cA, _cge_ifel(M.cd', QNA[n, .], J(1, nA, 1))')
+            _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "QNA", (n - 1) * nA :+ cA, (M.cd' :* PNA[n, .])')
+            _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "PVA", cA, -_cge_ifel(M.cd', p.dvn[n, .] :* QVA', R2 :/ PVA')')
+            _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "QVA", cA, -_cge_ifel(M.cd', p.dvn[n, .] :* PVA', R2 :/ QVA')')
+            Cross = R2 :* rho :/ cessum
+            for (k = 1; k <= nN; k++) {
+                dq = (k == n) :* _cge_ifel(1 :- M.cd', R2 :* (-rho :- 1) :/ qna[n, .], J(1, nA, 0)) +
+                     Cross :* M.nn[k, .] :* p.dvn[k, .] :* (qna[k, .] :^ (-rho :- 1))
+                if (any(dq)) _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "QNA", (k - 1) * nA :+ cA, -(dq :* M.nn[k, .])')
+            }
+            for (gg = 1; gg <= nF; gg++) {
+                dq = Cross :* top[gg, .] :* p.dva[gg, .] :* (qf[gg, .] :^ (-rho :- 1))
+                if (!any(dq)) continue
+                _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "QF", (gg - 1) * nA :+ cA, -(dq :* M.fa[gg, .] :* z[gg, .])')
+                _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "EFF", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * DW[gg]) :* QF[gg, .])')
+                _cge_jd(M, T, bo, "N2", (n - 1) * nA :+ cA, "DW", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * EFF[gg]) :* QF[gg, .])')
+            }
+        }
+        // N3, by commodity in a nest
+        pe = PQ :* (1 :+ vint)
+        for (c = 1; c <= nC; c++) {
+            n = M.nestc[c]
+            if (!n) continue
+            rr = rns[n]
+            Ns = nsum[n, .]
+            if (M.cdn[n]) {
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "PQ", c, ((1 :+ vint[c, .]) :* QINT[c, .])')
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "TVADJ", 1, (PQ[c] * p.tv[c] :* (1 :- p.kappa') :* QINT[c, .])')
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "QINT", (c - 1) * nA :+ cA, pe[c, .]')
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "PNA", (n - 1) * nA :+ cA, -(p.dce[c, .] :* QNA[n, .])')
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "QNA", (n - 1) * nA :+ cA, -(p.dce[c, .] :* PNA[n, .])')
+                continue
+            }
+            R3 = (pnqn[n, .] :/ Ns) :* p.dce[c, .] :* (qint[c, .] :^ (-rr - 1))
+            _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "PQ", c, (1 :+ vint[c, .])')
+            _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "TVADJ", 1, (PQ[c] * p.tv[c] :* (1 :- p.kappa'))')
+            _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "PNA", (n - 1) * nA :+ cA, -(R3 :/ PNA[n, .])')
+            _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "QNA", (n - 1) * nA :+ cA, -(R3 :/ QNA[n, .])')
+            Cross = R3 :* rr :/ Ns
+            for (k = 1; k <= nC; k++) {
+                if (M.nestc[k] != n) continue
+                dq = (k == c) :* (R3 :* (-rr - 1) :/ qint[c, .]) + Cross :* M.ecell[k, .] :* p.dce[k, .] :* (qint[k, .] :^ (-rr - 1))
+                if (any(dq)) _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "QINT", (k - 1) * nA :+ cA, -(dq :* M.ecell[k, .])')
+            }
+            for (gg = 1; gg <= nF; gg++) {
+                if (M.nestf[gg] != n) continue
+                dq = Cross :* nested[gg, .] :* p.dva[gg, .] :* (qf[gg, .] :^ (-rr - 1))
+                if (!any(dq)) continue
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "QF", (gg - 1) * nA :+ cA, -(dq :* M.fa[gg, .] :* z[gg, .])')
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "EFF", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * DW[gg]) :* QF[gg, .])')
+                _cge_jd(M, T, bo, "N3", (c - 1) * nA :+ cA, "DW", J(nA, 1, gg), -(dq :* M.fa[gg, .] :* (p.af[gg] * EFF[gg]) :* QF[gg, .])')
+            }
+        }
+    }
+
+    // Health services, factor efficiency and days lost to illness
+    i = selectindex(M.chs)
+    if (rows(i) * cols(i)) {
+        i = colshape(i, 1)
+        _cge_jd(M, T, bo, "H1", 1, "HS", 1, 1)
+        _cge_jd(M, T, bo, "H1", J(rows(i) * nH, 1, 1), "QH", colshape(_cge_el(i * J(1, nH, 1), J(rows(i), 1, 1) * cH', nH), 1), -1)
+        _cge_jd(M, T, bo, "H1", J(rows(i), 1, 1), "QG", i, -1)
+        _cge_jd(M, T, bo, "H1", J(rows(i), 1, 1), "QSHI", i, -1)
+    }
+    else _cge_jd(M, T, bo, "H1", 1, "HS", 1, 1)
+    _cge_jd(M, T, bo, "H2", cF, "EFF", cF, 1)
+    _cge_jd(M, T, bo, "H2", cF, "HS", 1, -p.etah :* ((HS / p.hs0) :^ (p.etah :- 1)) :/ p.hs0)
+    _cge_jd(M, T, bo, "H3", cF, "DW", cF, 1)
+    _cge_jd(M, T, bo, "H3", cF, "HS", 1, p.sick :* p.epss :* ((HS / p.hs0) :^ (p.epss :- 1)) :/ (p.hs0 :* (1 :- p.sick0)))
+    // Intermediate inputs and marketed output
+    IC = _cge_rowi(nC, nA)
+    eCA = _cge_el(IC, _cge_coli(nC, nA), nA)
+    _cge_jd(M, T, bo, "Q5", eCA, "QINT", eCA, 1)
+    _cge_jd(M, T, bo, "Q5", eCA, "QINTA", _cge_coli(nC, nA), -p.ica)
+    _cge_nzv(p.theta, i, j, v)
+    _cge_jd(M, T, bo, "Q6", cC, "QX", cC, 1)
+    _cge_jd(M, T, bo, "Q6", j, "QA", i, -v)
+    for (hh = 1; hh <= nH; hh++) _cge_jd(M, T, bo, "Q6", j, "QHA", _cge_el(i, hh, nH), v)
+    // Output of a commodity from several activities (Q6A, Q6B, P5A)
+    if (ncac) {
+        eAC = _cge_el(_cge_rowi(nA, nC), _cge_coli(nA, nC), nC)
+        rsac = (M.cac :* (1 :- M.cdac) :* p.rac + (1 :- M.cac :* (1 :- M.cdac)))'
+        qxac = M.xac :* QXAC + (1 :- M.xac)
+        sxac = colsum(M.xac :* p.dac :* (qxac :^ (-(J(nA, 1, 1) * rsac))))
+        lxac = colsum(M.xac :* p.dac :* ln(qxac))
+        R6 = p.aac :* (M.cdac :* exp(lxac') + (1 :- M.cdac) :* ((sxac + (sxac :== 0)) :^ (-1 :/ rsac))')
+        tmp = _cge_ifel(J(nA, 1, 1) * M.cdac', (J(nA, 1, 1) * R6') :* p.dac :/ qxac,
+                        (J(nA, 1, 1) * (R6' :/ (sxac + (sxac :== 0)))) :* p.dac :* (qxac :^ (-(J(nA, 1, 1) * rsac) :- 1)))
+        _cge_jd(M, T, bo, "Q6A", cC, "QX", cC, 1)
+        _cge_jd(M, T, bo, "Q6A", _cge_coli(nA, nC), "QXAC", eAC, -tmp :* M.xac)
+        _cge_jd(M, T, bo, "Q6B", eAC, "QXAC", eAC, 1)
+        _cge_jd(M, T, bo, "Q6B", eAC, "QA", _cge_rowi(nA, nC), -p.theta)
+        for (hh = 1; hh <= nH; hh++) _cge_jd(M, T, bo, "Q6B", eAC, "QHA", _cge_el(_cge_rowi(nA, nC), hh, nH), p.theta)
+        for (c = 1; c <= nC; c++) {
+            if (!M.cac[c]) continue
+            i = selectindex(M.xac[., c])
+            if (rows(i) * cols(i) == 0) continue
+            i = colshape(i, 1)
+            if (M.cdac[c]) {
+                _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "PXAC", (i :- 1) :* nC :+ c, QXAC[i, c])
+                _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "QXAC", (i :- 1) :* nC :+ c, PXAC[i, c])
+                _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "PX", c, -p.dac[i, c] :* QX[c])
+                _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "QX", c, -p.dac[i, c] :* PX[c])
+                continue
+            }
+            rr = rsac[c]
+            R5 = (PX[c] * QX[c] / sxac[c]) :* p.dac[i, c] :* (qxac[i, c] :^ (-rr - 1))
+            _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "PXAC", (i :- 1) :* nC :+ c, 1)
+            _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "PX", c, -R5 :/ PX[c])
+            _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "QX", c, -R5 :/ QX[c])
+            for (k = 1; k <= rows(i); k++) {
+                dq = (i :== i[k]) :* (R5 :* (-rr - 1) :/ qxac[i[k], c]) +
+                     R5 :* (rr * p.dac[i[k], c] * qxac[i[k], c]^(-rr - 1) / sxac[c])
+                _cge_jd(M, T, bo, "P5A", (i :- 1) :* nC :+ c, "QXAC", (i[k] - 1) * nC + c, -dq)
+            }
+        }
+    }
+
+    // 5.3 Trade block
+    Sc = p.dt :* (QE :^ p.rt) + p.dtc :* (QD :^ p.rt)
+    tmp = p.at :* (Sc :^ (1 :/ p.rt))
+    _cge_jd(M, T, bo, "T1", cC, "QX", cC, 1)
+    _cge_jd(M, T, bo, "T1", cC, "QE", cC, -(tmp :/ Sc) :* p.dt :* (QE :^ (p.rt :- 1)))
+    _cge_jd(M, T, bo, "T1", cC, "QD", cC, -(tmp :/ Sc) :* p.dtc :* (QD :^ (p.rt :- 1)))
+    k2 = 1 :/ (p.rt :- 1)
+    ratio = (PE :/ PD) :* (p.dtc :/ p.dt)
+    tmp = QD :* (ratio :^ k2)
+    _cge_jd(M, T, bo, "T2", cC, "QE", cC, 1)
+    _cge_jd(M, T, bo, "T2", cC, "QD", cC, -(ratio :^ k2))
+    _cge_jd(M, T, bo, "T2", cC, "PE", cC, -k2 :* tmp :/ PE)
+    _cge_jd(M, T, bo, "T2", cC, "PD", cC, k2 :* tmp :/ PD)
+    _cge_jd(M, T, bo, "T3", cC, "QX", cC, 1)
+    _cge_jd(M, T, bo, "T3", cC, "QD", cC, -1)
+    _cge_jd(M, T, bo, "T3E", cC, "QX", cC, 1)
+    _cge_jd(M, T, bo, "T3E", cC, "QE", cC, -1)
+    Sc = p.dq :* (QM :^ (-p.rq)) + p.dqc :* (QD :^ (-p.rq))
+    tmp = p.aq :* (Sc :^ (-1 :/ p.rq))
+    _cge_jd(M, T, bo, "T4", cC, "QQ", cC, 1)
+    _cge_jd(M, T, bo, "T4", cC, "QM", cC, -(tmp :/ Sc) :* p.dq :* (QM :^ (-p.rq :- 1)))
+    _cge_jd(M, T, bo, "T4", cC, "QD", cC, -(tmp :/ Sc) :* p.dqc :* (QD :^ (-p.rq :- 1)))
+    k2 = 1 :/ (1 :+ p.rq)
+    ratio = (PDD :/ PM) :* (p.dq :/ p.dqc)
+    tmp = QD :* (ratio :^ k2)
+    _cge_jd(M, T, bo, "T5", cC, "QM", cC, 1)
+    _cge_jd(M, T, bo, "T5", cC, "QD", cC, -(ratio :^ k2))
+    _cge_jd(M, T, bo, "T5", cC, "PM", cC, k2 :* tmp :/ PM)
+    _cge_jd(M, T, bo, "T5", cC, "PD", cC, -k2 :* tmp :/ PDD)
+    _cge_nzv(p.icd, i, j, v)
+    if (rows(i)) _cge_jd(M, T, bo, "T5", j, "PQ", i, -k2[j] :* tmp[j] :/ PDD[j] :* v)
+    _cge_jd(M, T, bo, "T6", cC, "QQ", cC, 1)
+    _cge_jd(M, T, bo, "T6", cC, "QD", cC, -p.aq)
+    _cge_jd(M, T, bo, "T7", cC, "QQ", cC, 1)
+    _cge_jd(M, T, bo, "T7", cC, "QM", cC, -p.aq)
+    _cge_jd(M, T, bo, "T8", cC, "QT", cC, 1)
+    _cge_nzv(p.icm, i, j, v)
+    _cge_jd(M, T, bo, "T8", i, "QQ", j, -v)
+    _cge_nzv(p.icd, i, j, v)
+    _cge_jd(M, T, bo, "T8", i, "QD", j, -v)
+    _cge_nzv(p.ici, i, j, v)
+    _cge_jd(M, T, bo, "T8", i, "QM", j, -v)
+    _cge_nzv(p.ice, i, j, v)
+    _cge_jd(M, T, bo, "T8", i, "QE", j, -v)
+    tmp = p.qer :* ((PQ :/ (EXR :* p.pwe)) :^ (-p.st))
+    _cge_jd(M, T, bo, "T9", cC, "QER", cC, 1)
+    _cge_jd(M, T, bo, "T9", cC, "PQ", cC, p.st :* tmp :/ PQ)
+    _cge_jd(M, T, bo, "T9", cC, "EXR", 1, -p.st :* tmp :/ EXR)
+    tmp = p.qe0 :* ((PWE :/ p.pwe) :^ (-p.etae))
+    _cge_jd(M, T, bo, "T10", cC, "QE", cC, 1)
+    _cge_jd(M, T, bo, "T10", cC, "PWE", cC, p.etae :* tmp :/ PWE)
+
+    // 5.4 Institution block
+    eIF = _cge_el(_cge_rowi(nI, nF), _cge_coli(nI, nF), nF)
+    coef = p.shif :* (J(nI, 1, 1) * (1 :- p.tshi :- p.tfy)')
+    if (M.ishi) coef[nI, .] = p.tshi'
+    _cge_jd(M, T, bo, "I2", eIF, "YIF", eIF, 1)
+    _cge_jd(M, T, bo, "I2", eIF, "YF", _cge_coli(nI, nF), -coef)
+    tmp = I(nD) - p.shii :* (J(nD, 1, 1) * ((1 :- MPS) :* (1 :- TINS))')
+    _cge_nzv(tmp, i, j, v)
+    _cge_jd(M, T, bo, "I3", i, "YI", j, v)
+    _cge_nzv(p.shii :* (J(nD, 1, 1) * ((1 :- TINS) :* YI)'), i, j, v)
+    _cge_jd(M, T, bo, "I3", i, "MPS", j, v)
+    _cge_nzv(p.shii :* (J(nD, 1, 1) * ((1 :- MPS) :* YI)'), i, j, v)
+    _cge_jd(M, T, bo, "I3", i, "TINS", j, v)
+    _cge_jd(M, T, bo, "I3", _cge_rowi(nD, nF), "YIF", _cge_el(_cge_rowi(nD, nF), _cge_coli(nD, nF), nF), -1)
+    _cge_jd(M, T, bo, "I3", cD, "CPI", 1, -p.trdg)
+    _cge_jd(M, T, bo, "I3", cD, "EXR", 1, -p.trdr)
+    for (k = 1; k <= nD; k++) {
+        if (!any(p.rrm :== nF + k) & !any(p.rre :== nF + k) & !any(p.rra :== nF + k)) continue
+        G = J(1, rows(x), 0)
+        _cge_rent_grad(M, p, x, nF + k, G, 1, -1, 0)
+        _cge_jdense(M, T, bo, "I3", k, G)
+    }
+    G = J(0, 0, .)
+    _cge_jd(M, T, bo, "I4", cH, "EH", cH, 1)
+    _cge_jd(M, T, bo, "I4", cH, "YI", cH, -p.hc :* (1 :- MPS[cH]) :* (1 :- TINS[cH]))
+    _cge_jd(M, T, bo, "I4", cH, "MPS", cH, p.hc :* (1 :- TINS[cH]) :* YI[cH])
+    _cge_jd(M, T, bo, "I4", cH, "TINS", cH, p.hc :* (1 :- MPS[cH]) :* YI[cH])
+    // Household purchases (I5) and home consumption (I5H), LES
+    eCH = _cge_el(_cge_rowi(nC, nH), _cge_coli(nC, nH), nH)
+    eAH = _cge_el(_cge_rowi(nA, nH), _cge_coli(nA, nH), nH)
+    _cge_jd(M, T, bo, "I5", eCH, "QH", eCH, PH * J(1, nH, 1))
+    _cge_jd(M, T, bo, "I5", eCH, "PQ", _cge_rowi(nC, nH), (1 :+ tv) :* (QH - p.gamma))
+    _cge_jd(M, T, bo, "I5", eCH, "EH", _cge_coli(nC, nH), -p.beta)
+    _cge_jd(M, T, bo, "I5", eCH, "TVADJ", 1,
+            (p.tv :* PQ) :* (QH - p.gamma) + p.beta :* (J(nC, 1, 1) * ((p.tv :* PQ)' * p.gamma)))
+    _cge_jd(M, T, bo, "I5H", eAH, "QHA", eAH, PA * J(1, nH, 1))
+    _cge_jd(M, T, bo, "I5H", eAH, "PA", _cge_rowi(nA, nH), QHA - p.gammah)
+    _cge_jd(M, T, bo, "I5H", eAH, "EH", _cge_coli(nA, nH), -p.betah)
+    _cge_jd(M, T, bo, "I5H", eAH, "TVADJ", 1, p.betah :* (J(nA, 1, 1) * ((p.tv :* PQ)' * p.gamma)))
+    for (hh = 1; hh <= nH; hh++) {
+        // supernumerary spending depends on the prices of the subsistence quantities
+        if (any(p.gamma[., hh])) {
+            outer = p.beta[., hh] * ((1 :+ tv) :* p.gamma[., hh])'
+            _cge_nzv(outer, i, j, v)
+            _cge_jd(M, T, bo, "I5", _cge_el(i, hh, nH), "PQ", j, v)
+            outer = p.betah[., hh] * ((1 :+ tv) :* p.gamma[., hh])'
+            _cge_nzv(outer, i, j, v)
+            _cge_jd(M, T, bo, "I5H", _cge_el(i, hh, nH), "PQ", j, v)
+        }
+        if (any(p.gammah[., hh])) {
+            outer = p.beta[., hh] * p.gammah[., hh]'
+            _cge_nzv(outer, i, j, v)
+            _cge_jd(M, T, bo, "I5", _cge_el(i, hh, nH), "PA", j, v)
+            outer = p.betah[., hh] * p.gammah[., hh]'
+            _cge_nzv(outer, i, j, v)
+            _cge_jd(M, T, bo, "I5H", _cge_el(i, hh, nH), "PA", j, v)
+        }
+    }
+    _cge_jd(M, T, bo, "I6", cC, "QINV", cC, 1)
+    _cge_jd(M, T, bo, "I6", cC, "IADJ", 1, -p.qinv)
+    _cge_jd(M, T, bo, "I7", cC, "QG", cC, 1)
+    _cge_jd(M, T, bo, "I7", cC, "GADJ", 1, -p.qg)
+    _cge_jd(M, T, bo, "I10", cD, "TINS", cD, 1)
+    _cge_jd(M, T, bo, "I10", cD, "TINSADJ", 1, -p.tins0)
+    _cge_jd(M, T, bo, "I11", cD, "MPS", cD, 1)
+    _cge_jd(M, T, bo, "I11", cD, "MPSADJ", 1, -p.mps0)
+    _cge_jd(M, T, bo, "I12", 1, "YSHI", 1, 1)
+    if (M.ishi) _cge_jd(M, T, bo, "I12", J(nF, 1, 1), "YIF", (nI - 1) * nF :+ cF, -1)
+    _cge_jd(M, T, bo, "I12", 1, "CPI", 1, -p.trshi)
+    _cge_jd(M, T, bo, "I12", 1, "EXR", 1, -p.trshir)
+    _cge_jd(M, T, bo, "I13", cC, "QSHI", cC, 1)
+    _cge_jd(M, T, bo, "I13", cC, "SHIADJ", 1, -p.qshi)
+    _cge_jd(M, T, bo, "I14", J(nC, 1, 1), "PQ", cC, (1 :+ tv) :* _cge_v(M, x, 47))
+    _cge_jd(M, T, bo, "I14", 1, "TVADJ", 1, sum(p.tv :* PQ :* _cge_v(M, x, 47)))
+    _cge_jd(M, T, bo, "I14", J(nC, 1, 1), "QSHI", cC, PH)
+    _cge_jd(M, T, bo, "I14", 1, "YSHI", 1, -(1 - p.sshi))
+
+    // Labour-market regimes
+    unemp = 1 :- QFS :/ p.qlf
+    rwage = W :/ CPI
+    _cge_jd(M, T, bo, "L1", cF, "W", cF, J(nF, 1, 1 / CPI))
+    _cge_jd(M, T, bo, "L1", cF, "CPI", 1, -W :/ (CPI^2))
+    _cge_jd(M, T, bo, "L1", cF, "QFS", cF, -p.wref :* p.epsw :* ((unemp :/ p.u0) :^ (-p.epsw :- 1)) :/ (p.u0 :* p.qlf))
+    _cge_jd(M, T, bo, "L1", cF, "LSW", cF, -1)
+    ub = rwage :/ p.wmin :- 1
+    s = sqrt(unemp :^ 2 + ub :^ 2 :+ 2 * p.mu)
+    _cge_jd(M, T, bo, "L2", cF, "QFS", cF, -(1 :- unemp :/ s) :/ p.qlf)
+    _cge_jd(M, T, bo, "L2", cF, "W", cF, (1 :- ub :/ s) :/ (CPI :* p.wmin))
+    _cge_jd(M, T, bo, "L2", cF, "CPI", 1, -(1 :- ub :/ s) :* W :/ ((CPI^2) :* p.wmin))
+    _cge_jd(M, T, bo, "L2", cF, "LSM", cF, -1)
+
+    // 5.5 System constraints: market clearing (S2) and the government balance (S4)
+    _cge_jd(M, T, bo, "S2", cC, "QQ", cC, 1)
+    _cge_jd(M, T, bo, "S2", IC, "QINT", eCA, -1)
+    _cge_jd(M, T, bo, "S2", _cge_rowi(nC, nH), "QH", eCH, -1)
+    _cge_jd(M, T, bo, "S2", cC, "QG", cC, -1)
+    _cge_jd(M, T, bo, "S2", cC, "QINV", cC, -1)
+    _cge_jd(M, T, bo, "S2", cC, "QT", cC, -M.ct)
+    _cge_jd(M, T, bo, "S2", cC, "QER", cC, -M.cr)
+    _cge_jd(M, T, bo, "S2", cC, "QSHI", cC, -1)
+    _cge_jd(M, T, bo, "S4", 1, "YG", 1, 1)
+    _cge_jd(M, T, bo, "S4", 1, "EG", 1, -1)
+    _cge_jd(M, T, bo, "S4", 1, "GSAV", 1, -1)
+
+    // Constraints (Section 16.2)
+    kb = _cge_find(M.ename, "B1")
+    if (rows(M.bY)) {
+        g = M.btype :* (p.bval - x[M.bY]) :/ M.xscale[M.bY]
+        h = M.bdir :* (x[M.bX] - p.bxbar) :/ M.xscale[M.bX]
+        sb = sqrt(g :^ 2 + h :^ 2 :+ 2 * p.bmu)
+        bm = p.bmode
+        _cge_tadd(T, bo[kb] :+ (1::rows(M.bY)), M.bY,
+                  ((bm :== 1) :* (1 :- g :/ sb) + (bm :== 2)) :* (-M.btype :/ M.xscale[M.bY]))
+        _cge_tadd(T, bo[kb] :+ (1::rows(M.bY)), M.bX,
+                  ((bm :== 1) :* (1 :- h :/ sb) + (bm :== 0) + (bm :== 3)) :* (M.bdir :/ M.xscale[M.bX]))
+    }
+
+    // User equations (Section 19): forward differentiation of both sides
+    kb = _cge_find(M.ename, "U")
+    for (k = 1; k <= rows(M.uelab); k++) {
+        tk1 = M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|]
+        tk2 = M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|]
+        utk = tk1 \ tk2
+        vpos = select(utk[., 2], utk[., 1] :== 2)
+        if (rows(vpos) == 0) continue
+        vpos = uniqrows(vpos)
+        (void) _cge_u_dvalue(M, p, x, tk1, vpos, gl)
+        (void) _cge_u_dvalue(M, p, x, tk2, vpos, gr)
+        _cge_tadd(T, bo[kb] + k, vpos, (gl - gr)')
+    }
+}
+
+// The value of the postfix rows tok at x and, in grad, its derivatives with
+// respect to the variables at positions vpos of x (forward differentiation)
+real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real matrix tok,
+                          real colvector vpos, real rowvector grad)
+{
+    real colvector st
+    real matrix G, v
+    real rowvector ga, gb
+    real scalar i, sp, a, b, c, nv, op, val
+    nv = rows(vpos)
+    st = J(rows(tok), 1, .)
+    G = J(rows(tok), nv, 0)
+    sp = 0
+    for (i = 1; i <= rows(tok); i++) {
+        c = tok[i, 1]
+        if (c == 1) {
+            sp = sp + 1
+            st[sp] = tok[i, 2]
+            G[sp, .] = J(1, nv, 0)
+        }
+        else if (c == 2) {
+            sp = sp + 1
+            st[sp] = x[tok[i, 2]]
+            G[sp, .] = (vpos' :== tok[i, 2])
+        }
+        else if (c == 3) {
+            v = _cge_par_get(p, M.upar[tok[i, 2]])
+            sp = sp + 1
+            st[sp] = v[tok[i, 3]]
+            G[sp, .] = J(1, nv, 0)
+        }
+        else if (c == 4) {
+            b = st[sp]
+            gb = G[sp, .]
+            sp = sp - 1
+            a = st[sp]
+            ga = G[sp, .]
+            op = tok[i, 2]
+            if (op == 1) {
+                st[sp] = a + b
+                G[sp, .] = ga + gb
+            }
+            else if (op == 2) {
+                st[sp] = a - b
+                G[sp, .] = ga - gb
+            }
+            else if (op == 3) {
+                st[sp] = a * b
+                G[sp, .] = b :* ga + a :* gb
+            }
+            else if (op == 4) {
+                st[sp] = a / b
+                G[sp, .] = ga :/ b - (a / b^2) :* gb
+            }
+            else {
+                val = a ^ b
+                st[sp] = val
+                // a constant exponent needs no logarithm of the base
+                if (!any(gb)) G[sp, .] = (b == 0 ? J(1, nv, 0) : (b * a ^ (b - 1)) :* ga)
+                else G[sp, .] = val :* ((b / a) :* ga + ln(a) :* gb)
+            }
+        }
+        else if (c == 5) {
+            st[sp] = -st[sp]
+            G[sp, .] = -G[sp, .]
+        }
+        else {
+            a = st[sp]
+            op = tok[i, 2]
+            if (op == 1) {
+                st[sp] = exp(a)
+                G[sp, .] = st[sp] :* G[sp, .]
+            }
+            else if (op == 2) {
+                st[sp] = ln(a)
+                G[sp, .] = G[sp, .] :/ a
+            }
+            else {
+                st[sp] = sqrt(a)
+                G[sp, .] = G[sp, .] :/ (2 * st[sp])
+            }
+        }
+    }
+    grad = G[1, .]
+    return(st[1])
+}
+
+// The variables of the explicit definitions left out of the reduced system
+// (positions in x) and their definition rows (positions in the stacked equations)
+void _cge_dvars(struct cge_model scalar M, real colvector dpos, real colvector drow)
+{
+    string matrix cand
+    real colvector bo, pos, sel
+    real scalar k, g, v
+    cand = _cge_dcandidates()
+    bo = runningsum(M.elen) - M.elen
+    dpos = J(0, 1, .)
+    drow = J(0, 1, .)
+    for (k = 1; k <= rows(cand); k++) {
+        if (!M.dact[k]) continue
+        g = _cge_find(M.ename, cand[k, 1])
+        v = _cge_vidx(M, cand[k, 2])
+        pos = _cge_vpos(M, v)
+        sel = _cge_which(M.exists[pos])
+        dpos = dpos \ pos[sel]
+        drow = drow \ (bo[g] :+ sel)
+    }
+}
+
+// Sums of v by index k = 1..n
+real colvector _cge_sumby(real colvector k, real colvector v, real scalar n)
+{
+    real colvector o, ks, out
+    real matrix info
+    out = J(n, 1, 0)
+    if (rows(k) == 0) return(out)
+    o = order(k, 1)
+    ks = k[o]
+    info = panelsetup(ks, 1)
+    out[ks[info[., 1]]] = panelsum(v[o], info)
+    return(out)
+}
+
+// The exact Jacobian of system S at z, scaled as _cge_F (rows by the scale
+// of the equations, columns by the scale of the variables). In the reduced
+// system each variable of a left-out definition d - g(y) = 0 is replaced by
+// its dependencies, with dd/dy = -(dD/dy) / (dD/dd) from the definition row D.
+real matrix _cge_jacobian_exact(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                                struct cge_sys scalar S, real colvector z)
+{
+    struct cge_trip scalar T
+    real colvector x, r, c, v, keep, dpos, drow, isdef, dnum, indef, piv, sel, dk, dc, dv, o
+    real colvector hasd, kt, vt, rt, nt, first, tt, within, src, start, len, rowsys, colmap, lin, ri, ci
+    real matrix Jac, info
+    real scalar nd, pass, N, k, a, b, n, nfree
+
+    nfree = rows(z)
+    x = xfix
+    x[S.free] = z :* M.xscale[S.free]
+    if (S.reduced) _cge_derive(M, p, x)
+    if (min(x[M.positive]) <= 0 | hasmissing(x)) return(J(S.neq, nfree, .))
+    _cge_tinit(T)
+    _cge_jtrip(M, p, x, T)
+    if (T.n == 0) return(J(S.neq, nfree, 0))
+    r = T.r[|1 \ T.n|]
+    c = T.c[|1 \ T.n|]
+    v = T.v[|1 \ T.n|]
+    // existing equations and variables
+    keep = selectindex(M.emask[r] :& M.exists[c])
+    r = r[keep]
+    c = c[keep]
+    v = v[keep]
+
+    if (S.reduced) {
+        _cge_dvars(M, dpos, drow)
+        nd = rows(dpos)
+        if (nd) {
+            isdef = J(rows(M.emask), 1, 0)
+            isdef[drow] = (1::nd)
+            dnum = J(rows(x), 1, 0)
+            dnum[dpos] = (1::nd)
+            indef = (isdef[r] :> 0)
+            // pivots: each definition row's derivative with respect to its own variable
+            sel = selectindex(indef :& (dnum[c] :== isdef[r]))
+            piv = _cge_sumby(isdef[r[sel]], v[sel], nd)
+            // dd/dy for the other entries of the definition rows, sorted by definition
+            sel = selectindex(indef :& (dnum[c] :!= isdef[r]))
+            dk = isdef[r[sel]]
+            dc = c[sel]
+            dv = -v[sel] :/ piv[dk]
+            o = order((dk, dc), (1, 2))
+            dk = dk[o]
+            dc = dc[o]
+            dv = dv[o]
+            start = J(nd, 1, 0)
+            len = J(nd, 1, 0)
+            if (rows(dk)) {
+                info = panelsetup(dk, 1)
+                start[dk[info[., 1]]] = info[., 1]
+                len[dk[info[., 1]]] = info[., 2] - info[., 1] :+ 1
+            }
+            // the other rows; definitions depend on no other left-out variable,
+            // but substitution is repeated in case one does
+            sel = selectindex(!indef)
+            r = r[sel]
+            c = c[sel]
+            v = v[sel]
+            for (pass = 1; pass <= 5; pass++) {
+                hasd = (dnum[c] :> 0)
+                if (!any(hasd)) break
+                sel = selectindex(hasd)
+                kt = dnum[c[sel]]
+                vt = v[sel]
+                rt = r[sel]
+                sel = selectindex(!hasd)
+                r = r[sel]
+                c = c[sel]
+                v = v[sel]
+                nt = len[kt]
+                sel = selectindex(nt :> 0)
+                if (rows(sel) * cols(sel) == 0) continue
+                kt = kt[sel]
+                vt = vt[sel]
+                rt = rt[sel]
+                nt = nt[sel]
+                N = sum(nt)
+                first = runningsum(nt) - nt :+ 1
+                tt = J(N, 1, 0)
+                tt[first] = J(rows(first), 1, 1)
+                tt = runningsum(tt)
+                within = (1::N) - first[tt]
+                src = start[kt[tt]] + within
+                r = r \ rt[tt]
+                c = c \ dc[src]
+                v = v \ vt[tt] :* dv[src]
+            }
+            if (pass > 5) _cge_fail("cge internal error: left-out variables remain in the Jacobian", 3498)
+        }
+    }
+
+    // rows of the system and free columns, scaled
+    rowsys = runningsum(S.mask) :* S.mask
+    colmap = J(rows(x), 1, 0)
+    colmap[S.free] = (1::nfree)
+    keep = selectindex((rowsys[r] :> 0) :& (colmap[c] :> 0))
+    if (rows(keep) * cols(keep) == 0) return(J(S.neq, nfree, 0))
+    r = r[keep]
+    c = c[keep]
+    v = v[keep] :* M.xscale[c] :/ M.escale[r]
+    if (hasmissing(v)) return(J(S.neq, nfree, .))
+    ri = rowsys[r]
+    ci = colmap[c]
+    // duplicates summed, then the entries written row by row
+    lin = (ri :- 1) :* nfree :+ ci
+    o = order(lin, 1)
+    lin = lin[o]
+    v = v[o]
+    info = panelsetup(lin, 1)
+    v = panelsum(v, info)
+    lin = lin[info[., 1]]
+    ri = floor((lin :- 1) :/ nfree) :+ 1
+    ci = lin - (ri :- 1) :* nfree
+    Jac = J(S.neq, nfree, 0)
+    info = panelsetup(ri, 1)
+    n = rows(info)
+    for (k = 1; k <= n; k++) {
+        a = info[k, 1]
+        b = info[k, 2]
+        Jac[ri[a], ci[|a \ b|]'] = v[|a \ b|]'
+    }
+    return(Jac)
+}
+
+// Test hook (from version 0.7.0): the exact Jacobian against column-by-column
+// central differences at the current point, for the reduced system (the
+// default) or the full one; r(maxdiff), and the block of the largest difference
+void _cge_jexcheck(| real scalar full, string scalar sim, real scalar perturb)
+{
+    struct cge_model scalar M
+    struct cge_par scalar p
+    struct cge_sys scalar S
+    real colvector z, rowpre, bo, rw, o, x
+    real matrix A, B, D
+    real scalar k, i, j, g
+    string scalar blk
+
+    if (args() == 0) full = 0
+    if (args() < 2) sim = ""
+    if (args() < 3) perturb = 0
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    S = _cge_sys_make(M, !full)
+    // at the solution of a simulation, with its parameters, or at the
+    // current point; free variables optionally perturbed by up to +-perturb
+    p = M.p
+    x = M.xcur
+    if (sim != "") {
+        k = _cge_sim_index(M, sim)
+        p = M.simp[k]
+        x = M.simx[., k]
+    }
+    z = x[S.free] :/ M.xscale[S.free]
+    if (perturb > 0) z = z :* (1 :+ perturb :* (2 :* runiform(rows(z), 1) :- 1))
+    A = _cge_jacobian_exact(M, p, x, S, z)
+    B = _cge_jacobian_full(M, p, x, S, z)
+    D = abs(A - B)
+    // the equation block of each row of the system
+    rowpre = selectindex(S.mask)
+    bo = runningsum(M.elen) - M.elen
+    k = 0
+    i = 1
+    j = 1
+    if (rows(D) * cols(D)) {
+        rw = rowmax(D)
+        o = order(-rw, 1)
+        i = o[1]
+        o = order(-D[i, .]', 1)
+        j = o[1]
+    }
+    blk = ""
+    if (rows(rowpre) * cols(rowpre)) {
+        g = max(selectindex(bo :< rowpre[i]))
+        blk = M.ename[g] + "(" + strofreal(rowpre[i] - bo[g]) + ")"
+    }
+    // the variable of that column
+    g = max(selectindex(M.voff :< S.free[j]))
+    st_numscalar("r(maxdiff)", (rows(D) * cols(D) ? max(D) : 0))
+    st_global("r(block)", blk)
+    st_global("r(variable)", M.vname[g] + "(" + strofreal(S.free[j] - M.voff[g]) + ")")
+    st_numscalar("r(columns)", rows(z))
+    printf("{txt}Exact Jacobian (%s system): {res}%f{txt} columns; largest difference from central differences {res}%9.3e{txt} in row {res}%s{txt}, column {res}%s\n",
+           (full ? "full" : "reduced"), rows(z), st_numscalar("r(maxdiff)"), blk, st_global("r(variable)"))
+}
+
+// Test hook (from version 0.7.0): _cge_jexcheck for the reduced and the full
+// system, at the current point and with the free variables perturbed by up to
+// perturb (default 0.03); r(maxdiff) is the largest difference
+void _cge_jexall(| real scalar perturb)
+{
+    real scalar m
+    if (args() == 0) perturb = 0.03
+    _cge_jexcheck(0)
+    m = st_numscalar("r(maxdiff)")
+    _cge_jexcheck(1)
+    m = max((m, st_numscalar("r(maxdiff)")))
+    _cge_jexcheck(0, "", perturb)
+    m = max((m, st_numscalar("r(maxdiff)")))
+    _cge_jexcheck(1, "", perturb)
+    m = max((m, st_numscalar("r(maxdiff)")))
+    st_numscalar("r(maxdiff)", m)
+}
+
 // Test hook: the grouped and column-by-column Jacobians at the current point,
 // with the current shocks and closure, for the reduced system (the default)
 // or the full one
@@ -5096,71 +6181,140 @@ void _cge_jaccheck(| real scalar full, real scalar forward)
            (full ? "full" : "reduced"), (forward ? "one-sided" : "central"), rows(z), G.ncolour, max(abs(A - B)))
 }
 
-// Test hook (from version 0.6.3): the current shocks and closure solved from
-// the base by Newton with the reduced system, with one-sided and with central
-// differences, and the largest relative difference between the two solutions
-void _cge_newtoncheck()
+// Test hook (from version 0.6.3; from 0.7.0 the exact Jacobian): the current
+// shocks and closure solved from the base by Newton with the reduced system,
+// with mode m1 (default 0, the exact Jacobian with Broyden's updates) and with
+// mode m2 (default 1, central differences), and the largest relative
+// difference between the two solutions
+void _cge_newtoncheck(| real scalar m1, real scalar m2)
 {
     struct cge_model scalar M
     struct cge_sys scalar S
     real colvector z1, z2
-    real scalar c1, c2, i1, i2, e1, e2, j1, j2
+    real scalar c1, c2, i1, i2, e1, e2, j1, j2, b1
 
+    if (args() < 1) m1 = 0
+    if (args() < 2) m2 = 1
     M = _cge_load()
     _cge_need(M, "calibrated")
     S = _cge_sys_make(M, 1)
     z1 = M.x0[S.free] :/ M.xscale[S.free]
     z2 = z1
-    c1 = _cge_newton(M, M.p, M.xcur, S, z1, 1e-10, 100, 0, i1, e1)
+    c1 = _cge_newton(M, M.p, M.xcur, S, z1, 1e-10, 100, 0, i1, e1, m1)
     j1 = st_numscalar("r(jacobians)")
-    c2 = _cge_newton(M, M.p, M.xcur, S, z2, 1e-10, 100, 0, i2, e2, 1)
+    b1 = st_numscalar("r(broyden)")
+    c2 = _cge_newton(M, M.p, M.xcur, S, z2, 1e-10, 100, 0, i2, e2, m2)
     j2 = st_numscalar("r(jacobians)")
-    st_numscalar("r(converged_onesided)", c1)
-    st_numscalar("r(converged_central)", c2)
-    st_numscalar("r(iterations_onesided)", i1)
-    st_numscalar("r(iterations_central)", i2)
-    st_numscalar("r(jacobians_onesided)", j1)
-    st_numscalar("r(jacobians_central)", j2)
+    st_numscalar("r(converged1)", c1)
+    st_numscalar("r(converged2)", c2)
+    st_numscalar("r(iterations1)", i1)
+    st_numscalar("r(iterations2)", i2)
+    st_numscalar("r(jacobians1)", j1)
+    st_numscalar("r(jacobians2)", j2)
+    st_numscalar("r(broyden1)", b1)
     st_numscalar("r(maxdiff)", max(abs(z1 - z2) :/ rowmax((J(rows(z2), 1, 1), abs(z2)))))
-    printf("{txt}Newton, one-sided differences: converged {res}%f{txt}, {res}%f{txt} iterations, {res}%f{txt} Jacobian(s)\n", c1, i1, j1)
-    printf("{txt}Newton, central differences:   converged {res}%f{txt}, {res}%f{txt} iterations, {res}%f{txt} Jacobian(s)\n", c2, i2, j2)
+    printf("{txt}Newton, mode %f: converged {res}%f{txt}, {res}%f{txt} iterations, {res}%f{txt} Jacobian(s), {res}%f{txt} Broyden update(s)\n", m1, c1, i1, j1, b1)
+    printf("{txt}Newton, mode %f: converged {res}%f{txt}, {res}%f{txt} iterations, {res}%f{txt} Jacobian(s)\n", m2, c2, i2, j2)
     printf("{txt}Largest relative difference between the solutions {res}%9.3e\n", st_numscalar("r(maxdiff)"))
 }
 
-// Newton-Raphson with a backtracking line search; returns 1 on convergence.
-// From version 0.2.0 the LU factors of the Jacobian are reused for further
-// steps while each such step at least halves the residual norm; otherwise the
-// Jacobian is computed again.
+// Newton's method with a backtracking line search; returns 1 on convergence.
+// The Jacobian is exact (modes 0 and 3, from version 0.7.0), or found by
+// central (mode 1) or one-sided (mode 2) differences.
+//
+// Mode 0 (the default) continues after each Newton step, full or shortened by
+// the line search, with Broyden's good method (Broyden 1965): the inverse of
+// the Jacobian is updated after each step s, with y the change in F, as
+// H+ = (I + a s') H, a = (s - H y) / (s' H y), so that H is the LU factors of
+// the last Jacobian times the stored factors (I + a s'). The next direction
+// is -H+ F+; as H F = -d for the last direction d, H y = H F+ + d needs one
+// solve with the LU factors. A Broyden step is taken with a line search of
+// at most two halvings; a new Jacobian is computed when that fails, after a
+// step that reduces the residual norm by less than a tenth, or after 30
+// updates. Modes 1 to 3 reuse the LU factors of a Jacobian, without updates,
+// after a full step while each step at least halves the residual norm (the
+// method before version 0.7.0, a chord method).
+//
+// Once the tolerance is met, up to three more steps with the last factors
+// (no new Jacobian) are taken while each halves the residual, toward a
+// thousandth of the tolerance: a solution far inside the tolerance varies
+// smoothly with the shocks, as cge_optimize and cge_sensitivity need.
 real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                         struct cge_sys scalar S, real colvector z, real scalar tol, real scalar maxit,
-                        real scalar trace, real scalar iter, real scalar err, | real scalar central)
+                        real scalar trace, real scalar iter, real scalar err, | real scalar mode)
 {
     struct cge_jpat scalar G
-    real colvector f, fn, dz, zn, perm
-    real matrix LU, U
-    real scalar norm0, step, it, fresh, njac
+    real colvector f, fn, dz, zn, perm, d, s, g, Hy, a
+    real matrix LU, U, A, Sm
+    real scalar norm0, step, it, have, njac, nbro, ns, npol, den, ok, smin, j
 
-    if (args() < 11) central = 0
+    if (args() < 11) mode = 0
     f = _cge_F(M, p, xfix, S, z)
     iter = 0
     err = .
     if (hasmissing(f)) return(0)
-    G = _cge_jpat_make(M, S)
-    fresh = 1
+    if (mode == 1 | mode == 2) G = _cge_jpat_make(M, S)
+    have = 0
     njac = 0
-    for (it = 0; it <= maxit; it++) {
+    nbro = 0
+    ns = 0
+    npol = 0
+    for (it = 0; it <= maxit + 3; it++) {
         err = max(abs(f))
-        iter = it
-        if (trace) printf("{txt}Iteration %f: largest scaled residual = {res}%9.3e{txt} (%f Jacobian(s))\n",
-                          it, err, njac)
-        if (err < tol) {
-            st_numscalar("r(jacobians)", njac)
-            return(1)
+        if (!npol) {
+            iter = it
+            if (trace) printf("{txt}Iteration %f: largest scaled residual = {res}%9.3e{txt} (%f Jacobian(s), %f Broyden update(s))\n",
+                              it, err, njac, nbro)
         }
-        if (it == maxit) break
+        if (err < tol) {
+            if (!have | npol >= 3 | err <= 1e-3 * tol) {
+                st_numscalar("r(jacobians)", njac)
+                st_numscalar("r(broyden)", nbro)
+                return(1)
+            }
+            npol++
+        }
+        else if (it >= maxit) break
         norm0 = norm(f)
-        if (!fresh) {
-            // Step with the factors of an earlier Jacobian
+        if (have & mode == 0) {
+            // A Broyden step along d: full, or halved at most twice; when
+            // polishing, a full step that halves the residual
+            ok = 0
+            smin = (npol ? 1 : 0.25)
+            for (step = 1; step >= smin; step = step / 2) {
+                zn = z + step * d
+                fn = _cge_F(M, p, xfix, S, zn)
+                if (!hasmissing(fn)) {
+                    if (norm(fn) <= (npol ? 0.5 : 1 - 1e-4 * step) * norm0) {
+                        ok = 1
+                        break
+                    }
+                }
+            }
+            if (ok) {
+                s = step * d
+                g = _cge_hsolve(LU, U, perm, A, Sm, ns, fn)
+                Hy = g + d
+                den = s' * Hy
+                z = zn
+                f = fn
+                nbro++
+                have = 0
+                if (!hasmissing(g) & abs(den) > 1e-14 * norm(s) * norm(Hy) & ns < 30) {
+                    a = (s - Hy) / den
+                    A = A, a
+                    Sm = Sm, s
+                    ns++
+                    d = -(g + a * (s' * g))
+                    // slow progress: a new Jacobian at the next step
+                    have = (norm(fn) <= 0.9 * norm0)
+                }
+                continue
+            }
+            have = 0
+        }
+        else if (have) {
+            // A step with the factors of the last Jacobian, without updates
             dz = solveupper(U, solvelower(LU, -f[perm]))
             if (!hasmissing(dz)) {
                 zn = z + dz
@@ -5173,10 +6327,17 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
                     }
                 }
             }
-            fresh = 1
+            have = 0
         }
-        if (central) LU = _cge_jacobian(M, p, xfix, S, z, G)
-        else LU = _cge_jacobian(M, p, xfix, S, z, G, f)
+        // a polishing step that does not help ends the solve, converged
+        if (npol) {
+            st_numscalar("r(jacobians)", njac)
+            st_numscalar("r(broyden)", nbro)
+            return(1)
+        }
+        if (mode == 1) LU = _cge_jacobian(M, p, xfix, S, z, G)
+        else if (mode == 2) LU = _cge_jacobian(M, p, xfix, S, z, G, f)
+        else LU = _cge_jacobian_exact(M, p, xfix, S, z)
         njac++
         if (hasmissing(LU)) break
         // Mata's _lud() gives A = (L*U)[p, .], so A x = b is solved with b[invorder(p)]
@@ -5184,7 +6345,6 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
         perm = invorder(perm)
         dz = solveupper(U, solvelower(LU, -f[perm]))
         if (hasmissing(dz)) break
-        fresh = 0
         step = 1
         while (step >= 1e-8) {
             zn = z + step * dz
@@ -5195,13 +6355,46 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             step = step / 2
         }
         if (step < 1e-8) break
-        // After a damped step the old factors are less likely to help
-        if (step < 1) fresh = 1
+        if (mode == 0) {
+            // the first update, from H0 = J^-1: H0 F = -dz
+            A = J(rows(z), 0, .)
+            Sm = A
+            ns = 0
+            s = step * dz
+            g = solveupper(U, solvelower(LU, fn[perm]))
+            Hy = g + dz
+            den = s' * Hy
+            have = 0
+            if (!hasmissing(g) & abs(den) > 1e-14 * norm(s) * norm(Hy)) {
+                a = (s - Hy) / den
+                A = a
+                Sm = s
+                ns = 1
+                d = -(g + a * (s' * g))
+                have = 1
+            }
+        }
+        // after a step shortened by the line search the factors are less
+        // likely to help without updates
+        else have = (step == 1)
         z = zn
         f = fn
     }
     st_numscalar("r(jacobians)", njac)
-    return(0)
+    st_numscalar("r(broyden)", nbro)
+    return(npol > 0)
+}
+
+// H v, with H the inverse of the Jacobian from its LU factors times the
+// stored Broyden factors (I + a_j s_j'), applied in the order they were made
+real colvector _cge_hsolve(real matrix LU, real matrix U, real colvector perm, real matrix A, real matrix Sm,
+                           real scalar ns, real colvector v)
+{
+    real colvector w
+    real scalar j
+    w = solveupper(U, solvelower(LU, v[perm]))
+    for (j = 1; j <= ns; j++) w = w + A[., j] * (Sm[., j]' * w)
+    return(w)
 }
 
 // Evaluator for solvenl(), which takes at most three extra arguments in Stata 13:
@@ -5224,20 +6417,23 @@ void _cge_solvenl_eval(real colvector z, real colvector y, struct cge_model scal
 real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                                 real colvector start, real scalar tol, real scalar maxit,
                                 real scalar trace, real scalar conv, real scalar iter,
-                                real scalar err, string scalar method, | real scalar full)
+                                real scalar err, string scalar method, | real scalar full, real scalar mode)
 {
     real colvector x, act, g, h, flip
     real scalar it2, r
     string scalar m2
 
     if (args() < 12) full = 0
+    // the mode of Newton's method (_cge_newton); 0, the default, is the exact
+    // Jacobian with Broyden's updates
+    if (args() < 13) mode = 0
     if (rows(M.bY)) p.bxbar = xfix[M.bX]
-    if (!rows(M.bY)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full))
+    if (!rows(M.bY)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full, mode))
     act = (p.bmode :> 0)
-    if (!any(act)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full))
+    if (!any(act)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full, mode))
     // Constraints (Section 16.3). 1. The smoothed conditions find the regimes.
     p.bmode = act
-    x = _cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full)
+    x = _cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full, mode)
     if (conv) {
         _cge_bgaps(M, p, x, g, h)
         p.bmode = act :* (2 :* (h :> g) + 3 :* (h :<= g))
@@ -5250,7 +6446,7 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
     // 2. Exact conditions in those regimes; a constraint whose other condition
     // fails changes regime
     for (r = 1; r <= 10; r++) {
-        x = _cge_solve_sys(M, p, xfix, x, tol, maxit, trace, conv, it2, err, m2, full)
+        x = _cge_solve_sys(M, p, xfix, x, tol, maxit, trace, conv, it2, err, m2, full, mode)
         iter = iter + it2
         if (!conv) break
         _cge_bgaps(M, p, x, g, h)
@@ -5276,7 +6472,7 @@ void _cge_bgaps(struct cge_model scalar M, struct cge_par scalar p, real colvect
 real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                               real colvector start, real scalar tol, real scalar maxit,
                               real scalar trace, real scalar conv, real scalar iter,
-                              real scalar err, string scalar method, real scalar full)
+                              real scalar err, string scalar method, real scalar full, | real scalar mode)
 {
     struct cge_sys scalar S
     real colvector z, z2, x, isfree
@@ -5294,10 +6490,12 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     }
     z = start[S.free] :/ M.xscale[S.free]
     method = "newton"
-    conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter, err)
+    if (args() < 13) mode = 0
+    conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter, err, mode)
     if (!conv) {
-        // Newton again from the start, with central differences
-        if (trace) printf("{txt}Newton with one-sided differences failed; again with central differences\n")
+        // Newton again from the start, with a Jacobian from central
+        // differences and without Broyden's updates
+        if (trace) printf("{txt}Newton with the exact Jacobian failed; again with central differences\n")
         z = start[S.free] :/ M.xscale[S.free]
         conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter2, err, 1)
         iter = iter + iter2
@@ -5324,7 +6522,7 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
         rc = _solvenl_solve(SV)
         if (rc == 0) {
             z2 = solvenl_result_values(SV)
-            conv = _cge_newton(M, p, xfix, S, z2, tol, maxit, trace, iter2, err)
+            conv = _cge_newton(M, p, xfix, S, z2, tol, maxit, trace, iter2, err, mode)
             if (conv) z = z2
             iter = iter + iter2
         }
@@ -5422,6 +6620,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     else if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) ({res}%s{txt})\n", name, iter, method)
     else printf("{err}Simulation %s did not converge (largest scaled residual %9.3e)\n", name, err)
     printf("{txt}Largest scaled residual {res}%9.3e{txt}; WALRAS = {res}%9.3e\n", err, walras)
+    st_numscalar("r(N_collapsed)", (conv ? _cge_collapsed(M, x, 1) : .))
     // Diagnostics (from version 0.4.5): after a failure, or when asked
     if (!conv | diagnose) _cge_diagnose(M, M.p, x, full, (diagnose ? 10 : 5))
     st_numscalar("r(steps)", nsteps)
@@ -5440,6 +6639,43 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     st_global("r(name)", name)
     st_global("r(method)", method)
     st_global("r(closure)", _cge_closure_text(M))
+}
+
+// Values of a solution below one millionth of their positive base value, or
+// negative (from version 0.7.0): quantities, prices, incomes and the scaling
+// factors of demand. The equations hold at such a point, but it rarely is an
+// equilibrium that makes economic sense. With show, the largest falls are listed.
+real scalar _cge_collapsed(struct cge_model scalar M, real colvector x, real scalar show)
+{
+    string colvector names
+    real colvector pos, sel, ratio, o
+    real scalar k, v, n
+    names = ("PA", "PVA", "PINTA", "PX", "PD", "PE", "PM", "PQ", "W", "EXR", "CPI", "DPI",
+             "QA", "QVA", "QINTA", "QF", "QINT", "QX", "QD", "QE", "QM", "QQ", "QH", "QG", "QINV", "QFS",
+             "YF", "YI", "EH", "YG", "EG", "IADJ", "GADJ", "QT", "QER", "YSHI", "SHIADJ", "QSHI", "HS",
+             "PWE", "QHA", "QNA", "PNA", "PXAC", "QXAC")'
+    pos = J(0, 1, .)
+    for (k = 1; k <= rows(names); k++) {
+        v = _cge_vidx(M, names[k])
+        if (v) pos = pos \ _cge_vpos(M, v)
+    }
+    sel = _cge_which(M.exists[pos] :& (M.x0[pos] :> 0))
+    if (rows(sel) == 0) return(0)
+    pos = pos[sel]
+    ratio = x[pos] :/ M.x0[pos]
+    sel = _cge_which(ratio :< 1e-6)
+    n = rows(sel)
+    if (n == 0 | !show) return(n)
+    pos = pos[sel]
+    ratio = ratio[sel]
+    o = order(ratio, 1)
+    printf("{txt}Note: {res}%f{txt} value(s) of the solution are negative or below one millionth of their base value:\n", n)
+    for (k = 1; k <= min((n, 5)); k++) {
+        printf("{txt}  %-28s {res}%14.6g{txt}  (base %g)\n", _cge_poslabel(M, pos[o[k]]), x[pos[o[k]]], M.x0[pos[o[k]]])
+    }
+    if (n > 5) printf("{txt}  and %f more\n", n - 5)
+    printf("{txt}The equations hold, but such a solution rarely makes economic sense.\n")
+    return(n)
 }
 
 // =====================================================================
@@ -8490,8 +9726,7 @@ void _cge_diagnose(struct cge_model scalar M, struct cge_par scalar p, real colv
     rows_g = selectindex(S.mask)
     z = x[S.free] :/ M.xscale[S.free]
     if (S.reduced) _cge_derive(M, p, x)
-    G = _cge_jpat_make(M, S)
-    Jac = _cge_jacobian(M, p, x, S, z, G)
+    Jac = _cge_jacobian_exact(M, p, x, S, z)
     if (hasmissing(Jac)) {
         printf("{txt}  The Jacobian cannot be evaluated here: a price or quantity is not positive\n")
         st_numscalar("r(diag_singular)", .)
@@ -10229,7 +11464,10 @@ real scalar _cge_opt_solve(real colvector v, real colvector r, real colvector x)
     q = findexternal("cge__model")
     O = _cge_opt_load()
     _cge_opt_apply(*q, O, v, p, xfix)
-    x = _cge_solve_point(*q, p, xfix, O.xlast, O.tol, O.maxit, 0, conv, iter, err, method)
+    // Each solve starts from the last solution: Newton's method without
+    // Broyden's updates (mode 3), whose steps leave the solution far inside
+    // the tolerance, so that it varies smoothly with the instruments
+    x = _cge_solve_point(*q, p, xfix, O.xlast, O.tol, O.maxit, 0, conv, iter, err, method, 0, 3)
     O.nevals = O.nevals + 1
     if (!conv) {
         // a failed trial starts the next one from the last solution

@@ -6,6 +6,6 @@ Benchmark replication: largest scaled residual  3.55e-16
   [ok]   SAM balance (largest imbalance)                       0.00e+00
   [ok]   benchmark replication (largest scaled residual)       3.55e-16
   [ok]   closure is square (free variables minus equations)    0.00e+00
-  [ok]   homogeneity (largest relative deviation)              2.49e-15
-  [ok]   perturbed start returns the base (largest deviation)  1.26e-12
+  [ok]   homogeneity (largest relative deviation)              5.33e-15
+  [ok]   perturbed start returns the base (largest deviation)  2.00e-14
 All checks passed

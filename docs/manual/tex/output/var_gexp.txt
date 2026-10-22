@@ -25,4 +25,4 @@ Parameter pwm changed for 3 element(s)
 
 . cge_solve, name(budget)
 Simulation budget solved in 7 iteration(s) (newton)
-Largest scaled residual  7.38e-11; WALRAS =  6.61e-10
+Largest scaled residual  1.44e-14; WALRAS =  2.78e-13

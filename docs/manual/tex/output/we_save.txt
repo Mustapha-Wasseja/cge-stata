@@ -2,4 +2,4 @@
 Model saved to worked.cgem (calibrated, 15 simulation(s))
 
 . cge_use using worked.cgem
-Model loaded from worked.cgem (saved by cge-stata 0.6.4; calibrated, 15 simulation(s))
+Model loaded from worked.cgem (saved by cge-stata 0.7.0; calibrated, 15 simulation(s))

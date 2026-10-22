@@ -18,5 +18,5 @@ Sorted by:
   | notariff   compensating_variation       hhd    6.1363604    2.6679828 |
   |-----------------------------------------------------------------------|
   | nt_sales     equivalent_variation       hhd   -.59016788   -.25659473 |
-  | nt_sales   compensating_variation       hhd   -.59010876   -.25656903 |
+  | nt_sales   compensating_variation       hhd   -.59010877   -.25656903 |
   +-----------------------------------------------------------------------+

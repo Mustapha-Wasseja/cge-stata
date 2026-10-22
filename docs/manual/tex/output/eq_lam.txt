@@ -20,4 +20,4 @@ Variable LAM changed for 1 element(s)
 
 . cge_solve, name(qgser)
 Simulation qgser solved in 5 iteration(s) (newton)
-Largest scaled residual  2.77e-12; WALRAS = -5.59e-11
+Largest scaled residual  2.50e-14; WALRAS = -2.57e-13

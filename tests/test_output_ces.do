@@ -17,6 +17,9 @@ quietly cge_sam, labels(account)
 quietly cge_map, `stdmap'
 cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) sigmaac(com_man:2)
 assert r(max_residual) < 1e-12
+* the exact Jacobian (version 0.7.0)
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 quietly cge_solve, name(base) tolerance(1e-12)
 quietly cge_results, sim(base) clear nodisplay
 quietly count if variable == "QXAC"

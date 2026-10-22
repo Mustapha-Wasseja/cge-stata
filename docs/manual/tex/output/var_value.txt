@@ -7,9 +7,9 @@ Add the equations that determine it with cge_equation
   [ok]   benchmark replication (largest scaled residual)       3.55e-16
   [fail] closure is square (free variables minus equations)    1.00e+00
 Simulation realwage:
-  [ok]     solution (largest scaled residual)                  2.16e-11
-  [ok]     Walras's law (WALRAS)                               1.11e-09
-  [ok]     GDP identity (expenditure minus income)             3.61e-09
+  [ok]     solution (largest scaled residual)                  6.14e-14
+  [ok]     Walras's law (WALRAS)                               2.47e-13
+  [ok]     GDP identity (expenditure minus income)             2.39e-12
 1 check(s) failed
 
 r(9);

@@ -1,0 +1,17 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_shock qg, scale(10)
+Parameter qg changed for 3 element(s)
+
+. cge_solve, name(qg10)
+Simulation qg10 solved in 52 iteration(s) (newton)
+Largest scaled residual  5.50e-11; WALRAS = -2.26e-09
+Note: 30 value(s) of the solution are negative or below one millionth of their base value:
+  IADJ                               -26.0597  (base 1)
+  QINV(com_man)                      -1042.39  (base 40)
+  QINV(com_agr)                      -130.299  (base 5)
+  QINV(com_ser)                      -130.299  (base 5)
+  QM(com_man)                     1.77691e-11  (base 60)
+  and 25 more
+The equations hold, but such a solution rarely makes economic sense.

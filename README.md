@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.6.4 implements the standard single-country model described in
+Version 0.7.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,14 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.7.0 solves faster: the Jacobian is exact, from the derivatives of
+every equation of the model and forward differentiation of user equations,
+and Newton's method continues after each step with Broyden's updates of the
+inverse Jacobian. On a synthetic SAM with 40,190 equations (4,254 in the
+reduced system), a tariff removal takes 27 seconds in Stata 13.1/IC instead
+of 96, and 29 in StataNow/MP 19.5 instead of 72. `cge_solve` also notes
+solutions whose quantities, prices or incomes collapse to zero or turn
+negative, which satisfy the equations but rarely make economic sense.
 Version 0.6.4 corrects the help files against the commands and fixes the
 faults that the review found: `cge_solve` stops with error 459 when a user
 variable has no equation; user variables are shocked over their own sets;
@@ -97,8 +105,8 @@ example in the help files runs on the SYNTHETIC data shipped with the
 package, except those that name the user's own files.
 Version 0.6.3 builds the Jacobian with one-sided differences, one evaluation
 of the equations for each group of variables instead of two. On a synthetic
-SAM with 40,190 equations, a tariff removal now takes 96 seconds in Stata
-13.1/IC and 72 in StataNow/MP 19.5 on four cores; the solutions are unchanged.
+SAM with 40,190 equations, a tariff removal took 96 seconds in Stata
+13.1/IC and 72 in StataNow/MP 19.5 on four cores; the solutions were unchanged.
 Version 0.6.2 brings GAMS solutions back into Stata (`cge_gams ..., import()`):
 the solution is checked against the model's equations and stored as a
 simulation, for reports and microsimulation. On a synthetic SAM with

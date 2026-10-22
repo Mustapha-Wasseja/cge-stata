@@ -33,6 +33,9 @@ quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 _standard_simulations ftax_
 cge_shock, reset
 cge_shock tf, elements(lab) scale(0.5)
+* the exact Jacobian (version 0.7.0)
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
 cge_solve, name(ftax_payroll_cut) tolerance(1e-12)
 _compare_reference ftax_payroll_cut
 _compare_report ftax_payroll_cut

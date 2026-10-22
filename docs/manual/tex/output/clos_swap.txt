@@ -16,4 +16,4 @@ Variable QG changed for 1 element(s)
 
 . cge_solve, name(qgser)
 Simulation qgser solved in 5 iteration(s) (newton)
-Largest scaled residual  2.78e-12; WALRAS = -5.68e-11
+Largest scaled residual  1.73e-14; WALRAS =  7.06e-14

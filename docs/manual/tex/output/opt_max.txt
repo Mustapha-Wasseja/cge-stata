@@ -1,15 +1,16 @@
 . cge_optimize, instruments(tm(com_man)) maximize(welfare equivalent_variation hhd) ///
 >     lower(tm(com_man):-0.5) upper(tm(com_man):1) trace
 Iteration 0: objective              0, largest free gradient  8.38e-01
-Iteration 1: objective    .7280923181, largest free gradient  1.63e-01
-Iteration 2: objective    .7677599289, largest free gradient  1.04e-02
-Iteration 3: objective    .7679361177, largest free gradient  4.96e-05
+Iteration 1: objective    .7280912943, largest free gradient  1.63e-01
+Iteration 2: objective    .7677599778, largest free gradient  1.04e-02
+Iteration 3: objective    .7679361175, largest free gradient  4.96e-05
 Iteration 4: objective    .7679361216, largest free gradient  1.28e-08
+Iteration 5: objective    .7679361216, largest free gradient  7.11e-09
 
-Optimisation optimum: converged after 67 solve(s) of the model
+Optimisation optimum: converged after 32 solve(s) of the model
 ----------------------------------------------------------------
 Instrument                                start          optimum
 ----------------------------------------------------------------
-tm(com_man)                                  .1      .3032243549
+tm(com_man)                                  .1      .3032241215
 ----------------------------------------------------------------
 Maximised welfare equivalent_variation hhd:      .7679361216

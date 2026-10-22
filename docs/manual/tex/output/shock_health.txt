@@ -8,8 +8,8 @@ Parameter tshi changed for 1 element(s)
 Parameter af changed for 1 element(s)
 
 . cge_solve, name(health)
-Simulation health solved in 10 iteration(s) (newton)
-Largest scaled residual  9.48e-11; WALRAS = -2.52e-10
+Simulation health solved in 8 iteration(s) (newton)
+Largest scaled residual  6.33e-15; WALRAS =  2.99e-14
 
 . cge_report, sims(health) tables(health)
 

@@ -16,7 +16,7 @@ Parameter tm changed for 3 element(s)
 . cge_optimize, instruments(TINSADJ) targets(government savings = 3) name(tins) trace
 Newton iteration 0: largest scaled target gap  2.71e+00
 Newton iteration 1: largest scaled target gap  6.57e-05
-Newton iteration 2: largest scaled target gap  6.71e-13
+Newton iteration 2: largest scaled target gap  1.27e-14
 
 Optimisation tins: converged after 8 solve(s) of the model
 ----------------------------------------------------------------

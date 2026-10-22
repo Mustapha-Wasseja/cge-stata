@@ -1,7 +1,7 @@
 . type gams_notariff/cge_run.gms
 $title cge-stata model exported by cge_gams: notariff
 $ontext
-Written by cge_gams (cge-stata 0.6.4). GAMS calibrates the model from the
+Written by cge_gams (cge-stata 0.7.0). GAMS calibrates the model from the
 SAM and settings in cge_data.inc, solves the base and then scenario notariff,
 whose parameter changes and closure are in cge_shock_par.inc and whose
 changes to fixed variables are in cge_shock_var.inc. The equations are in

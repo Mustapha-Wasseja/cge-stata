@@ -7,8 +7,8 @@ Parameter qg changed for 1 element(s)
 Constraint QA(act_hlt) <= 30.9, RA(act_hlt) up, rents to hhd: not solved
 
 . cge_solve, name(hlt20_cap)
-Simulation hlt20_cap solved in 23 iteration(s) (newton)
-Largest scaled residual  8.12e-14; WALRAS =  3.17e-14
+Simulation hlt20_cap solved in 14 iteration(s) (newton)
+Largest scaled residual  8.12e-14; WALRAS =  1.62e-15
 Constraints
   QA(act_hlt) <= 30.9, RA(act_hlt) up, rents to hhd: binding
       QA(act_hlt) =         30.9;  RA(act_hlt) =  .0590320938
