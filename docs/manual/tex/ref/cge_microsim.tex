@@ -1,9 +1,9 @@
-\cgeentry{cge_microsim}{Pass a simulation to household survey data}
+\cgeentry{cge_microsim}{Pass simulations to household survey data}
 
 \cgesec{Description}
 
-\cmd{cge_microsim} passes the results of a simulation to the household survey
-in memory, top-down and without feedback to the model. Each survey household
+\cmd{cge_microsim} passes the results of one or more simulations to the
+household survey in memory, top-down and without feedback to the model. Each survey household
 belongs to a household group of the model and keeps its own income
 composition and, if they are given, its own budget shares. Each income
 component changes as the model says that its source changes for the
@@ -13,7 +13,11 @@ index at the prices households pay, including VAT. The command reports real
 consumption per person, the poverty headcount and poverty gap, and the Gini
 coefficient, before and after the simulation, for all households and for
 each group, and can add the household's new consumption and price index to
-the data.
+the data. From version 0.8.0 it also gives, for several simulations at once,
+poverty for several lines, including lines that differ by household, the
+number of poor, eight more inequality measures, incidence by quantile of
+base consumption and the growth incidence curve, and all results as a
+dataset.
 
 \cgesec{Quick start}
 
@@ -35,34 +39,49 @@ cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsi
     income(wage:lab profit:cap remit:row grants:gov)                              ///
     budget(food:com_agr goods:com_man services:com_ser) line(1200)
 \end{stcode}
-As above, and add the variables \cmd{nt_nom}, \cmd{nt_price}, \cmd{nt_real}
-and \cmd{nt_pc}, replacing them if they exist
+As above, and add the variables \cmd{nt_nom}, \cmd{nt_price}, \cmd{nt_real},
+\cmd{nt_pc} and \cmd{nt_q}, replacing them if they exist
 \begin{stcode}
 cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) ///
     income(wage:lab profit:cap remit:row grants:gov) line(1200) generate(nt) replace
+\end{stcode}
+Two simulations, a national line and regional lines in the variable
+\cmd{zreg}, quintiles, and every table
+\begin{stcode}
+cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap remit:row grants:gov) line(1200 zreg) quantiles(5) detail
+\end{stcode}
+As above, with the results as a dataset, saved to \cmd{incidence.dta}
+\begin{stcode}
+cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap remit:row grants:gov) line(1200 zreg) saving(incidence)
 \end{stcode}
 
 \cgesec{Syntax}
 
 \begin{stsyntax}
 \cmdb{cge_microsim} [\argu{if}] [\argu{in}] [\argu{weight}]\texttt{,}
-\optarg{}{sim}{name} \optarg{}{group}{varname} \optarg{cons}{umption}{varname}
+\optarg{}{sim}{names} \optarg{}{group}{varname} \optarg{cons}{umption}{varname}
 [\argu{options}]
 \end{stsyntax}
 
 \begin{opttable}
 \optgroup{Main}
-\optarg{}{sim}{name} & the simulation; required\\
+\optarg{}{sim}{names} & one or more simulations; required\\
 \optarg{}{group}{varname} & each household's model group; required\\
 \optarg{cons}{umption}{varname} & household consumption; required\\
 \optarg{}{size}{varname} & household size; default 1\\
 \optarg{inc}{ome}{var\texttt{:}source \ldots} & income components and their sources\\
 \optarg{bud}{get}{var\texttt{:}commodity \ldots} & budget items and the commodities whose prices apply\\
-\optarg{}{line}{\#} & poverty line per person\\
+\optarg{}{line}{lines} & poverty lines per person, numbers or variables\\
+\optarg{quant}{iles}{\#} & number of quantile groups for incidence; default \texttt{10}\\
 \optgroup{Results}
 \optarg{gen}{erate}{prefix} & add new consumption and the price index as variables\\
 \opt{}{replace} & allow the variables of \cmd{generate()} to be replaced\\
-\opt{nod}{isplay} & suppress the table of results\\
+\opt{det}{ail} & display poverty for every line, inequality and incidence\\
+\opt{}{clear} & replace the survey in memory with the results\\
+\optarg{sav}{ing}{filename[\texttt{, replace}]} & save the results as a dataset\\
+\opt{nod}{isplay} & suppress the tables of results\\
 \end{opttable}
 
 \cmd{pweight}s, \cmd{aweight}s, \cmd{fweight}s and \cmd{iweight}s are
@@ -71,10 +90,12 @@ allowed; all are used as proportional household weights.
 \cgesec{Options}
 
 \begin{optdesc}
-\item[\optarg{}{sim}{name}] names the simulation whose results are passed to
-the survey: a simulation solved by \manref{cge_solve}, a period of a run of
-\manref{cge_dynamic}, or a solution imported by \mbox{\manref{cge_gams}}. Changes
-are measured from the calibrated base.
+\item[\optarg{}{sim}{names}] names the simulations whose results are passed to
+the survey: simulations solved by \manref{cge_solve}, periods of a run of
+\manref{cge_dynamic}, or solutions imported by \mbox{\manref{cge_gams}}. Changes
+are measured from the calibrated base. Several simulations may be given from
+version 0.8.0; \cmd{r()} then holds the results of the first, and
+\cmd{clear} or \cmd{saving()} give those of every one.
 
 \item[\optarg{}{group}{varname}] gives each household's group: a string
 variable whose values are labels of the model's households, or a numeric
@@ -110,21 +131,43 @@ output at the activity's price. A household's price index then uses its own
 budget shares; without \cmd{budget()}, or for a household whose items sum to
 zero, it uses its group's base budget shares, including home consumption.
 
-\item[\optarg{}{line}{\#}] is the poverty line per person, in the units of
-consumption, and must be positive. Without it, no poverty measures are
-computed.
+\item[\optarg{}{line}{lines}] gives one or more poverty lines per person, in
+the units of consumption: positive numbers, or (from version 0.8.0) numeric
+variables that give each household its own line, such as a regional line or a
+line that depends on the household's composition. A household whose line is
+missing is left out. The first line is the one shown in the main table and in
+\res{r(table)}. Without \cmd{line()}, no poverty measures are computed.
+
+\item[\optarg{quant}{iles}{\#}] sets the number of groups of persons, ranked by
+base consumption per person, for incidence: 10, the default, for deciles, 5
+for quintiles, and so on, from 2 to 100.
 
 \item[\optarg{gen}{erate}{prefix}] adds the variables \argu{prefix}\cmd{_nom}
 (new nominal consumption), \argu{prefix}\cmd{_price} (the household's price
 index, relative to the base), \argu{prefix}\cmd{_real} (real consumption, at base
-prices) and \argu{prefix}\cmd{_pc} (real consumption per person). They are
-missing for observations outside the sample. \argu{prefix} may have at most
-26 characters.
+prices), \argu{prefix}\cmd{_pc} (real consumption per person) and
+\argu{prefix}\cmd{_q} (the household's quantile group of base consumption per
+person). With several simulations, the first four are numbered in the order
+of \cmd{sim()}: \argu{prefix}\cmd{_nom1}, \argu{prefix}\cmd{_nom2}, and so on.
+They are missing for observations outside the sample. \argu{prefix} may have
+at most 26 characters, fewer the more simulations there are.
 
 \item[\opt{}{replace}] allows the variables of \cmd{generate()} to be
 replaced. Without it, a variable that exists is an error.
 
-\item[\opt{nod}{isplay}] suppresses the table of results.
+\item[\opt{det}{ail}] also displays, for each simulation, poverty for every
+line and group, the inequality measures for all households, and incidence by
+quantile.
+
+\item[\opt{}{clear}] replaces the survey in memory with the results, as a
+dataset (see \emph{Results as a dataset} below). It cannot be combined with
+\cmd{generate()}, whose variables would be lost.
+
+\item[\optarg{sav}{ing}{filename[\texttt{, replace}]}] saves the results as a
+dataset in \argu{filename} and leaves the survey in memory; \cmd{replace}
+allows an existing file to be replaced.
+
+\item[\opt{nod}{isplay}] suppresses the tables of results.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -192,19 +235,87 @@ index, real consumption and real consumption per person:
 These variables can be analysed with any Stata command, for example to
 compute other poverty or inequality measures, or measures by region.
 
+\cgesubsec{Example 4: several simulations and several poverty lines}
+
+A second scenario doubles the tariffs. Both scenarios are passed to the
+survey at once, with the national line of 100 and a regional line of 90 or
+110 per person, held in a variable:
+\stlog{ms_sim2}
+\stlog[\scriptsize]{ms_multi}
+The table shows each simulation in turn. With \cmd{detail}, each simulation
+also has poverty for every line, the inequality measures, and incidence by
+quintile (here, with \cmd{quantiles(5)}): the persons of each fifth of the
+base distribution of consumption per person, their mean consumption before
+and after, their shares of total consumption, and their share of the total
+change. At the regional lines, 25.82 per cent of persons are poor in the base,
+against 26.75 per cent at the national line, and removing the tariffs raises
+the headcount by 0.58 points, against 0.16. Doubling the tariffs raises mean
+consumption by 0.095 per cent, and the poorest fifth receives 7.2 per cent of
+the gain while holding 6.4 per cent of consumption.
+
+\cgesubsec{Example 5: the results as a dataset}
+
+With \cmd{clear}, the results replace the survey in memory; \cmd{saving()}
+would save them and keep the survey. Each observation is one result:
+\stlog{ms_data}
+The growth incidence curve is in the table \cmd{gic}: the per cent change of
+each percentile of consumption per person, from the base to the simulation.
+It compares the distributions, not the same households; the table
+\cmd{quantile} follows the same persons:
+\stlog{ms_gic}
+
+\cgesubsec{Results as a dataset}
+
+With \cmd{clear} or \cmd{saving()}, the results form a dataset with one
+observation per simulation, table, group, measure, line and quantile:
+\begin{cgetable}{p{0.16\linewidth}p{0.78\linewidth}}
+\toprule
+Variable & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{sim} & the simulation\\
+\cmd{table} & \cmd{summary}, \cmd{quantile} or \cmd{gic}\\
+\cmd{group} & \cmd{all}, every household, or a household group (\cmd{summary})\\
+\cmd{measure} & the measure, below\\
+\cmd{line} & the poverty line, for \cmd{fgt0}, \cmd{fgt1}, \cmd{fgt2} and \cmd{npoor}\\
+\cmd{q} & the quantile group (\cmd{quantile}) or the percentile (\cmd{gic})\\
+\cmd{base}, \cmd{value} & the base and simulated values\\
+\cmd{change}, \cmd{pct} & the change and the per cent change\\
+\end{cgetable}
+The measures of \cmd{summary} are \cmd{mean} (mean consumption per person);
+for each line \cmd{fgt0}, \cmd{fgt1}, \cmd{fgt2} and \cmd{npoor} (the number
+of poor persons, in units of the weights); and \cmd{gini}, \cmd{theil},
+\cmd{mld}, \cmd{ge2}, \cmd{atkinson_05}, \cmd{atkinson_1}, \cmd{atkinson_2},
+\cmd{palma} and \cmd{s80s20}. Those of \cmd{quantile} are \cmd{popshare},
+\cmd{mean}, \cmd{share} (the share of total consumption) and \cmd{inc_abs}
+(the share of the total change, in \cmd{value}); that of \cmd{gic} is
+\cmd{quantile}, the percentile. Poverty measures and inequality indexes are
+proportions; \cmd{pct} is the per cent change of the measure itself.
+
 \cgesec{Stored results}
 
 \cmd{cge_microsim} stores the following in \cmd{r()}:
 \begin{storedres}
 \resgroup{Scalars}
 \res{r(N)} & number of households used\\
-\res{r(fgt0_base)} & poverty headcount in the base, all households (missing without \cmd{line()})\\
+\res{r(N_sims)} & number of simulations\\
+\res{r(N_lines)} & number of poverty lines\\
+\res{r(N_quantiles)} & number of quantile groups\\
+\res{r(fgt0_base)} & poverty headcount at the first line in the base, all households (missing without \cmd{line()})\\
 \res{r(fgt0_sim)} & poverty headcount in the simulation, all households\\
 \res{r(gini_base)} & Gini coefficient in the base, all households\\
 \res{r(gini_sim)} & Gini coefficient in the simulation, all households\\
+\resgroup{Macros}
+\res{r(sims)} & the simulations\\
+\res{r(lines)} & the poverty lines\\
 \resgroup{Matrices}
-\res{r(table)} & one row for all households (\cmd{all}) and one for each group in the survey; columns \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{fgt0_base}, \cmd{fgt0_sim}, \cmd{fgt1_base}, \cmd{fgt1_sim}, \cmd{fgt2_base}, \cmd{fgt2_sim}, \cmd{gini_base} and \cmd{gini_sim}\\
+\res{r(table)} & one row for all households (\cmd{all}) and one for each group in the survey; columns \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{fgt0_base}, \cmd{fgt0_sim}, \cmd{fgt1_base}, \cmd{fgt1_sim}, \cmd{fgt2_base}, \cmd{fgt2_sim} (first line), \cmd{gini_base} and \cmd{gini_sim}\\
+\res{r(poverty)} & for each line (equations \cmd{line1}, \cmd{line2}, \ldots) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated\\
+\res{r(inequality)} & for each group: the nine inequality measures, base and simulated\\
+\res{r(quantiles)} & for each quantile group: \cmd{popshare}, \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{share_base}, \cmd{share_sim} and \cmd{inc_abs}\\
+\res{r(gic)} & for percentiles 1 to 99: the base and simulated values and their per cent change\\
 \end{storedres}
+The results in \cmd{r()} are those of the first simulation of \cmd{sim()}.
 
 \cgesec{Methods and formulas}
 
@@ -260,6 +371,46 @@ $L_i$ the cumulative share of $v_i r_i$, and $F_0 = L_0 = 0$,
 \begin{equation*}
 G = 1 - \sum_i (F_i - F_{i-1})(L_i + L_{i-1}).
 \end{equation*}
+A poverty line given as a variable replaces $z$ by the household's line $z_i$.
+The number of poor is $\sum_i v_i\,\mathbf{1}[r_i < z_i]$.
+
+\textbf{Other inequality measures (from version 0.8.0).} With
+$\mu = \sum_i v_i r_i / \sum_i v_i$ and $s_i = r_i / \mu$, over the persons with
+$v_i > 0$,
+\begin{gather*}
+\text{GE}(0) = -\frac{\sum_i v_i \ln s_i}{\sum_i v_i}, \qquad
+\text{GE}(1) = \frac{\sum_i v_i\, s_i \ln s_i}{\sum_i v_i}, \qquad
+\text{GE}(2) = \frac{\sum_i v_i (s_i^2 - 1)}{2 \sum_i v_i},\\
+A(\varepsilon) = 1 - \frac{1}{\mu}\left(\frac{\sum_i v_i\, r_i^{1-\varepsilon}}{\sum_i v_i}\right)^{1/(1-\varepsilon)},
+\qquad A(1) = 1 - \frac{1}{\mu}\exp\left(\frac{\sum_i v_i \ln r_i}{\sum_i v_i}\right),
+\end{gather*}
+the mean log deviation, the Theil index, half the squared coefficient of
+variation, and the Atkinson index for $\varepsilon = 0.5$, 1 and 2. The
+measures that need $\ln r_i$, or $r_i^{1-\varepsilon}$ with $\varepsilon > 1$,
+are missing when some person's consumption is 0 or less. With $L(p)$ the
+Lorenz curve, linear between the points $(F_i, L_i)$, so that a household at a
+boundary is shared between the groups on either side,
+\begin{equation*}
+\text{Palma} = \frac{1 - L(0.9)}{L(0.4)}, \qquad \text{S80/S20} = \frac{1 - L(0.8)}{L(0.2)} .
+\end{equation*}
+
+\textbf{Quantiles and incidence.} With the values $r_{(1)} \le \dots \le r_{(n)}$,
+$W(i)$ the cumulative person weight and $P = W(n)\,p/100$, the $p$th
+percentile is $r_{(i)}$ for the first $i$ with $W(i) > P$, or
+$(r_{(i-1)} + r_{(i)})/2$ when $W(i-1) = P$: the definition of \cmd{_pctile}
+with weights. Persons fall into quantile group $k$ of $K$ when their base
+consumption per person is above percentile $100(k-1)/K$ and up to percentile
+$100k/K$, as \cmd{xtile} forms groups; tied values stay together, so groups
+may hold somewhat more or less than $1/K$ of persons. For group $k$, with
+$S^t_k = \sum_{i \in k} v_i r^t_i$, the table gives the population share
+$\sum_{i \in k} v_i / \sum_i v_i$, mean consumption $S^t_k / \sum_{i \in k} v_i$
+in the base ($t = 0$) and the simulation ($t = 1$), the shares of total
+consumption $S^t_k / \sum_j S^t_j$, and the share of the total change,
+$(S^1_k - S^0_k) / \sum_j (S^1_j - S^0_j)$. The growth incidence curve
+\citep{ravallion2003} is $g(p) = 100\,\bigl(r^1(p)/r^0(p) - 1\bigr)$ at
+$p = 1, \dots, 99$, with $r^t(p)$ the $p$th percentile of consumption per person
+in the base and the simulation.
+
 \Chapref{chap:microsim} describes the link in full.
 
 \cgesec{References}
@@ -268,6 +419,9 @@ Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. 2008.
 \textit{The Impact of Macroeconomic Policies on Poverty and Income
 Distribution: Macro-Micro Evaluation Techniques and Tools}. World Bank and
 Palgrave Macmillan.
+
+Ravallion, M., and S. Chen. 2003. Measuring pro-poor growth.
+\textit{Economics Letters} 78: 93--99.
 
 \cgesec{Also see}
 

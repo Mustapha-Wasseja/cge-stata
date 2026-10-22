@@ -173,7 +173,7 @@ Entry titles, for `\cgeentry` and `\seeentry`:
 | `cge_equation` | User equations: new relations among the model's variables |
 | `cge_gams` | Write the model as a GAMS program, and solve it in GAMS |
 | `cge_map` | Assign SAM accounts to model roles |
-| `cge_microsim` | Pass a simulation to household survey data |
+| `cge_microsim` | Pass simulations to household survey data |
 | `cge_multiplier` | SAM multipliers and their decomposition |
 | `cge_optimize` | Choose policy instruments to maximise an outcome or reach targets |
 | `cge_parameters` | The calibrated parameters as a dataset |

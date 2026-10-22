@@ -54,3 +54,34 @@ matrix list r(table), format(%9.4f)
 *>> ms_vars
 summarize nt_nom nt_price nt_real nt_pc
 *<<
+
+*>> ms_sim2
+cge_shock, reset
+cge_shock tm, scale(2)
+cge_solve, name(tariff2)
+generate double zreg = cond(runiform() < 0.5, 90, 110)
+*<<
+
+*>> ms_multi
+set linesize 110
+cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap transfer:gov)                                                   ///
+    budget(food:com_agr goods:com_man services:com_ser) line(100 zreg) quantiles(5) detail
+*<<
+set linesize 100
+
+*>> ms_data
+set linesize 110
+cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap transfer:gov)                                                   ///
+    budget(food:com_agr goods:com_man services:com_ser) line(100 zreg) clear nodisplay
+describe, short
+list sim measure line base value change pct if table == "summary" & group == "all" & ///
+    inlist(measure, "mean", "fgt0", "npoor", "theil", "palma"), noobs sepby(sim)
+*<<
+set linesize 100
+
+*>> ms_gic
+list sim q base value pct if table == "gic" & inlist(q, 10, 50, 90), noobs sepby(sim)
+list sim q base value pct if table == "quantile" & measure == "mean" & q <= 3, noobs sepby(sim)
+*<<

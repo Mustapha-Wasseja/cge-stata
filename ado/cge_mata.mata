@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.7.2  2026-10-22
+*! cge_mata.mata  v0.8.0  2026-10-23
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -200,7 +200,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.7.2")
+    return("0.8.0")
 }
 
 // =====================================================================
@@ -8598,8 +8598,9 @@ real scalar _cge_ms_ratio(struct cge_model scalar M, struct cge_par scalar p, re
     return(YIF[h, f] / YIF0[h, f])
 }
 
-// Weighted Fosters-Greer-Thorbecke index of order a for poverty line z
-real scalar _cge_fgt(real colvector r, real colvector w, real scalar z, real scalar a)
+// Weighted Fosters-Greer-Thorbecke index of order a for poverty line z: a
+// number or (from version 0.8.0) a line for each observation
+real scalar _cge_fgt(real colvector r, real colvector w, real colvector z, real scalar a)
 {
     real colvector poor, gap
     poor = (r :< z)
@@ -8622,6 +8623,127 @@ real scalar _cge_gini(real colvector r, real colvector w)
     return(1 - sum((cw - cw1) :* (L + L1)))
 }
 
+// Weighted percentiles pv (between 0 and 100) of r, as _pctile and xtile
+// compute them: with the values sorted, W(i) their cumulative weight and
+// P = W(n) p / 100, the value of the first i with W(i) > P, or the mean of the
+// values i - 1 and i when W(i - 1) = P (from version 0.8.0)
+real colvector _cge_wpct(real colvector r, real colvector w, real colvector pv)
+{
+    real colvector o, xs, W, out
+    real scalar n, P, i, k
+    n = rows(r)
+    o = order(r, 1)
+    xs = r[o]
+    W = runningsum(w[o])
+    out = J(rows(pv), 1, .)
+    for (k = 1; k <= rows(pv); k++) {
+        P = W[n] * pv[k] / 100
+        i = sum(W :<= P) + 1
+        if (i > n) i = n
+        out[k] = xs[i]
+        if (i > 1) {
+            if (W[i - 1] == P) out[k] = (xs[i - 1] + xs[i]) / 2
+        }
+    }
+    return(out)
+}
+
+// Quantile groups 1 to nq of r over weights w, as xtile forms them: group k
+// holds the values above the cut point k - 1 and up to cut point k (from
+// version 0.8.0)
+real colvector _cge_wxtile(real colvector r, real colvector w, real scalar nq)
+{
+    real colvector c, q
+    real scalar k
+    c = _cge_wpct(r, w, 100 :* (1::(nq - 1)) :/ nq)
+    q = J(rows(r), 1, 1)
+    for (k = 1; k < nq; k++) q = q + (r :> c[k])
+    return(q)
+}
+
+// The Lorenz curve of r over weights w at population shares pv, linear
+// between observations (from version 0.8.0)
+real colvector _cge_lorenzv(real colvector r, real colvector w, real colvector pv)
+{
+    real colvector o, F, L, out
+    real scalar k, i, F1, L1
+    o = order(r, 1)
+    F = runningsum(w[o]) / sum(w)
+    L = runningsum(r[o] :* w[o]) / sum(r :* w)
+    out = J(rows(pv), 1, .)
+    for (k = 1; k <= rows(pv); k++) {
+        i = sum(F :< pv[k]) + 1
+        if (i > rows(F)) i = rows(F)
+        F1 = 0
+        L1 = 0
+        if (i > 1) {
+            F1 = F[i - 1]
+            L1 = L[i - 1]
+        }
+        out[k] = L1 + (pv[k] - F1) / (F[i] - F1) * (L[i] - L1)
+    }
+    return(out)
+}
+
+// Generalised entropy GE(a) of r over weights w: a = 0 is the mean log
+// deviation, a = 1 the Theil index; missing when a logarithm needs a value
+// that is not positive (from version 0.8.0)
+real scalar _cge_ge(real colvector r, real colvector w, real scalar a)
+{
+    real colvector s
+    real scalar W
+    W = sum(w)
+    s = r :/ (sum(w :* r) / W)
+    if (a == 0) {
+        if (min(r) <= 0) return(.)
+        return(-sum(w :* ln(s)) / W)
+    }
+    if (a == 1) {
+        if (min(r) < 0) return(.)
+        return(sum(w :* s :* ln(s + (s :<= 0))) / W)
+    }
+    return(sum(w :* (s :^ a :- 1)) / (W * a * (a - 1)))
+}
+
+// Atkinson index of r over weights w, with inequality aversion e (from
+// version 0.8.0)
+real scalar _cge_atk(real colvector r, real colvector w, real scalar e)
+{
+    real scalar W, mu
+    if (min(r) < 0) return(.)
+    if (e >= 1 & min(r) <= 0) return(.)
+    W = sum(w)
+    mu = sum(w :* r) / W
+    if (e == 1) return(1 - exp(sum(w :* ln(r)) / W) / mu)
+    return(1 - (sum(w :* r :^ (1 - e)) / W) ^ (1 / (1 - e)) / mu)
+}
+
+// The inequality measures of cge_microsim, over persons v with positive
+// weight: Gini, Theil, mean log deviation, GE(2), Atkinson with aversion
+// 0.5, 1 and 2, and the Palma and S80/S20 ratios (from version 0.8.0)
+string rowvector _cge_ms_ineqnames()
+{
+    return(("gini", "theil", "mld", "ge2", "atkinson_05", "atkinson_1", "atkinson_2", "palma", "s80s20"))
+}
+
+real rowvector _cge_ms_ineq(real colvector r, real colvector v)
+{
+    real colvector k, L
+    k = selectindex(v :> 0)
+    if (rows(k) < 2) return(J(1, 9, .))
+    L = _cge_lorenzv(r[k], v[k], (0.2 \ 0.4 \ 0.8 \ 0.9))
+    return((_cge_gini(r[k], v[k]), _cge_ge(r[k], v[k], 1), _cge_ge(r[k], v[k], 0), _cge_ge(r[k], v[k], 2),
+            _cge_atk(r[k], v[k], 0.5), _cge_atk(r[k], v[k], 1), _cge_atk(r[k], v[k], 2),
+            (1 - L[4]) / L[2], (1 - L[3]) / L[1]))
+}
+
+// FGT0, FGT1 and FGT2 for line z, and the number of poor persons in units of
+// the weights (from version 0.8.0)
+real rowvector _cge_ms_pov(real colvector r, real colvector v, real colvector z)
+{
+    return((_cge_fgt(r, v, z, 0), _cge_fgt(r, v, z, 1), _cge_fgt(r, v, z, 2), sum(v :* (r :< z))))
+}
+
 // "var:target" pairs
 void _cge_ms_pairs(string scalar spec, string scalar what, string rowvector vars, string rowvector targets)
 {
@@ -8639,24 +8761,37 @@ void _cge_ms_pairs(string scalar spec, string scalar what, string rowvector vars
     }
 }
 
-void _cge_microsim(string scalar sim, string scalar touse, string scalar gvar, string scalar cvar,
+// A matrix in r() with row and column names
+void _cge_ms_rmat(string scalar name, real matrix X, string colvector req, string colvector rn, string colvector cn)
+{
+    st_matrix(name, X)
+    st_matrixrowstripe(name, (req, rn))
+    st_matrixcolstripe(name, (J(rows(cn), 1, ""), cn))
+}
+
+void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, string scalar cvar,
                    string scalar wvar, string scalar svar, string scalar income, string scalar budget,
-                   real scalar zline, string scalar gen, real scalar show)
+                   string scalar lines, real scalar nq, string scalar gen, real scalar show,
+                   real scalar detail)
 {
     struct cge_model scalar M
     struct cge_par scalar p
-    string colvector g, ug, rlab
-    string rowvector ivars, isrc, bvars, bcom
+    string colvector g, ug, rlab, cn
+    string rowvector ivars, isrc, bvars, bcom, simv, ltok, ineqn, povn, nm
+    string scalar sfx, sname
+    string matrix S
     real colvector x, C0, w, nsz, hi, EH, EH0, MPS, TINS, MPS0, TINS0, kappa, grp, ratio, C1, PQ, PQ0
-    real colvector pr, Pg, P, R, r0, r1, pw, Y0, Y1, tot, ci, sel, present
-    real matrix Y, rho, QH0, wg, B, T
-    real scalar s, n, k, h, j, nH, row, hasline
+    real colvector pr, Pg, P, R, r0, r1, pw, Y0, Y1, tot, ci, sel, present, qg, pv, q0, q1
+    real rowvector a, b
+    real matrix Y, rho, QH0, wg, B, T, Z, V, IB, IS, PT, QT, GT
+    real scalar s, n, k, h, j, nH, row, nz, ns, l, si, hasline, zv, d, nr
 
     M = _cge_load()
     _cge_need(M, "calibrated")
-    s = _cge_sim_index(M, sim)
-    x = M.simx[., s]
-    p = M.simp[s]
+    simv = tokens(sims)
+    ns = cols(simv)
+    if (ns == 0) _cge_fail("sim(): give a simulation", 198)
+    for (k = 1; k <= ns; k++) (void) _cge_sim_index(M, simv[k])
     nH = M.nH
     g = st_sdata(., gvar, touse)
     C0 = st_data(., cvar, touse)
@@ -8675,15 +8810,23 @@ void _cge_microsim(string scalar sim, string scalar touse, string scalar gvar, s
         hi = hi + h :* (g :== ug[k])
     }
 
-    // Nominal consumption
-    EH = _cge_vn(M, x, "EH")
-    EH0 = _cge_vn(M, M.x0, "EH")
-    MPS = _cge_vn(M, x, "MPS");      TINS = _cge_vn(M, x, "TINS")
-    MPS0 = _cge_vn(M, M.x0, "MPS");  TINS0 = _cge_vn(M, M.x0, "TINS")
-    kappa = ((1 :- MPS[|1 \ nH|]) :* (1 :- TINS[|1 \ nH|])) :/ ((1 :- MPS0[|1 \ nH|]) :* (1 :- TINS0[|1 \ nH|]))
-    grp = EH :/ EH0
-    if (income == "") ratio = grp[hi, 1]
-    else {
+    // Poverty lines per person: numbers, or variables that give each
+    // household its line (from version 0.8.0)
+    ltok = tokens(lines)
+    nz = cols(ltok)
+    Z = J(n, nz, .)
+    for (l = 1; l <= nz; l++) {
+        zv = strtoreal(ltok[l])
+        if (zv < .) Z[., l] = J(n, 1, zv)
+        else {
+            Z[., l] = st_data(., ltok[l], touse)
+            if (min(Z[., l]) <= 0) _cge_fail("line(): the poverty lines in " + ltok[l] + " must be positive", 459)
+        }
+    }
+    hasline = (nz > 0)
+
+    // Income components and budget items
+    if (income != "") {
         _cge_ms_pairs(income, "income", ivars, isrc)
         for (k = 1; k <= cols(isrc); k++) {
             if (!anyof(("gov", "row", "dom", "cpi", "fixed"), isrc[k]) & !_cge_find(M.F, isrc[k])) {
@@ -8691,27 +8834,9 @@ void _cge_microsim(string scalar sim, string scalar touse, string scalar gvar, s
             }
         }
         Y = st_data(., ivars, touse)
-        rho = J(nH, cols(isrc), .)
-        for (h = 1; h <= nH; h++) {
-            for (k = 1; k <= cols(isrc); k++) rho[h, k] = _cge_ms_ratio(M, p, x, h, isrc[k])
-        }
         Y0 = rowsum(Y)
-        Y1 = rowsum(Y :* rho[hi, .])
-        ratio = (Y0 :!= 0) :* (Y1 :/ (Y0 + (Y0 :== 0))) :* kappa[hi, 1] + (Y0 :== 0) :* grp[hi, 1]
     }
-    // (indexes like grp[hi, 1] keep a column when there is one household group)
-    C1 = C0 :* ratio
-
-    // Prices households pay (including VAT): the household's budget shares, or its group's
-    // (home consumption, from version 0.3.2, at the activity price)
-    PQ = _cge_ph(M, p, x) \ _cge_vn(M, x, "PA")
-    PQ0 = _cge_ph(M, M.p0, M.x0) \ _cge_vn(M, M.x0, "PA")
-    pr = PQ :/ PQ0
-    QH0 = _cge_vn(M, M.x0, "QH") \ _cge_vn(M, M.x0, "QHA")
-    wg = (PQ0 :* QH0) :/ (EH0' + (EH0' :== 0))
-    Pg = wg' * pr
-    if (budget == "") P = Pg[hi, 1]
-    else {
+    if (budget != "") {
         _cge_ms_pairs(budget, "budget", bvars, bcom)
         ci = J(cols(bcom), 1, 0)
         for (k = 1; k <= cols(bcom); k++) {
@@ -8723,72 +8848,300 @@ void _cge_microsim(string scalar sim, string scalar touse, string scalar gvar, s
         B = st_data(., bvars, touse)
         if (min(B) < 0) _cge_fail("budget(): spending on an item cannot be negative", 459)
         tot = rowsum(B)
-        P = (tot :> 0) :* ((B * pr[ci]) :/ (tot + (tot :== 0))) + (tot :<= 0) :* Pg[hi, 1]
     }
-    R = C1 :/ P
-    r0 = C0 :/ nsz
-    r1 = R :/ nsz
-    pw = w :* nsz
 
-    // Results: all households, then each group present
-    hasline = (zline > 0 & zline < .)
+    // Base consumption per person, person weights, and the quantile groups of
+    // the base (from version 0.8.0)
+    r0 = C0 :/ nsz
+    pw = w :* nsz
+    qg = _cge_wxtile(r0, pw, nq)
+    pv = (1::99)
     present = uniqrows(hi)
     rlab = "all" \ M.H[present]
-    T = J(rows(rlab), 11, .)
-    for (row = 1; row <= rows(rlab); row++) {
-        if (row == 1) sel = (1::n)
-        else sel = select((1::n), hi :== present[row - 1])
-        T[row, 1] = sum(pw[sel] :* r0[sel]) / sum(pw[sel])
-        T[row, 2] = sum(pw[sel] :* r1[sel]) / sum(pw[sel])
-        T[row, 3] = 100 * (T[row, 2] / T[row, 1] - 1)
-        if (hasline) {
-            for (j = 0; j <= 2; j++) {
-                T[row, 4 + 2 * j] = _cge_fgt(r0[sel], pw[sel], zline, j)
-                T[row, 5 + 2 * j] = _cge_fgt(r1[sel], pw[sel], zline, j)
+    nr = rows(rlab)
+    ineqn = _cge_ms_ineqnames()
+    povn = ("fgt0", "fgt1", "fgt2", "npoor")
+    // the results dataset: sim, table, group, measure, line; q, base, value
+    S = J(0, 5, "")
+    V = J(0, 3, .)
+
+    for (si = 1; si <= ns; si++) {
+        sname = simv[si]
+        s = _cge_sim_index(M, sname)
+        x = M.simx[., s]
+        p = M.simp[s]
+
+        // Nominal consumption
+        EH = _cge_vn(M, x, "EH")
+        EH0 = _cge_vn(M, M.x0, "EH")
+        MPS = _cge_vn(M, x, "MPS");      TINS = _cge_vn(M, x, "TINS")
+        MPS0 = _cge_vn(M, M.x0, "MPS");  TINS0 = _cge_vn(M, M.x0, "TINS")
+        kappa = ((1 :- MPS[|1 \ nH|]) :* (1 :- TINS[|1 \ nH|])) :/ ((1 :- MPS0[|1 \ nH|]) :* (1 :- TINS0[|1 \ nH|]))
+        grp = EH :/ EH0
+        if (income == "") ratio = grp[hi, 1]
+        else {
+            rho = J(nH, cols(isrc), .)
+            for (h = 1; h <= nH; h++) {
+                for (k = 1; k <= cols(isrc); k++) rho[h, k] = _cge_ms_ratio(M, p, x, h, isrc[k])
+            }
+            Y1 = rowsum(Y :* rho[hi, .])
+            ratio = (Y0 :!= 0) :* (Y1 :/ (Y0 + (Y0 :== 0))) :* kappa[hi, 1] + (Y0 :== 0) :* grp[hi, 1]
+        }
+        // (indexes like grp[hi, 1] keep a column when there is one household group)
+        C1 = C0 :* ratio
+
+        // Prices households pay (including VAT): the household's budget
+        // shares, or its group's (home consumption, from version 0.3.2, at
+        // the activity price)
+        PQ = _cge_ph(M, p, x) \ _cge_vn(M, x, "PA")
+        PQ0 = _cge_ph(M, M.p0, M.x0) \ _cge_vn(M, M.x0, "PA")
+        pr = PQ :/ PQ0
+        QH0 = _cge_vn(M, M.x0, "QH") \ _cge_vn(M, M.x0, "QHA")
+        wg = (PQ0 :* QH0) :/ (EH0' + (EH0' :== 0))
+        Pg = wg' * pr
+        if (budget == "") P = Pg[hi, 1]
+        else P = (tot :> 0) :* ((B * pr[ci]) :/ (tot + (tot :== 0))) + (tot :<= 0) :* Pg[hi, 1]
+        R = C1 :/ P
+        r1 = R :/ nsz
+
+        // Means, poverty and inequality: all households, then each group present
+        T = J(nr, 11, .)
+        IB = J(nr, 9, .)
+        IS = J(nr, 9, .)
+        PT = J(nz * nr, 8, .)
+        for (row = 1; row <= nr; row++) {
+            if (row == 1) sel = (1::n)
+            else sel = select((1::n), hi :== present[row - 1])
+            T[row, 1] = sum(pw[sel] :* r0[sel]) / sum(pw[sel])
+            T[row, 2] = sum(pw[sel] :* r1[sel]) / sum(pw[sel])
+            T[row, 3] = 100 * (T[row, 2] / T[row, 1] - 1)
+            S = S \ (sname, "summary", rlab[row], "mean", "")
+            V = V \ (., T[row, 1], T[row, 2])
+            for (l = 1; l <= nz; l++) {
+                a = _cge_ms_pov(r0[sel], pw[sel], Z[sel, l])
+                b = _cge_ms_pov(r1[sel], pw[sel], Z[sel, l])
+                PT[(l - 1) * nr + row, .] = (a[1], b[1], a[2], b[2], a[3], b[3], a[4], b[4])
+                if (l == 1) T[row, (4..9)] = (a[1], b[1], a[2], b[2], a[3], b[3])
+                S = S \ (J(4, 1, (sname, "summary", rlab[row])), povn', J(4, 1, ltok[l]))
+                V = V \ (J(4, 1, .), a', b')
+            }
+            IB[row, .] = _cge_ms_ineq(r0[sel], pw[sel])
+            IS[row, .] = _cge_ms_ineq(r1[sel], pw[sel])
+            T[row, 10] = IB[row, 1]
+            T[row, 11] = IS[row, 1]
+            S = S \ (J(9, 1, (sname, "summary", rlab[row])), ineqn', J(9, 1, ""))
+            V = V \ (J(9, 1, .), IB[row, .]', IS[row, .]')
+        }
+
+        // Incidence by quantile group of base consumption per person: the
+        // same persons before and after (from version 0.8.0)
+        QT = J(nq, 7, .)
+        d = sum(pw :* (r1 - r0))
+        for (k = 1; k <= nq; k++) {
+            sel = select((1::n), qg :== k)
+            QT[k, 1] = (rows(sel) ? sum(pw[sel]) : 0) / sum(pw)
+            if (!rows(sel)) continue
+            QT[k, 2] = sum(pw[sel] :* r0[sel]) / sum(pw[sel])
+            QT[k, 3] = sum(pw[sel] :* r1[sel]) / sum(pw[sel])
+            QT[k, 4] = 100 * (QT[k, 3] / QT[k, 2] - 1)
+            QT[k, 5] = sum(pw[sel] :* r0[sel]) / sum(pw :* r0)
+            QT[k, 6] = sum(pw[sel] :* r1[sel]) / sum(pw :* r1)
+            if (d != 0) QT[k, 7] = sum(pw[sel] :* (r1[sel] - r0[sel])) / d
+        }
+        for (k = 1; k <= nq; k++) {
+            S = S \ (J(4, 1, (sname, "quantile", "all")), ("popshare" \ "mean" \ "share" \ "inc_abs"), J(4, 1, ""))
+            V = V \ (J(4, 1, k), (QT[k, 1] \ QT[k, 2] \ QT[k, 5] \ .), (QT[k, 1] \ QT[k, 3] \ QT[k, 6] \ QT[k, 7]))
+        }
+
+        // Growth incidence curve: the growth of each percentile of the
+        // distribution of persons, from the base to the simulation
+        q0 = _cge_wpct(r0, pw, pv)
+        q1 = _cge_wpct(r1, pw, pv)
+        GT = (q0, q1, 100 :* (q1 :/ q0 :- 1))
+        S = S \ (J(99, 1, (sname, "gic", "all", "quantile")), J(99, 1, ""))
+        V = V \ (pv, q0, q1)
+
+        if (show) {
+            printf("\n{txt}Household survey results of simulation {res}%s{txt}: {res}%f{txt} households\n", sname, n)
+            printf("{txt}Real consumption per person (base prices); poverty and inequality over persons\n")
+            printf("{txt}{hline 98}\n")
+            printf("{txt}%-14s %11s %11s %8s %18s %18s %18s\n", "", "base", "simulated", "% chg",
+                   (hasline ? "headcount (%)" : ""), (hasline ? "poverty gap (%)" : ""), "Gini (%)")
+            printf("{txt}{hline 98}\n")
+            for (row = 1; row <= nr; row++) {
+                printf("{txt}%-14s {res}%11.4g %11.4g %8.3f", abbrev(rlab[row], 14), T[row, 1], T[row, 2], T[row, 3])
+                if (hasline) printf("{res}  %7.2f -> %7.2f  %7.2f -> %7.2f", 100 * T[row, 4], 100 * T[row, 5],
+                                    100 * T[row, 6], 100 * T[row, 7])
+                else printf("%38s", "")
+                printf("{res}  %7.2f -> %7.2f\n", 100 * T[row, 10], 100 * T[row, 11])
+            }
+            printf("{txt}{hline 98}\n")
+            if (hasline) printf("{txt}Poverty line {res}%s{txt} per person; severity (FGT2) is in r(table)%s\n",
+                                ltok[1], (nz > 1 ? ", the other lines in r(poverty)" : ""))
+            if (detail) _cge_ms_detail(rlab, ltok, PT, IB, IS, QT, nq)
+        }
+
+        if (gen != "") {
+            // with several simulations, the variables of each are numbered
+            sfx = (ns > 1 ? strofreal(si) : "")
+            nm = (gen + "_nom", gen + "_price", gen + "_real", gen + "_pc") :+ sfx
+            (void) st_addvar("double", nm)
+            st_store(., nm, touse, (C1, P, R, r1))
+            st_varlabel(nm[1], "Nominal consumption, simulation " + sname)
+            st_varlabel(nm[2], "Household price index, simulation " + sname)
+            st_varlabel(nm[3], "Real consumption (base prices), simulation " + sname)
+            st_varlabel(nm[4], "Real consumption per person, simulation " + sname)
+            if (si == 1) {
+                (void) st_addvar("double", gen + "_q")
+                st_store(., gen + "_q", touse, qg)
+                st_varlabel(gen + "_q", "Quantile group of base consumption per person, 1 to " + strofreal(nq))
             }
         }
-        T[row, 10] = _cge_gini(r0[sel], pw[sel])
-        T[row, 11] = _cge_gini(r1[sel], pw[sel])
-    }
 
-    if (show) {
-        printf("\n{txt}Household survey results of simulation {res}%s{txt}: {res}%f{txt} households\n", sim, n)
-        printf("{txt}Real consumption per person (base prices); poverty and inequality over persons\n")
+        // r(): the first simulation
+        if (si == 1) {
+            st_matrix("r(table)", T)
+            st_matrixrowstripe("r(table)", (J(nr, 1, ""), rlab))
+            st_matrixcolstripe("r(table)", (J(11, 1, ""), ("mean_base" \ "mean_sim" \ "mean_pct" \ "fgt0_base" \
+                               "fgt0_sim" \ "fgt1_base" \ "fgt1_sim" \ "fgt2_base" \ "fgt2_sim" \ "gini_base" \ "gini_sim")))
+            if (nz) {
+                cn = ("fgt0_base" \ "fgt0_sim" \ "fgt1_base" \ "fgt1_sim" \ "fgt2_base" \ "fgt2_sim" \ "npoor_base" \ "npoor_sim")
+                _cge_ms_rmat("r(poverty)", PT, ("line" :+ strofreal(ceil((1::(nz * nr)) :/ nr))), J(nz, 1, rlab), cn)
+            }
+            cn = vec((ineqn :+ "_base") \ (ineqn :+ "_sim"))
+            _cge_ms_rmat("r(inequality)", _cge_ms_interleave(IB, IS), J(nr, 1, ""), rlab, cn)
+            _cge_ms_rmat("r(quantiles)", QT, J(nq, 1, ""), "q" :+ strofreal(1::nq),
+                         ("popshare" \ "mean_base" \ "mean_sim" \ "mean_pct" \ "share_base" \ "share_sim" \ "inc_abs"))
+            _cge_ms_rmat("r(gic)", GT, J(99, 1, ""), "p" :+ strofreal(pv), ("base" \ "sim" \ "pct"))
+            st_numscalar("r(N)", n)
+            st_numscalar("r(fgt0_base)", T[1, 4])
+            st_numscalar("r(fgt0_sim)", T[1, 5])
+            st_numscalar("r(gini_base)", T[1, 10])
+            st_numscalar("r(gini_sim)", T[1, 11])
+            st_numscalar("r(N_sims)", ns)
+            st_numscalar("r(N_lines)", nz)
+            st_numscalar("r(N_quantiles)", nq)
+            st_global("r(sims)", invtokens(simv))
+            st_global("r(lines)", invtokens(ltok))
+        }
+    }
+    _cge_ms_keep(S, V)
+}
+
+// Columns of A and B side by side: a1 b1 a2 b2 ...
+real matrix _cge_ms_interleave(real matrix A, real matrix B)
+{
+    real matrix X
+    real scalar k
+    X = J(rows(A), 2 * cols(A), .)
+    for (k = 1; k <= cols(A); k++) {
+        X[., 2 * k - 1] = A[., k]
+        X[., 2 * k] = B[., k]
+    }
+    return(X)
+}
+
+// The tables of option detail: poverty for every line, inequality and
+// incidence by quantile (from version 0.8.0)
+void _cge_ms_detail(string colvector rlab, string rowvector ltok, real matrix PT, real matrix IB,
+                    real matrix IS, real matrix QT, real scalar nq)
+{
+    string rowvector lab
+    real scalar l, row, k, nr
+    nr = rows(rlab)
+    if (cols(ltok)) {
+        printf("\n{txt}Poverty by line, base -> simulated: headcount, poverty gap and severity in per cent of persons;\n")
+        printf("{txt}number of poor persons in units of the weights\n")
         printf("{txt}{hline 98}\n")
-        printf("{txt}%-14s %11s %11s %8s %18s %18s %18s\n", "", "base", "simulated", "% chg",
-               (hasline ? "headcount (%)" : ""), (hasline ? "poverty gap (%)" : ""), "Gini (%)")
+        printf("{txt}%-18s %16s  %16s  %16s  %24s\n", "line", "headcount", "poverty gap", "severity", "number poor")
         printf("{txt}{hline 98}\n")
-        for (row = 1; row <= rows(rlab); row++) {
-            printf("{txt}%-14s {res}%11.4g %11.4g %8.3f", abbrev(rlab[row], 14), T[row, 1], T[row, 2], T[row, 3])
-            if (hasline) printf("{res}  %7.2f -> %7.2f  %7.2f -> %7.2f", 100 * T[row, 4], 100 * T[row, 5],
-                                100 * T[row, 6], 100 * T[row, 7])
-            else printf("%38s", "")
-            printf("{res}  %7.2f -> %7.2f\n", 100 * T[row, 10], 100 * T[row, 11])
+        for (l = 1; l <= cols(ltok); l++) {
+            for (row = 1; row <= nr; row++) {
+                k = (l - 1) * nr + row
+                printf("{txt}%-8s %-9s {res}%6.2f -> %6.2f  %6.2f -> %6.2f  %6.2f -> %6.2f  %10.0fc -> %10.0fc\n",
+                       (row == 1 ? abbrev(ltok[l], 8) : ""), abbrev(rlab[row], 9), 100 * PT[k, 1], 100 * PT[k, 2],
+                       100 * PT[k, 3], 100 * PT[k, 4], 100 * PT[k, 5], 100 * PT[k, 6], PT[k, 7], PT[k, 8])
+            }
         }
         printf("{txt}{hline 98}\n")
-        if (hasline) printf("{txt}Poverty line {res}%g{txt} per person; severity (FGT2) is in r(table)\n", zline)
     }
+    lab = ("Gini", "Theil, GE(1)", "Mean log deviation", "GE(2)", "Atkinson, e = 0.5", "Atkinson, e = 1",
+           "Atkinson, e = 2", "Palma", "S80/S20")
+    printf("\n{txt}Inequality of consumption per person over persons, all households\n")
+    printf("{txt}{hline 56}\n")
+    printf("{txt}%-22s %10s %10s %10s\n", "", "base", "simulated", "change")
+    printf("{txt}{hline 56}\n")
+    for (k = 1; k <= 9; k++) {
+        printf("{txt}%-22s {res}%10.5f %10.5f %10.5f\n", lab[k], IB[1, k], IS[1, k], IS[1, k] - IB[1, k])
+    }
+    printf("{txt}{hline 56}\n")
+    printf("\n{txt}Incidence by quantile of base consumption per person (same persons before and after)\n")
+    printf("{txt}{hline 98}\n")
+    printf("{txt}%-9s %9s %12s %12s %8s %22s %14s\n", "quantile", "persons", "mean base", "simulated", "% chg",
+           "share of consumption", "share of gain")
+    printf("{txt}{hline 98}\n")
+    for (k = 1; k <= nq; k++) {
+        printf("{txt}%-9s {res}%8.2f%% %12.4g %12.4g %8.3f %9.2f%% -> %7.2f%% %13.2f%%\n", strofreal(k), 100 * QT[k, 1],
+               QT[k, 2], QT[k, 3], QT[k, 4], 100 * QT[k, 5], 100 * QT[k, 6], 100 * QT[k, 7])
+    }
+    printf("{txt}{hline 98}\n")
+}
 
-    if (gen != "") {
-        (void) st_addvar("double", (gen + "_nom", gen + "_price", gen + "_real", gen + "_pc"))
-        st_store(., gen + "_nom", touse, C1)
-        st_store(., gen + "_price", touse, P)
-        st_store(., gen + "_real", touse, R)
-        st_store(., gen + "_pc", touse, r1)
-        st_varlabel(gen + "_nom", "Nominal consumption, simulation " + sim)
-        st_varlabel(gen + "_price", "Household price index, simulation " + sim)
-        st_varlabel(gen + "_real", "Real consumption (base prices), simulation " + sim)
-        st_varlabel(gen + "_pc", "Real consumption per person, simulation " + sim)
+// The results of the last call, for option saving() or clear
+void _cge_ms_keep(string matrix S, real matrix V)
+{
+    pointer(string matrix) scalar ps
+    pointer(real matrix) scalar pv
+    if ((ps = findexternal("cge__mss")) == NULL) ps = crexternal("cge__mss")
+    if ((pv = findexternal("cge__msv")) == NULL) pv = crexternal("cge__msv")
+    *ps = S
+    *pv = V
+}
+
+void _cge_ms_drop()
+{
+    if (findexternal("cge__mss") != NULL) rmexternal("cge__mss")
+    if (findexternal("cge__msv") != NULL) rmexternal("cge__msv")
+}
+
+// The results as a dataset, in the empty dataset in memory: one observation
+// per simulation, table, group, measure, line and quantile (from version 0.8.0)
+void _cge_ms_post()
+{
+    pointer(string matrix) scalar ps
+    pointer(real matrix) scalar pv
+    string matrix S
+    string rowvector sv
+    real matrix V
+    real colvector ch, pc
+    real scalar k, wd
+    ps = findexternal("cge__mss")
+    pv = findexternal("cge__msv")
+    if (ps == NULL | pv == NULL) _cge_fail("no results of cge_microsim to save", 459)
+    S = *ps
+    V = *pv
+    sv = ("sim", "table", "group", "measure", "line")
+    for (k = 1; k <= 5; k++) {
+        wd = max((1, max(strlen(S[., k]))))
+        (void) st_addvar("str" + strofreal(wd), sv[k])
     }
-    st_matrix("r(table)", T)
-    st_matrixrowstripe("r(table)", (J(rows(rlab), 1, ""), rlab))
-    st_matrixcolstripe("r(table)", (J(11, 1, ""), ("mean_base" \ "mean_sim" \ "mean_pct" \ "fgt0_base" \
-                       "fgt0_sim" \ "fgt1_base" \ "fgt1_sim" \ "fgt2_base" \ "fgt2_sim" \ "gini_base" \ "gini_sim")))
-    st_numscalar("r(N)", n)
-    st_numscalar("r(fgt0_base)", T[1, 4])
-    st_numscalar("r(fgt0_sim)", T[1, 5])
-    st_numscalar("r(gini_base)", T[1, 10])
-    st_numscalar("r(gini_sim)", T[1, 11])
+    (void) st_addvar("double", ("q", "base", "value", "change", "pct"))
+    st_addobs(rows(S))
+    st_sstore(., sv, S)
+    ch = V[., 3] - V[., 2]
+    pc = 100 :* (V[., 3] :/ V[., 2] :- 1)
+    st_store(., ("q", "base", "value", "change", "pct"), (V, ch, pc))
+    st_varlabel("sim", "Simulation")
+    st_varlabel("table", "Table: summary, quantile or gic")
+    st_varlabel("group", "Household group (all: every household)")
+    st_varlabel("measure", "Measure")
+    st_varlabel("line", "Poverty line")
+    st_varlabel("q", "Quantile group (quantile) or percentile (gic)")
+    st_varlabel("base", "Base value")
+    st_varlabel("value", "Value in the simulation")
+    st_varlabel("change", "Change, simulated minus base")
+    st_varlabel("pct", "Per cent change")
+    _cge_ms_drop()
 }
 
 // =====================================================================

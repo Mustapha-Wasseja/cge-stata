@@ -1,0 +1,11 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_shock tm, scale(2)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(tariff2)
+Simulation tariff2 solved in 7 iteration(s) (newton)
+Largest scaled residual  1.95e-14; WALRAS = -2.39e-13
+
+. generate double zreg = cond(runiform() < 0.5, 90, 110)

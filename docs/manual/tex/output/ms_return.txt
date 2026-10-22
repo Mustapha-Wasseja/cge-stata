@@ -1,13 +1,24 @@
 . return list
 
 scalars:
+        r(N_quantiles) =  10
+            r(N_lines) =  1
+             r(N_sims) =  1
            r(gini_sim) =  .3632654507489588
           r(gini_base) =  .3632179401351559
            r(fgt0_sim) =  .2690883392367442
           r(fgt0_base) =  .2674509902763488
                   r(N) =  1000
 
+macros:
+              r(lines) : "100"
+               r(sims) : "notariff"
+
 matrices:
+                r(gic) :  99 x 3
+          r(quantiles) :  10 x 7
+         r(inequality) :  2 x 18
+            r(poverty) :  2 x 8
               r(table) :  2 x 11
 
 . matrix list r(table), format(%9.4f)

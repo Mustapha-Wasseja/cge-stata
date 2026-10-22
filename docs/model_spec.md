@@ -941,6 +941,38 @@ $C^0_i/n_i$), and person weights $w_i n_i$:
 $$FGT_\alpha = \frac{\sum_i w_i n_i\,\mathbf{1}[r_i < z]\,\big((z - r_i)/z\big)^\alpha}{\sum_i w_i n_i}, \qquad \alpha = 0, 1, 2,$$
 for a poverty line $z$, and the Gini coefficient is that of $r_i$ over persons.
 
+**Distribution and incidence (from version 0.8.0).** `sim()` takes several
+simulations; the base is the same for all. A poverty line may be a number or
+a variable, $z_i$ for each household (regional or household-specific lines),
+and several lines may be given; for each, FGT0 to FGT2 use $z_i$ in place of
+$z$, and the number of poor is $\sum_i w_i n_i\,\mathbf{1}[r_i < z_i]$. With
+$v_i = w_i n_i$, $\mu = \sum v_i r_i / \sum v_i$ and $s_i = r_i/\mu$, over the
+persons with $v_i > 0$:
+$GE(0) = -\sum v_i \ln s_i / \sum v_i$ (mean log deviation),
+$GE(1) = \sum v_i s_i \ln s_i / \sum v_i$ (Theil),
+$GE(2) = \sum v_i (s_i^2 - 1) / (2 \sum v_i)$;
+Atkinson $A(\varepsilon) = 1 - \big(\sum v_i r_i^{1-\varepsilon}/\sum v_i\big)^{1/(1-\varepsilon)}/\mu$,
+$A(1) = 1 - \exp(\sum v_i \ln r_i / \sum v_i)/\mu$, for $\varepsilon = 0.5, 1, 2$;
+measures that need $\ln r_i$ or $r_i^{1-\varepsilon}$ with $\varepsilon \ge 1$ are
+missing when some $r_i \le 0$. With $L(p)$ the Lorenz curve over persons,
+linear between households, Palma $= (1 - L(0.9))/L(0.4)$ and
+$S80/S20 = (1 - L(0.8))/L(0.2)$.
+Persons are ranked by base consumption per person into `quantiles(#)` groups
+(default 10) as `xtile` forms them: with the values sorted, $W(i)$ their
+cumulative person weight and $P = W(n)\,p/100$, the $p$-th percentile is the
+value of the first $i$ with $W(i) > P$, or the mean of values $i-1$ and $i$ when
+$W(i-1) = P$ (the definition of `_pctile`), and group $k$ holds the values
+above percentile $100(k-1)/K$ up to percentile $100k/K$. For each group, the
+same persons before and after: its population share, mean base and simulated
+consumption per person and its per cent change, its shares of total
+consumption, and its share of the total change. The growth incidence curve
+(Ravallion and Chen 2003) compares percentiles $p = 1, \dots, 99$ of the
+base and simulated distributions, $g(p) = 100\,(r^1(p)/r^0(p) - 1)$.
+`clear` or `saving()` give every result as a dataset: one observation per
+simulation, table (`summary`, `quantile`, `gic`), group, measure, line and
+quantile, with the base, the simulated value, the change and the per cent
+change.
+
 ## 12. Fiscal instruments (from version 0.3.1)
 
 ### 12.1 Revenue-neutral tax replacement

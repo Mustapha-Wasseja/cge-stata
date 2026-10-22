@@ -1,0 +1,35 @@
+. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) ///
+>     income(wage:lab profit:cap transfer:gov)                                                   ///
+>     budget(food:com_agr goods:com_man services:com_ser) line(100 zreg) clear nodisplay
+
+. describe, short
+
+Contains data
+  obs:           350
+ vars:            10
+ size:        25,900
+Sorted by:
+     Note:  dataset has changed since last saved
+
+. list sim measure line base value change pct if table == "summary" & group == "all" & ///
+>     inlist(measure, "mean", "fgt0", "npoor", "theil", "palma"), noobs sepby(sim)
+
+  +-----------------------------------------------------------------------------+
+  |      sim   measure   line        base       value       change          pct |
+  |-----------------------------------------------------------------------------|
+  | notariff      mean          184.28883   183.57269   -.71614257   -.38859791 |
+  | notariff      fgt0    100   .26745099   .26908834    .00163735    .61220523 |
+  | notariff     npoor    100   118660.08   119386.52    726.44319    .61220523 |
+  | notariff      fgt0   zreg    .2582147   .26403556    .00582086     2.254272 |
+  | notariff     npoor   zreg   114562.21   117144.75    2582.5437     2.254272 |
+  | notariff     theil          .22525936   .22532191    .00006255    .02776857 |
+  | notariff     palma          1.4963349   1.4967363    .00040139    .02682493 |
+  |-----------------------------------------------------------------------------|
+  |  tariff2      mean          184.28883   184.46422    .17538989     .0951712 |
+  |  tariff2      fgt0    100   .26745099   .26682288   -.00062811     -.234851 |
+  |  tariff2     npoor    100   118660.08    118381.4   -278.67437     -.234851 |
+  |  tariff2      fgt0   zreg    .2582147    .2582147            0            0 |
+  |  tariff2     npoor   zreg   114562.21   114562.21            0            0 |
+  |  tariff2     theil          .22525936    .2252111   -.00004826   -.02142531 |
+  |  tariff2     palma          1.4963349   1.4960225   -.00031239    -.0208768 |
+  +-----------------------------------------------------------------------------+

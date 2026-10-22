@@ -66,6 +66,32 @@ the headcount ratio, the poverty gap and the squared poverty gap. The Gini
 coefficient is that of $r_i$ over persons. Both are computed before and after,
 overall and by group.
 
+\section{Distribution and incidence}
+
+From version 0.8.0, a poverty line may differ by household, $z_i$, for
+regional lines or lines that depend on household composition, and several
+lines may be compared at once; for each, the number of poor,
+$\sum_i w_i n_i\,\mathbf{1}[r_i < z_i]$, is given with the FGT measures.
+Beside the Gini coefficient, the generalised entropy measures GE(0), the mean
+log deviation, GE(1), the Theil index, and GE(2), the Atkinson indexes with
+inequality aversion 0.5, 1 and 2, and the Palma and S80/S20 ratios describe
+the distribution of consumption per person over persons
+(\manref{cge_microsim} gives the formulas).
+
+Incidence follows the same persons: ranked by base consumption per person
+into quantile groups, deciles by default, each group's mean consumption
+before and after, its shares of total consumption, and its share of the total
+change show who gains and who loses. The growth incidence curve of
+\citet{ravallion2003} compares the distributions instead: the growth of each
+percentile of consumption per person, whoever holds it. Under the top-down
+link, a household's rank can change only through its own income composition
+and budget shares, so the two views agree closely unless the shock changes
+relative incomes strongly.
+
+Several simulations, such as alternative policies or the periods of a
+dynamic run, can be passed to the survey in one call, with every result in one
+dataset for tables and graphs.
+
 Survey households keep their own income composition and budget shares, so
 their average change can differ from their group's: a household that lives on
 wages gains more than its group when wages rise relative to other income. The

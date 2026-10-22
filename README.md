@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.7.2 implements the standard single-country model described in
+Version 0.8.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,14 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.8.0 extends the link to household surveys (`cge_microsim`): several
+simulations in one call, with every result as a dataset; several poverty
+lines, including lines that differ by household, and the number of poor; the
+Theil index, mean log deviation, GE(2), Atkinson indexes and the Palma and
+S80/S20 ratios beside the Gini coefficient; and incidence by decile (or any
+number of quantiles) of base consumption per person, with the growth
+incidence curve. Quantile groups and percentiles are those of Stata's `xtile`
+and `_pctile`.
 Version 0.7.2 adds conditions, as GAMS's dollar operator: a sum over the
 elements that meet a condition, `sum(c$(tm(c) > 0), PM(c) * QM(c))`, a term
 that is 0 where a condition fails, and user variables and equations defined

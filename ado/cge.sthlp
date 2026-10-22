@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.2  22oct2026}{...}
+{* *! version 0.8.0  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -64,7 +64,7 @@ debt with interest.
 {p2col:{helpb cge_report}}standard report tables, to screen, Stata or Excel{p_end}
 {p2col:{helpb cge_dynresults}}results of a dynamic run, against a baseline{p_end}
 {p2col:{helpb cge_sensitivity}}sensitivity of a scenario to the elasticities{p_end}
-{p2col:{helpb cge_microsim}}pass a simulation to household survey data{p_end}
+{p2col:{helpb cge_microsim}}pass simulations to household survey data: poverty, inequality and incidence{p_end}
 {p2col:{helpb cge_check}}run validation checks{p_end}
 {p2col:{helpb cge_parameters}}calibrated parameters as a dataset{p_end}
 {p2col:{helpb cge_save}}save the model and its simulations{p_end}
