@@ -12,8 +12,9 @@ specification, calibrates the model from the SAM and the user's settings alone,
 and is solved with PATH; it reproduces the 186 scenarios of the Python
 reference, including scenarios with constraints solved as complementarity
 problems, to $2.9 \times 10^{-11}$ or better. \manref{cge_gams} writes any model
-for that GAMS program: 31 exported cases, solved with PATH, CONOPT, KNITRO and
-IPOPT, reproduce the solutions of Stata to $4 \times 10^{-9}$ or better
+for that GAMS program: 33 exported cases, solved with PATH (17 of them also
+with CONOPT, KNITRO and IPOPT), reproduce the solutions of Stata to
+$4 \times 10^{-9}$ or better
 (\secref{sec:gams-import}). The test suite also runs every example do-file.
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;

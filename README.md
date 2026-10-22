@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.7.1 implements the standard single-country model described in
+Version 0.7.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,13 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.7.2 adds conditions, as GAMS's dollar operator: a sum over the
+elements that meet a condition, `sum(c$(tm(c) > 0), PM(c) * QM(c))`, a term
+that is 0 where a condition fails, and user variables and equations defined
+only for some elements, `TMV(c)$(tm(c) > 0)`. Conditions use comparisons,
+`&`, `|`, `!`, set membership, `sameas()` and `ord()`, and are evaluated at
+the base, so the model has the same equations in every scenario, in Stata and
+in GAMS.
 Version 0.7.1 adds user sets and parameters (`cge_set`, `cge_parameter`): a
 set of elements, such as the goods or the health commodities, serves as the
 index of user variables, equations and sums, and a parameter with values of

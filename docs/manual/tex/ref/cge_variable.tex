@@ -32,12 +32,12 @@ cge_variable LAM, value(1)
 
 A variable and its definition
 \begin{stsyntax}
-\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}] \cmd{=} \argu{expression}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]] \cmd{=} \argu{expression}
 [\texttt{,} \opt{}{nominal}]
 \end{stsyntax}
 A variable that user equations determine
 \begin{stsyntax}
-\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}]\texttt{,} \optarg{}{value}{\#}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{value}{\#}
 [\opt{}{nominal}]
 \end{stsyntax}
 \argu{name} has at most 24 characters, letters, digits and underscores; it

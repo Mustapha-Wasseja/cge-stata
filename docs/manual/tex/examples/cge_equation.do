@@ -42,3 +42,25 @@ di as err "r(" _rc ");"
 cge_closure, swap(none)
 cge_equation, clear
 *<<
+
+*>> eq_cond
+cge_set goods = c, except(com_ser)
+cge_variable MT = sum(c$(tm(c) > 0), PM(c) * QM(c)), nominal
+cge_variable TMV(c)$(tm(c) > 0) = tm(c) * PM(c) * QM(c)
+cge_variable LQM(c)$(tm(c) > 0), value(1)
+cge_equation lqm(c)$(tm(c) > 0): QM(c) = LQM(c) * base(QM(c))
+cge_variable GGOODS = sum(c, (PQ(c) * QG(c))$(goods(c)))
+cge_shock tm, value(0)
+cge_solve, name(notariff)
+quietly cge_results, sim(notariff) clear nodisplay
+list variable element1 base value if inlist(variable, "MT", "TMV", "LQM", "GGOODS"), noobs
+*<<
+
+*>> eq_cond_err
+capture noisily cge_variable X1 = sum(c$(1 / tm(c) > 0), PQ(c))
+di as err "r(" _rc ");"
+capture noisily cge_variable X2(c)$(tm(c) > 1) = PQ(c)
+di as err "r(" _rc ");"
+capture noisily cge_variable X3 = sum(c, PQ(c) * (tm(c) > 0))
+di as err "r(" _rc ");"
+*<<

@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.7.1  2026-10-22
+*! cge_mata.mata  v0.7.2  2026-10-22
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -200,7 +200,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.7.1")
+    return("0.7.2")
 }
 
 // =====================================================================
@@ -5934,6 +5934,11 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
                 st[sp] = a / b
                 G[sp, .] = ga :/ b - (a / b^2) :* gb
             }
+            else if (op >= 6) {
+                // comparisons and & |: no derivative
+                st[sp] = _cge_u_cmp(op, a, b)
+                G[sp, .] = J(1, nv, 0)
+            }
             else {
                 val = a ^ b
                 st[sp] = val
@@ -5945,6 +5950,10 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
         else if (c == 5) {
             st[sp] = -st[sp]
             G[sp, .] = -G[sp, .]
+        }
+        else if (c == 8) {
+            st[sp] = (st[sp] >= . ? . : st[sp] == 0)
+            G[sp, .] = J(1, nv, 0)
         }
         else {
             a = st[sp]
@@ -10810,7 +10819,7 @@ void _cge_u_newname(struct cge_model scalar M, string scalar name, string scalar
     if (!regexm(name, "^[A-Za-z_][A-Za-z_0-9]*$") | strlen(name) > 24) {
         _cge_fail(what + " " + name + ": a name has letters, digits and underscores, at most 24 characters, and starts with a letter", 198)
     }
-    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all"), name)) _cge_fail(name + " is a reserved word", 198)
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all", "ord", "sameas"), name)) _cge_fail(name + " is a reserved word", 198)
     if (regexm(name, "^[acfhdin][0-9]*$")) _cge_fail(name + " is the index of a model set", 198)
     if (_cge_vidx(M, name)) _cge_fail(name + " is the name of a variable", 110)
     if (_cge_find(_cge_gams_params()[., 1], name) | anyof(("mort", "tf"), name)) _cge_fail(name + " is the name of a model parameter", 110)
@@ -10914,6 +10923,9 @@ real scalar _cge_us_used(struct cge_model scalar M, string scalar name)
     for (k = 1; k <= rows(M.uedef); k++) {
         if (anyof(_cge_u_tokens(M.uedef[k, 4]), name) | anyof(_cge_u_tokens(M.uedef[k, 5]), name)) return(1)
     }
+    // conditions (from version 0.7.2)
+    if (cols(M.uvdef) >= 7) for (k = 1; k <= rows(M.uvdef); k++) if (anyof(_cge_u_tokens(M.uvdef[k, 7]), name)) return(1)
+    if (cols(M.uedef) >= 6) for (k = 1; k <= rows(M.uedef); k++) if (anyof(_cge_u_tokens(M.uedef[k, 6]), name)) return(1)
     return(0)
 }
 
@@ -11114,6 +11126,8 @@ real scalar _cge_up_used(struct cge_model scalar M, string scalar name)
     for (k = 1; k <= rows(M.uedef); k++) {
         if (anyof(_cge_u_tokens(M.uedef[k, 4]), name) | anyof(_cge_u_tokens(M.uedef[k, 5]), name)) return(1)
     }
+    if (cols(M.uvdef) >= 7) for (k = 1; k <= rows(M.uvdef); k++) if (anyof(_cge_u_tokens(M.uvdef[k, 7]), name)) return(1)
+    if (cols(M.uedef) >= 6) for (k = 1; k <= rows(M.uedef); k++) if (anyof(_cge_u_tokens(M.uedef[k, 6]), name)) return(1)
     return(0)
 }
 
@@ -11240,7 +11254,13 @@ string rowvector _cge_u_tokens(string scalar s)
             i++
             continue
         }
-        if (strpos("+-*/^(),=", ch)) {
+        // two-character operators of conditions (from version 0.7.2)
+        if (anyof((">=", "<=", "==", "!=", "<>"), substr(s, i, 2))) {
+            out = out, (substr(s, i, 2) == "<>" ? "!=" : substr(s, i, 2))
+            i = i + 2
+            continue
+        }
+        if (strpos("+-*/^(),=<>&|!$", ch)) {
             out = out, ch
             i++
             continue
@@ -11278,42 +11298,77 @@ real scalar _cge_u_close(string rowvector t, real scalar k)
 }
 
 // Tokens with index idx replaced by element el where it is an argument of a
-// reference, between "(" or "," and ")" or ","
-string rowvector _cge_u_subst(string rowvector t, string scalar idx, string scalar el)
+// reference, between "(" or "," and ")" or ","; with ordv, ord(idx) becomes
+// ordv, the position of el in the set (from version 0.7.2)
+string rowvector _cge_u_subst(string rowvector t, string scalar idx, string scalar el, | real scalar ordv)
 {
     string rowvector out
     real scalar k
     // a copy: Mata passes arguments by reference
     out = t
     for (k = 2; k < cols(t); k++) {
-        if (t[k] == idx & (t[k - 1] == "(" | t[k - 1] == ",") & (t[k + 1] == ")" | t[k + 1] == ",")) out[k] = el
+        if (t[k] == idx & (t[k - 1] == "(" | t[k - 1] == ",") & (t[k + 1] == ")" | t[k + 1] == ",")) {
+            out[k] = el
+            if (args() > 3 & k > 2) {
+                if (t[k - 2] == "ord" & t[k - 1] == "(" & t[k + 1] == ")") {
+                    out[k - 2] = ""
+                    out[k - 1] = ""
+                    out[k] = strofreal(ordv)
+                    out[k + 1] = ""
+                }
+            }
+        }
     }
-    return(out)
+    return(select(out, out :!= ""))
 }
 
 // Sums written out: sum(i, body) becomes (body_1 + body_2 + ...) over the
-// elements of the set of i; sums within sums are written out first
-string rowvector _cge_u_expand(struct cge_model scalar M, string rowvector t)
+// elements of the set of i; sums within sums are written out first. With a
+// condition, sum(i$cond, body), only the elements for which cond holds at
+// the base (p, x0) are written out (from version 0.7.2).
+string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar p, real colvector x0,
+                               string rowvector t)
 {
-    string rowvector out, body, els
+    string rowvector out, body, els, cond
     string scalar idx
-    real scalar k, e, j
+    real scalar k, e, j, c, d, n, m
     out = J(1, 0, "")
     k = 1
     while (k <= cols(t)) {
         if (t[k] == "sum" & k < cols(t)) {
             if (t[k + 1] == "(") {
                 e = _cge_u_close(t, k + 1)
-                if (e < k + 5 | t[k + 3] != ",") _cge_fail("sum(): write sum(i, expression), with i the index of a set", 198)
+                if (e < k + 5 | (t[k + 3] != "," & t[k + 3] != "$")) _cge_fail("sum(): write sum(i, expression), with i the index of a set", 198)
                 idx = t[k + 2]
                 els = _cge_setlab(M, _cge_u_set(M, idx))'
-                body = _cge_u_expand(M, t[|k + 4 \ e - 1|])
-                out = out, "("
-                if (!cols(els)) out = out, "0"
-                for (j = 1; j <= cols(els); j++) {
-                    if (j > 1) out = out, "+"
-                    out = out, "(", _cge_u_subst(body, idx, els[j]), ")"
+                cond = J(1, 0, "")
+                c = k + 3
+                if (t[k + 3] == "$") {
+                    // the condition runs to the comma that ends the domain
+                    d = 0
+                    for (c = k + 4; c < e; c++) {
+                        if (t[c] == "(") d++
+                        else if (t[c] == ")") d--
+                        else if (t[c] == "," & d == 0) break
+                    }
+                    if (c >= e | c == k + 4) _cge_fail("sum(): write sum(i" + char(36) + "(condition), expression)", 198)
+                    cond = t[|k + 4 \ c - 1|]
                 }
+                if (c + 1 > e - 1) _cge_fail("sum(): write sum(i, expression), with i the index of a set", 198)
+                body = t[|c + 1 \ e - 1|]
+                out = out, "("
+                n = 0
+                for (j = 1; j <= cols(els); j++) {
+                    if (cols(cond)) {
+                        if (!_cge_u_condval(M, p, x0, _cge_u_subst(("(", cond, ")"), idx, els[j], j))) continue
+                    }
+                    if (n) out = out, "+"
+                    // the element first, then the sums within: their
+                    // conditions may use this index
+                    out = out, "(", _cge_u_expand(M, p, x0, _cge_u_subst(body, idx, els[j], j)), ")"
+                    n++
+                }
+                if (!n) out = out, "0"
                 out = out, ")"
                 k = e + 1
                 continue
@@ -11323,6 +11378,109 @@ string rowvector _cge_u_expand(struct cge_model scalar M, string rowvector t)
         k++
     }
     return(out)
+}
+
+// An expression written out: sums, then conditional terms, every index
+// replaced by an element (from version 0.7.2)
+string rowvector _cge_u_written(struct cge_model scalar M, struct cge_par scalar p, real colvector x0,
+                                string rowvector t)
+{
+    return(_cge_u_done(M, _cge_u_rdollar(M, p, x0, _cge_u_expand(M, p, x0, t))))
+}
+
+// Conditional terms written out: expr$cond is expr where cond holds at the
+// base and 0 elsewhere (from version 0.7.2). expr is a number, a name, a
+// reference such as PQ(com_agr), a function or a parenthesised expression;
+// cond a parenthesised condition, a name or a reference.
+string rowvector _cge_u_rdollar(struct cge_model scalar M, struct cge_par scalar p, real colvector x0,
+                                string rowvector t)
+{
+    string rowvector out, left, cond
+    real scalar k, a, b, d, j
+    out = t
+    while (1) {
+        k = 0
+        for (j = 1; j <= cols(out); j++) {
+            if (out[j] == "$") {
+                k = j
+                break
+            }
+        }
+        if (!k) break
+        if (k == 1 | k == cols(out)) _cge_fail("$: write expression$(condition)", 198)
+        // the operand on the left
+        a = k - 1
+        if (out[a] == ")") {
+            d = 0
+            for (; a >= 1; a--) {
+                if (out[a] == ")") d++
+                else if (out[a] == "(") {
+                    d--
+                    if (!d) break
+                }
+            }
+            if (a < 1) _cge_fail("$: a parenthesis is not opened", 198)
+            if (a > 1) {
+                if (regexm(out[a - 1], "^[A-Za-z_][A-Za-z_0-9]*$")) a--
+            }
+        }
+        else if (!regexm(out[a], "^[A-Za-z_0-9.]+$")) _cge_fail("$: write expression$(condition)", 198)
+        // the condition on the right
+        b = k + 1
+        if (out[b] == "(") b = _cge_u_close(out, b)
+        else if (regexm(out[b], "^[A-Za-z_][A-Za-z_0-9]*$")) {
+            if (b < cols(out)) {
+                if (out[b + 1] == "(") b = _cge_u_close(out, b + 1)
+            }
+        }
+        else _cge_fail("$: write expression$(condition)", 198)
+        left = out[|a \ k - 1|]
+        cond = out[|k + 1 \ b|]
+        out = (a > 1 ? out[|1 \ a - 1|] : J(1, 0, "")), (_cge_u_condval(M, p, x0, cond) ? ("(", left, ")") : "0"),
+              (b < cols(out) ? out[|b + 1 \ cols(out)|] : J(1, 0, ""))
+    }
+    return(out)
+}
+
+// The value of condition t (tokens with the indexes written out) at the base:
+// 1 when it holds, else 0. Conditions use comparisons, & | !, set membership
+// (goods(com_agr)), parameters and variables at the base (from version 0.7.2).
+real scalar _cge_u_condval(struct cge_model scalar M, struct cge_par scalar p, real colvector x0, string rowvector t)
+{
+    real matrix tok
+    real scalar v
+    string scalar g
+    tok = _cge_u_compile(M, _cge_u_written(M, p, x0, t), x0, g, 1)
+    v = _cge_u_value(M, p, x0, tok)
+    if (v >= .) _cge_fail("a condition is missing at the base: " + invtokens(t, " "), 459)
+    return(v != 0)
+}
+
+// The elements of the set of index idx for which condition cond holds at the
+// base, as a 0/1 column (all of them without a condition)
+real colvector _cge_u_domain(struct cge_model scalar M, struct cge_par scalar p, real colvector x0,
+                             string scalar idx, string scalar set, string scalar cond)
+{
+    string colvector els
+    real colvector m
+    real scalar j
+    string rowvector tc
+    els = _cge_setlab(M, set)
+    m = J(rows(els), 1, 1)
+    if (cond == "") return(m)
+    tc = _cge_u_tokens(cond)
+    for (j = 1; j <= rows(els); j++) m[j] = _cge_u_condval(M, p, x0, _cge_u_subst(("(", tc, ")"), idx, els[j], j))
+    return(m)
+}
+
+// The definitions of user variables and equations with their columns for
+// conditions (from version 0.7.2): files saved before have one column fewer
+void _cge_u_widen(struct cge_model scalar M)
+{
+    if (rows(M.uvdef) == 0 & cols(M.uvdef) != 7) M.uvdef = J(0, 7, "")
+    if (rows(M.uedef) == 0 & cols(M.uedef) != 6) M.uedef = J(0, 6, "")
+    if (cols(M.uvdef) == 6) M.uvdef = M.uvdef, J(rows(M.uvdef), 1, "")
+    if (cols(M.uedef) == 5) M.uedef = M.uedef, J(rows(M.uedef), 1, "")
 }
 
 // Tokens written out: an index left over was not the index of a sum or of
@@ -11374,7 +11532,8 @@ real scalar _cge_u_varpos(struct cge_model scalar M, string scalar name, string 
 // rows (type, value, element): 1 number, 2 variable at a position, 3
 // parameter (index in M.upar, element), 4 operator (1 + 2 - 3 * 4 / 5 ^), 5
 // negation, 6 function (1 exp, 2 ln, 3 sqrt); and writes the GAMS text
-real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real colvector x0, string scalar gams)
+real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real colvector x0, string scalar gams,
+                           | real scalar condmode)
 {
     string matrix P
     string rowvector ops, args, gtok
@@ -11382,9 +11541,12 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     string scalar tk, nm, g
     real matrix out, opst
     real scalar k, e, prev, pos, pi, el, j, pr, code, n
+    if (args() < 5) condmode = 0
     P = _cge_gams_params()
     out = J(0, 3, .)
-    opst = J(0, 2, .)          // operator stack: (kind, code); kind 1 operator, 2 function, 3 "(", 4 negation
+    // operator stack: (kind, code); kind 1 operator, 2 function, 3 "(", 4
+    // negation, 6 logical not (conditions)
+    opst = J(0, 2, .)
     gtok = J(1, 0, "")
     prev = 0                   // 0 start or after an operator, 1 after an operand
     k = 1
@@ -11403,6 +11565,39 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             nm = tk
             args = J(1, 0, "")
             e = k
+            // in a condition (from version 0.7.2), sameas(e1, e2) and set
+            // membership, goods(com_agr): 1 or 0
+            if (nm == "sameas") {
+                if (!condmode) _cge_fail("sameas() is allowed only in conditions ($)", 198)
+                if (k + 5 > cols(t)) _cge_fail("sameas(): write sameas(i, label)", 198)
+                if (t[k + 1] != "(" | t[k + 3] != "," | t[k + 5] != ")") _cge_fail("sameas(): write sameas(i, label)", 198)
+                for (j = 2; j <= 4; j = j + 2) {
+                    if (!anyof(_cge_alllabels(M), t[k + j])) {
+                        if (_cge_u_isindex(M, t[k + j])) _cge_fail("sameas(): index " + t[k + j] + " is not the index of a sum or of the domain", 198)
+                        _cge_fail("sameas(): " + t[k + j] + " is not the label of an element of the model", 111)
+                    }
+                }
+                out = out \ (1, t[k + 2] == t[k + 4], .)
+                gtok = gtok, "1"
+                prev = 1
+                k = k + 6
+                continue
+            }
+            if (nm == "ord") _cge_fail("ord(): write ord(i), with i the index of a sum or of the domain", 198)
+            if (condmode & k + 3 <= cols(t)) {
+                if (t[k + 1] == "(" & t[k + 3] == ")" & !_cge_vidx(M, nm) & !_cge_up_find(M, nm) & _cge_u_isindex(M, nm)) {
+                    lab = _cge_setlab(M, _cge_u_set(M, nm))
+                    if (!anyof(_cge_alllabels(M), t[k + 2])) {
+                        if (_cge_u_isindex(M, t[k + 2])) _cge_fail(nm + "(" + t[k + 2] + "): index " + t[k + 2] + " is not the index of a sum or of the domain", 198)
+                        _cge_fail(nm + "(" + t[k + 2] + "): " + t[k + 2] + " is not the label of an element of the model", 111)
+                    }
+                    out = out \ (1, anyof(lab, t[k + 2]), .)
+                    gtok = gtok, "1"
+                    prev = 1
+                    k = k + 4
+                    continue
+                }
+            }
             if (k < cols(t)) {
                 if (t[k + 1] == "(") {
                     // a function: its argument follows as an expression
@@ -11471,6 +11666,9 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             }
             else {
                 pi = _cge_find(P[., 1], nm)
+                if (!pi & condmode & _cge_u_isindex(M, nm)) {
+                    _cge_fail("index " + nm + " in a condition: compare elements with sameas(" + nm + ", label) or positions with ord(" + nm + ")", 198)
+                }
                 if (!pi) _cge_fail(nm + " is not a model variable, a user variable, a user parameter or a parameter that cge_shock changes", 111)
                 if (P[pi, 3] == "") {
                     if (cols(args)) _cge_fail("parameter " + nm + " has no elements", 198)
@@ -11498,6 +11696,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             continue
         }
         if (tk == ")") {
+            if (!prev) _cge_fail("an operand is missing before )", 198)
             while (rows(opst)) {
                 if (opst[rows(opst), 1] == 3) break
                 out = out \ _cge_u_pop(opst)
@@ -11510,6 +11709,36 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             }
             gtok = gtok, ")"
             prev = 1
+            k++
+            continue
+        }
+        // logical not, in conditions (from version 0.7.2)
+        if (tk == "!") {
+            if (!condmode) _cge_fail("! and comparisons are allowed only in conditions ($)", 198)
+            if (prev) _cge_fail("! must come before an operand", 198)
+            opst = opst \ (6, 0)
+            gtok = gtok, "not"
+            k++
+            continue
+        }
+        if (anyof((">", "<", ">=", "<=", "==", "!=", "&", "|"), tk)) {
+            if (!condmode) _cge_fail("comparisons and & | are allowed only in conditions ($)", 198)
+            if (!prev) _cge_fail("an operand is missing before " + tk, 198)
+            code = 5 + _cge_find((">", "<", ">=", "<=", "==", "!=", "&", "|")', tk)
+            pr = _cge_u_prec(code)
+            while (rows(opst)) {
+                if (opst[rows(opst), 1] == 3) break
+                if (opst[rows(opst), 1] == 1) {
+                    if (!(_cge_u_prec(opst[rows(opst), 2]) >= pr)) break
+                }
+                else if (opst[rows(opst), 1] == 6) {
+                    if (pr > 0.5) break
+                }
+                out = out \ _cge_u_pop(opst)
+            }
+            opst = opst \ (1, code)
+            gtok = gtok, tk
+            prev = 0
             k++
             continue
         }
@@ -11538,6 +11767,8 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                 else if (opst[rows(opst), 1] == 4) {
                     if (code == 5) break
                 }
+                // logical not binds less tightly than arithmetic
+                else if (opst[rows(opst), 1] == 6) break
                 out = out \ _cge_u_pop(opst)
             }
             opst = opst \ (1, code)
@@ -11561,7 +11792,14 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
 
 real scalar _cge_u_prec(real scalar code)
 {
-    return(code <= 2 ? 1 : (code <= 4 ? 2 : 4))
+    // + - 1, * / 2, ^ 4; in conditions (from version 0.7.2) comparisons 0.6,
+    // & 0.4 and | 0.2, with logical not at 0.5
+    if (code <= 2) return(1)
+    if (code <= 4) return(2)
+    if (code == 5) return(4)
+    if (code <= 11) return(0.6)
+    if (code == 12) return(0.4)
+    return(0.2)
 }
 
 // The top of the operator stack as a postfix row, removed from the stack
@@ -11572,6 +11810,7 @@ real rowvector _cge_u_pop(real matrix opst)
     opst = (rows(opst) > 1 ? opst[|1, 1 \ rows(opst) - 1, 2|] : J(0, 2, .))
     if (r[1] == 1) return((4, r[2], .))
     if (r[1] == 2) return((6, r[2], .))
+    if (r[1] == 6) return((8, 0, .))
     return((5, 0, .))
 }
 
@@ -11613,13 +11852,32 @@ real scalar _cge_u_value(struct cge_model scalar M, struct cge_par scalar p, rea
             b = st[sp]
             sp = sp - 1
             a = st[sp]
-            st[sp] = (tok[i, 2] == 1 ? a + b : (tok[i, 2] == 2 ? a - b : (tok[i, 2] == 3 ? a * b :
-                     (tok[i, 2] == 4 ? a / b : a ^ b))))
+            if (tok[i, 2] <= 5) {
+                st[sp] = (tok[i, 2] == 1 ? a + b : (tok[i, 2] == 2 ? a - b : (tok[i, 2] == 3 ? a * b :
+                         (tok[i, 2] == 4 ? a / b : a ^ b))))
+            }
+            else st[sp] = _cge_u_cmp(tok[i, 2], a, b)
         }
         else if (c == 5) st[sp] = -st[sp]
+        else if (c == 8) st[sp] = (st[sp] >= . ? . : st[sp] == 0)
         else st[sp] = (tok[i, 2] == 1 ? exp(st[sp]) : (tok[i, 2] == 2 ? ln(st[sp]) : sqrt(st[sp])))
     }
     return(st[1])
+}
+
+// Comparisons and & | of conditions (codes 6 to 13): 1 or 0, missing when
+// an operand is missing
+real scalar _cge_u_cmp(real scalar code, real scalar a, real scalar b)
+{
+    if (a >= . | b >= .) return(.)
+    if (code == 6) return(a > b)
+    if (code == 7) return(a < b)
+    if (code == 8) return(a >= b)
+    if (code == 9) return(a <= b)
+    if (code == 10) return(a == b)
+    if (code == 11) return(a != b)
+    if (code == 12) return(a != 0 & b != 0)
+    return(a != 0 | b != 0)
 }
 
 // Both sides of every user equation element at x
@@ -11638,12 +11896,22 @@ void _cge_u_eval(struct cge_model scalar M, struct cge_par scalar p, real colvec
 
 // The name and index of a definition "NAME" or "NAME(i)": the index and its set
 void _cge_u_head(struct cge_model scalar M, string scalar head, string scalar name, string scalar idx,
-                 string scalar set)
+                 string scalar set, | string scalar cond)
 {
     head = strtrim(head)
     idx = ""
     set = ""
-    if (regexm(head, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*\(([A-Za-z_][A-Za-z_0-9]*)\)$")) {
+    cond = ""
+    // a condition on the domain (from version 0.7.2): NAME(i)$cond
+    if (regexm(head, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*\(([A-Za-z_][A-Za-z_0-9]*)\)[ ]*[$](.+)$")) {
+        name = regexs(1)
+        idx = regexs(2)
+        cond = strtrim(regexs(3))
+        set = _cge_u_set(M, idx)
+        if (args() < 6) _cge_fail("a condition is not allowed here", 198)
+    }
+    else if (regexm(head, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*[$]")) _cge_fail("a condition needs an index: NAME(i)" + char(36) + "(condition)", 198)
+    else if (regexm(head, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*\(([A-Za-z_][A-Za-z_0-9]*)\)$")) {
         name = regexs(1)
         idx = regexs(2)
         set = _cge_u_set(M, idx)
@@ -11661,8 +11929,9 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     string colvector lab, gl
     string scalar name, idx, set, gtl, gtr
     real matrix tok, L, R
-    real colvector pos, st, ln1, ln2
+    real colvector pos, st, ln1, ln2, dom
     real scalar k, j, kv, v
+    _cge_u_widen(M)
     M.upar = J(0, 1, "")
     // user variables: base values from their expressions
     for (k = 1; k <= rows(M.uvdef); k++) {
@@ -11670,10 +11939,17 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
         pos = _cge_vpos(M, kv)
         idx = M.uvdef[k, 4]
         els = (M.uvdef[k, 2] == "" ? "" : _cge_setlab(M, M.uvdef[k, 2])')
+        // the elements in its domain exist (from version 0.7.2)
+        dom = (idx == "" ? 1 : _cge_u_domain(M, p, x0, idx, M.uvdef[k, 2], M.uvdef[k, 7]))
+        M.exists[pos] = dom
         for (j = 1; j <= rows(pos); j++) {
+            if (!dom[j]) {
+                x0[pos[j]] = 0
+                continue
+            }
             tl = _cge_u_tokens(M.uvdef[k, 3])
-            if (idx != "") tl = _cge_u_subst(("(", tl, ")"), idx, els[j])
-            tl = _cge_u_done(M, _cge_u_expand(M, tl))
+            if (idx != "") tl = _cge_u_subst(("(", tl, ")"), idx, els[j], j)
+            tl = _cge_u_written(M, p, x0, tl)
             tok = _cge_u_compile(M, tl, x0, gtl)
             v = _cge_u_value(M, p, x0, tok)
             if (v >= .) _cge_fail("user variable " + M.uvdef[k, 1] + ": its base value is missing", 459)
@@ -11691,15 +11967,17 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
         idx = M.uedef[k, 2]
         set = M.uedef[k, 3]
         els = (set == "" ? "" : _cge_setlab(M, set)')
+        dom = (idx == "" ? 1 : _cge_u_domain(M, p, x0, idx, set, M.uedef[k, 6]))
         for (j = 1; j <= cols(els); j++) {
+            if (!dom[j]) continue
             tl = _cge_u_tokens(M.uedef[k, 4])
             tr = _cge_u_tokens(M.uedef[k, 5])
             if (idx != "") {
-                tl = _cge_u_subst(("(", tl, ")"), idx, els[j])
-                tr = _cge_u_subst(("(", tr, ")"), idx, els[j])
+                tl = _cge_u_subst(("(", tl, ")"), idx, els[j], j)
+                tr = _cge_u_subst(("(", tr, ")"), idx, els[j], j)
             }
-            L = _cge_u_compile(M, _cge_u_done(M, _cge_u_expand(M, tl)), x0, gtl)
-            R = _cge_u_compile(M, _cge_u_done(M, _cge_u_expand(M, tr)), x0, gtr)
+            L = _cge_u_compile(M, _cge_u_written(M, p, x0, tl), x0, gtl)
+            R = _cge_u_compile(M, _cge_u_written(M, p, x0, tr), x0, gtr)
             st = st \ (rows(tok) + 1)
             ln1 = ln1 \ rows(L)
             ln2 = ln2 \ rows(R)
@@ -11716,6 +11994,21 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     M.ulen2 = ln2
 }
 
+// Position of the first colon outside parentheses, 0 if none
+real scalar _cge_u_colon(string scalar s)
+{
+    real scalar k, d
+    string scalar ch
+    d = 0
+    for (k = 1; k <= strlen(s); k++) {
+        ch = substr(s, k, 1)
+        if (ch == "(") d++
+        else if (ch == ")") d--
+        else if (ch == ":" & d == 0) return(k)
+    }
+    _cge_fail("cge_equation: write NAME: expression = expression", 198)
+}
+
 // Splits "head = expression , options" at the first "=" and the last comma
 // outside parentheses
 void _cge_u_split(string scalar s, string scalar head, string scalar expr, string scalar opts)
@@ -11730,7 +12023,10 @@ void _cge_u_split(string scalar s, string scalar head, string scalar expr, strin
         ch = substr(t, k, 1)
         if (ch == "(") d++
         else if (ch == ")") d--
-        else if (ch == "=" & d == 0 & !eq) eq = k
+        else if (ch == "=" & d == 0 & !eq) {
+            // a single = (from version 0.7.2, conditions use == >= <= !=)
+            if (!(k > 1 & strpos("=<>!", substr(t, k - 1, 1))) & substr(t, k + 1, 1) != "=") eq = k
+        }
         else if (ch == "," & d == 0) cm = k
     }
     opts = (cm ? strtrim(substr(t, cm + 1, .)) : "")
@@ -11745,14 +12041,14 @@ void _cge_u_split(string scalar s, string scalar head, string scalar expr, strin
 void _cge_u_addvar(string scalar spec)
 {
     struct cge_model scalar M
-    string scalar head, expr, opts, name, idx, set, value
+    string scalar head, expr, opts, name, idx, set, value, cond
     string rowvector ot
     real colvector x0, pos
     real scalar k, len, nom
     M = _cge_load()
     _cge_need(M, "calibrated")
     _cge_u_split(spec, head, expr, opts)
-    _cge_u_head(M, head, name, idx, set)
+    _cge_u_head(M, head, name, idx, set, cond)
     nom = 0
     value = ""
     ot = tokens(subinstr(subinstr(opts, "(", " ( "), ")", " ) "))
@@ -11769,15 +12065,15 @@ void _cge_u_addvar(string scalar spec)
     if (expr != "" & value != "") _cge_fail("cge_variable: give a definition or value(#), not both", 198)
     if (value != "" & strtoreal(value) >= .) _cge_fail("cge_variable: value() must be a number", 198)
     if (_cge_vidx(M, name)) _cge_fail(name + " is already a variable of the model", 110)
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas"), name)) _cge_fail(name + " is a reserved word", 198)
     if (_cge_find(_cge_gams_params()[., 1], name)) _cge_fail(name + " is the name of a parameter", 110)
     if (_cge_up_find(M, name) | _cge_us_find(M, name)) _cge_fail(name + " is the name of a user parameter or set", 110)
     if (rows(M.uedef) & expr != "") {
         if (anyof(M.uedef[., 1], name)) _cge_fail("an equation is already named " + name, 110)
     }
-    if (cols(M.uvdef) != 6) M.uvdef = J(0, 6, "")
-    if (cols(M.uedef) != 5) M.uedef = J(0, 5, "")
-    M.uvdef = M.uvdef \ (name, set, (expr != "" ? expr : value), idx, (nom ? "nominal" : ""), (expr != "" ? "defined" : "value"))
-    if (expr != "") M.uedef = M.uedef \ (name, idx, set, name + (idx != "" ? "(" + idx + ")" : ""), expr)
+    _cge_u_widen(M)
+    M.uvdef = M.uvdef \ (name, set, (expr != "" ? expr : value), idx, (nom ? "nominal" : ""), (expr != "" ? "defined" : "value"), cond)
+    if (expr != "") M.uedef = M.uedef \ (name, idx, set, name + (idx != "" ? "(" + idx + ")" : ""), expr, cond)
     _cge_layout(M)
     len = rows(_cge_vpos(M, rows(M.vname)))
     M.x0 = M.x0 \ J(len, 1, 0)
@@ -11794,10 +12090,14 @@ void _cge_u_addvar(string scalar spec)
     M.xcur[pos] = x0[pos]
     M.xscale[pos] = abs(x0[pos]) :* (abs(x0[pos]) :> 1e-12) + (abs(x0[pos]) :<= 1e-12)
     if (cols(M.simx)) M.simx[pos, .] = J(1, cols(M.simx), x0[pos])
+    // the elements in the domain (from version 0.7.2)
+    pos = select(pos, M.exists[pos])
+    len = rows(pos)
+    if (!len) _cge_fail("user variable " + name + ": no element meets the condition", 459)
     _cge_u_refresh(M)
     _cge_store(M)
     printf("{txt}User variable {res}%s%s{txt}: %f element(s), base value%s {res}%s\n", name,
-           (idx != "" ? "(" + idx + ")" : ""), len, (len > 1 ? "s" : ""),
+           (idx != "" ? "(" + idx + ")" + (cond != "" ? "$" + cond : "") : ""), len, (len > 1 ? "s" : ""),
            invtokens(strtrim(strofreal(x0[pos[|1 \ min((len, 5))|]]', "%12.6g"))) + (len > 5 ? " ..." : ""))
     if (expr != "") printf("{txt}and its definition, equation {res}%s\n", name)
     else printf("{txt}Add the equations that determine it with cge_equation\n")
@@ -11809,25 +12109,28 @@ void _cge_u_addvar(string scalar spec)
 void _cge_u_addeq(string scalar spec)
 {
     struct cge_model scalar M
-    string scalar head, rest, name, idx, set, lhs, rhs, opts
+    string scalar head, rest, name, idx, set, lhs, rhs, opts, cond
     real colvector L, R
     real scalar k, c, n0, worst
     M = _cge_load()
     _cge_need(M, "calibrated")
     c = strpos(spec, ":")
     if (!c) _cge_fail("cge_equation: write NAME: expression = expression", 198)
+    // the colon after the head, outside the parentheses of a condition
+    c = _cge_u_colon(spec)
     head = substr(spec, 1, c - 1)
     rest = substr(spec, c + 1, .)
-    _cge_u_head(M, head, name, idx, set)
+    _cge_u_head(M, head, name, idx, set, cond)
     if (rows(M.uedef)) {
         if (anyof(M.uedef[., 1], name)) _cge_fail("equation " + name + " is already defined", 110)
     }
     _cge_u_split(rest, lhs, rhs, opts)
     if (opts != "" | lhs == "" | rhs == "") _cge_fail("cge_equation: write NAME: expression = expression", 198)
     n0 = rows(M.uelab)
-    if (cols(M.uedef) != 5) M.uedef = J(0, 5, "")
-    M.uedef = M.uedef \ (name, idx, set, lhs, rhs)
+    _cge_u_widen(M)
+    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond)
     _cge_u_build(M, M.p0, M.x0)
+    if (rows(M.uelab) == n0) _cge_fail("user equation " + name + ": no element meets the condition", 459)
     _cge_u_refresh(M)
     // the base need not satisfy a new equation: it then acts as a shock
     _cge_u_eval(M, M.p0, M.x0, L, R)
@@ -11865,11 +12168,13 @@ void _cge_u_list()
         return
     }
     for (k = 1; k <= rows(M.uvdef); k++) {
-        printf("{txt}variable {res}%s%s{txt}: %s%s\n", M.uvdef[k, 1], (M.uvdef[k, 4] != "" ? "(" + M.uvdef[k, 4] + ")" : ""),
+        printf("{txt}variable {res}%s%s{txt}: %s%s\n", M.uvdef[k, 1], (M.uvdef[k, 4] != "" ? "(" + M.uvdef[k, 4] + ")" +
+               (cols(M.uvdef) >= 7 ? (M.uvdef[k, 7] != "" ? "$" + M.uvdef[k, 7] : "") : "") : ""),
                (M.uvdef[k, 6] == "value" ? "value " : "= "), M.uvdef[k, 3] + (M.uvdef[k, 5] != "" ? ", nominal" : ""))
     }
     for (k = 1; k <= rows(M.uedef); k++) {
-        printf("{txt}equation {res}%s%s{txt}: %s = %s\n", M.uedef[k, 1], (M.uedef[k, 2] != "" ? "(" + M.uedef[k, 2] + ")" : ""),
+        printf("{txt}equation {res}%s%s{txt}: %s = %s\n", M.uedef[k, 1], (M.uedef[k, 2] != "" ? "(" + M.uedef[k, 2] + ")" +
+               (cols(M.uedef) >= 6 ? (M.uedef[k, 6] != "" ? "$" + M.uedef[k, 6] : "") : "") : ""),
                M.uedef[k, 4], M.uedef[k, 5])
     }
 }
@@ -11889,8 +12194,8 @@ void _cge_u_clear()
     if (rows(M.bY)) {
         if (any(M.bY :> nkeep) | any(M.bX :> nkeep)) _cge_fail("constraints involve user variables: remove them first with cge_constraint, clear", 459)
     }
-    M.uvdef = J(0, 6, "")
-    M.uedef = J(0, 5, "")
+    M.uvdef = J(0, 7, "")
+    M.uedef = J(0, 6, "")
     M.utok = J(0, 3, .)
     M.uelab = J(0, 1, "")
     M.uegams = J(0, 2, "")
@@ -11942,6 +12247,12 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
         _cge_vlabels(M, kv, e1, e2)
         pos = _cge_vpos(M, kv)
         for (i = 1; i <= rows(pos); i++) {
+            // elements outside a conditional domain do not exist (from
+            // version 0.7.2): fixed at 0, as in Stata, where referred to
+            if (!M.exists[pos[i]]) {
+                fput(fh, g + ".fx" + _cge_gams_elem(e1[i], "") + " = 0;")
+                continue
+            }
             fput(fh, g + ".l" + _cge_gams_elem(e1[i], "") + " = " + _cge_gnum(M.x0[pos[i]]) + ";")
             fput(fh2, "put '%2', '" + M.vname[kv] + "', '" + e1[i] + "', '', " + g + ".l" + _cge_gams_elem(e1[i], "") + " /;")
         }

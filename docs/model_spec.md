@@ -1610,6 +1610,28 @@ continuation; `cge_optimize` takes an element as an instrument of kind 3;
 replication covers the model's own equations only (`_cge_maxres_part`):
 user equations need not hold at the base, where they act as shocks.
 
+**Conditions (from version 0.7.2).** `sum(i$(q), g)`, `g$(q)` and the
+domains `NAME(i)$(q)` of user variables and equations restrict a sum, a term
+or a domain to the elements for which the condition `q` is nonzero. `q` is
+evaluated by `_cge_u_condval()` at the base point and base parameters
+(`M.x0`, `M.p0`) when the definition is added and when the model is
+calibrated again, so the terms and equation elements are the same in every
+simulation. Conditions compile with comparisons (`> < >= <= == !=`, codes 6
+to 11), `&` and `|` (12, 13) and `!` (postfix row type 8); a comparison with
+a missing operand is missing, which is an error (459). Set membership
+`set(e)` and `sameas(e1, e2)` compile to the constants 1 and 0, and
+`ord(i)` is replaced by the position of the element when the index is
+written out (`_cge_u_subst()`). Sums are written out from the outside in
+(`_cge_u_expand()`), each element substituted before the sums within, so an
+inner condition may use the index of an enclosing sum; conditional terms are
+then replaced by themselves or 0 (`_cge_u_rdollar()`). The conditions are
+stored in a seventh column of `M.uvdef` and a sixth of `M.uedef`
+(`_cge_u_widen()` pads models saved before). Elements of a user variable
+outside its domain have `M.exists` 0 and base value 0: they are not in the
+system or the results, a reference to one is the constant 0, and `cge_gams`
+fixes them at 0. Comparisons, membership and `sameas()` are errors outside
+conditions; a domain that no element meets is error 459.
+
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
 numbers, variables (positions in the stacked vector), parameters, operators

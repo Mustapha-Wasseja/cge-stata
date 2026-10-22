@@ -29,6 +29,11 @@ An equation for every commodity
 cge_variable PIX(c), value(1)
 cge_equation pix(c): ln(PIX(c)) = ln(PQ(c)) - ln(CPI)
 \end{stcode}
+An equation for the commodities with an import tariff only
+\begin{stcode}
+cge_variable LQM(c)$(tm(c) > 0), value(1)
+cge_equation lqm(c)$(tm(c) > 0): QM(c) = LQM(c) * base(QM(c))
+\end{stcode}
 List the user variables and equations; remove them
 \begin{stcode}
 cge_equation, list
@@ -39,7 +44,7 @@ cge_equation, clear
 
 Add an equation
 \begin{stsyntax}
-\cmdb{cge_equation} \argu{name}[\cmd{(}\argu{i}\cmd{)}]\cmd{:}
+\cmdb{cge_equation} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\cmd{:}
 \argu{expression} \cmd{=} \argu{expression}
 \end{stsyntax}
 List the user variables and equations
@@ -54,7 +59,8 @@ Remove the user variables and equations
 may not be the name of another user equation; a variable defined by
 \manref{cge_variable} gives its name to its definition. \argu{i} is an index,
 the letter of a set or the name of a user set (\manref{cge_set}), possibly
-followed by digits.
+followed by digits. A condition, \cmd{$(}\argu{condition}\cmd{)}, restricts
+the equation to the elements that meet it (from version 0.7.2).
 
 \cgesec{Options}
 
@@ -88,6 +94,9 @@ numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
 \argu{upar}, \argu{upar}\cmd{(}\argu{e}[\cmd{,} \argu{e2}]\cmd{)} & a user parameter (\manref{cge_parameter}), at its current value\\
 \cmd{base(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}]\cmd{)} & the base value of a variable\\
 \cmd{sum(}\argu{i}\cmd{,} \argu{expression}\cmd{)} & the sum over the elements of the set of index \argu{i}\\
+\cmd{ord(}\argu{i}\cmd{)} & the position of the element of index \argu{i} in its set, from 1\\
+\cmd{sum(}\argu{i}\cmd{$(}\argu{condition}\cmd{),} \argu{expression}\cmd{)} & the sum over the elements for which the condition holds\\
+\argu{term}\cmd{$(}\argu{condition}\cmd{)} & the term where the condition holds, else 0\\
 \end{cgetable}
 
 Variables are written in upper case, with as many elements as they have
@@ -113,6 +122,36 @@ enclosing sum is an error. Sums may contain sums.
 \cmd{^} binds most tightly and groups from the right; then come \cmd{*} and
 \cmd{/}, and then \cmd{+} and \cmd{-}, which group from the left. A leading
 minus sign applies after any power: \cmd{-X^2} is $-(X^2)$.
+
+\cgesubsec{Conditions}
+
+From version 0.7.2, a condition written \cmd{$(}\argu{condition}\cmd{)}, as
+in GAMS, restricts a sum, a term, or the domain of an equation or a variable,
+\argu{name}\cmd{(}\argu{i}\cmd{)$(}\argu{condition}\cmd{)}. A term is a
+number, a reference such as \cmd{PQ(c)}, a function or an expression in
+parentheses. Besides the terms of expressions, a condition may use
+\begin{cgetable}{p{0.34\linewidth}p{0.60\linewidth}}
+\toprule
+Term & Meaning\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{> < >= <= == !=} & comparisons, 1 if true and 0 if not\\
+\cmd{&}, \cmd{|}, \cmd{!} & and, or, not; any value other than 0 is true\\
+\argu{set}\cmd{(}\argu{e}\cmd{)} & 1 if element \argu{e} belongs to a user set or a model set, as in \cmd{goods(c)}\\
+\cmd{sameas(}\argu{i}\cmd{,} \argu{label}\cmd{)} & 1 if the element of index \argu{i} is \argu{label}\\
+\cmd{ord(}\argu{i}\cmd{)} & the position of the element in its set\\
+\end{cgetable}
+Arithmetic is evaluated first, then comparisons, \cmd{!}, \cmd{&} and
+\cmd{|}. Comparisons, \cmd{sameas()} and set membership are allowed only in
+conditions.
+
+Conditions are evaluated with the variables and parameters at their base
+values, when the equation is added and when the model is calibrated again; they
+choose the terms and the equation elements, which stay the same in every
+scenario. A condition that is missing at the base, such as \cmd{1/tm(c) > 0}
+where a tariff is 0, and a domain that no element meets are errors. Stata
+reads \cmd{$}\argu{name} on a command line as a global macro, so the
+condition is always written in parentheses.
 
 \cgesubsec{Equations and the closure}
 
@@ -158,12 +197,24 @@ A reference to an element that does not exist is an error, and the user
 equations cannot be removed while a swap involves a user variable:
 \stlog{eq_err}
 
+\cgesubsec{Example 5: conditions}
+
+Import spending on the commodities that carry a tariff, the tariff revenue of
+each, a variable and an equation over the same domain, and government purchases
+of goods, with goods a user set:
+\stlog{eq_cond}
+\cmd{TMV} and \cmd{LQM} exist for the commodities with a tariff only. With the
+tariffs removed, the tariff revenue is 0, while the domain stays as it was in the
+base. A condition that cannot be evaluated at the base, or that no element
+meets, is an error:
+\stlog{eq_cond_err}
+
 \cgesec{Stored results}
 
 \cmd{cge_equation} stores the following in \cmd{r()}:
 \begin{storedres}
 \resgroup{Scalars}
-\res{r(N_elements)} & number of elements of the equation\\
+\res{r(N_elements)} & number of elements of the equation, those that meet its condition\\
 \res{r(N_variables)} & number of user variables (\opt{}{list})\\
 \res{r(N_equations)} & number of equation elements (\opt{}{list})\\
 \resgroup{Macros}
@@ -181,7 +232,16 @@ that
 \texttt{sum(}j\texttt{,}\ g\texttt{)} = \sum_{k \in J} g\,[\,j = k\,],
 \end{equation*}
 where $J$ is the set of index $j$ and $g\,[\,j = k\,]$ is $g$ with $j$ replaced by
-$k$.
+$k$. With a condition $q$ (from version 0.7.2),
+\begin{equation*}
+\texttt{sum(}j\texttt{\$(}q\texttt{),}\ g\texttt{)} = \sum_{k \in J:\ q[\,j = k\,](x^0,\,\theta^0) \neq 0} g\,[\,j = k\,],
+\end{equation*}
+with $q$ evaluated at the base point $x^0$ and the base parameters $\theta^0$;
+a conditional term $g\texttt{\$(}q\texttt{)}$ is $g$ where $q(x^0, \theta^0) \neq 0$
+and 0 elsewhere, and an equation with a condition is written out only for the
+elements $e$ with $q[\,i = e\,](x^0, \theta^0) \neq 0$. Sums are written out from
+the outside in, each element substituted before the sums within, so that an
+inner condition may use the index of an enclosing sum.
 Each side is then compiled to postfix order, with numbers, variables (as
 positions in the stacked vector of variables), parameters, operators and
 functions, and \cmd{base()} replaced by the number it denotes. The solver

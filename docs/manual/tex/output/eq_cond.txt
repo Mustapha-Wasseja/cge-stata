@@ -1,0 +1,44 @@
+. cge_set goods = c, except(com_ser)
+User set goods: 2 element(s): com_agr com_man
+
+. cge_variable MT = sum(c$(tm(c) > 0), PM(c) * QM(c)), nominal
+User variable MT: 1 element(s), base value 88
+and its definition, equation MT
+
+. cge_variable TMV(c)$(tm(c) > 0) = tm(c) * PM(c) * QM(c)
+User variable TMV(c)$(tm(c) > 0): 2 element(s), base values 2.2 6.6
+and its definition, equation TMV
+
+. cge_variable LQM(c)$(tm(c) > 0), value(1)
+User variable LQM(c)$(tm(c) > 0): 2 element(s), base values 1 1
+Add the equations that determine it with cge_equation
+
+. cge_equation lqm(c)$(tm(c) > 0): QM(c) = LQM(c) * base(QM(c))
+User equation lqm: 2 element(s)
+
+. cge_variable GGOODS = sum(c, (PQ(c) * QG(c))$(goods(c)))
+User variable GGOODS: 1 element(s), base value 5
+and its definition, equation GGOODS
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(notariff)
+Simulation notariff solved in 7 iteration(s) (newton)
+Largest scaled residual  3.55e-14; WALRAS = -2.63e-14
+
+. quietly cge_results, sim(notariff) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "MT", "TMV", "LQM", "GGOODS"), noobs
+
+  +----------------------------------------+
+  | variable   element1   base       value |
+  |----------------------------------------|
+  |       MT                88   89.296578 |
+  |      TMV    com_agr    2.2           0 |
+  |      TMV    com_man    6.6           0 |
+  |      LQM    com_agr      1   1.1118433 |
+  |      LQM    com_man      1   1.0500471 |
+  |----------------------------------------|
+  |   GGOODS                 5   4.8950264 |
+  +----------------------------------------+

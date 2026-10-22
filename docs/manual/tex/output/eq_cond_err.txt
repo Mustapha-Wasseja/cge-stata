@@ -1,0 +1,14 @@
+. cge_variable X1 = sum(c$(1 / tm(c) > 0), PQ(c))
+a condition is missing at the base: ( ( 1 / tm ( com_ser ) > 0 ) )
+
+r(459);
+
+. cge_variable X2(c)$(tm(c) > 1) = PQ(c)
+user variable X2: no element meets the condition
+
+r(459);
+
+. cge_variable X3 = sum(c, PQ(c) * (tm(c) > 0))
+comparisons and & | are allowed only in conditions ($)
+
+r(198);

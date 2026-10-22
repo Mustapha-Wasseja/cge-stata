@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.7.2  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -10,10 +10,10 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}] {cmd:=} {it:expression} [{cmd:,} {opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal}]
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}]{cmd:,} {opt value(#)} [{opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt nominal}]
 
 
 {title:Description}
@@ -24,7 +24,10 @@ model: with an expression, the variable and the equation that defines it;
 with {opt value()}, a free variable that user equations determine. See
 {helpb cge_equation} for the expressions, the options and examples. The
 index may be that of a user set ({helpb cge_set}), and expressions may use
-user parameters ({helpb cge_parameter}).
+user parameters ({helpb cge_parameter}). From version 0.7.2, a condition,
+{it:name}{cmd:(}{it:i}{cmd:)$(}{it:condition}{cmd:)}, defines the variable
+only for the elements that meet it; see {it:Conditions} in
+{helpb cge_equation}.
 
 {pstd}
 A variable added with {opt value()} needs an equation added with

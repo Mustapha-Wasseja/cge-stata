@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets
+    nests nestvat outces user usersets conditions
 local ncase : word count `cases'
 
 tempname post
@@ -303,6 +303,27 @@ foreach case of local cases {
         quietly cge_closure, swap(LAM GADJ)
         cge_shock hgoal, value(1.2)
         cge_shock wg, elements(com_man) scale(2)
+        cge_shock tm, value(0)
+    }
+    * conditions (version 0.7.2): conditional sums and terms, variables and
+    * equations over conditional domains, and a target for government
+    * purchases of goods only
+    else if "`case'" == "conditions" {
+        quietly cge_synthetic, clear health
+        quietly cge_sam, labels(account)
+        quietly cge_map, `hltmap'
+        quietly cge_calibrate, `sigmas'
+        cge_set goods = c, except(com_ser com_hlt)
+        cge_variable MT = sum(c$(tm(c) > 0), PM(c) * QM(c)), nominal
+        cge_variable GH = sum(c, (PQ(c) * QG(c))$(goods(c) | ord(c) == 4))
+        cge_variable TMV(c)$(tm(c) > 0) = tm(c) * PM(c) * QM(c)
+        cge_variable TOUT = TMV(com_ser) + 1
+        cge_variable LAMC(c)$(goods(c)), value(1)
+        cge_equation lc(c)$(goods(c)): QM(c) = LAMC(c) * base(QM(c))
+        cge_variable LAM, value(1)
+        cge_equation lam: sum(c$(goods(c)), QG(c)) = LAM * sum(c$(goods(c) & !sameas(c, com_hlt)), base(QG(c)))
+        quietly cge_closure, swap(LAM GADJ)
+        cge_shock LAM, value(1.1)
         cge_shock tm, value(0)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers

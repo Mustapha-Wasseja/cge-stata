@@ -204,7 +204,7 @@ assert _rc == 111
 cge_equation, clear
 
 * ---------------------------------------------------------------------
-* 5. User sets and parameters (version 0.7.1)
+* 6. User sets and parameters (version 0.7.1)
 * ---------------------------------------------------------------------
 * The largest relative difference between two simulations, leaving out the
 * variables named after them
@@ -377,4 +377,158 @@ cge_parameter, clear
 cge_set, clear
 cge_parameter, list
 assert r(N_parameters) == 0
+
+* ---------------------------------------------------------------------
+* 7. Conditional domains (version 0.7.2): conditions on sums, terms and the
+* domains of variables and equations, evaluated at the base
+* ---------------------------------------------------------------------
+quietly cge_synthetic, clear health
+quietly cge_sam, labels(account)
+quietly cge_map, `hltmap'
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+* the scenario without user variables, for comparison
+cge_shock tm, value(0)
+quietly cge_solve, name(cd0) tolerance(1e-12)
+quietly cge_shock, reset
+cge_set goods = c, except(com_ser com_hlt)
+cge_parameter thr = 0
+* in this SAM only com_agr and com_man carry an import tariff
+cge_variable MT = sum(c$(tm(c) > thr), PM(c) * QM(c)), nominal
+cge_variable MT2 = sum(c, (PM(c) * QM(c))$(tm(c) > 0)), nominal
+cge_variable MT3 = PM(com_agr) * QM(com_agr) + PM(com_man) * QM(com_man), nominal
+cge_variable GG = sum(c$(goods(c)), PQ(c) * QG(c))
+cge_variable GG2 = sum(goods, PQ(goods) * QG(goods))
+* logical operators, ord() and sameas(); an inner condition on the outer index
+cge_variable GH = sum(c$(goods(c) & !(tm(c) <= 0) | ord(c) == 4), PQ(c) * QG(c))
+cge_variable GH2 = sum(c$(sameas(c, com_agr) | sameas(c, com_man) | sameas(c, com_hlt)), PQ(c) * QG(c))
+cge_variable GH3 = sum(c$(ord(c) != 3), PQ(c) * QG(c))
+cge_variable HA = sum(c, sum(h$(sameas(c, com_agr)), PQ(c) * QH(c, h)))
+cge_variable HA2 = sum(h, PQ(com_agr) * QH(com_agr, h))
+cge_variable OW = sum(c, ord(c) * PQ(c))
+* a domain with a condition; a reference outside it is 0
+cge_variable TMV(c)$(tm(c) > thr) = tm(c) * PM(c) * QM(c)
+assert r(N_elements) == 2
+cge_variable TOUT = TMV(com_ser) + 1
+* an empty conditional sum is 0
+cge_variable NONE = sum(c$(tm(c) > 5), PQ(c))
+* an equation over a conditional domain, with a variable over the same domain
+cge_variable LAMC(c)$(goods(c)), value(1)
+cge_equation lc(c)$(goods(c) & base(QM(c)) > 0): QM(c) = LAMC(c) * base(QM(c))
+assert r(N_elements) == 2
+cge_equation, list
+assert r(N_variables) == 15
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+* the definitions hold in a scenario, and the model's solution is unchanged
+cge_shock tm, value(0)
+quietly cge_solve, name(cd1) tolerance(1e-12)
+mata: _cge_jexcheck(0, "cd1")
+assert r(maxdiff) < 1e-6
+_usdiff cd1 cd0 MT MT2 MT3 GG GG2 GH GH2 GH3 HA HA2 OW TMV TOUT NONE LAMC
+assert r(maxdiff) < 1e-9
+quietly cge_results, sim(cd1) clear nodisplay
+foreach v in MT MT2 MT3 GG GG2 GH GH2 GH3 HA HA2 OW TOUT NONE {
+    quietly summarize value if variable == "`v'"
+    assert r(N) == 1
+    local `v' = r(mean)
+}
+foreach c in com_agr com_man com_ser com_hlt {
+    quietly summarize value if variable == "PQ" & element1 == "`c'"
+    local pq_`c' = r(mean)
+    quietly summarize value if variable == "QG" & element1 == "`c'"
+    local qg_`c' = r(mean)
+}
+assert reldif(`MT', `MT3') < 1e-12 & reldif(`MT2', `MT3') < 1e-12
+assert reldif(`GG', `GG2') < 1e-12
+assert reldif(`GH', `GG' + `pq_com_hlt' * `qg_com_hlt') < 1e-12
+assert reldif(`GH2', `GH') < 1e-12 & reldif(`GH3', `GH') < 1e-12
+assert reldif(`HA', `HA2') < 1e-12
+assert reldif(`OW', `pq_com_agr' + 2 * `pq_com_man' + 3 * `pq_com_ser' + 4 * `pq_com_hlt') < 1e-12
+assert `TOUT' == 1 & `NONE' == 0
+* only the elements in a domain are in the results
+quietly count if variable == "TMV"
+assert r(N) == 2
+quietly count if variable == "TMV" & inlist(element1, "com_agr", "com_man")
+assert r(N) == 2
+quietly summarize value if variable == "TMV"
+assert r(max) == 0
+foreach c in com_agr com_man {
+    quietly summarize value if variable == "QM" & element1 == "`c'"
+    local qm = r(mean)
+    quietly summarize base if variable == "QM" & element1 == "`c'"
+    local qm0 = r(mean)
+    quietly summarize value if variable == "LAMC" & element1 == "`c'"
+    assert reldif(r(mean), `qm' / `qm0') < 1e-12
+}
+* a condition uses the base value of a parameter: a shock to thr leaves the
+* domains and the sums as they were
+cge_shock thr, value(1)
+quietly cge_solve, name(cd2) tolerance(1e-12)
+_usdiff cd1 cd2
+assert r(maxdiff) < 1e-12
+* saved and loaded with the model
+tempfile cdm
+quietly cge_save using "`cdm'", replace
+quietly cge_use using "`cdm'"
+quietly cge_solve, name(cd1u) tolerance(1e-12)
+_usdiff cd1 cd1u
+assert r(maxdiff) < 1e-12
+* calibrating again keeps the conditions
+quietly cge_calibrate, sigmava(0.5) sigmaq(2) sigmat(2)
+cge_equation, list
+assert r(N_variables) == 15
+cge_shock tm, value(0)
+quietly cge_solve, name(cd3) tolerance(1e-12)
+quietly cge_results, sim(cd3) clear nodisplay
+quietly count if variable == "TMV"
+assert r(N) == 2
+quietly summarize value if variable == "MT"
+local mt = r(mean)
+quietly summarize value if variable == "MT3"
+assert reldif(`mt', r(mean)) < 1e-12
+* the GAMS program writes out only the elements whose condition holds
+tempfile gc
+cge_gams using "`gc'_c", sim(cd3) replace
+mata:
+u = cat(st_local("gc") + "_c/cge_user.inc")
+u2 = select(u, (strpos(u, "U_MT =e=") :> 0) :| (strpos(u, "U_TMV") :> 0))
+u2
+end
+* errors
+capture noisily cge_variable XX = sum(c, PQ(c) * (tm(c) > 0))
+assert _rc == 198
+capture noisily cge_variable XX = sum(c$(c == 1), PQ(c))
+assert _rc == 198
+capture noisily cge_variable XX = sum(c$(sameas(c, nosuch)), PQ(c))
+assert _rc == 111
+capture noisily cge_variable XX = sum(c$(goods(nosuch)), PQ(c))
+assert _rc == 111
+capture noisily cge_variable XX = sum(c$, PQ(c))
+assert _rc == 198
+capture noisily cge_variable XX = sum(c$(1 / tm(c) > 0), PQ(c))
+assert _rc == 459
+capture noisily cge_variable XX(c)$(tm(c) > 5) = PQ(c)
+assert _rc == 459
+capture noisily cge_equation xx(c)$(tm(c) > 5): PQ(c) = 1
+assert _rc == 459
+capture noisily cge_variable XX$(tm(com_agr) > 0) = 1
+assert _rc == 198
+capture noisily cge_variable XX = ord(c)
+assert _rc == 198
+capture noisily cge_variable XX = sameas(com_agr, com_agr)
+assert _rc == 198
+capture noisily cge_variable XX = PQ(com_agr)$(QM(com_agr) > 0 | !)
+assert _rc == 198
+capture noisily cge_variable ord, value(1)
+assert _rc == 198
+cge_equation, list
+assert r(N_variables) == 15
+* a parameter that only conditions use is still in use, as is a set
+capture noisily cge_set, clear
+assert _rc == 459
+capture noisily cge_parameter, clear
+assert _rc == 459
+cge_equation, clear
+cge_parameter, clear
+cge_set, clear
 program drop _usdiff
