@@ -17,7 +17,8 @@ the data. From version 0.8.0 it also gives, for several simulations at once,
 poverty for several lines, including lines that differ by household, the
 number of poor, eight more inequality measures, incidence by quantile of
 base consumption and the growth incidence curve, and all results as a
-dataset.
+dataset. From version 0.8.1 it gives each household's equivalent and
+compensating variations, and divides every change among its channels.
 
 \cgesec{Quick start}
 
@@ -51,6 +52,11 @@ Two simulations, a national line and regional lines in the variable
 cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) size(hhsize) ///
     income(wage:lab profit:cap remit:row grants:gov) line(1200 zreg) quantiles(5) detail
 \end{stcode}
+Welfare by household, and the contribution of each channel to every change
+\begin{stcode}
+cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap remit:row grants:gov) line(1200) generate(w1) decompose
+\end{stcode}
 As above, with the results as a dataset, saved to \cmd{incidence.dta}
 \begin{stcode}
 cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) size(hhsize) ///
@@ -78,7 +84,8 @@ cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) siz
 \optgroup{Results}
 \optarg{gen}{erate}{prefix} & add new consumption and the price index as variables\\
 \opt{}{replace} & allow the variables of \cmd{generate()} to be replaced\\
-\opt{det}{ail} & display poverty for every line, inequality and incidence\\
+\opt{det}{ail} & display poverty for every line, inequality, welfare and incidence\\
+\opt{dec}{ompose} & divide every change among its channels\\
 \opt{}{clear} & replace the survey in memory with the results\\
 \optarg{sav}{ing}{filename[\texttt{, replace}]} & save the results as a dataset\\
 \opt{nod}{isplay} & suppress the tables of results\\
@@ -146,9 +153,11 @@ for quintiles, and so on, from 2 to 100.
 (new nominal consumption), \argu{prefix}\cmd{_price} (the household's price
 index, relative to the base), \argu{prefix}\cmd{_real} (real consumption, at base
 prices), \argu{prefix}\cmd{_pc} (real consumption per person) and
-\argu{prefix}\cmd{_q} (the household's quantile group of base consumption per
-person). With several simulations, the first four are numbered in the order
-of \cmd{sim()}: \argu{prefix}\cmd{_nom1}, \argu{prefix}\cmd{_nom2}, and so on.
+\argu{prefix}\cmd{_ev} and \argu{prefix}\cmd{_cv} (the household's equivalent
+and compensating variations, from version 0.8.1), and \argu{prefix}\cmd{_q}
+(the household's quantile group of base consumption per person). With several
+simulations, all but \argu{prefix}\cmd{_q} are numbered in the order of
+\cmd{sim()}: \argu{prefix}\cmd{_nom1}, \argu{prefix}\cmd{_nom2}, and so on.
 They are missing for observations outside the sample. \argu{prefix} may have
 at most 26 characters, fewer the more simulations there are.
 
@@ -156,8 +165,19 @@ at most 26 characters, fewer the more simulations there are.
 replaced. Without it, a variable that exists is an error.
 
 \item[\opt{det}{ail}] also displays, for each simulation, poverty for every
-line and group, the inequality measures for all households, and incidence by
-quantile.
+line and group, the inequality measures for all households, the equivalent and
+compensating variations by group, and incidence by quantile.
+
+\item[\opt{dec}{ompose}] (from version 0.8.1) divides the change in every
+measure for all households among its channels, by the Shapley method: each
+source of income named in \cmd{income()}; \cmd{taxsav}, the direct tax and
+savings rates of the household's group; \cmd{group}, for households without
+income in the components given, which follow their group's consumption; and
+\cmd{prices}. Without \cmd{income()}, the channels are \cmd{income}, the
+group's consumption, and \cmd{prices}. The contributions add up to the change.
+The change in each poverty measure is also divided into growth and
+redistribution. With $K$ channels, every measure is computed for $2^K$
+distributions; $K$ may be at most 12.
 
 \item[\opt{}{clear}] replaces the survey in memory with the results, as a
 dataset (see \emph{Results as a dataset} below). It cannot be combined with
@@ -264,6 +284,24 @@ It compares the distributions, not the same households; the table
 \cmd{quantile} follows the same persons:
 \stlog{ms_gic}
 
+\cgesubsec{Example 6: welfare, and the channels of the changes}
+
+\cmd{generate()} adds each household's equivalent and compensating variations,
+and \cmd{decompose} divides each change among its channels:
+\stlog[\scriptsize]{ms_decomp}
+\stlog{ms_ev}
+Removing the tariffs raises wages, which add 2.41 per cent to mean
+consumption per person, and profits, which add 0.23 per cent; the direct tax
+rate rises to keep government savings fixed, which takes away 3.04 per cent;
+prices add 0.01 per cent, and government transfers, fixed in real terms,
+nothing. The contributions add up to the change, $-0.389$ per cent, and those
+to the headcount, to its rise of 0.16 points. Growth and redistribution divide
+the change in the headcount in the same way: here it is all growth, since the
+change in the distribution, at either mean, moves no one across the line.
+The equivalent variation, the change in consumption at base prices worth as
+much as the simulation, is at least the change in real consumption for every
+household, since the household can substitute among goods.
+
 \cgesubsec{Results as a dataset}
 
 With \cmd{clear} or \cmd{saving()}, the results form a dataset with one
@@ -274,22 +312,29 @@ Variable & Content\\
 \midrule\endhead
 \bottomrule\endlastfoot
 \cmd{sim} & the simulation\\
-\cmd{table} & \cmd{summary}, \cmd{quantile} or \cmd{gic}\\
+\cmd{table} & \cmd{summary}, \cmd{quantile}, \cmd{gic}, \cmd{shapley} or \cmd{growthred}\\
 \cmd{group} & \cmd{all}, every household, or a household group (\cmd{summary})\\
 \cmd{measure} & the measure, below\\
 \cmd{line} & the poverty line, for \cmd{fgt0}, \cmd{fgt1}, \cmd{fgt2} and \cmd{npoor}\\
+\cmd{channel} & the channel (\cmd{shapley}) or component (\cmd{growthred}), from version 0.8.1\\
 \cmd{q} & the quantile group (\cmd{quantile}) or the percentile (\cmd{gic})\\
 \cmd{base}, \cmd{value} & the base and simulated values\\
 \cmd{change}, \cmd{pct} & the change and the per cent change\\
 \end{cgetable}
 The measures of \cmd{summary} are \cmd{mean} (mean consumption per person);
+\cmd{ev} and \cmd{cv}, the equivalent and compensating variations per person,
+with \cmd{pct} their per cent of base consumption;
 for each line \cmd{fgt0}, \cmd{fgt1}, \cmd{fgt2} and \cmd{npoor} (the number
 of poor persons, in units of the weights); and \cmd{gini}, \cmd{theil},
 \cmd{mld}, \cmd{ge2}, \cmd{atkinson_05}, \cmd{atkinson_1}, \cmd{atkinson_2},
 \cmd{palma} and \cmd{s80s20}. Those of \cmd{quantile} are \cmd{popshare},
-\cmd{mean}, \cmd{share} (the share of total consumption) and \cmd{inc_abs}
-(the share of the total change, in \cmd{value}); that of \cmd{gic} is
-\cmd{quantile}, the percentile. Poverty measures and inequality indexes are
+\cmd{mean}, \cmd{share} (the share of total consumption), \cmd{inc_abs}
+(the share of the total change, in \cmd{value}) and \cmd{ev}; that of
+\cmd{gic} is \cmd{quantile}, the percentile. With \cmd{decompose}, the table
+\cmd{shapley} has, for every measure of \cmd{summary} for all households and
+each channel, the base value and the base value plus the channel's
+contribution, so that \cmd{change} is the contribution; \cmd{growthred} has
+the growth and redistribution components of each poverty measure. Poverty measures and inequality indexes are
 proportions; \cmd{pct} is the per cent change of the measure itself.
 
 \cgesec{Stored results}
@@ -308,12 +353,16 @@ proportions; \cmd{pct} is the per cent change of the measure itself.
 \resgroup{Macros}
 \res{r(sims)} & the simulations\\
 \res{r(lines)} & the poverty lines\\
+\res{r(channels)} & the channels of \cmd{decompose}\\
 \resgroup{Matrices}
 \res{r(table)} & one row for all households (\cmd{all}) and one for each group in the survey; columns \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{fgt0_base}, \cmd{fgt0_sim}, \cmd{fgt1_base}, \cmd{fgt1_sim}, \cmd{fgt2_base}, \cmd{fgt2_sim} (first line), \cmd{gini_base} and \cmd{gini_sim}\\
 \res{r(poverty)} & for each line (equations \cmd{line1}, \cmd{line2}, \ldots) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated\\
 \res{r(inequality)} & for each group: the nine inequality measures, base and simulated\\
 \res{r(quantiles)} & for each quantile group: \cmd{popshare}, \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{share_base}, \cmd{share_sim} and \cmd{inc_abs}\\
 \res{r(gic)} & for percentiles 1 to 99: the base and simulated values and their per cent change\\
+\res{r(welfare)} & for each group: \cmd{ev} and \cmd{cv} per person, \cmd{ev_pct} and \cmd{cv_pct}, as per cent of base consumption\\
+\res{r(shapley)} & with \cmd{decompose}: for each measure (poverty measures with equations \cmd{line1}, \ldots), the base, the contribution of each channel, and the simulated value\\
+\res{r(growthred)} & with \cmd{decompose}: for each line and poverty measure, the base, growth, redistribution and the simulated value\\
 \end{storedres}
 The results in \cmd{r()} are those of the first simulation of \cmd{sim()}.
 
@@ -411,6 +460,46 @@ $(S^1_k - S^0_k) / \sum_j (S^1_j - S^0_j)$. The growth incidence curve
 $p = 1, \dots, 99$, with $r^t(p)$ the $p$th percentile of consumption per person
 in the base and the simulation.
 
+\textbf{Welfare (from version 0.8.1).} With $p_j$ the prices households
+pay, $\gamma_{jh}$ and $\beta_{jh}$ the subsistence quantities and marginal
+budget shares of group $h$, and $\lambda_i = C^0_i/\V{EH}^0_h$,
+\begin{gather*}
+EV_i = \lambda_i \sum_j p^0_j\gamma_{jh} + \Bigl(C^1_i - \lambda_i \sum_j p^1_j\gamma_{jh}\Bigr)\prod_j \Bigl(\frac{p^0_j}{p^1_j}\Bigr)^{\beta_{jh}} - C^0_i,\\
+CV_i = C^1_i - \lambda_i \sum_j p^1_j\gamma_{jh} - \Bigl(C^0_i - \lambda_i \sum_j p^0_j\gamma_{jh}\Bigr)\prod_j \Bigl(\frac{p^1_j}{p^0_j}\Bigr)^{\beta_{jh}},
+\end{gather*}
+the measures of the group's expenditure function with subsistence quantities
+$\lambda_i \gamma_{jh}$; a household with its group's change in consumption
+has $\lambda_i$ times its group's $EV_h$ and $CV_h$. With \cmd{budget()}, a
+household with budget items has Cobb--Douglas preferences in its own shares
+$s_{ik}$: with $G_i = \prod_k (p^1_{j(k)}/p^0_{j(k)})^{s_{ik}}$,
+$EV_i = C^1_i/G_i - C^0_i$ and $CV_i = C^1_i - C^0_i\,G_i$. Since $G_i \le P_i$,
+$EV_i \ge R_i - C^0_i$. The tables give $\sum_i w_i EV_i / \sum_i v_i$ per
+person and $100 \sum_i w_i EV_i / \sum_i w_i C^0_i$.
+
+\textbf{Decomposition (from version 0.8.1).} Consumption per person in the
+simulation is $r^1_i = r^0_i\,f_i/P_i$, where the nominal factor $f_i$ is the
+product of the changes in the household's income components and in its
+group's direct tax and savings rates. For a subset $S$ of the $K$ channels,
+$r^S_i$ takes the channels in $S$ at their simulated values and the others at
+their base values; $r^\emptyset = r^0$ and $r^{\{1, \dots, K\}} = r^1$. The
+contribution of channel $j$ to a measure $I$ is its Shapley value
+\citep{shorrocks2013},
+\begin{equation*}
+\phi_j = \sum_{S \not\ni j} \frac{|S|!\,(K - |S| - 1)!}{K!}\,\bigl[I(r^{S \cup \{j\}}) - I(r^S)\bigr],
+\qquad \sum_j \phi_j = I(r^1) - I(r^0),
+\end{equation*}
+the change that channel $j$ makes, averaged over the orders in which the
+channels change. A channel that changes nothing contributes nothing. With
+$P(\mu, L)$ a poverty measure of the distribution with mean $\mu$ and Lorenz
+curve $L$, the growth and redistribution components \citep{datt1992}, in
+Shapley form, are
+\begin{gather*}
+G = \tfrac12\bigl[P(\mu^1, L^0) - P(\mu^0, L^0) + P(\mu^1, L^1) - P(\mu^0, L^1)\bigr],\\
+R = \tfrac12\bigl[P(\mu^0, L^1) - P(\mu^0, L^0) + P(\mu^1, L^1) - P(\mu^1, L^0)\bigr],
+\end{gather*}
+with $G + R = P(\mu^1, L^1) - P(\mu^0, L^0)$, computed from the distributions
+$r^0 \mu^1/\mu^0$ and $r^1 \mu^0/\mu^1$.
+
 \Chapref{chap:microsim} describes the link in full.
 
 \cgesec{References}
@@ -420,8 +509,16 @@ Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. 2008.
 Distribution: Macro-Micro Evaluation Techniques and Tools}. World Bank and
 Palgrave Macmillan.
 
+Datt, G., and M. Ravallion. 1992. Growth and redistribution components of
+changes in poverty measures: A decomposition with applications to Brazil and
+India in the 1980s. \textit{Journal of Development Economics} 38: 275--295.
+
 Ravallion, M., and S. Chen. 2003. Measuring pro-poor growth.
 \textit{Economics Letters} 78: 93--99.
+
+Shorrocks, A. F. 2013. Decomposition procedures for distributional analysis:
+A unified framework based on the Shapley value. \textit{Journal of Economic
+Inequality} 11: 99--126.
 
 \cgesec{Also see}
 

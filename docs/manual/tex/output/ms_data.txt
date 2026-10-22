@@ -5,9 +5,9 @@
 . describe, short
 
 Contains data
-  obs:           350
- vars:            10
- size:        25,900
+  obs:           378
+ vars:            11
+ size:        28,350
 Sorted by:
      Note:  dataset has changed since last saved
 

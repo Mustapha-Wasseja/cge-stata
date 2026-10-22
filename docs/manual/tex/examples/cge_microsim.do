@@ -70,6 +70,20 @@ cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(
 *<<
 set linesize 100
 
+*>> ms_decomp
+set linesize 110
+cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap transfer:gov)                                         ///
+    budget(food:com_agr goods:com_man services:com_ser) line(100) generate(w1) decompose
+*<<
+set linesize 100
+
+*>> ms_ev
+generate double dreal = w1_real - cons
+summarize w1_ev w1_cv dreal
+count if w1_ev < dreal
+*<<
+
 *>> ms_data
 set linesize 110
 cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) ///

@@ -973,6 +973,33 @@ simulation, table (`summary`, `quantile`, `gic`), group, measure, line and
 quantile, with the base, the simulated value, the change and the per cent
 change.
 
+**Welfare and decomposition (from version 0.8.1).** With $\lambda_i =
+C^0_i/EH^0_h$, prices households pay $p$ (PH and PA) and the group's LES
+parameters, household $i$ has
+$EV_i = \lambda_i p^0\gamma_h + (C^1_i - \lambda_i p^1\gamma_h)\prod_j (p^0_j/p^1_j)^{\beta_{jh}} - C^0_i$ and
+$CV_i = C^1_i - \lambda_i p^1\gamma_h - (C^0_i - \lambda_i p^0\gamma_h)\prod_j (p^1_j/p^0_j)^{\beta_{jh}}$,
+so that a household that follows its group has $\lambda_i$ times the group's
+$EV_h$ and $CV_h$; with budget items, Cobb-Douglas in its own shares $s_{ik}$,
+$G_i = \prod_k (p^1_{j(k)}/p^0_{j(k)})^{s_{ik}}$, $EV_i = C^1_i/G_i - C^0_i$ and
+$CV_i = C^1_i - C^0_i G_i$. Results give $\sum_i w_i EV_i / \sum_i w_i n_i$
+per person and $100 \sum_i w_i EV_i / \sum_i w_i C^0_i$.
+`decompose` writes $r^1_i = r^0_i\,f_i(\text{income channels})/P_i$ and
+evaluates every measure for all $2^K$ subsets $S$ of the $K$ channels, with
+the channels in $S$ at their simulated values and the others at the base:
+each source $k$ multiplies its component by $\rho_{hk}$, `taxsav` the
+income ratio by $\kappa_h$, `group` gives $EH_h/EH^0_h$ to households
+without mapped income, and `prices` divides by $P_i$ (without `income()`,
+the channels are `income`, $EH_h/EH^0_h$, and `prices`). The Shapley value
+of channel $j$ is $\sum_{S \not\ni j} \frac{|S|!\,(K-|S|-1)!}{K!}\,
+[I(S \cup \{j\}) - I(S)]$ (Shorrocks 2013); the values add up to
+$I(r^1) - I(r^0)$. For poverty, with $P(\mu, L)$ the measure of the
+distribution with mean $\mu$ and Lorenz curve $L$, growth is
+$\frac12[P(\mu^1, L^0) - P(\mu^0, L^0) + P(\mu^1, L^1) - P(\mu^0, L^1)]$ and
+redistribution
+$\frac12[P(\mu^0, L^1) - P(\mu^0, L^0) + P(\mu^1, L^1) - P(\mu^1, L^0)]$
+(Datt and Ravallion 1992, in Shapley form), computed from $r^0 \mu^1/\mu^0$
+and $r^1 \mu^0/\mu^1$.
+
 ## 12. Fiscal instruments (from version 0.3.1)
 
 ### 12.1 Revenue-neutral tax replacement

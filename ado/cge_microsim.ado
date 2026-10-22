@@ -1,7 +1,7 @@
-*! cge_microsim.ado  v0.8.0  2026-10-23
+*! cge_microsim.ado  v0.8.1  2026-10-23
 *! cge-stata: pass one or more simulations to household survey data
 *! (model_spec.md, Section 11): consumption, prices, poverty, inequality and
-*! incidence by household
+*! incidence by household; welfare, and the decomposition of the changes
 *!
 *! Author: Mustapha Wasseja
 *! Requires: Stata 13+
@@ -11,7 +11,7 @@ program define cge_microsim, rclass
     syntax [if] [in] [pweight aweight fweight iweight], SIM(string) GROUP(varname)   ///
         CONSumption(varname numeric) [SIZE(varname numeric) INCome(string)          ///
         BUDget(string) LINE(string) QUANTiles(integer 10) GENerate(name) REPLACE     ///
-        DETail CLEAR SAVing(string) NODisplay]
+        DETail DECompose CLEAR SAVing(string) NODisplay]
 
     * Simulations: one or more (several from version 0.8.0)
     local sims `sim'
@@ -119,7 +119,7 @@ program define cge_microsim, rclass
         forvalues k = 1/`nsims' {
             local sfx ""
             if `nsims' > 1 local sfx `k'
-            foreach suffix in nom price real pc {
+            foreach suffix in nom price real pc ev cv {
                 local gvars `gvars' `generate'_`suffix'`sfx'
             }
         }
@@ -137,7 +137,7 @@ program define cge_microsim, rclass
     _cge_load
     mata: _cge_microsim("`sims'", "`touse'", "`gs'", "`consumption'", "`wvar'", "`size'", ///
         `"`income'"', `"`budget'"', "`lines'", `quantiles', "`generate'",              ///
-        ("`nodisplay'" == ""), ("`detail'" != ""))
+        ("`nodisplay'" == ""), ("`detail'" != ""), ("`decompose'" != ""))
     return add
 
     if "`clear'" != "" {

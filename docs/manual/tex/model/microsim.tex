@@ -92,6 +92,26 @@ Several simulations, such as alternative policies or the periods of a
 dynamic run, can be passed to the survey in one call, with every result in one
 dataset for tables and graphs.
 
+\section{Welfare and the channels of change}
+
+From version 0.8.1, each household's equivalent and compensating variations
+measure its welfare change in money: with the expenditure function of its
+group, the group's subsistence quantities scaled to the household, or, when
+its budget is given, Cobb--Douglas preferences in its own budget shares. A
+household that follows its group has its group's welfare change, as
+\manref{cge_report} reports it, in proportion to its consumption, so the
+survey and the model agree for the average household of each group.
+
+A change in poverty or inequality has several causes: wages, profits,
+transfers and remittances change by different amounts, the direct tax and
+savings rates of the groups change, and prices change. Since a household's
+consumption is the product of these changes, the contribution of each can be
+found by switching the channels on one at a time; the order matters, and the
+Shapley decomposition \citep{shorrocks2013} averages over every order, so that
+the contributions add up exactly to the change. The change in poverty can
+also be divided into growth, the change in the mean with an unchanged
+distribution, and redistribution \citep{datt1992}.
+
 Survey households keep their own income composition and budget shares, so
 their average change can differ from their group's: a household that lives on
 wages gains more than its group when wages rise relative to other income. The

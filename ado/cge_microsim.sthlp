@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.8.0  23oct2026}{...}
+{* *! version 0.8.1  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -13,7 +13,7 @@
 {cmd:cge_microsim} [{it:if}] [{it:in}] [{it:weight}]{cmd:,} {opt sim(names)} {opt group(varname)}
 {opt cons:umption(varname)} [{opt size(varname)} {opt inc:ome(var:source ...)}
 {opt bud:get(var:commodity ...)} {opt line(lines)} {opt quant:iles(#)}
-{opt gen:erate(prefix)} {opt replace} {opt det:ail} {opt clear}
+{opt gen:erate(prefix)} {opt replace} {opt det:ail} {opt dec:ompose} {opt clear}
 {opt sav:ing(filename[, replace])} {opt nod:isplay}]
 
 {pstd}
@@ -44,7 +44,9 @@ The command then reports, before and after each simulation:
 {phang2}- for each poverty line, the headcount, poverty gap, severity and number of poor;{p_end}
 {phang2}- the Gini coefficient, Theil index, mean log deviation, GE(2), Atkinson indexes and the Palma and S80/S20 ratios;{p_end}
 {phang2}- incidence by decile, or by any number of quantiles, of base consumption per person;{p_end}
-{phang2}- the growth incidence curve, the growth of each percentile of the distribution.{p_end}
+{phang2}- the growth incidence curve, the growth of each percentile of the distribution;{p_end}
+{phang2}- each household's equivalent and compensating variations (from version 0.8.1);{p_end}
+{phang2}- with {opt decompose}, the contribution of each channel, each source of income, direct taxes and savings, and prices, to every change, and the growth and redistribution components of the change in poverty (from version 0.8.1).{p_end}
 
 {pstd}
 The survey's own income and consumption data drive the results. The CGE
@@ -109,14 +111,25 @@ person as {helpb xtile} ranks them.
 {opt generate(prefix)} creates {it:prefix}{cmd:_nom} (nominal consumption),
 {it:prefix}{cmd:_price} (the household's price index),
 {it:prefix}{cmd:_real} (real consumption), {it:prefix}{cmd:_pc} (real
-consumption per person) and {it:prefix}{cmd:_q} (the quantile group of base
-consumption per person). With several simulations the first four are
-numbered, {it:prefix}{cmd:_nom1}, {it:prefix}{cmd:_nom2}, and so on.
+consumption per person), {it:prefix}{cmd:_ev} and {it:prefix}{cmd:_cv} (the
+household's equivalent and compensating variations, from version 0.8.1) and
+{it:prefix}{cmd:_q} (the quantile group of base consumption per person). With
+several simulations all but the last are numbered, {it:prefix}{cmd:_nom1}, {it:prefix}{cmd:_nom2}, and so on.
 {opt replace} allows them to be replaced.
 
 {phang}
 {opt detail} also displays poverty for every line, the inequality measures
 and incidence by quantile.
+
+{phang}
+{opt decompose} divides the change in every measure for all households among
+its channels by the Shapley method: each source of income in {opt income()},
+direct taxes and savings ({cmd:taxsav}), the households that follow their
+group's consumption ({cmd:group}), and prices; without {opt income()}, income
+and prices. The contributions add up to the change. The change in poverty is
+also divided into growth and redistribution (Datt and Ravallion 1992, in
+Shapley form). With K channels the measures are computed for 2^K
+distributions; K is at most 12.
 
 {phang}
 {opt clear} replaces the survey in memory with the results; see
@@ -130,19 +143,35 @@ survey in memory.
 {opt nodisplay} suppresses the tables.
 
 
+{title:Welfare}
+
+{pstd}
+The equivalent variation of a household is the change in its consumption at
+base prices that is worth as much as the simulation; the compensating
+variation, the change at the new prices. They use the expenditure function of
+the household's group, LES or Cobb-Douglas as calibrated, with the group's
+subsistence quantities scaled by the household's base consumption relative to
+its group's; with {opt budget()}, Cobb-Douglas in the household's own budget
+shares. A household that follows its group has its group's welfare change
+({helpb cge_report}) in proportion to its consumption.
+
+
 {title:Results as a dataset}
 
 {pstd}
 With {opt clear} or {opt saving()}, each observation is one result:
 {cmd:sim} (the simulation), {cmd:table}, {cmd:group} ({cmd:all} or a household
-group), {cmd:measure}, {cmd:line} (for poverty measures), {cmd:q} (the quantile
-group or percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
+group), {cmd:measure}, {cmd:line} (for poverty measures), {cmd:channel}
+({cmd:shapley} and {cmd:growthred}), {cmd:q} (the quantile group or
+percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {cmd:pct} (per cent change). The tables are:
 
 {p2colset 9 22 24 2}{...}
-{p2col:{cmd:summary}}by group: {cmd:mean}; for each line {cmd:fgt0}, {cmd:fgt1}, {cmd:fgt2} and {cmd:npoor}; {cmd:gini}, {cmd:theil}, {cmd:mld}, {cmd:ge2}, {cmd:atkinson_05}, {cmd:atkinson_1}, {cmd:atkinson_2}, {cmd:palma} and {cmd:s80s20}{p_end}
-{p2col:{cmd:quantile}}by quantile group: {cmd:popshare}, {cmd:mean}, {cmd:share} (of total consumption) and {cmd:inc_abs} (share of the total change, in {cmd:value}){p_end}
+{p2col:{cmd:summary}}by group: {cmd:mean}; {cmd:ev} and {cmd:cv} per person, with {cmd:pct} their per cent of base consumption; for each line {cmd:fgt0}, {cmd:fgt1}, {cmd:fgt2} and {cmd:npoor}; {cmd:gini}, {cmd:theil}, {cmd:mld}, {cmd:ge2}, {cmd:atkinson_05}, {cmd:atkinson_1}, {cmd:atkinson_2}, {cmd:palma} and {cmd:s80s20}{p_end}
+{p2col:{cmd:quantile}}by quantile group: {cmd:popshare}, {cmd:mean}, {cmd:share} (of total consumption), {cmd:inc_abs} (share of the total change, in {cmd:value}) and {cmd:ev}{p_end}
 {p2col:{cmd:gic}}percentiles 1 to 99 of consumption per person, base and simulated: {cmd:pct} is the growth incidence curve{p_end}
+{p2col:{cmd:shapley}}with {opt decompose}: for every measure of {cmd:summary} for all households and each channel, the base and the base plus the channel's contribution; {cmd:change} is the contribution{p_end}
+{p2col:{cmd:growthred}}with {opt decompose}: the growth and redistribution components of each poverty measure{p_end}
 {p2colreset}{...}
 
 
@@ -178,6 +207,9 @@ group or percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {pstd}Two simulations, a national and a regional line, and every table{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) detail}{p_end}
 
+{pstd}Welfare by household, and the contributions of each channel{p_end}
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) budget(food:com_agr goods:com_man) line(100) generate(w1) decompose}{p_end}
+
 {pstd}The results as a dataset, and the growth incidence curve{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) clear nodisplay}{p_end}
 {phang2}{cmd:. list q pct if sim == "notariff" & table == "gic" & inlist(q, 10, 50, 90), noobs}{p_end}
@@ -199,12 +231,16 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {p2col 5 20 24 2: Macros}{p_end}
 {synopt:{cmd:r(sims)}}the simulations{p_end}
 {synopt:{cmd:r(lines)}}the poverty lines{p_end}
+{synopt:{cmd:r(channels)}}the channels of {opt decompose}{p_end}
 {p2col 5 20 24 2: Matrices}{p_end}
 {synopt:{cmd:r(table)}}for all households and each group: mean real consumption per person, base and simulated, and its per cent change; FGT0, FGT1 and FGT2 at the first line, base and simulated; the Gini coefficient, base and simulated{p_end}
 {synopt:{cmd:r(poverty)}}for each line ({cmd:line1}, {cmd:line2}, ...) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated{p_end}
 {synopt:{cmd:r(inequality)}}for each group: the nine inequality measures, base and simulated{p_end}
 {synopt:{cmd:r(quantiles)}}for each quantile group: population share, mean base and simulated, per cent change, share of consumption base and simulated, share of the total change{p_end}
 {synopt:{cmd:r(gic)}}percentiles 1 to 99, base and simulated, and their per cent change{p_end}
+{synopt:{cmd:r(welfare)}}for each group: EV and CV per person, and as per cent of base consumption{p_end}
+{synopt:{cmd:r(shapley)}}with {opt decompose}: for each measure, the base, the contribution of each channel, and the simulated value{p_end}
+{synopt:{cmd:r(growthred)}}with {opt decompose}: for each line and poverty measure, the base, growth, redistribution and the simulated value{p_end}
 
 
 {title:References}
@@ -216,8 +252,18 @@ Macro-Micro Evaluation Techniques and Tools. World Bank and Palgrave
 Macmillan.
 
 {phang}
+Datt, G., and M. Ravallion (1992). Growth and redistribution components of
+changes in poverty measures: A decomposition with applications to Brazil and
+India in the 1980s. Journal of Development Economics 38: 275-295.
+
+{phang}
 Ravallion, M., and S. Chen (2003). Measuring pro-poor growth. Economics
 Letters 78: 93-99.
+
+{phang}
+Shorrocks, A. F. (2013). Decomposition procedures for distributional analysis:
+a unified framework based on the Shapley value. Journal of Economic Inequality
+11: 99-126.
 
 
 {title:Also see}

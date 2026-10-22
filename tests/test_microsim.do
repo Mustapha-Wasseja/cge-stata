@@ -278,12 +278,13 @@ assert mreldif(r(table), T1) < 1e-15
 preserve
 cge_microsim `ms' sim(notariff double) line(10 20 z2) clear nodisplay
 cf _all using "`msres'"
-* each simulation: 3 rows (all, hhd, npi) of 1 + 4 x 3 + 9 measures, 10
-* quantiles of 4 measures and 99 percentiles
+* each simulation: 3 rows (all, hhd, npi) of 1 + 2 + 4 x 3 + 9 measures
+* (with EV and CV from version 0.8.1), 10 quantiles of 5 measures and 99
+* percentiles
 quietly count if sim == "notariff"
-assert r(N) == 3 * 22 + 40 + 99
+assert r(N) == 3 * 24 + 50 + 99
 quietly count
-assert r(N) == 2 * (3 * 22 + 40 + 99)
+assert r(N) == 2 * (3 * 24 + 50 + 99)
 quietly summarize base if sim == "notariff" & table == "summary" & group == "all" & measure == "fgt0" & line == "10"
 assert r(N) == 1 & r(mean) == T1[1, 4]
 quietly summarize value if sim == "double" & table == "summary" & group == "npi" & measure == "gini"
@@ -363,3 +364,191 @@ matrix I6 = r(inequality)
 assert I6[1, 5] == . & I6[1, 11] == . & I6[1, 13] == .
 assert I6[1, 3] < . & I6[1, 9] < . & I6[1, 1] < .
 restore
+
+* ---------------------------------------------------------------------
+* 6. Version 0.8.1: equivalent and compensating variations by household,
+*    and the decomposition of the changes by channel
+* ---------------------------------------------------------------------
+* The groups' welfare changes, per cent of base consumption (cge_report)
+preserve
+quietly cge_report, sims(notariff) tables(welfare) clear nodisplay
+foreach h in hhd npi {
+    quietly summarize pct if measure == "equivalent_variation" & element == "`h'"
+    local evp_`h' = r(mean)
+    quietly summarize pct if measure == "compensating_variation" & element == "`h'"
+    local cvp_`h' = r(mean)
+}
+restore
+* Households that follow their group, without income components or budget
+* items, have their group's welfare change in proportion to their consumption
+cge_microsim [pweight = w], sim(notariff) group(group) consumption(cons) size(size) generate(f) nodisplay
+matrix W = r(welfare)
+local row = 1
+foreach h in hhd npi {
+    local ++row
+    generate double evr = 100 * f_ev / cons if group == "`h'"
+    generate double cvr = 100 * f_cv / cons if group == "`h'"
+    quietly summarize evr
+    assert abs(r(min) - `evp_`h'') < 1e-9 & abs(r(max) - `evp_`h'') < 1e-9
+    quietly summarize cvr
+    assert abs(r(min) - `cvp_`h'') < 1e-9 & abs(r(max) - `cvp_`h'') < 1e-9
+    assert abs(W[`row', 2] - `evp_`h'') < 1e-9 & abs(W[`row', 4] - `cvp_`h'') < 1e-9
+    drop evr cvr
+}
+* r(welfare): EV per person over persons
+generate double wev = w * f_ev
+quietly summarize wev, meanonly
+local sev = r(sum)
+quietly summarize pw, meanonly
+assert reldif(W[1, 1], `sev' / r(sum)) < 1e-12
+drop wev
+
+* With budget items, Cobb-Douglas in the household's own budget shares, at
+* the prices households pay (PQ: there is no VAT in this SAM)
+preserve
+quietly cge_results, sim(notariff) clear nodisplay
+foreach c in com_agr com_man com_ser {
+    quietly summarize value if variable == "PQ" & element1 == "`c'"
+    local pq1 = r(mean)
+    quietly summarize base if variable == "PQ" & element1 == "`c'"
+    local lp_`c' = ln(`pq1' / r(mean))
+}
+restore
+cge_microsim `ms' sim(notariff) generate(cd) nodisplay
+generate double G = exp((food * `lp_com_agr' + manu * `lp_com_man' + serv * `lp_com_ser') / (food + manu + serv))
+assert abs(cd_ev - (cd_nom / G - cons)) < 1e-9 * cons
+assert abs(cd_cv - (cd_nom - cons * G)) < 1e-9 * cons
+assert abs(cd_cv - G * cd_ev) < 1e-9 * cons
+* the exact measure is at least the first-order one (G is at most the
+* Laspeyres index)
+assert cd_ev >= cd_real - cons - 1e-9 * cons
+drop G
+* Doubling the numeraire changes no household's welfare
+cge_microsim `ms' sim(double) generate(dd) nodisplay
+assert abs(dd_ev) < 1e-9 * cons & abs(dd_cv) < 1e-9 * cons
+* EV by quantile: per person, and per cent of base consumption
+cge_microsim `ms' sim(notariff) nodisplay
+matrix Q2 = r(quantiles)
+matrix W2 = r(welfare)
+generate double wev = w * cd_ev
+generate double wc0 = w * cons
+quietly summarize wev if a_q == 1, meanonly
+local s1 = r(sum)
+quietly summarize pw if a_q == 1, meanonly
+assert reldif(Q2[1, 8], `s1' / r(sum)) < 1e-12
+quietly summarize wc0 if a_q == 1, meanonly
+assert reldif(Q2[1, 9], 100 * `s1' / r(sum)) < 1e-12
+drop wev wc0
+
+* The Shapley decomposition: the contributions of the channels add up to the
+* change in every measure
+cge_microsim `ms' sim(notariff) line(10 z2) decompose nodisplay
+matrix SH = r(shapley)
+matrix GR = r(growthred)
+assert "`r(channels)'" == "lab cap gov row dom taxsav prices"
+assert rowsof(SH) == 1 + 2 * 4 + 9 & colsof(SH) == 9
+mata: S_ = st_matrix("SH"); st_numscalar("dmax", max(abs(rowsum(S_[., 1..(cols(S_) - 1)]) - S_[., cols(S_)]) :/ (1 :+ abs(S_[., cols(S_)]))))
+assert dmax < 1e-12
+* base and simulated values are those of the summary
+matrix I3 = r(inequality)
+matrix P3 = r(poverty)
+matrix T3 = r(table)
+assert reldif(SH[1, 1], T3[1, 1]) < 1e-15 & reldif(SH[1, 9], T3[1, 2]) < 1e-15
+assert reldif(SH[2, 9], P3[1, 2]) < 1e-15 & reldif(SH[10, 9], I3[1, 2]) < 1e-15
+* growth and redistribution add up to the change in poverty
+mata: G_ = st_matrix("GR"); st_numscalar("dmax", max(abs(G_[., 1] + G_[., 2] + G_[., 3] - G_[., 4])))
+assert dmax < 1e-12
+* the growth component, by its formula: the distribution scaled to the new mean
+quietly summarize r0 [aweight = pw]
+local mu0 = r(mean)
+quietly summarize a_pc [aweight = pw]
+local mu1 = r(mean)
+generate double h00 = r0 < 10
+generate double h11 = a_pc < 10
+generate double h10 = r0 * `mu1' / `mu0' < 10
+generate double h01 = a_pc * `mu0' / `mu1' < 10
+foreach v in h00 h11 h10 h01 {
+    quietly summarize `v' [aweight = pw]
+    local `v' = r(mean)
+}
+assert abs(GR[1, 2] - ((`h10' - `h00') + (`h11' - `h01')) / 2) < 1e-12
+assert abs(GR[1, 3] - ((`h01' - `h00') + (`h11' - `h10')) / 2) < 1e-12
+drop h00 h11 h10 h01
+* A channel that changes nothing contributes nothing: income indexed to the
+* CPI, the numeraire
+generate double misc = 5
+cge_microsim [pweight = w], group(group) consumption(cons) size(size) `bud' sim(notariff) line(10) ///
+    income(lab:lab cap:cap gov:gov rem:row dom:dom misc:cpi) decompose nodisplay
+assert "`r(channels)'" == "lab cap gov row dom cpi taxsav prices"
+matrix SC = r(shapley)
+mata: S_ = st_matrix("SC"); st_numscalar("dmax", max(abs(S_[., 7])))
+assert dmax < 1e-12
+drop misc
+
+* Two channels, by the formula: the mean, the headcount and the poverty gap
+cge_microsim [pweight = w], sim(notariff) group(group) consumption(cons) size(size) line(10) ///
+    generate(t2) decompose nodisplay
+assert "`r(channels)'" == "income prices"
+matrix S2 = r(shapley)
+generate double ri = r0 * t2_nom / cons
+generate double rp = r0 / t2_price
+local k = 0
+foreach v in r0 ri rp t2_pc {
+    local ++k
+    quietly summarize `v' [aweight = pw]
+    local m`k' = r(mean)
+    capture drop pp gg
+    generate double pp = `v' < 10
+    generate double gg = pp * (10 - `v') / 10
+    quietly summarize pp [aweight = pw]
+    local h`k' = r(mean)
+    quietly summarize gg [aweight = pw]
+    local g`k' = r(mean)
+}
+assert reldif(S2[1, 2], ((`m2' - `m1') + (`m4' - `m3')) / 2) < 1e-10
+assert reldif(S2[1, 3], ((`m3' - `m1') + (`m4' - `m2')) / 2) < 1e-10
+assert abs(S2[2, 2] - ((`h2' - `h1') + (`h4' - `h3')) / 2) < 1e-12
+assert abs(S2[3, 3] - ((`g3' - `g1') + (`g4' - `g2')) / 2) < 1e-12
+drop ri rp pp gg
+
+* In the results dataset: the rows of shapley and growthred
+preserve
+cge_microsim `ms' sim(notariff) line(10 z2) decompose clear nodisplay
+quietly count if table == "shapley"
+assert r(N) == 7 * 18
+quietly count if table == "growthred"
+assert r(N) == 2 * 8
+quietly summarize change if table == "shapley" & measure == "gini", meanonly
+assert reldif(r(sum), SH[10, 9] - SH[10, 1]) < 1e-10
+quietly summarize value if table == "summary" & group == "all" & measure == "ev"
+assert reldif(r(mean), W2[1, 1]) < 1e-12
+restore
+
+* The tables of detail and decompose
+cge_microsim `ms' sim(notariff) line(10) detail decompose
+
+* Households that follow their group under LES demand: their welfare change
+* is their group's, in proportion to consumption
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)
+cge_shock tm, value(0)
+quietly cge_solve, name(les) tolerance(1e-12)
+cge_shock, reset
+preserve
+quietly cge_report, sims(les) tables(welfare) clear nodisplay
+foreach h in hhd npi {
+    quietly summarize pct if measure == "equivalent_variation" & element == "`h'"
+    local evp_`h' = r(mean)
+    quietly summarize pct if measure == "compensating_variation" & element == "`h'"
+    local cvp_`h' = r(mean)
+}
+restore
+cge_microsim [pweight = w], sim(les) group(group) consumption(cons) size(size) generate(ls) nodisplay
+foreach h in hhd npi {
+    generate double evr = 100 * ls_ev / cons if group == "`h'"
+    generate double cvr = 100 * ls_cv / cons if group == "`h'"
+    quietly summarize evr
+    assert abs(r(min) - `evp_`h'') < 1e-9 & abs(r(max) - `evp_`h'') < 1e-9
+    quietly summarize cvr
+    assert abs(r(min) - `cvp_`h'') < 1e-9 & abs(r(max) - `cvp_`h'') < 1e-9
+    drop evr cvr
+}

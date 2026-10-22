@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.8.0 implements the standard single-country model described in
+Version 0.8.1 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,12 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.8.1 adds welfare and decomposition to `cge_microsim`: each
+household's equivalent and compensating variations, consistent with the
+groups' welfare in `cge_report`, and, with `decompose`, the contribution of
+each channel (each source of income, direct taxes and savings, prices) to
+every change in poverty and inequality, by the Shapley method, with the
+growth and redistribution components of the change in poverty.
 Version 0.8.0 extends the link to household surveys (`cge_microsim`): several
 simulations in one call, with every result as a dataset; several poverty
 lines, including lines that differ by household, and the number of poor; the
