@@ -1,0 +1,9 @@
+. type bad.csv
+account,act,com
+act,0,"1,234"
+com,"1,234",0
+
+. cge_sam using bad.csv, direct
+row act, column com: 1,234 is not a number
+
+r(459);

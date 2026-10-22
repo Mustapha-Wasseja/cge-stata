@@ -1,0 +1,31 @@
+. cge_solve, name(base)
+Simulation base solved in 0 iteration(s) (newton)
+Largest scaled residual  3.55e-16; WALRAS =  0.00e+00
+
+. cge_report, sims(base) tables(government)
+
+Government
+-------------------------------------------------
+                                  base       base
+revenue                             63      0.000
+spending                            60      0.000
+savings                              3      0.000
+tax_direct                          25      0.000
+tax_sales                           30      0.000
+tax_import                           8      0.000
+tax_export                           0          .
+tax_activity                         0          .
+tax_vat                              0          .
+tax_factor_use                       0          .
+tax_factor_income                    0          .
+-------------------------------------------------
+Percentage changes from the base (rates: changes in points)
+
+. cge_closure, government(fixgsav)
+Closure
+  external account     flexexr
+  government           fixgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile

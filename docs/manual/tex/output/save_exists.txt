@@ -1,0 +1,4 @@
+. cge_save using mymodel
+file mymodel.cgem already exists; use replace
+
+r(602);

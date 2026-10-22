@@ -1,0 +1,167 @@
+\cgeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+
+\cgesec{Description}
+
+\cmd{cge_variable} adds a variable to the calibrated model. With an expression,
+it adds the variable and the equation that defines it; with \opt{}{value()}, it
+adds a free variable, with that base value, that user equations added by
+\manref{cge_equation} determine. A variable may be indexed by a set of the
+model, and is then defined for every element of the set.
+
+\cgesec{Quick start}
+
+Government purchases at market prices
+\begin{stcode}
+cge_variable GEXP = sum(c, PQ(c) * QG(c)), nominal
+\end{stcode}
+Fix them in value, with the volumes adjusting
+\begin{stcode}
+cge_closure, swap(GEXP GADJ)
+\end{stcode}
+Prices relative to the consumer price index, for every commodity
+\begin{stcode}
+cge_variable PREL(c) = PQ(c) * (1 + tv(c)) / CPI
+\end{stcode}
+A variable with base value 1, for an equation of \manref{cge_equation} to
+determine
+\begin{stcode}
+cge_variable LAM, value(1)
+\end{stcode}
+
+\cgesec{Syntax}
+
+A variable and its definition
+\begin{stsyntax}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}] \cmd{=} \argu{expression}
+[\texttt{,} \opt{}{nominal}]
+\end{stsyntax}
+A variable that user equations determine
+\begin{stsyntax}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}]\texttt{,} \optarg{}{value}{\#}
+[\opt{}{nominal}]
+\end{stsyntax}
+\argu{name} has at most 24 characters, letters, digits and underscores; it
+may not be the name of a model variable, a user variable or a parameter that
+expressions use, and a defined variable may not take the name of a user
+equation. \argu{i} is an index: the letter of a set, possibly followed by
+digits, as in \cmd{c} or \cmd{c2}. \argu{expression} is written in the language
+described in \manref{cge_equation}.
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{value}{\#} & base value of a variable that user equations determine\\
+\opt{}{nominal} & the variable is measured in local currency\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{value}{\#}] gives the base value of a variable that user
+equations determine, and adds no equation. A variable has either a definition
+or a value, not both.
+
+\item[\opt{}{nominal}] marks a variable measured in local currency, so that
+the homogeneity check of \manref{cge_check} expects it to scale with the
+numeraire.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+User variables extend the model without changing its code. A defined variable
+gives a name to an expression of the model's variables, which can then be
+reported, bounded by \manref{cge_constraint} or, through a swap, fixed in the
+closure. A variable given a value is a new unknown, and needs equations of its
+own.
+
+User variables are free when they are added. A defined variable is determined
+by its definition. Swapped into the closure with
+\cmd{cge_closure, swap(}\argu{name} \argu{variable}\cmd{)}, it is fixed, which
+fixes the expression that defines it, and \argu{variable}, which the closure
+fixed, adjusts instead; \manref{cge_shock} can then change its value. A
+variable given a value adds one free variable for each element and no
+equation, so the closure is not square until \manref{cge_equation} adds as
+many equations.
+
+Indexes name the sets of the model: \cmd{a} activities, \cmd{c} commodities,
+\cmd{f} factors, \cmd{h} households, \cmd{d} households and enterprises,
+\cmd{i} institutions that receive factor income and \cmd{n} nests of value
+added. \argu{name}\cmd{(}\argu{i}\cmd{)} defines the variable for every element
+of the set of \argu{i}, and the index may then appear in the expression.
+
+User variables are saved with the model by \manref{cge_save}, kept when the
+model is calibrated again, with base values from the new base, solved in every
+simulation, dynamic run and sensitivity draw, listed in the results with the
+other variables, and written into the GAMS program by \manref{cge_gams}.
+Simulations stored before a variable was added hold its base value until they
+are solved again. \cmd{cge_equation, list} lists the user variables, and
+\cmd{cge_equation, clear} removes them with the user equations.
+
+\cgesubsec{Example 1: government spending fixed in value}
+
+The synthetic SAM is mapped and calibrated as in \manref{cge_solve}. The value
+of government purchases at market prices is defined, swapped for the scaling
+factor of government consumption, and so fixed while world import prices rise
+by 10 per cent:
+\stlog{var_gexp}
+The value of purchases stays at its base, 45, and the volumes adjust, all in
+the same proportion:
+\stlog{var_gexp_res}
+
+\cgesubsec{Example 2: an indexed variable}
+
+A variable indexed by commodity is defined for each one; \cmd{tv(c)}, the VAT
+rate, is zero in this SAM. Solving the simulation again gives the variable its
+values in the solution:
+\stlog{var_index}
+
+\cgesubsec{Example 3: a rigid real wage}
+
+Fixing the real wage of labour, and freeing its supply, gives unemployment at
+a fixed real wage. The shock and the swap of Example~1 are removed first:
+\stlog{var_rw}
+Under the CPI numeraire the real wage and the wage are both fixed at the base,
+and the rise in import prices lowers employment by about 5 per cent.
+
+\cgesubsec{Example 4: a variable that equations determine}
+
+A variable given a value has no equation, and the closure is then not square,
+as \manref{cge_check} shows:
+\stlog{var_value}
+\manref{cge_equation} gives an example that adds the equation.
+
+\cgesec{Stored results}
+
+\cmd{cge_variable} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_elements)} & number of elements of the variable\\
+\resgroup{Macros}
+\res{r(name)} & name of the variable\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+A defined variable $U$ with index $i$ adds, for every element $e$ of the set of
+$i$, the variable $U_e$ and the equation
+\begin{equation*}
+U_e = g_e(x),
+\end{equation*}
+where $g_e$ is the expression with $i$ replaced by $e$ and $x$ the vector of the
+model's variables, parameters at their current values. Its base value is
+$U^0_e = g_e(x^0)$, which must not be missing. The equation is a user equation
+named after the variable, and \cmd{cge_equation, list} lists it with the
+others. A variable given a value $v$ adds $U_e$ with $U^0_e = v$ and no
+equation. User variables come after the model's variables in the stacked
+vector of variables, in the order in which they are added, so that a
+definition may use the variables added before it. \Chapref{chap:user} describes
+the compilation of the expressions and their derivatives.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_equation}{User equations: new relations among the model's variables}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\seechapter{chap:user}{User variables and equations}
+\end{alsosee}

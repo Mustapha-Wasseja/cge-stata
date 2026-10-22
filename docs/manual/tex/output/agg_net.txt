@@ -1,0 +1,19 @@
+. cge_sam, labels(account)
+SAM read: 17 accounts, total 1866
+Largest row-column imbalance:  0.00e+00
+
+. cge_aggregate, groups(hh: hhd npi) netdiagonal
+Accounts merged: 2 accounts into 1 group; 15 accounts left as they are
+Diagonal cells (flows within an account): 3, total 8, removed
+Aggregated SAM: 16 accounts, total 1858
+Largest row-column imbalance:  0.00e+00
+
+. return list
+
+scalars:
+           r(diagonal) =  8
+         r(N_diagonal) =  3
+            r(N_blank) =  0
+            r(maxdiff) =  0
+              r(total) =  1858
+         r(N_accounts) =  16

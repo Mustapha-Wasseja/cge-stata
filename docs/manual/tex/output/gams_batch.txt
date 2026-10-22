@@ -1,0 +1,5 @@
+. cge_gams using gams_notariff, sim(notariff) noexport run
+Stata in batch mode cannot start GAMS: run cge_run.gms in the folder with GAMS, then compare with cg
+> e_gams ..., sim() compare noexport (or dynamic())
+
+r(198);

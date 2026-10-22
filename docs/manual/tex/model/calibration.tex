@@ -1,0 +1,342 @@
+\chapter{Calibration}\label{chap:calibration}
+
+Calibration computes the base value of every variable and every parameter of
+the model from the SAM and from the elasticities and other settings given by
+the user, so that the base solves every equation. \manref{cge_map} assigns
+the accounts to roles, checks the SAM and rewrites the common
+national-accounts layouts; \manref{cge_calibrate} then computes the
+parameters and checks benchmark replication. In this chapter $\SAM(r, c)$ is
+a cell of the SAM after the rewrites, and a superscript $0$ marks a base value.
+
+\section{SAM checks and the flows the model represents}\label{sec:flows}
+
+Before calibration the SAM must be square, with identical row and column
+labels; it must be balanced, each row total equal to its column total within
+$10^{-8}$ times the largest absolute cell; and every account with a non-zero
+flow must have a role. Every non-zero cell must be one of the flows of the
+table below. \manref{cge_map} lists every other flow, grouped by the roles of
+the paying and the receiving accounts, before it stops.
+
+\begin{cgetable}{p{0.24\linewidth}p{0.72\linewidth}}
+\toprule
+Paid by (column) & Received by (row)\\
+\midrule\endhead
+\bottomrule\endlastfoot
+commodity & activities (domestic output); rest of the world (imports); import, sales, export and VAT accounts; margin accounts (margins)\\
+activity & commodities (intermediate inputs); factors; activity tax account; accounts of taxes on factor use\\
+factor & households; enterprises; government; rest of the world; health insurance fund (contributions); account of taxes on factor income\\
+household & commodities; activities (home consumption); direct tax account; savings--investment; households and enterprises (transfers); rest of the world (transfers)\\
+enterprise & direct tax account; savings--investment; households and enterprises (transfers); rest of the world (transfers)\\
+government & commodities; households and enterprises (transfers); government (internal transfers); rest of the world (transfers); savings--investment; health insurance fund\\
+tax account & government\\
+savings--investment & commodities (investment, including changes in inventories)\\
+margin account & commodities (margin services)\\
+health insurance fund & commodities (purchases); savings--investment\\
+rest of the world & commodities (exports); households, enterprises and government (transfers); factors (factor income from abroad); savings--investment; health insurance fund\\
+\end{cgetable}
+
+Negative cells are allowed only in tax rows, the savings--investment row,
+transfer cells (the flows labelled transfers above, and factor income from
+abroad), payments of tax accounts to the government, VAT cells, investment
+demand (a fall in inventories) and sales of commodities by activities (a
+negative entry of the make matrix gives a negative yield; each activity's
+output and each commodity's domestic output must still be positive). Every
+activity needs positive output and positive value added, and every commodity
+needs domestic output or imports. An account with no flows at all needs no
+role.
+
+\section{Layouts rewritten before the checks}\label{sec:layouts}
+
+National SAMs often record some flows differently from the layout of the
+model. \manref{cge_map} rewrites the common ones before the checks above and
+reports the amounts it moves; the SAM itself is not changed, and
+\manref{cge_samexport} with \cmd{mapped} writes the SAM after the rewrites.
+
+\subsection{Exports recorded as sales by activities}
+
+A cell $\SAM(a, row)$ is treated as exports of the commodity paired with
+$a$: it is added to $\SAM(c(a), row)$ and to $\SAM(a, c(a))$, and set to zero.
+The activity's output and the rest of the world's spending are unchanged; the
+commodity's supply and demand both rise by the exports.
+
+\subsection{Taxes paid directly to the government}
+
+A tax option of the mapping (direct, sales, import, export or activity tax)
+may name the government account itself. The cells of the government's row in
+the columns that pay that tax (households and enterprises for the direct tax,
+commodities for the sales, import and export taxes, activities for the
+activity tax) are then moved to an internal tax account, whose column pays
+their total to the government. Government revenue is unchanged. At most one of
+the sales, import and export tax options may name the government account,
+because the cells would otherwise be ambiguous.
+
+\subsection{Margins netted out of margin activities}
+
+Some SAMs attribute trade and transport margins to the producing activities,
+as their purchases of trade and transport services, and net the margin
+revenue out of the output of the trade and transport activities by recording
+a negative use of their own product, $\SAM(c(a), a) < 0$. For each activity
+named in the option \cmd{margins()}, $-\SAM(c(a), a)$ is added to its output
+$\SAM(a, c(a))$, and $\SAM(c(a), a)$ is set to zero. The activity's output
+then equals its costs, and the margins enter the model as the producing
+activities' fixed-coefficient purchases of trade and transport services, as
+the SAM records them. Naming an activity without a negative use of its own
+product is an error. Only the net amount is recorded, so after the rewrite the
+activity's use of its own product is zero.
+
+\subsection{Territorial correction}
+
+National accounts move household consumption from the territorial to the
+residents' concept with a correction account: residents' purchases abroad are
+recorded as its imports, non-residents' purchases in the country as its
+exports (sometimes in the row of a matching activity), and the net as a
+negative household consumption of the correction. For the commodity (and,
+optionally, the activity) named in \cmd{territorial()}, the activity's exports
+are first moved to the commodity, and the activity must then have no flows.
+With $IM$ the commodity's imports, $EX$ its exports and $HC_h$ household $h$'s
+consumption of it, $\sum_h HC_h = IM - EX$, each household's share is
+$s_h = HC_h / \sum_h HC_h$, and
+\begin{equation*}
+\SAM(row, h) \mathrel{+}= s_h\,IM, \qquad \SAM(h, row) \mathrel{+}= s_h\,EX:
+\end{equation*}
+residents' purchases abroad become household payments to the rest of the
+world, and non-residents' purchases become transfers from the rest of the
+world to households. The correction's cells are then set to zero.
+
+\subsection{Stock-change accounts}
+
+Some SAMs record changes in inventories in a separate account, financed by
+savings--investment and buying commodities. For an account named in
+\cmd{stocks()}, its payments are added to the savings--investment column, and
+its row and column are set to zero. Changes in inventories are then part of
+investment demand, scaled by $\V{IADJ}$ \eqref{eq:I6}.
+
+\subsection{VAT within the sales tax}
+
+When the SAM records VAT within the sales tax account, \cmd{vatshare()} gives
+the VAT share of each commodity's sales tax; that share of
+$\SAM(tax_{sal}, c)$ is moved to an internal VAT account before the checks
+(\secref{sec:vat}). \cmd{vatshare(0)} creates an empty VAT account, so that a
+VAT can be introduced by a shock.
+
+\subsection{Roles that are not rewrites}
+
+Margin accounts, mapped with \cmd{marginaccounts()} or, for margins by market,
+with \cmd{domesticmargins()}, \cmd{importmargins()} and
+\cmd{exportmargins()}, collect margins from commodities, $\SAM(t, c)$, and buy margin services,
+$\SAM(c', t)$; they may have no other flows. A health insurance fund
+(\cmd{insurance()}) receives contributions from factors and transfers from the
+government and the rest of the world, buys health services and saves. A
+household's payment to an activity, $\SAM(a, h)$, is home consumption of the
+activity's output (\secref{sec:home}).
+
+The rewrites of exports, of taxes paid to the government, of the territorial
+correction and of stock changes leave every total that enters the model
+unchanged, except that the territorial correction replaces the correction's
+imports, exports and negative consumption by transfers. The margin rewrite
+raises the output of the margin activities, and the supply and demand of
+their products, by the margins.
+
+\section{Normalisation}\label{sec:normalisation}
+
+All base prices are one:
+\begin{equation*}
+\V{PA}^0_a = \V{PVA}^0_a = \V{PX}^0_c = \V{PD}^0_c = \V{PE}^0_c = \V{PQ}^0_c = 1,
+\qquad \V{EXR}^0 = 1, \qquad \V{pwm}_c = 1,
+\end{equation*}
+and $\V{W}^0_f = \V{WFDIST}^0_{fa} = 1$ unless factor quantities are supplied
+(\secref{sec:factor-quantities}). The base quantity of every flow is therefore
+its value in the SAM.
+
+\section{Taxes and trade}\label{sec:cal-trade}
+
+\begin{itemize}
+\item Imports: $\V{QM}^0_c = \SAM(row, c)$, $\V{tm}_c = \SAM(tax_{imp}, c) / \V{QM}^0_c$
+and $\V{PM}^0_c = 1 + \V{tm}_c$.
+\item Activities: $\V{QA}^0_a$ is the column total of activity $a$, and
+$\V{ta}_a = \SAM(tax_{act}, a) / \V{QA}^0_a$.
+\item Yields: $\theta_{ac} = \SAM(a, c) / \V{QA}^0_a$, and commodity output
+$\V{QX}^0_c = \sum_a \SAM(a, c)$; $CX$ is the set of commodities with
+$\V{QX}^0_c > 0$. With home consumption, marketed output replaces
+$\V{QA}^0_a$ in the yields (\secref{sec:home}).
+\item Exports: a commodity with $\SAM(c, row) > 0$ belongs to $CR$ if
+$\SAM(c, row) - \SAM(tax_{exp}, c) \ge \V{QX}^0_c$, and to $CE$ otherwise.
+\item For $c \in CE$: $\V{te}_c = \SAM(tax_{exp}, c) / \SAM(c, row)$,
+$\V{QE}^0_c = \SAM(c, row) - \SAM(tax_{exp}, c)$, $\V{pwe}_c = 1/(1 - \V{te}_c)$
+and $\V{QD}^0_c = \V{QX}^0_c - \V{QE}^0_c$.
+\item For $c \in CR$: $\overline{\V{qer}}_c = \V{QER}^0_c = \SAM(c, row)$,
+$\V{pwe}_c = 1$ and $\V{QD}^0_c = \V{QX}^0_c$. An export tax on such a commodity
+is an error.
+\item For other commodities, $\V{QD}^0_c = \V{QX}^0_c$.
+\item Margins paid by commodity $c$: $\V{MG}^0_c = \sum_{t \in T} \SAM(t, c)$.
+\item Composite supply and the sales tax rate:
+\begin{equation*}
+\V{QQ}^0_c = \V{QD}^0_c + \V{PM}^0_c\,\V{QM}^0_c + \SAM(tax_{sal}, c) + \V{MG}^0_c,
+\qquad \V{tq}_c = \SAM(tax_{sal}, c) / \V{QQ}^0_c .
+\end{equation*}
+VAT is not part of
+$\V{QQ}^0_c$ (\secref{sec:vat}).
+\item Margin services: $\V{QT}^0_{c'} = \sum_{t \in T} \SAM(c', t)$ and
+\begin{equation*}
+\V{icm}_{c'c} = \frac{1}{\V{QQ}^0_c} \sum_{t \in T} \SAM(t, c)\,\frac{\SAM(c', t)}{\sum_{c''} \SAM(c'', t)},
+\end{equation*}
+so that the margins collected by account $t$ are spent on services in the
+proportions in which $t$ buys them.
+\end{itemize}
+Balance of the SAM implies that $\V{QQ}^0_c$ equals total demand for $c$ at
+purchaser prices other than exports from domestic output and VAT: the
+commodity's row total less $\V{QE}^0_c$ and $\SAM(vat, c)$. Calibration checks
+this identity rather than assuming it.
+
+\section{Production}\label{sec:cal-production}
+
+\begin{itemize}
+\item Intermediate input: $\V{QINTA}^0_a = \sum_c \SAM(c, a)$ and
+$\V{ica}_{ca} = \SAM(c, a) / \V{QINTA}^0_a$ (with VAT, the quantities of
+\secref{sec:vat}).
+\item Factors: $\V{QF}^0_{fa} = \SAM(f, a) / (\V{W}^0_f\,\V{WFDIST}^0_{fa})$ and
+$\V{QVA}^0_a = \sum_f \SAM(f, a)$ (with taxes on factor use, their cost is
+added; \secref{sec:factortax}).
+\item Leontief top nest: $\V{iva}_a = \V{QVA}^0_a / \V{QA}^0_a$ and
+$\V{inta}_a = \V{QINTA}^0_a / \V{QA}^0_a$.
+\item CES top nest: with
+$r_a = (\V{PVA}^0_a / \V{PINTA}^0_a)\,(\V{QVA}^0_a / \V{QINTA}^0_a)^{1 + \rho^a_a}$,
+$\delta^a_a = r_a / (1 + r_a)$ and $1 - \delta^a_a = 1/(1 + r_a)$ (both
+stored), and
+\begin{equation*}
+\V{aa}_a = \V{QA}^0_a \Big/ \Bigl[\delta^a_a\,(\V{QVA}^0_a)^{-\rho^a_a} + (1 - \delta^a_a)\,(\V{QINTA}^0_a)^{-\rho^a_a}\Bigr]^{-1/\rho^a_a}.
+\end{equation*}
+\item Cobb--Douglas top nest:
+$\delta^a_a = \V{PVA}^0_a\,\V{QVA}^0_a / (\V{PVA}^0_a\,\V{QVA}^0_a + \V{PINTA}^0_a\,\V{QINTA}^0_a)$
+and $\V{aa}_a = \V{QA}^0_a / \bigl[(\V{QVA}^0_a)^{\delta^a_a}(\V{QINTA}^0_a)^{1 - \delta^a_a}\bigr]$.
+\item CES value added: with $w_{fa} = \V{W}^0_f\,\V{WFDIST}^0_{fa}$,
+\begin{equation*}
+\delta^{va}_{fa} = \frac{w_{fa}\,(\V{QF}^0_{fa})^{1 + \rho^{va}_a}}{\sum_{f'} w_{f'a}\,(\V{QF}^0_{f'a})^{1 + \rho^{va}_a}},
+\qquad
+\V{ad}_a = \V{QVA}^0_a \Big/ \Bigl[\sum_f \delta^{va}_{fa}\,(\V{QF}^0_{fa})^{-\rho^{va}_a}\Bigr]^{-1/\rho^{va}_a}.
+\end{equation*}
+\item Cobb--Douglas value added: $\delta^{va}_{fa} = \SAM(f, a) / \V{QVA}^0_a$ and
+$\V{ad}_a = \V{QVA}^0_a / \prod_f (\V{QF}^0_{fa})^{\delta^{va}_{fa}}$.
+\item Factor efficiency: $\V{af}_f = \V{EFF}^0_f = \V{DW}^0_f = 1$, so the
+parameters above are unchanged, and
+\begin{equation*}
+\V{HS}^0 = \sum_{c \in HC} \Bigl[\sum_h \SAM(c, h) + \SAM(c, gov) + \SAM(c, shi)\Bigr],
+\end{equation*}
+which must be positive when some health elasticity is positive.
+\end{itemize}
+
+\section{CET and Armington functions}\label{sec:cal-cet}
+
+\begin{itemize}
+\item CET:
+\begin{gather*}
+\delta^t_c = \frac{1}{1 + (\V{PD}^0_c / \V{PE}^0_c)\,(\V{QE}^0_c / \V{QD}^0_c)^{\rho^t_c - 1}},\\
+\V{at}_c = \V{QX}^0_c \Big/ \Bigl[\delta^t_c\,(\V{QE}^0_c)^{\rho^t_c} + (1 - \delta^t_c)\,(\V{QD}^0_c)^{\rho^t_c}\Bigr]^{1/\rho^t_c}.
+\end{gather*}
+\item Armington, for imported commodities with domestic output:
+\begin{gather*}
+\delta^q_c = \frac{(\V{PM}^0_c / \V{PD}^0_c)\,(\V{QM}^0_c / \V{QD}^0_c)^{1 + \rho^q_c}}{1 + (\V{PM}^0_c / \V{PD}^0_c)\,(\V{QM}^0_c / \V{QD}^0_c)^{1 + \rho^q_c}},\\
+\V{aq}_c = \V{QQ}^0_c \Big/ \Bigl[\delta^q_c\,(\V{QM}^0_c)^{-\rho^q_c} + (1 - \delta^q_c)\,(\V{QD}^0_c)^{-\rho^q_c}\Bigr]^{-1/\rho^q_c};
+\end{gather*}
+$\V{aq}_c = \V{QQ}^0_c / \V{QD}^0_c$ for commodities that are not imported, and
+$\V{aq}_c = \V{QQ}^0_c / \V{QM}^0_c$ for those that are imported only. With
+margins by market, $\V{PDD}^0_c$ and $\V{PM}^0_c$ include the margins
+(\secref{sec:margins-market}).
+\end{itemize}
+The complements $1 - \delta^t_c$ and $1 - \delta^q_c$ are stored as separate
+parameters, computed from the same ratio as the shares (for example
+$1 - \delta^t_c = r/(1 + r)$ with $\delta^t_c = 1/(1 + r)$), and used in
+\eqref{eq:T1}, \eqref{eq:T2}, \eqref{eq:T4} and \eqref{eq:T5}. Computing
+$1 - \delta$ by subtraction loses most significant digits when a share is
+close to one, as with a low CET elasticity and a small export share, and can
+leave a benchmark residual near $10^{-7}$.
+
+\section{Institutions}\label{sec:cal-institutions}
+
+\begin{itemize}
+\item Factor income: $\V{YF}^0_f$ is the row total of factor $f$, and
+\begin{equation*}
+\V{tshi}_f = \frac{\SAM(shi, f)}{\V{YF}^0_f}, \qquad
+\V{shif}_{if} = \frac{\SAM(i, f)}{(1 - \V{tshi}_f)\,\V{YF}^0_f}, \quad i \ne shi,
+\end{equation*}
+with $\V{tshi}_f = 0$ without a fund; with a tax on factor income the
+denominator is $(1 - \V{tshi}_f - \V{tfy}_f)\,\V{YF}^0_f$.
+\item Health insurance fund: $\V{YSHI}^0$ is the row total of $shi$, the
+base purchases are $\overline{\V{qshi}}_c = \SAM(c, shi)$ and the savings rate
+is $\V{sshi} = \SAM(sav, shi) / \V{YSHI}^0$; the transfers are
+$\V{trnsfr}_{shi,gov} = \SAM(shi, gov)$ and
+$\V{trnsfr}_{shi,row} = \SAM(shi, row)$; and $\V{SHIADJ}^0 = 1$.
+\item Domestic institutions: $\V{YI}^0_d$ is the row total of $d \in D$;
+$\overline{\V{tins}}_d = \SAM(tax_{dir}, d) / \V{YI}^0_d$ and
+$\overline{\V{mps}}_d = \SAM(sav, d) / \bigl[(1 - \overline{\V{tins}}_d)\,\V{YI}^0_d\bigr]$.
+\item Income after direct taxes and savings:
+$\V{DY}^0_d = \V{YI}^0_d - \SAM(tax_{dir}, d) - \SAM(sav, d)$; calibration stops
+with an error if $\V{DY}^0_d = 0$ while $d$ makes transfers or consumes. Then
+$\V{shii}_{dd'} = \SAM(d, d') / \V{DY}^0_{d'}$ and
+$\V{shir}_d = \SAM(row, d) / \V{DY}^0_d$.
+\item Consumption: $\V{EH}^0_h = \sum_c \SAM(c, h)$ (plus home consumption),
+$\V{hc}_h = \V{EH}^0_h / \V{DY}^0_h$, and budget shares
+$w_{ch} = \SAM(c, h) / \V{EH}^0_h$.
+\item Cobb--Douglas demand, the default: $\beta_{ch} = w_{ch}$ and
+$\gamma_{ch} = 0$.
+\item Linear expenditure system: given income elasticities
+$\varepsilon_c > 0$ and a Frisch parameter $\phi_h < -1$ for each household,
+\begin{equation*}
+\beta_{ch} = \frac{\varepsilon_c\,w_{ch}}{\sum_{c'} \varepsilon_{c'}\,w_{c'h}},
+\qquad
+\gamma_{ch} = \V{QH}^0_{ch} + \frac{\beta_{ch}\,\V{EH}^0_h}{\V{PH}^0_c\,\phi_h},
+\end{equation*}
+so that the marginal shares sum to one (the income elasticities used are then
+$\beta_{ch}/w_{ch}$, proportional to those supplied). Supernumerary spending,
+$\V{EH}^0_h - \sum_c \V{PH}^0_c\,\gamma_{ch}$, is then $-\V{EH}^0_h/\phi_h$,
+positive and below total spending because $\phi_h < -1$.
+\item Transfers: $\V{trnsfr}_{d,gov} = \SAM(d, gov)$,
+$\V{trnsfr}_{gov,gov} = \SAM(gov, gov)$, $\V{trnsfr}_{d,row} = \SAM(d, row)$,
+$\V{trnsfr}_{f,row} = \SAM(f, row)$, $\V{trnsfr}_{gov,row} = \SAM(gov, row)$ and
+$\V{trnsfr}_{row,gov} = \SAM(row, gov)$ (with public debt, the interest is
+separated from them; \secref{sec:debt}).
+\item Final demand: $\overline{\V{qg}}_c = \SAM(c, gov)$ and
+$\overline{\V{qinv}}_c = \SAM(c, sav)$ (divided by $1 + \V{tv}_c$ with VAT),
+$\V{GSAV}^0 = \SAM(sav, gov)$ and $\V{FSAV}^0 = \SAM(sav, row)$.
+\item Scaling factors: $\V{TINSADJ}^0 = \V{MPSADJ}^0 = \V{IADJ}^0 = \V{GADJ}^0 = 1$,
+and the tax scaling factors are one.
+\item Price index weights:
+\begin{equation*}
+\V{cwts}_c = \frac{\sum_h \SAM(c, h)}{(1 + \V{tv}_c) \sum_{c'} \sum_h \SAM(c', h)},
+\qquad
+\V{dwts}_c = \frac{\V{QD}^0_c}{\sum_{c'} \V{QD}^0_{c'}},
+\end{equation*}
+so that $\V{CPI}^0 = \V{DPI}^0 = 1$.
+\end{itemize}
+Balance of the SAM implies $\V{hc}_h = 1 - \sum_d \V{shii}_{dh} - \V{shir}_h$
+for households and $\sum_d \V{shii}_{de} + \V{shir}_e = 1$ for enterprises;
+calibration checks both.
+
+\section{Tax accounts}
+
+Each tax is recorded in a tax account whose row collects the tax and whose
+column pays only the government, either in the SAM itself or as an internal
+account created by a rewrite (\secref{sec:layouts}).
+
+\section{Factor quantities}\label{sec:factor-quantities}
+
+If the user supplies base factor quantities $\V{QF}^0_{fa}$, for example
+employment, the base prices of the factors are
+\begin{equation*}
+\V{W}^0_f = \frac{\sum_a \SAM(f, a)}{\sum_a \V{QF}^0_{fa}},
+\qquad
+\V{WFDIST}^0_{fa} = \frac{\SAM(f, a)}{\V{W}^0_f\,\V{QF}^0_{fa}},
+\end{equation*}
+so that the average price of a factor is its payment per unit, and the wage
+distortions are the differences between activities. Otherwise
+$\V{W}^0_f = \V{WFDIST}^0_{fa} = 1$.
+
+\section{Benchmark replication}
+
+The calibrated base must solve every equation of the model. \manref{cge_calibrate}
+evaluates every scaled residual at the base, displays the largest and stops
+with an error if it exceeds $10^{-9}$. A failure points to a problem in the
+SAM or the mapping, such as a negative cell where values must be
+non-negative or an elasticity that the model does not allow, not to the
+solver. With the default closure, the solver started from the base returns it
+in zero iterations; chapter~\ref{chap:checks} lists the further checks.

@@ -1,0 +1,80 @@
+\chapter{Labour-market regimes}\label{chap:labour}
+
+\section{Labour force and unemployment}\label{sec:labourforce}
+
+For a factor $f \in FL$ the user gives the base unemployment rate $u^0_f$
+(\manref{cge_calibrate}, option \cmd{unemployment()}), which SAMs do not
+record, for example from a labour force survey. $\V{QFS}_f$ is then
+employment, and the labour force is
+\begin{equation*}
+\V{QLF}_f = \V{QFS}^0_f / (1 - u^0_f),
+\end{equation*}
+exogenous (it grows in dynamic runs at the factor's growth rate), so that the
+unemployment rate is
+\begin{equation*}
+U_f = 1 - \V{QFS}_f / \V{QLF}_f .
+\end{equation*}
+Two regimes link the real wage $\V{W}_f / \V{CPI}$ to unemployment. Each has
+an equation for every $f \in FL$, whatever the closure, with a slack variable
+that the regime's closure fixes at zero; under other closures the slack is free
+and the equation is inert. The number of equations therefore does not depend
+on the closure.
+
+\section{Wage curve}\label{sec:wagecurve}
+
+Real wages fall as unemployment rises \citep{blanchflower1994}:
+\begin{equation}
+\frac{\V{W}_f}{\V{CPI}} = \overline{w}_f \left(\frac{U_f}{u^0_f}\right)^{-\epsilon^w_f} + \V{LSW}_f
+\tag{L1}\label{eq:L1}
+\end{equation}
+with $\overline{w}_f = \V{W}^0_f / \V{CPI}^0$ and the elasticity
+$\epsilon^w_f > 0$ given by the user (\cmd{wagecurve()}); it needs
+$u^0_f > 0$. Under the closure \cmd{factors(}$f$\cmd{:wagecurve)} both
+$\V{W}_f$ and $\V{QFS}_f$ are free and $\V{LSW}_f = 0$: a fall in labour demand
+lowers both employment and the real wage. A small elasticity approaches
+unemployment at a fixed real wage; a large one, full employment.
+
+\section{Minimum wage}\label{sec:minwage}
+
+The real wage may not fall below a floor $\underline{w}_f$, and unemployment
+may not be negative; one of them binds:
+\begin{equation*}
+U_f \ge 0, \qquad \frac{\V{W}_f}{\V{CPI}\,\underline{w}_f} - 1 \ge 0,
+\qquad U_f\left(\frac{\V{W}_f}{\V{CPI}\,\underline{w}_f} - 1\right) = 0 .
+\end{equation*}
+This complementarity condition is solved, with the rest of the model, in the
+Fischer--Burmeister form \citep{fischer1992}, smoothed as in
+\citet{kanzow1996}:
+\begin{equation}
+a + b - \sqrt{a^2 + b^2 + 2\mu} = \V{LSM}_f,
+\qquad a = U_f, \quad b = \frac{\V{W}_f}{\V{CPI}\,\underline{w}_f} - 1
+\tag{L2}\label{eq:L2}
+\end{equation}
+which with $\V{LSM}_f = 0$ holds exactly when $a > 0$, $b > 0$ and $ab = \mu$.
+With the default $\mu = 10^{-10}$ (\cmd{smoothing()}), the wage is at the floor
+to within $\mu / U_f$ when unemployment is positive, and unemployment is at
+most $\mu / b$ when the floor does not bind: for example $7 \times 10^{-10}$
+with 15 per cent unemployment. The regime is found by the solver, not chosen
+in advance.
+
+\textbf{Calibration.} With unemployment in the base, $u^0_f > 0$, the floor
+binds and is the base real wage, $\underline{w}_f = \overline{w}_f / (1 + \mu /
+u^0_f)$ (\cmd{minwage(}$f$\cmd{:1)}, the default). With full employment,
+$u^0_f = 0$, the floor is given as a share $r < 1$ of the base real wage
+(\cmd{minwage(}$f$\cmd{:}$r$\cmd{)}), so that $\underline{w}_f = r\,\overline{w}_f$;
+the base then has the unemployment rate $\mu / (1/r - 1)$, which defines the
+labour force. Under the closure \cmd{factors(}$f$\cmd{:minwage)}, $\V{W}_f$
+and $\V{QFS}_f$ are free and $\V{LSM}_f = 0$.
+
+The test suite checks the smoothed solutions against the exact regimes: with
+the floor binding, against unemployment at the fixed wage $\underline{w}_f$;
+without, against full employment of the labour force.
+
+\section{Results and dynamics}
+
+Reports show the labour force and the unemployment rate of each $f \in FL$.
+In dynamic runs the labour force grows at the factor's growth rate, so that
+employment is endogenous under both regimes and under unemployment at a fixed
+wage. The reference wage $\overline{w}_f$ and the floor $\underline{w}_f$ stay
+constant in real terms; shocks may change them (\cmd{wref}, \cmd{wmin}), and
+the labour force (\cmd{qlf}).

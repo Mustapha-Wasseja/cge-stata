@@ -1,0 +1,11 @@
+. cge_aggregate using roles.csv
+Accounts merged: 4 accounts into 2 groups; 11 accounts left as they are
+Aggregated SAM: 13 accounts, total 1743
+Largest row-column imbalance:  0.00e+00
+
+. cge_map using roles.csv
+Mapping from the template:
+cge_map, activities(act_agr act_nag) commodities(com_agr com_nag) factors(lab cap) households(hhd) g
+> overnment(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+Accounts mapped: 2 activities, 2 commodities, 2 factors, 1 households, 0 enterprises, 0 margin accou
+> nts

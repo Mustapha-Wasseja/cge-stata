@@ -159,8 +159,8 @@ Version 0.4.1 adds SAM multiplier analysis (`cge_multiplier`; Pyatt and Round
 transfer, open-loop and closed-loop effects, and the fixed-price effects of
 injections such as more government spending on health services, without
 calibrating a model.
-Version 0.4.0 adds a user manual ([docs/manual](docs/manual/README.md)), in ten
-chapters from preparing a SAM to validation and troubleshooting, and a worked
+Version 0.4.0 adds a user manual (now the
+[Reference Manual](docs/manual/cge-stata-manual.pdf)), and a worked
 example that takes an unbalanced SAM through every step: a template,
 aggregation, balancing, mapping, elasticities from the library, calibration
 and checks, three policy simulations, report tables, sensitivity analysis, a
@@ -314,13 +314,25 @@ example, and `help cge` for the command list.
 
 ## Documentation
 
-- [docs/manual](docs/manual/README.md): the user manual, with the worked
-  examples in [examples/](examples).
-- [docs/model_spec.md](docs/model_spec.md): equations, calibration, closures
-  and validation checks.
+- [The cge-stata Reference Manual](docs/manual/cge-stata-manual.pdf) (PDF), in
+  the form of Stata's own manuals: a user's guide with a worked example from a
+  raw SAM to results; the model's equations, closures, calibration and
+  solution method, and the methods of every command; and a reference entry
+  for each command, with its syntax, options, examples and their output, and
+  stored results. It is built from the LaTeX sources in
+  [docs/manual/tex](docs/manual/tex) with `tools/build_manual.py`.
+- `help cge` in Stata: the help files of the commands.
+- [examples/](examples): do-files that run on the synthetic SAMs.
+
+Developer notes:
+
+- [docs/model_spec.md](docs/model_spec.md): the specification of the
+  equations, calibration, closures and validation checks, which the Stata,
+  Python and GAMS implementations follow.
 - [docs/elasticities.md](docs/elasticities.md): the elasticity library.
 - [docs/sam_tools.md](docs/sam_tools.md): reading, writing, aggregating and
   balancing SAMs, and the mapping template.
+- [docs/gams.md](docs/gams.md): the GAMS export.
 - [docs/design.md](docs/design.md): commands, data structures, solver, testing
   and roadmap.
 - [CONTRIBUTING.md](CONTRIBUTING.md): development conventions.

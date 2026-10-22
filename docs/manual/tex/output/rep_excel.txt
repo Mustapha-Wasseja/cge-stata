@@ -1,0 +1,2 @@
+. cge_report, sims(_all) tables(all) saving(report.xlsx, replace) nodisplay
+Report saved to report.xlsx (one sheet per table)

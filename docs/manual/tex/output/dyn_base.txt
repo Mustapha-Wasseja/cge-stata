@@ -1,0 +1,9 @@
+. cge_dynamic, name(base) periods(0/4) capital(cap) depreciation(0.05) rental(0.15) ///
+>     growth(lab:0.025) population(0.025) govgrowth(0.03) foreigngrowth(0.02)      ///
+>     gdpgrowth(0.04)
+Period 0: solved in 0 iteration(s)
+Period 1: solved in 7 iteration(s); efficiency factor 1.0223831984
+Period 2: solved in 7 iteration(s); efficiency factor 1.0213821436
+Period 3: solved in 7 iteration(s); efficiency factor 1.0204080406
+Period 4: solved in 7 iteration(s); efficiency factor 1.0194645412
+Dynamic run base stored as simulations: base0 base1 base2 base3 base4

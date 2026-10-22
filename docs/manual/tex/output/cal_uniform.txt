@@ -1,0 +1,3 @@
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+Calibrated: 93 equations, 93 free variables
+Benchmark replication: largest scaled residual  3.55e-16

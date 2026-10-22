@@ -1,0 +1,5 @@
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)
+Labour force of lab: 158.823529; base unemployment rate .15; wage-curve elasticity .1; real minimum
+> wage .999999999 (base real wage 1)
+Calibrated: 95 equations, 95 free variables
+Benchmark replication: largest scaled residual  3.55e-16

@@ -1,0 +1,12 @@
+. cge_closure, government(fixgsav direct)
+Closure
+  external account     flexexr
+  government           fixgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_solve, name(notariff_direct)
+Simulation notariff_direct solved in 9 iteration(s) (newton)
+Largest scaled residual  3.46e-11; WALRAS = -1.44e-11

@@ -1,0 +1,204 @@
+\cgeentry{cge_equation}{User equations: new relations among the model's variables}
+
+\cgesec{Description}
+
+\cmd{cge_equation} adds an equation to the calibrated model, written in a small
+language of the model's variables and parameters, for one element or for every
+element of a set. With \manref{cge_variable}, which adds variables, it extends
+the model without changing its code: Stata compiles the equations for its
+solver, and \manref{cge_gams} writes them into the GAMS program, so that GAMS
+solves the same model. \cmd{cge_equation, list} lists the user variables and
+equations, and \cmd{cge_equation, clear} removes them.
+
+\cgesec{Quick start}
+
+Government purchases of services at \cmd{LAM} times their base level, with
+\cmd{LAM} a user variable
+\begin{stcode}
+cge_variable LAM, value(1)
+cge_equation lam: QG(com_ser) = LAM * base(QG(com_ser))
+\end{stcode}
+Fix \cmd{LAM} and let the scaling factor of government consumption adjust; then
+raise it by 10 per cent
+\begin{stcode}
+cge_closure, swap(LAM GADJ)
+cge_shock LAM, value(1.1)
+\end{stcode}
+An equation for every commodity
+\begin{stcode}
+cge_variable PIX(c), value(1)
+cge_equation pix(c): ln(PIX(c)) = ln(PQ(c)) - ln(CPI)
+\end{stcode}
+List the user variables and equations; remove them
+\begin{stcode}
+cge_equation, list
+cge_equation, clear
+\end{stcode}
+
+\cgesec{Syntax}
+
+Add an equation
+\begin{stsyntax}
+\cmdb{cge_equation} \argu{name}[\cmd{(}\argu{i}\cmd{)}]\cmd{:}
+\argu{expression} \cmd{=} \argu{expression}
+\end{stsyntax}
+List the user variables and equations
+\begin{stsyntax}
+\cmdb{cge_equation}\texttt{,} \opt{}{list}
+\end{stsyntax}
+Remove the user variables and equations
+\begin{stsyntax}
+\cmdb{cge_equation}\texttt{,} \opt{}{clear}
+\end{stsyntax}
+\argu{name} has at most 24 characters, letters, digits and underscores, and
+may not be the name of another user equation; a variable defined by
+\manref{cge_variable} gives its name to its definition. \argu{i} is an index,
+the letter of a set possibly followed by digits.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{}{list}] lists the user variables, with their definitions or
+values, and the user equations. It is the default when only a comma is given.
+
+\item[\opt{}{clear}] removes every user variable and equation. Swaps and
+constraints that involve user variables must be removed first, with
+\cmd{cge_closure, swap(none)} and \cmd{cge_constraint, clear}.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+\cgesubsec{The language}
+
+Expressions are built from
+\begin{cgetable}{p{0.34\linewidth}p{0.60\linewidth}}
+\toprule
+Term & Meaning\\
+\midrule\endhead
+\bottomrule\endlastfoot
+numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
+\cmd{+ - * /} and \cmd{^} & arithmetic; \cmd{^} is the power\\
+\cmd{( )} & grouping\\
+\cmd{exp()}, \cmd{ln()} or \cmd{log()}, \cmd{sqrt()} & functions\\
+\argu{VAR}, \argu{VAR}\cmd{(}\argu{e}\cmd{)}, \argu{VAR}\cmd{(}\argu{e1}\cmd{,} \argu{e2}\cmd{)}
+  & a model or user variable at an element, given by its label, such as
+    \cmd{com_hlt}, or by the index of the equation or of a sum\\
+\argu{par}, \argu{par}\cmd{(}\argu{e}\cmd{)} & a parameter, at its current value\\
+\cmd{base(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}]\cmd{)} & the base value of a variable\\
+\cmd{sum(}\argu{i}\cmd{,} \argu{expression}\cmd{)} & the sum over the elements of the set of index \argu{i}\\
+\end{cgetable}
+
+Variables are written in upper case, with as many elements as they have
+indexes, and parameters in lower case. The parameters are \cmd{tm}, \cmd{te},
+\cmd{tq}, \cmd{ta}, \cmd{tv}, \cmd{kappa}, \cmd{pwm}, \cmd{pwe}, \cmd{ad},
+\cmd{af}, \cmd{qg}, \cmd{qinv}, \cmd{trdg}, \cmd{trdr}, \cmd{trfr},
+\cmd{trgr}, \cmd{trrg}, \cmd{tshi}, \cmd{qshi}, \cmd{trshi}, \cmd{trshir},
+\cmd{rd}, \cmd{rf}, \cmd{ddebt}, \cmd{fdebt}, \cmd{qlf}, \cmd{wmin},
+\cmd{wref}, \cmd{sick} and \cmd{tfy}, as in \manref{cge_shock}, and \cmd{trgg},
+transfers within government, and \cmd{hs0}, the base volume of health
+services; \cmd{tf}, which has two indexes, and \cmd{mort} cannot be used. A
+parameter takes its value in the simulation being solved, with any shock.
+
+The indexes are \cmd{a} activities, \cmd{c} commodities, \cmd{f} factors,
+\cmd{h} households, \cmd{d} households and enterprises, \cmd{i} institutions
+that receive factor income and \cmd{n} nests of value added, each possibly
+followed by digits, as in \cmd{c2}. An equation
+\argu{name}\cmd{(}\argu{i}\cmd{)} is written for every element of the set of
+\argu{i}; an index that is neither that of the equation nor that of an
+enclosing sum is an error. Sums may contain sums.
+
+\cmd{^} binds most tightly and groups from the right; then come \cmd{*} and
+\cmd{/}, and then \cmd{+} and \cmd{-}, which group from the left. A leading
+minus sign applies after any power: \cmd{-X^2} is $-(X^2)$.
+
+\cgesubsec{Equations and the closure}
+
+Each equation element needs a free variable, so that the closure stays square:
+a variable added by \cmd{cge_variable} with \opt{}{value()}, or a variable that
+a swap frees. In the example below, the equation determines the new variable
+\cmd{LAM}; the swap then fixes \cmd{LAM} and frees the scaling factor of
+government consumption, so that \cmd{GADJ} adjusts to satisfy the equation. The
+base need not satisfy a new equation: if it does not, \cmd{cge_equation} says
+so, and the equation then acts as a shock, moving the solution from the base.
+
+User equations are saved with the model, compiled again when the model is
+calibrated again, and solved in every simulation, dynamic run and sensitivity
+draw.
+
+\cgesubsec{Example 1: government purchases of services 10 per cent above the base}
+
+The synthetic SAM is mapped and calibrated as in \manref{cge_solve}:
+\stlog{eq_lam}
+Government purchases of services are 10 per cent above the base, and, with
+$\V{GADJ}$ adjusting, so are the other purchases:
+\stlog{eq_lam_res}
+
+\cgesubsec{Example 2: indexed equations and sums}
+
+An equation for every commodity defines a price index relative to the CPI in
+implicit form, and an equation with sums gives a volume index of household
+consumption, the value of consumption over its value at base quantities:
+\stlog{eq_index}
+The variables could equally be defined by \manref{cge_variable}, with an
+expression; the equations show the functions, an index and a sum with
+\cmd{base()}.
+
+\cgesubsec{Example 3: listing}
+
+\stlog{eq_list}
+\res{r(N_equations)} counts equation elements: one for \cmd{lam}, three for
+\cmd{pix} and one for \cmd{cvol}.
+
+\cgesubsec{Example 4: errors, and removing the user equations}
+
+A reference to an element that does not exist is an error, and the user
+equations cannot be removed while a swap involves a user variable:
+\stlog{eq_err}
+
+\cgesec{Stored results}
+
+\cmd{cge_equation} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_elements)} & number of elements of the equation\\
+\res{r(N_variables)} & number of user variables (\opt{}{list})\\
+\res{r(N_equations)} & number of equation elements (\opt{}{list})\\
+\resgroup{Macros}
+\res{r(name)} & name of the equation\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+An equation $\ell(x) = r(x)$ with index $i$ is written out for every element
+$e$ of the set of $i$, with $i$ replaced by $e$ where it is an argument of a
+variable or a parameter; each \cmd{sum(}$j$\cmd{,} $\cdot$\cmd{)} is written
+out in the same way over the elements of the set of $j$, inner sums first, so
+that
+\begin{equation*}
+\texttt{sum(}j\texttt{,}\ g\texttt{)} = \sum_{k \in J} g\,[\,j = k\,],
+\end{equation*}
+where $J$ is the set of index $j$ and $g\,[\,j = k\,]$ is $g$ with $j$ replaced by
+$k$.
+Each side is then compiled to postfix order, with numbers, variables (as
+positions in the stacked vector of variables), parameters, operators and
+functions, and \cmd{base()} replaced by the number it denotes. The solver
+evaluates both sides at each point, with the parameters of the simulation, and
+the equation element is
+\begin{equation*}
+\ell_e(x) - r_e(x) = 0,
+\end{equation*}
+a row of the block \cmd{U} of the system. Its derivatives are found by
+differences, grouped with those of the other equations over a Jacobian
+pattern built from the variables that each equation element contains.
+\Chapref{chap:user} describes the compilation and the GAMS program, in which
+GAMS differentiates the same equations itself.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\seechapter{chap:user}{User variables and equations}
+\end{alsosee}

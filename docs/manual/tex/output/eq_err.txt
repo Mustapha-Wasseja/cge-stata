@@ -1,0 +1,21 @@
+. cge_equation bad: QG(com_xxx) = 1
+QG(com_xxx) is not an element of QG
+
+r(111);
+
+. cge_equation, clear
+swaps involve user variables: remove them first with cge_closure, swap(none)
+
+r(459);
+
+. cge_closure, swap(none)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_equation, clear
+User variables and equations removed

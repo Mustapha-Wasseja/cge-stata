@@ -1,0 +1,18 @@
+. cge_synthetic, clear
+(16 vars, 15 obs)
+
+Synthetic SAM loaded (standard layout): 15 accounts, total   1743.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam using sam.csv, direct
+SAM read: 15 accounts, total 1743
+Largest row-column imbalance:  0.00e+00
+
+. describe, short
+
+Contains data
+  obs:            15
+ vars:            16
+ size:           390
+Sorted by:
+     Note:  dataset has changed since last saved

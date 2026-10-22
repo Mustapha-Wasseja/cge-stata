@@ -1,0 +1,8 @@
+. cge_sam, labels(account)
+SAM read: 17 accounts, total 1860.4569
+Largest row-column imbalance:  1.21e+01
+
+. cge_balance, fixed(hhd)
+hhd: its row and column cannot change and their totals differ
+
+r(459);

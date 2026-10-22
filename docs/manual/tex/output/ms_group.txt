@@ -1,0 +1,12 @@
+. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) ///
+>     line(100)
+
+Household survey results of simulation notariff: 1000 households
+Real consumption per person (base prices); poverty and inequality over persons
+--------------------------------------------------------------------------------------------------
+                      base   simulated    % chg      headcount (%)    poverty gap (%)           Gini (%)
+--------------------------------------------------------------------------------------------------
+all                  184.3       183.5   -0.431    26.75 ->   26.94     8.72 ->    8.80    36.32 ->   36.32
+hhd                  184.3       183.5   -0.431    26.75 ->   26.94     8.72 ->    8.80    36.32 ->   36.32
+--------------------------------------------------------------------------------------------------
+Poverty line 100 per person; severity (FGT2) is in r(table)

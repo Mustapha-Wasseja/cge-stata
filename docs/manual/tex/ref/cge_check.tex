@@ -1,0 +1,167 @@
+\cgeentry{cge_check}{Run model validation checks}
+
+\cgesec{Description}
+
+\cmd{cge_check} runs the validation checks of \chapref{chap:checks} on the
+calibrated model and reports each as \cmd{[ok]} or \cmd{[fail]}, with the value
+tested. It always checks the balance of the SAM, benchmark replication and the
+closure; after a simulation it also checks the simulation's solution, Walras's
+law and the GDP identity; and on request it checks homogeneity and that the
+solver returns to the base from perturbed starting values. \cmd{cge_check}
+exits with error 9 if any check fails.
+
+\cgesec{Quick start}
+
+Run the checks of the base and of the most recent simulation
+\begin{stcode}
+cge_check
+\end{stcode}
+As above, and check homogeneity and a start from base values perturbed by up
+to 10 per cent
+\begin{stcode}
+cge_check, homogeneity perturb(0.1)
+\end{stcode}
+Check the simulation \cmd{notariff}, with another seed for the perturbed start
+\begin{stcode}
+cge_check, sim(notariff) perturb(0.1) seed(2026)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_check} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{sim}{name} & simulation to check; default the most recent\\
+\opt{hom}{ogeneity} & add the homogeneity check\\
+\optarg{pert}{urb}{\#} & add the perturbed-start check, with starting values within $\pm\#$ times the base\\
+\optarg{}{seed}{\#} & random-number seed for \cmd{perturb()}; default \texttt{12345}\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{sim}{name}] selects the simulation whose solution, Walras's law
+and GDP identity are checked. The default is the most recent simulation. The
+other checks do not depend on the simulation.
+
+\item[\opt{hom}{ogeneity}] adds the homogeneity check: doubling every fixed
+nominal value, under the current closure and the base parameters, must double
+every price and nominal value and leave every quantity unchanged.
+
+\item[\optarg{pert}{urb}{\#}] adds the perturbed-start check: the solver,
+started from base values each multiplied by $1 + \#\,u$, with $u$ drawn
+uniformly between $-1$ and 1, must return to the base. \argu{\#} must be at
+least 0 and less than 1; the default, 0, leaves the check out. A value of 0.1
+perturbs every variable by up to 10 per cent.
+
+\item[\optarg{}{seed}{\#}] sets the random-number seed of the perturbed start;
+the default is 12345.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The checks test the model actually calibrated and solved, with its SAM,
+mapping, elasticities, closure and shocks. They are, in the order displayed:
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.33\linewidth}>{\raggedright\arraybackslash}p{0.47\linewidth}>{\raggedright\arraybackslash}p{0.14\linewidth}}
+\toprule
+Check & Value tested & Passes if at most\\
+\midrule
+SAM balance & largest difference between an account's row and column totals & $10^{-8}\,m$\\
+benchmark replication & largest scaled residual at the base & $10^{-9}$\\
+closure is square & free variables, plus constraints, minus equations & 0\\
+solution of the simulation & its largest scaled residual & $10^{-8}$\\
+Walras's law & $|\V{WALRAS}|$ in the solution & $10^{-8}\,m$\\
+GDP identity & GDP by expenditure minus GDP by income, in absolute value & $10^{-8}\,m$\\
+homogeneity & largest relative deviation from twice the nominal values and the base quantities & $10^{-8}$\\
+perturbed start & largest relative deviation from the base & $10^{-7}$\\
+\bottomrule
+\end{cgetable}
+
+Here $m$ is the largest absolute cell of the mapped SAM, or 1 if that is
+smaller, so that the checks give the same result whatever the units of the
+SAM. The SAM checked is the SAM after the rewrites of \manref{cge_map}. The
+three checks of a simulation are made only when a simulation has been solved;
+the homogeneity and perturbed-start checks are made only when requested. A
+check whose solve does not converge has a missing value and fails.
+
+Run \cmd{cge_check} after building a model and after changing the closure. A
+model that passes the homogeneity check responds only to relative prices under
+the closure, and one that passes the perturbed-start check returns to the same
+solution from starting values away from the base.
+
+\cgesubsec{Example 1: the base}
+
+After calibration, with no simulation, three checks are run:
+\stlog{check_base}
+
+\cgesubsec{Example 2: a simulation}
+
+After a tariff removal, the solution of the simulation is checked as well,
+with the homogeneity and perturbed-start checks:
+\stlog{check_sim}
+The solution's largest scaled residual, $8.13 \times 10^{-11}$, is below the
+default tolerance of \manref{cge_solve}. Under the default closure the only
+fixed nominal value is the consumer price index, the numeraire; doubling it
+doubles every price and nominal value, with a largest relative deviation of
+$2.49 \times 10^{-15}$.
+
+\cgesubsec{Example 3: another closure}
+
+The homogeneity and perturbed-start checks use the current closure. With a
+fixed exchange rate, investment-driven savings and capital specific to each
+activity, the fixed nominal values are the exchange rate, the consumer price
+index and the price of capital, \cmd{W(cap)}:
+\stlog{check_closure}
+The checks of the simulation \cmd{notariff} give the same values as before,
+because they use its solution as stored.
+
+\cgesec{Stored results}
+
+\cmd{cge_check} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(failures)} & number of failed checks\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $x^0$ be the base values, $\bar x$ the values of the variables fixed under
+the current closure, and $n_j = 1$ for a nominal variable and $n_j = 0$
+otherwise. The nominal variables are the prices, the price indices, the
+exchange rate, incomes, spending and savings ($\V{YF}$, $\V{YIF}$, $\V{YI}$,
+$\V{EH}$, $\V{YG}$, $\V{EG}$, $\V{GSAV}$, $\V{YSHI}$ and $\V{WALRAS}$), and
+user variables declared nominal. Deviations are measured relative to each value with a floor of one,
+and relative to $m$ for a variable whose base value is zero ($\V{WALRAS}$):
+\begin{equation*}
+d_j(x, y) = \frac{|x_j - y_j|}{\max(u_j, |y_j|)}, \qquad
+u_j = \begin{cases} 1 & \text{if } x^0_j \neq 0,\\ m & \text{if } x^0_j = 0 . \end{cases}
+\end{equation*}
+For homogeneity, the model is solved with the base parameters and the fixed
+values $\bar x_j (1 + n_j)$, starting from the base, and the value tested is
+$\max_j d_j\bigl(x, y\bigr)$ with $y_j = x^0_j (1 + n_j)$. For the perturbed
+start, the model is solved with the base parameters and fixed values, starting
+from
+\begin{equation*}
+x^s_j = x^0_j\,\bigl(1 + p\,(2 U_j - 1)\bigr), \qquad U_j \sim U(0, 1),
+\end{equation*}
+with $p$ the value of \cmd{perturb()}, and the value tested is
+$\max_j d_j(x, x^0)$. Both maxima are taken over the variable elements that
+exist in the model, and both solves use a tolerance of $10^{-12}$ and at most
+100 Newton iterations.
+
+The scaled residuals are those of \manref{cge_solve}; the GDP identity, in
+full, is in \chapref{chap:checks}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_calibrate}{Calibrate the model to the SAM}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_results}{Report simulation results}
+\seechapter{chap:checks}{Validation checks}
+\end{alsosee}

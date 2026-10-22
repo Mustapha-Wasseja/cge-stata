@@ -1,0 +1,27 @@
+. cge_aggregate using roles.csv
+Accounts merged: 2 accounts into 1 group; 15 accounts left as they are
+Diagonal cells (flows within an account): 3, total 7.843, kept
+Aggregated SAM: 16 accounts, total 1860.4569
+Largest row-column imbalance:  1.21e+01
+
+. cge_balance, method(ce) totals(hh:290)
+Cross entropy: converged in 4 iterations
+Largest row-column imbalance:  1.21e+01 before,  5.68e-14 after
+SAM total: 1860.4569 before, 1943.80685 after
+Cells changed: 61 of 63 non-zero; largest relative change  3.58e-01
+
+Largest changes
+  row                  column                       before          after   change %
+  hh                   lab                         134.415        148.579     10.538
+  hh                   ent                         66.1137        74.6388     12.895
+  com_ser              hh                          84.6701        92.5983      9.364
+  lab                  act_ser                      56.475        63.4746     12.394
+  com_man              hh                          81.1112         87.931      8.408
+  com_agr              hh                          66.3231         72.541      9.375
+  act_agr              com_agr                     95.0903        100.203      5.377
+  cap                  act_ser                      49.801        54.9053     10.249
+  act_man              com_man                      138.47        143.092      3.338
+  hh                   gov                         18.9545         22.466     18.526
+
+Balanced SAM: 16 accounts, total 1943.80685
+Largest row-column imbalance:  5.68e-14

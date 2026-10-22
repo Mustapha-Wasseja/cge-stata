@@ -1,0 +1,18 @@
+. cge_parameters, clear
+
+. display r(N)
+252
+
+. list if inlist(parameter, "tm", "tq"), noobs sepby(parameter) abbreviate(9)
+
+  +---------------------------------------------+
+  | parameter   element1   element2       value |
+  |---------------------------------------------|
+  |        tm    com_agr                     .1 |
+  |        tm    com_man                     .1 |
+  |        tm    com_ser                      0 |
+  |---------------------------------------------|
+  |        tq    com_agr              .07272727 |
+  |        tq    com_man              .06741573 |
+  |        tq    com_ser              .06060606 |
+  +---------------------------------------------+

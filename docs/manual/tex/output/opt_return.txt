@@ -1,0 +1,34 @@
+. display r(converged), r(N_evaluations), r(iterations), r(objective)
+1 67 5 .76793612
+
+. matrix list r(instruments)
+
+symmetric r(instruments)[1,1]
+    tm_com_man
+r1   .30322435
+
+. cge_report, sims(optimum) tables(government welfare)
+
+Government
+-------------------------------------------------
+                                  base    optimum
+revenue                             63     -1.145
+spending                            60     -1.202
+savings                              3      0.000
+tax_direct                          25    -37.901
+tax_sales                           30      0.193
+tax_import                           8    108.697
+tax_export                           0          .
+tax_activity                         0          .
+tax_vat                              0          .
+tax_factor_use                       0          .
+tax_factor_income                    0          .
+-------------------------------------------------
+
+Welfare (per cent of base consumption)
+---------------------------------------------------
+                                            optimum
+equivalent_variation hhd                      0.334
+compensating_variation hhd                    0.334
+---------------------------------------------------
+Percentage changes from the base (rates: changes in points)

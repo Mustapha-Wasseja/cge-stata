@@ -1,0 +1,126 @@
+\cgeentry{cge_samexport}{Write the SAM to a file or to memory}
+
+\cgesec{Description}
+
+\cmd{cge_samexport} writes the SAM of the current model, as read, aggregated
+or balanced, to a \cmd{.csv}, \cmd{.dta}, \cmd{.xls} or \cmd{.xlsx} file, or
+with \opt{}{clear} loads it as data in memory. With \opt{}{mapped}, it writes
+instead the SAM to which the model is calibrated: the SAM after the layout
+rewrites of \manref{cge_map}, with its internal tax accounts. The SAM is
+written in wide form, one row and one column per account, or in long form,
+one observation per non-zero cell.
+
+\cgesec{Quick start}
+
+Write the SAM to a CSV file, replacing the file if it exists
+\begin{stcode}
+cge_samexport using sam_balanced.csv, replace
+\end{stcode}
+Write the SAM to the worksheet \cmd{balanced} of an Excel file
+\begin{stcode}
+cge_samexport using sam.xlsx, sheet("balanced") replace
+\end{stcode}
+Replace the data in memory with the SAM in long form
+\begin{stcode}
+cge_samexport, clear long
+\end{stcode}
+Replace the data in memory with the SAM after the layout rewrites of the
+mapping
+\begin{stcode}
+cge_samexport, clear mapped
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_samexport} [\cmd{using} \argu{filename}] [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\argu{filename} ends in \cmd{.csv}, \cmd{.dta}, \cmd{.xls} or \cmd{.xlsx}.
+\cmd{using} \argu{filename}, \opt{}{clear} or both must be given.
+
+\begin{opttable}
+\optgroup{Main}
+\opt{}{long} & write long output, one observation per non-zero cell\\
+\opt{}{mapped} & write the SAM after the layout rewrites of \cmd{cge_map}\\
+\opt{}{clear} & replace the data in memory with the SAM\\
+\optgroup{Files}
+\optarg{}{sheet}{string} & Excel worksheet; default \cmd{SAM}\\
+\opt{}{replace} & allow an existing file to be replaced\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{}{long}] writes long output: string variables \cmd{row} and
+\cmd{column} and a double \cmd{value}, one observation per non-zero cell. The
+default is wide output: a string variable \cmd{account} and one double
+variable per account.
+
+\item[\opt{}{mapped}] writes the SAM after the layout rewrites of
+\manref{cge_map} (\secref{sec:layouts}), including the internal tax accounts
+that it adds, such as \cmd{_saltax} for sales taxes paid directly to the
+government. The model must be mapped.
+
+\item[\opt{}{clear}] replaces the data in memory with the SAM. It may be
+combined with \cmd{using}, to write the file and load the data.
+
+\item[\optarg{}{sheet}{string}] names the worksheet of an Excel file. The
+default is \cmd{SAM}.
+
+\item[\opt{}{replace}] allows an existing file to be replaced.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A \cmd{.csv} file is written directly in Mata and has no limit on the number of
+accounts. A \cmd{.dta} or Excel file in wide form, and wide data in memory,
+need the accounts to fit as variables (\cmd{c(maxvar)}, 2,048 in Stata/IC);
+long output has no such limit. Writing a file leaves the data in memory
+unchanged, unless \opt{}{clear} is also given.
+
+\cgesubsec{Example 1: a SAM written and read again}
+
+The unbalanced synthetic SAM is balanced and written to a CSV file, which
+\manref{cge_sam} then reads:
+\stlog{sxp_csv}
+The SAM read back has the total and the largest imbalance of the balanced SAM.
+Numbers are written with as many digits as they need to be read back as the
+same values, so that a SAM written and read again is unchanged.
+
+\cgesubsec{Example 2: long data}
+
+With \opt{}{clear} and \opt{}{long}, the SAM replaces the data in memory, one
+observation per non-zero cell, by row and, within each row, by column:
+\stlog{sxp_long}
+\manref{cge_sam} reads such data with \cmd{long(row column value)}.
+
+\cgesubsec{Example 3: the mapped SAM}
+
+In the national-accounts layout of the synthetic SAM, sales and direct taxes
+are paid directly to the government account. \manref{cge_map} routes them
+through the internal accounts \cmd{_saltax} and \cmd{_dirtax}, which the model
+uses as tax accounts. The mapped SAM shows them:
+\stlog{sxp_mapped}
+The SAM as read is not changed: without \opt{}{mapped}, \cmd{cge_samexport}
+writes it, with its 13 accounts.
+
+\cgesec{Methods and formulas}
+
+Each non-zero number in a CSV file is written with the format
+\texttt{\%21.0g} or, if that does not read back as the same double, with
+\texttt{\%24.17g}; zeros are written as \cmd{0}. A wide CSV file has the line
+\cmd{account,}\argu{label}\cmd{,}\argu{label}\dots{} followed by one line per
+account, its label and its row of cells; a long CSV file has the line
+\cmd{row,column,value} followed by one line per non-zero cell. \Chapref{chap:samtools}
+describes the output in \secref{sec:writing}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_sam}{Read a social accounting matrix}
+\seeentry{cge_balance}{Balance a SAM by RAS or cross entropy}
+\seeentry{cge_aggregate}{Merge SAM accounts into groups}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

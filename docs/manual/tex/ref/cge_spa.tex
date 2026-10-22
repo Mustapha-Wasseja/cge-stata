@@ -1,0 +1,201 @@
+\cgeentry{cge_spa}{Structural path analysis of a SAM multiplier}
+
+\cgesec{Description}
+
+\cmd{cge_spa} decomposes the accounting multiplier of account \opt{}{to()}
+with respect to an injection into account \opt{}{from()} into the paths along
+which the injection travels through the SAM (Defourny and Thorbecke 1984). A
+path is a chain of payments that passes through no account twice, for example
+\mbox{\cmd{com_hlt > act_hlt > lab > hhd}}: spending on health services is received by
+the health activity, which pays labour, which pays households. For each path
+the command reports its direct influence, its path multiplier and its total
+influence, and the share of the multiplier that it carries.
+
+The SAM is the one mapped by \manref{cge_map}, and the endogenous accounts are
+those of \manref{cge_multiplier}. The model in memory is not changed.
+
+\cgesec{Quick start}
+
+The paths from spending on health services to household income
+\begin{stcode}
+cge_spa, from(com_hlt) to(hhd)
+\end{stcode}
+As above, with paths of up to 8 arcs and a lower threshold, loading every path
+found as data
+\begin{stcode}
+cge_spa, from(com_hlt) to(hhd) maxlength(8) threshold(0.0001) clear
+\end{stcode}
+The paths to labour income, with the government endogenous
+\begin{stcode}
+cge_spa, from(com_hlt) to(lab) endogenous(gov)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_spa}\texttt{,} \optarg{}{from}{account} \optarg{}{to}{account}
+[\argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{from}{account} & origin: the account into which the injection enters\\
+\optarg{}{to}{account} & destination: the account whose income is decomposed\\
+\optgroup{Search}
+\optarg{max}{length}{\#} & largest number of arcs in a path; default 6\\
+\optarg{thr}{eshold}{\#} & smallest direct influence kept, as a share of the global influence; default \texttt{0.001}\\
+\optgroup{Accounts}
+\optarg{endo}{genous}{accounts} & make exogenous accounts endogenous, as in \cmd{cge_multiplier}\\
+\optarg{exo}{genous}{accounts} & make endogenous accounts exogenous, as in \cmd{cge_multiplier}\\
+\optgroup{Reporting}
+\optarg{}{top}{\#} & number of paths displayed; default 10\\
+\opt{}{clear} & replace the data in memory with every path found\\
+\end{opttable}
+
+\opt{}{from()} and \opt{}{to()} are required.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{from}{account} \textrm{and} \optarg{}{to}{account}] name the
+origin, where the injection enters, and the destination. Both must be
+endogenous accounts, and they must differ.
+
+\item[\optarg{max}{length}{\#}] sets the largest number of arcs in a path; the
+default is 6, and \argu{\#} must be at least 1.
+
+\item[\optarg{thr}{eshold}{\#}] sets the smallest direct influence of a path,
+as a share of the global influence in absolute value, below which the path and
+its extensions are dropped. The default is \texttt{0.001}. \cmd{threshold(0)}
+with a large \opt{max}{length()} finds every path, which can take long in a
+large SAM; the search stops with an error beyond 100,000 paths.
+
+\item[\optarg{endo}{genous}{accounts} \textrm{and}
+\optarg{exo}{genous}{accounts}] choose the endogenous accounts, as in
+\manref{cge_multiplier}.
+
+\item[\optarg{}{top}{\#}] sets the number of paths displayed, largest total
+influence (in absolute value) first; the default is 10.
+
+\item[\opt{}{clear}] replaces the data in memory with every path found, in the
+order of the display, with the variables \cmd{path} (the accounts of the path,
+separated by \cmd{ > }), \cmd{length} (its number of arcs), \cmd{direct},
+\cmd{multiplier}, \cmd{total} and \cmd{share} (the total influence as a
+percentage of the global influence).
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+Structural path analysis treats the endogenous accounts of the SAM as the
+poles of a graph. There is an arc from pole $i$ to pole $k$ when $k$ receives
+part of $i$'s spending, with intensity $A_{ki}$, the share of $i$'s spending
+that $k$ receives. For each path from the origin to the destination,
+\cmd{cge_spa} reports
+\begin{cgetable}{lp{0.70\linewidth}}
+\toprule
+Measure & Meaning\\
+\midrule\endhead
+\bottomrule\endlastfoot
+direct influence & the product of the intensities of its arcs: the effect along the path with every other account held fixed\\
+path multiplier & the feedback of the loops that start and end at the accounts of the path\\
+total influence & the direct influence times the path multiplier\\
+\% global & the total influence as a percentage of the global influence, the multiplier itself\\
+\end{cgetable}
+The total influences of all the paths from the origin to the destination add
+up to the global influence. Like the multipliers, the paths assume fixed
+prices and unused capacity.
+
+\cgesubsec{Example 1: the paths from health spending to household income}
+
+The health layout of the synthetic SAM is mapped as in
+\manref{cge_multiplier}:
+\stlog{spa_setup}
+A unit injection into health services raises household income by 1.813, the
+multiplier of \cmd{hhd} with respect to \cmd{com_hlt}:
+\stlog{spa_paths}
+The path through labour carries 64 per cent of the effect and the path through
+capital 22 per cent; paths through the intermediate inputs of the health
+activity carry most of the rest. The direct influence of the first path, 0.5733, is the
+product of the shares along it: all of the spending on health services goes to
+the health activity, which pays 18 of its 30 to labour, which pays 129 of its
+135 to households. Its path multiplier, 2.0379, raises it to a total influence
+of 1.168. The six paths found explain 97.66 per cent of the global influence;
+the others have a direct influence below 0.001 times the global influence or
+more than six arcs.
+
+The results are stored in \cmd{r()}:
+\stlog{spa_return}
+
+\cgesubsec{Example 2: every path}
+
+With \cmd{threshold(0)} and paths of up to ten arcs, as many as the eleven
+endogenous accounts allow, every elementary path is found, and the total
+influences add up to the global influence:
+\stlog{spa_all}
+In this SAM a path alternates between commodities and activities until it
+reaches a factor, which pays the household, so every path has an odd number of
+arcs.
+
+\cgesec{Stored results}
+
+\cmd{cge_spa} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(global)} & global influence (the multiplier)\\
+\res{r(N_paths)} & number of paths found\\
+\res{r(explained)} & sum of their total influences\\
+\res{r(share)} & that sum as a percentage of the global influence\\
+\res{r(total1)} & total influence of the largest path, if any\\
+\resgroup{Macros}
+\res{r(path1)} & the largest path, if any\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $A$ be the matrix of average expenditure propensities among the endogenous
+accounts and $M = (I - A)^{-1}$ the matrix of multipliers, as in
+\manref{cge_multiplier}. An elementary path $p$ from origin $i$ to destination
+$j$ is a sequence of poles $i = k_0, k_1, \dots, k_m = j$, none repeated, with
+$A_{k_l k_{l-1}} \ne 0$ for each arc. With $P$ the set of its poles,
+\begin{gather*}
+I^D_p = \prod_{l=1}^m A_{k_l k_{l-1}}, \qquad
+M_p = \frac{\det\bigl((I - A)_{-P,-P}\bigr)}{\det(I - A)} = \det\bigl(M_{P,P}\bigr), \qquad
+I^T_p = I^D_p\, M_p,
+\end{gather*}
+the direct influence, the path multiplier and the total influence, where
+$(I - A)_{-P,-P}$ leaves out the rows and columns of $P$ and $M_{P,P}$ is the
+block of $M$ on $P$; the two expressions of $M_p$ are equal by Jacobi's
+identity for complementary minors, and the command computes the second. The
+global influence of $i$ on $j$ is
+\begin{equation*}
+I^G_{ji} = M_{ji} = \sum_p I^T_p ,
+\end{equation*}
+the sum over every elementary path from $i$ to $j$.
+
+The paths are found by a depth-first search from the origin. A path is
+extended along each arc to a pole not already in it; it is dropped, with every
+extension of it, once $|I^D_p| < \text{\opt{thr}{eshold()}} \times
+|M_{ji}|$, and it has at most \opt{max}{length()} arcs. When every intensity
+is at most one in absolute value, as when the SAM has no negative cells, an
+extension cannot raise the direct influence, so no path above the threshold
+is missed. The share of the global influence explained is
+$100 \sum_p I^T_p / M_{ji}$ over the paths found. Structural path analysis is
+described in \secref{sec:spa}.
+
+\cgesec{References}
+
+\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\itemindent}{-2em}%
+  \setlength{\itemsep}{2pt}\setlength{\parsep}{0pt}}
+\item Defourny, J., and E. Thorbecke. 1984. Structural path analysis and
+multiplier decomposition within a social accounting matrix framework.
+\textit{Economic Journal} 94: 111--136.
+\end{list}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_multiplier}{SAM multipliers and their decomposition}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seeentry{cge}{Computable general equilibrium modelling in Stata}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

@@ -1,0 +1,10 @@
+. clear all
+
+. cge_use using mymodel
+Model loaded from mymodel.cgem (saved by cge-stata 0.6.3; calibrated, 2 simulation(s))
+
+. return list
+
+macros:
+           r(filename) : "mymodel.cgem"
+           r(saved_by) : "0.6.3"

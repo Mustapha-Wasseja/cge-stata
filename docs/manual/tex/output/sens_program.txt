@@ -1,0 +1,3 @@
+. program define tariff_cut
+  1.     cge_shock tm, value(0)
+  2. end

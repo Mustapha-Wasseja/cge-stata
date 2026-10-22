@@ -1,0 +1,5 @@
+. cge_map, activities(act_agr act_nag) commodities(com_agr com_nag) factors(lab cap) ///
+>     households(hh) enterprises(ent) government(gov) savinv(sav) row(row)         ///
+>     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+Accounts mapped: 2 activities, 2 commodities, 2 factors, 1 households, 1 enterprises, 0 margin accou
+> nts

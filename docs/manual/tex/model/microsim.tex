@@ -1,0 +1,74 @@
+\chapter{The link to household surveys}\label{chap:microsim}
+
+The model has a few household groups; poverty and inequality are measured on
+household surveys. \manref{cge_microsim} passes the results of a simulation to
+the survey data in memory, top-down and without feedback
+\citep{bourguignon2008}. Each survey household $i$ belongs to a model
+household group $h(i)$ and keeps its own income composition and, if given, its
+own budget shares.
+
+\section{Income}
+
+For each group $h$ the model gives the ratio of new to base values of each
+income source $k$; a zero base value is replaced by the ratio of the aggregate
+shown:
+
+\begin{cgetable}{p{0.30\linewidth}p{0.36\linewidth}p{0.28\linewidth}}
+\toprule
+Source & Ratio $\rho_{hk}$ & If the group's base value is zero\\
+\midrule\endhead
+\bottomrule\endlastfoot
+factor $f$ & $\V{YIF}_{hf} / \V{YIF}^0_{hf}$ & $\V{YF}_f / \V{YF}^0_f$\\
+government transfers (\cmd{gov}) & $\V{trnsfr}_{h,gov}\,\V{CPI} / (\V{trnsfr}^0_{h,gov}\,\V{CPI}^0)$ & $\V{CPI} / \V{CPI}^0$\\
+transfers from abroad (\cmd{row}) & $\V{trnsfr}_{h,row}\,\V{EXR} / (\V{trnsfr}^0_{h,row}\,\V{EXR}^0)$ & $\V{EXR} / \V{EXR}^0$\\
+transfers from other domestic institutions (\cmd{dom}) & $\sum_d \V{shii}_{hd}\,\V{DY}_d \big/ \sum_d \V{shii}_{hd}\,\V{DY}^0_d$ & $\V{CPI} / \V{CPI}^0$\\
+indexed to prices (\cmd{cpi}) & $\V{CPI} / \V{CPI}^0$ & \\
+unchanged (\cmd{fixed}) & 1 & \\
+\end{cgetable}
+
+Here $\V{DY}_d = (1 - \V{MPS}_d)(1 - \V{TINS}_d)\,\V{YI}_d$ is the income of
+institution $d$ after direct taxes and savings. With income components
+$y_{ik}$, the household's nominal consumption becomes
+\begin{equation*}
+C^1_i = C^0_i\,\frac{\sum_k \rho_{h(i)k}\,y_{ik}}{\sum_k y_{ik}}\;\kappa_{h(i)},
+\qquad
+\kappa_h = \frac{(1 - \V{MPS}_h)(1 - \V{TINS}_h)}{(1 - \V{MPS}^0_h)(1 - \V{TINS}^0_h)},
+\end{equation*}
+so that it follows its own income and its group's direct tax and savings
+rates. A household with no income in the components given, or every household
+when no components are given, follows its group's consumption:
+$C^1_i = C^0_i\,\V{EH}_h / \V{EH}^0_h$.
+
+\section{Prices and real consumption}
+
+The household's price index is
+\begin{equation*}
+P_i = \sum_c s_{ic}\,\frac{\V{PH}_c}{\V{PH}^0_c},
+\end{equation*}
+at the prices that households pay, including VAT, with $s_{ic}$ its survey
+budget shares when budget items are mapped to commodities, and the group's
+base shares $\V{PH}^0_c\,\V{QH}^0_{ch} / \V{EH}^0_h$ otherwise. Home
+consumption (\secref{sec:home}) enters the group's shares at the activity
+price $\V{PA}_a$. Real consumption is $R_i = C^1_i / P_i$; for households with LES
+demand this is a first-order (Laspeyres) approximation.
+
+\section{Poverty and inequality}
+
+With household size $n_i$ and survey weight $w_i$, poverty measures use
+consumption per person, $r_i = R_i / n_i$ (base $C^0_i / n_i$), and person
+weights $w_i\,n_i$. For a poverty line $z$ per person, the
+Foster--Greer--Thorbecke measures are
+\begin{equation*}
+\V{FGT}_\alpha = \frac{\sum_i w_i\,n_i\,\mathbf{1}[r_i < z]\,\bigl((z - r_i)/z\bigr)^\alpha}{\sum_i w_i\,n_i},
+\qquad \alpha = 0, 1, 2,
+\end{equation*}
+the headcount ratio, the poverty gap and the squared poverty gap. The Gini
+coefficient is that of $r_i$ over persons. Both are computed before and after,
+overall and by group.
+
+Survey households keep their own income composition and budget shares, so
+their average change can differ from their group's: a household that lives on
+wages gains more than its group when wages rise relative to other income. The
+link is only as good as the mapping of income sources, which should cover
+every substantial source, and the survey and the SAM should share a base year
+where possible.

@@ -1,0 +1,13 @@
+. cge_closure, swap(FSAV EXR)
+swap: FSAV is already fixed under the closure
+
+r(459);
+
+. cge_closure, swap(none)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile

@@ -1,0 +1,15 @@
+. return list
+
+scalars:
+       r(maxrelchange) =  .8918061647399571
+          r(N_changed) =  58
+       r(total_before) =  1860.4569
+     r(maxdiff_before) =  12.08590000000001
+         r(iterations) =  4
+            r(N_blank) =  0
+            r(maxdiff) =  1.79795733857e-10
+              r(total) =  1954.965727111547
+         r(N_accounts) =  17
+
+macros:
+             r(method) : "ce"

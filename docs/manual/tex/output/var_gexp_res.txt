@@ -1,0 +1,13 @@
+. quietly cge_results, sim(budget) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "GEXP", "GADJ", "QG"), noobs
+
+  +----------------------------------------+
+  | variable   element1   base       value |
+  |----------------------------------------|
+  |       QG    com_agr      0           0 |
+  |       QG    com_man      5   5.0474646 |
+  |       QG    com_ser     40   40.379716 |
+  |     GADJ                 1   1.0094929 |
+  |     GEXP                45          45 |
+  +----------------------------------------+

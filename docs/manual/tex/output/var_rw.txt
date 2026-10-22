@@ -1,0 +1,42 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_closure, swap(none)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_variable RW = W(lab) / CPI
+User variable RW: 1 element(s), base value 1
+and its definition, equation RW
+
+. cge_closure, swap(RW QFS(lab))
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+  swap                 RW fixed, QFS(lab) free
+
+. cge_shock pwm, scale(1.1)
+Parameter pwm changed for 3 element(s)
+
+. quietly cge_solve, name(realwage)
+
+. quietly cge_results, sim(realwage) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "RW", "W", "QFS") & element1 != "cap", noobs
+
+  +----------------------------------------+
+  | variable   element1   base       value |
+  |----------------------------------------|
+  |        W        lab      1           1 |
+  |      QFS        lab    135   128.04806 |
+  |       RW                 1           1 |
+  +----------------------------------------+

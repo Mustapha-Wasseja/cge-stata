@@ -1,0 +1,5 @@
+. return list
+
+scalars:
+             r(N_sims) =  2
+         r(N_measures) =  67

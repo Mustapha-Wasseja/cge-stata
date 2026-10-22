@@ -1,0 +1,15 @@
+. cge_synthetic, clear institutions
+(18 vars, 17 obs)
+
+Synthetic SAM loaded (institutions layout): 17 accounts, total   1866.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 17 accounts, total 1866
+Largest row-column imbalance:  0.00e+00
+
+. cge_aggregate, groups(act_nag: act_man act_ser, com_nag: com_man com_ser, hh: hhd npi)
+Accounts merged: 6 accounts into 3 groups; 11 accounts left as they are
+Diagonal cells (flows within an account): 3, total 8, kept
+Aggregated SAM: 14 accounts, total 1866
+Largest row-column imbalance:  0.00e+00

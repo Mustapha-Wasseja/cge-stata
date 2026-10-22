@@ -1,0 +1,252 @@
+\cgeentry{cge_multiplier}{SAM multipliers and their decomposition}
+
+\cgesec{Description}
+
+\cmd{cge_multiplier} computes the accounting multipliers of the SAM mapped by
+\manref{cge_map} (Pyatt and Round 1979): the effects of an injection into one
+account on the incomes of all the endogenous accounts, the accounts whose
+spending the SAM explains, with prices fixed. For each injected account it
+displays the total multiplier and its parts in gross output, value added and
+household income. \opt{decomp}{ose} splits the multipliers into transfer,
+open-loop and closed-loop effects, and \opt{inj}{ect()} gives the effects of
+a vector of injections.
+
+The multipliers use the SAM after the layout rewrites of \manref{cge_map} and
+need no calibration. The model in memory is not changed.
+
+\cgesec{Quick start}
+
+Multipliers of every endogenous account
+\begin{stcode}
+cge_multiplier
+\end{stcode}
+As above, with the decomposition into transfer, open-loop and closed-loop
+effects
+\begin{stcode}
+cge_multiplier, decompose
+\end{stcode}
+Effects of 10 more spending on health services
+\begin{stcode}
+cge_multiplier, inject(com_hlt:10)
+\end{stcode}
+Multipliers with the government endogenous, loaded as data
+\begin{stcode}
+cge_multiplier, endogenous(gov) clear
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_multiplier} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Accounts}
+\optarg{endo}{genous}{accounts} & make exogenous accounts endogenous, in the institutions block\\
+\optarg{exo}{genous}{accounts} & make endogenous accounts exogenous\\
+\optgroup{Results}
+\opt{decomp}{ose} & add the decomposition into transfer, open-loop and closed-loop effects\\
+\optarg{inj}{ect}{\argu{account}\texttt{:}\argu{value} \dots} & display the effects of injections into endogenous accounts\\
+\optarg{acc}{ounts}{accounts} & injected accounts to display\\
+\opt{}{clear} & replace the data in memory with the multipliers or the effects\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{endo}{genous}{accounts}] adds accounts that are exogenous by
+default, for example the government, to the endogenous accounts, in the
+institutions block.
+
+\item[\optarg{exo}{genous}{accounts}] makes accounts that are endogenous by
+default exogenous, for example an enterprise.
+
+\item[\opt{decomp}{ose}] adds the decomposition of each multiplier into
+transfer, open-loop and closed-loop effects. It requires the SAM to have no
+flows among the blocks other than those of the circular flow; the command lists
+the flows that break the structure if it does.
+
+\item[\optarg{inj}{ect}{\argu{account}\texttt{:}\argu{value} \dots}] gives
+injections into endogenous accounts, separated by spaces, for example
+\cmd{inject(com_hlt:100)} for 100 more spending on health services by an
+exogenous account such as the government. The command then displays, instead
+of the multipliers, the change in each endogenous account's income, its income
+in the SAM and the percentage change, and the totals.
+
+\item[\optarg{acc}{ounts}{accounts}] chooses the injected accounts whose
+multipliers are displayed. The default is every endogenous account, or the
+commodities and households if there are more than 40.
+
+\item[\opt{}{clear}] replaces the data in memory with the multiplier matrix,
+one observation per pair of endogenous accounts, with the variables
+\cmd{row}, \cmd{column}, \cmd{row_block}, \cmd{column_block} and
+\cmd{multiplier}, and, with \opt{decomp}{ose}, \cmd{transfer},
+\cmd{open_loop} and \cmd{closed_loop}. With \opt{inj}{ect()}, it loads instead the effects of
+the injection, one observation per endogenous account, with the variables
+\cmd{account}, \cmd{block}, \cmd{base}, \cmd{change} and \cmd{pct}.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The accounts of the SAM are divided into endogenous accounts, whose incomes
+are determined by the spending of the SAM's accounts, and exogenous accounts,
+whose spending injects income into them. By default the endogenous accounts
+form three blocks:
+\begin{cgetable}{lp{0.70\linewidth}}
+\toprule
+Block & Accounts\\
+\midrule\endhead
+\bottomrule\endlastfoot
+production & activities, commodities and margin accounts\\
+factors & factors\\
+institutions & households and enterprises, and the accounts in \opt{endo}{genous()}\\
+\end{cgetable}
+The government, savings--investment, the rest of the world, the tax accounts
+and the health insurance fund are exogenous. Each endogenous account spends
+its income in the shares of its column of the SAM; spending on exogenous
+accounts (taxes, savings and imports) leaks out of the circular flow.
+
+Accounting multipliers assume fixed prices, unused capacity in every sector,
+and average propensities to spend equal to marginal ones. They are upper
+bounds on what a CGE model with supply constraints and price changes would
+find, and complement it.
+
+\cgesubsec{Example 1: the multipliers}
+
+The health layout of the synthetic SAM is mapped:
+\stlog{mult_setup}
+\cgeneed{18\baselineskip}
+The multipliers have one row per injected account:
+\stlog[\scriptsize]{mult_table}
+A unit injection into health services, \cmd{com_hlt}, raises the incomes of
+all endogenous accounts by 9.408 in total, including the injection itself:
+gross output by 2.581, value added by 1.864 and household income by 1.813.
+Health services are neither imported nor taxed, so the whole of the injection
+passes to the health activity, and the multipliers of \cmd{com_hlt} are those
+of \cmd{act_hlt}, plus the injection itself in the total.
+
+\cgesubsec{Example 2: the decomposition}
+
+With \opt{decomp}{ose}, each total multiplier is split into 1, the injection
+itself, and three effects:
+\stlog[\scriptsize]{mult_decomp}
+The transfer effects are those within the injected account's block, such as
+the intermediate purchases among activities and commodities; the open-loop
+effects are those on the other blocks, before any income returns to the
+injected block; and the closed-loop effects are those of the circular flow
+production $\to$ factors $\to$ institutions $\to$ production back to it. The
+factors and the household have no transfer effects: no factor pays another,
+and the household pays no other institution.
+
+\cgesubsec{Example 3: an injection}
+
+An injection of 10 into health services, such as more spending on them by the
+government or another exogenous account:
+\stlog{mult_inject}
+Gross output rises by 25.8 and household income by 18.1. The base income of
+an account is its column total in the SAM.
+
+\cgesubsec{Example 4: other endogenous accounts}
+
+\opt{endo}{genous()} and \opt{exo}{genous()} change the accounts whose incomes
+the multipliers determine. With the government endogenous:
+\stlog[\scriptsize]{mult_endo}
+The multipliers of \cmd{com_hlt} and \cmd{hhd} do not change: the government's
+income comes only from the tax accounts, which remain exogenous, so no
+injection elsewhere reaches it. Making the government endogenous adds the
+effects of an injection into its income, through its purchases and its
+transfers to the household.
+
+Accounts added to the institutions block may break the circular structure
+that the decomposition requires. A sales tax account paid by the commodities
+is a flow from production to institutions:
+\stlog{mult_offcircle}
+
+\cgesubsec{Example 5: the multipliers as data}
+
+With \opt{}{clear}, the matrix of multipliers replaces the data in memory. The
+column of \cmd{com_hlt} gives the effects of a unit injection into it on each
+account:
+\stlog{mult_clear}
+Off the diagonal, each multiplier is the sum of its transfer, open-loop and
+closed-loop parts; on the diagonal, the sum is one less than the multiplier.
+
+\cgesec{Stored results}
+
+\cmd{cge_multiplier} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_endogenous)} & number of endogenous accounts\\
+\res{r(injection)} & total injection (with \opt{inj}{ect()})\\
+\res{r(output)} & change in gross output (with \opt{inj}{ect()})\\
+\res{r(value_added)} & change in value added (with \opt{inj}{ect()})\\
+\res{r(household_income)} & change in household income (with \opt{inj}{ect()})\\
+\res{r(total)} & change in the incomes of all endogenous accounts (with \opt{inj}{ect()})\\
+\resgroup{Macros}
+\res{r(endogenous)} & endogenous accounts\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $N$ be the set of endogenous accounts and $t_j$ the column total of
+account $j$ in the SAM after the layout rewrites. The average expenditure
+propensities among the endogenous accounts are
+\begin{equation*}
+A_{ij} = \frac{\SAM_{ij}}{t_j}, \qquad i, j \in N,
+\end{equation*}
+with $A_{ij} = 0$ when $t_j = 0$. The incomes $y$ of the endogenous accounts
+satisfy $y = A y + x$, where $x$ is their income from the exogenous accounts,
+so that
+\begin{equation*}
+y = M x, \qquad M = (I - A)^{-1}.
+\end{equation*}
+Column $j$ of $M$ is the change in the income of every endogenous account for
+a unit injection into account $j$. $I - A$ is invertible when every chain of
+payments among the endogenous accounts eventually leaks to an exogenous
+account; if it is singular, \cmd{cge_multiplier} stops and asks for one of the
+accounts to be made exogenous. For injected account $j$ the command displays
+the sums of column $j$ of $M$ over all endogenous accounts (\cmd{Total}), over
+the activities (\cmd{Output}), over the factors (\cmd{Value add.}) and over the
+households (\cmd{Hh income}). With \opt{inj}{ect()}, the changes
+in income are $\Delta y = M x$ for the vector $x$ of injections, and the
+percentage change of account $i$ is $100\, \Delta y_i / |t_i|$.
+
+\textit{Decomposition.} With the blocks ordered as production (1), factors (2)
+and institutions (3), the circular flow is made of the payments of production
+to factors ($A_{21}$), of factors to institutions ($A_{32}$) and of
+institutions to production ($A_{13}$), with transfers within each block
+($A_{11}$, $A_{22}$, $A_{33}$). The decomposition requires the other blocks,
+$A_{12}$, $A_{23}$ and $A_{31}$, to be zero. With $\tilde A$ the
+block-diagonal part of $A$ and $A^* = (I - \tilde A)^{-1}(A - \tilde A)$,
+\begin{equation*}
+M = M_3 M_2 M_1, \qquad M_1 = (I - \tilde A)^{-1}, \quad
+M_2 = I + A^* + A^{*2}, \quad M_3 = \bigl(I - A^{*3}\bigr)^{-1},
+\end{equation*}
+the transfer, open-loop and closed-loop multipliers of Pyatt and Round (1979),
+and additively
+\begin{equation*}
+M = I + (M_1 - I) + (M_2 - I) M_1 + (M_3 - I) M_2 M_1 .
+\end{equation*}
+The columns \cmd{Transfer}, \cmd{Open loop} and \cmd{Closed} are the column
+sums of the last three terms, so that the total multiplier is one plus their
+sum. Multipliers and their decomposition are described in
+\secref{sec:multipliers} and \secref{sec:decomposition}.
+
+\cgesec{References}
+
+\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\itemindent}{-2em}%
+  \setlength{\itemsep}{2pt}\setlength{\parsep}{0pt}}
+\item Pyatt, G., and J. I. Round. 1979. Accounting and fixed price multipliers
+in a social accounting matrix framework. \textit{Economic Journal} 89:
+850--873.
+\end{list}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_spa}{Structural path analysis of a SAM multiplier}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seeentry{cge_sam}{Read a social accounting matrix}
+\seeentry{cge}{Computable general equilibrium modelling in Stata}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

@@ -1,0 +1,47 @@
+. import delimited using roles.csv, clear stringcols(_all)
+(7 vars, 15 obs)
+
+. quietly replace role = "activities"  if inlist(account, "act_agr", "act_man", "act_ser")
+
+. quietly replace role = "commodities" if inlist(account, "com_agr", "com_man", "com_ser")
+
+. quietly replace role = "factors"     if inlist(account, "lab", "cap")
+
+. quietly replace role = "households"  if account == "hhd"
+
+. quietly replace role = "government"  if account == "gov"
+
+. quietly replace role = "savinv"      if account == "sav"
+
+. quietly replace role = "row"         if account == "row"
+
+. quietly replace role = "dirtax"      if account == "tax_dir"
+
+. quietly replace role = "saltax"      if account == "tax_sal"
+
+. quietly replace role = "imptax"      if account == "tax_imp"
+
+. quietly replace group = "act_nag"    if inlist(account, "act_man", "act_ser")
+
+. quietly replace group = "com_nag"    if inlist(account, "com_man", "com_ser")
+
+. export delimited account role pair group using roles.csv, replace
+file roles.csv saved
+
+. type roles.csv
+account,role,pair,group
+act_agr,activities,,
+act_man,activities,,act_nag
+act_ser,activities,,act_nag
+com_agr,commodities,,
+com_man,commodities,,com_nag
+com_ser,commodities,,com_nag
+lab,factors,,
+cap,factors,,
+hhd,households,,
+gov,government,,
+tax_dir,dirtax,,
+tax_sal,saltax,,
+tax_imp,imptax,,
+sav,savinv,,
+row,row,,

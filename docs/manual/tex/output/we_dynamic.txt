@@ -1,0 +1,30 @@
+. cge_closure, factors(cap:specific)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           specific
+
+. local growth capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.025) population(0.025) ///
+>     govgrowth(0.03) foreigngrowth(0.02)
+
+. cge_dynamic, name(base) periods(0/5) `growth' gdpgrowth(0.04)
+Period 0: solved in 0 iteration(s)
+Period 1: solved in 7 iteration(s); efficiency factor 1.0242473340
+Period 2: solved in 7 iteration(s); efficiency factor 1.0232215502
+Period 3: solved in 7 iteration(s); efficiency factor 1.0222097600
+Period 4: solved in 7 iteration(s); efficiency factor 1.0212189589
+Period 5: solved in 7 iteration(s); efficiency factor 1.0202552812
+Dynamic run base stored as simulations: base0 base1 base2 base3 base4 base5
+
+. cge_dynamic, name(lib) periods(0/5) `growth' baseline(base) shocks(tariff_from1)
+Period 0: solved in 0 iteration(s)
+Parameter tm changed for 3 element(s)
+Period 1: solved in 8 iteration(s); efficiency factor 1.0242473340
+Period 2: solved in 7 iteration(s); efficiency factor 1.0232215502
+Period 3: solved in 7 iteration(s); efficiency factor 1.0222097600
+Period 4: solved in 7 iteration(s); efficiency factor 1.0212189589
+Period 5: solved in 7 iteration(s); efficiency factor 1.0202552812
+Dynamic run lib stored as simulations: lib0 lib1 lib2 lib3 lib4 lib5

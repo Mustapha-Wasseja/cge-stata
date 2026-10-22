@@ -1,0 +1,12 @@
+. quietly cge_results, sim(qgser) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "QG", "GADJ"), noobs
+
+  +------------------------------------+
+  | variable   element1   base   value |
+  |------------------------------------|
+  |       QG    com_agr      0       0 |
+  |       QG    com_man      5     5.5 |
+  |       QG    com_ser     40      44 |
+  |     GADJ                 1     1.1 |
+  +------------------------------------+

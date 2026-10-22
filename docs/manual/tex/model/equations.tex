@@ -1,0 +1,495 @@
+\chapter{The equations of the standard model}\label{chap:equations}
+
+The equations are grouped in five blocks: prices (P), production (Q), trade
+(T), institutions (I) and the system constraints (S). Their labels are those
+that \manref{cge_solve} displays in its diagnostics and that the GAMS program
+written by \manref{cge_gams} uses, with a prefix \cmd{E} (\cmd{EP1} is
+equation~\eqref{eq:P1}). Each equation holds for every element of the sets
+shown with it; a term that refers to a variable that does not exist for an
+element (for example imports of a commodity that is not imported) is zero.
+
+Several equations include terms of the extensions: margins by market, VAT,
+taxes on factors, rents of constraints, public debt, home consumption and
+export demand. Without the extension, the terms are zero (or one, for a
+scaling factor) and the equation reduces to its standard form.
+
+\section{Prices}\label{sec:prices}
+
+The import price is the world price, with the tariff and any import premium,
+converted at the exchange rate, plus the margins paid per unit of imports:
+\begin{equation}
+\V{PM}_c = \V{pwm}_c\,(1 + \V{tm}_c\,\V{TMADJ} + \V{RM}_c)\,\V{EXR}
+  + \sum_{c'} \V{PQ}_{c'}\,\V{ici}_{c'c}, \qquad c \in CM
+\tag{P1}\label{eq:P1}
+\end{equation}
+The export price received by producers is the world price, less the export
+tax and any export premium, less the margins paid per unit of exports:
+\begin{equation}
+\V{PE}_c = \V{PWE}_c\,(1 - \V{te}_c - \V{RE}_c)\,\V{EXR}
+  - \sum_{c'} \V{PQ}_{c'}\,\V{ice}_{c'c}, \qquad c \in CE
+\tag{P2}\label{eq:P2}
+\end{equation}
+with $\V{PWE}_c = \V{pwe}_c$ for $c \notin CED$. The premiums $\V{RM}_c$ and
+$\V{RE}_c$ are zero unless a quota or another constraint frees them
+(\secref{sec:rents}).
+
+The value of composite supply, net of the sales tax, is the value of domestic
+sales at the price domestic buyers pay, of imports, and of the margin
+services that composite supply carries:
+\begin{equation}
+\V{PQ}_c\,(1 - \V{tq}_c\,\V{TQADJ})\,\V{QQ}_c = \V{PDD}_c\,\V{QD}_c
+  + \V{PM}_c\,\V{QM}_c + \sum_{c' \in CT} \V{PQ}_{c'}\,\V{icm}_{c'c}\,\V{QQ}_c
+\tag{P3}\label{eq:P3}
+\end{equation}
+where
+\begin{equation*}
+\V{PDD}_c = \V{PD}_c + \sum_{c'} \V{PQ}_{c'}\,\V{icd}_{c'c}
+\end{equation*}
+is the price that domestic buyers pay for domestic output, including the
+margins on domestic sales ($\V{PDD}_c = \V{PD}_c$ without them). The domestic
+term applies only for $c \in CX$, the import term only for $c \in CM$, and the
+margin term only when $c$ pays margins.
+
+The value of commodity output is the value of its domestic sales and exports:
+\begin{equation}
+\V{PX}_c\,\V{QX}_c = \V{PD}_c\,\V{QD}_c + \V{PE}_c\,\V{QE}_c, \qquad c \in CX
+\tag{P4}\label{eq:P4}
+\end{equation}
+where the export term applies only for $c \in CE$. The activity price is the
+value of the commodities a unit of activity yields:
+\begin{equation}
+\V{PA}_a = \sum_c \theta_{ac}\,\V{PX}_c
+\tag{P5}\label{eq:P5}
+\end{equation}
+(for commodities whose output is aggregated by a CES function, $\V{PX}_c$ is
+replaced by the activity's own price $\V{PXAC}_{ac}$; \secref{sec:outputces}).
+The price of aggregate intermediate input includes the VAT that the activity
+cannot recover:
+\begin{equation}
+\V{PINTA}_a = \sum_c \V{PQ}_c\,\bigl(1 + \V{tv}_c\,\V{TVADJ}\,(1 - \kappa_a)\bigr)\,\V{ica}_{ca}
+\tag{P6}\label{eq:P6}
+\end{equation}
+Revenue net of the activity tax and of any rent on output equals the cost of
+value added and intermediate input:
+\begin{equation}
+\V{PA}_a\,(1 - \V{ta}_a - \V{RA}_a)\,\V{QA}_a = \V{PVA}_a\,\V{QVA}_a + \V{PINTA}_a\,\V{QINTA}_a
+\tag{P7}\label{eq:P7}
+\end{equation}
+The rent $\V{RA}_a$ is zero unless a capacity limit or another constraint
+frees it. The price indexes are
+\begin{equation}
+\V{CPI} = \sum_c \V{cwts}_c\,\V{PH}_c
+\tag{P8}\label{eq:P8}
+\end{equation}
+\begin{equation}
+\V{DPI} = \sum_c \V{dwts}_c\,\V{PD}_c
+\tag{P9}\label{eq:P9}
+\end{equation}
+where
+\begin{equation*}
+\V{PH}_c = \V{PQ}_c\,(1 + \V{tv}_c\,\V{TVADJ})
+\end{equation*}
+is the price that final users pay, including VAT ($\V{PH}_c = \V{PQ}_c$ without
+VAT). $\V{PH}_c$ is an expression, not a variable.
+
+\section{Production}\label{sec:production}
+
+\subsection{The top nest}
+
+An activity combines aggregate value added and aggregate intermediate input.
+With a Leontief top nest ($\sigma^a_a = 0$, the default), each is a fixed
+quantity per unit of activity:
+\begin{equation}
+\V{QVA}_a = \V{iva}_a\,\V{QA}_a
+\tag{Q1}\label{eq:Q1}
+\end{equation}
+\begin{equation}
+\V{QINTA}_a = \V{inta}_a\,\V{QA}_a
+\tag{Q2}\label{eq:Q2}
+\end{equation}
+With a CES top nest ($\sigma^a_a > 0$, $\sigma^a_a \ne 1$), they substitute
+for each other as their prices change:
+\begin{equation}
+\V{QA}_a = \V{aa}_a\Bigl[\delta^a_a\,\V{QVA}_a^{-\rho^a_a} + (1 - \delta^a_a)\,\V{QINTA}_a^{-\rho^a_a}\Bigr]^{-1/\rho^a_a}
+\tag{Q1C}\label{eq:Q1C}
+\end{equation}
+\begin{equation}
+\frac{\V{QVA}_a}{\V{QINTA}_a} = \left[\frac{\V{PINTA}_a}{\V{PVA}_a}\cdot\frac{\delta^a_a}{1 - \delta^a_a}\right]^{1/(1 + \rho^a_a)}
+\tag{Q2C}\label{eq:Q2C}
+\end{equation}
+and with a Cobb--Douglas top nest ($\sigma^a_a = 1$),
+\begin{equation}
+\V{QA}_a = \V{aa}_a\,\V{QVA}_a^{\delta^a_a}\,\V{QINTA}_a^{1 - \delta^a_a},
+\qquad \V{PVA}_a\,\V{QVA}_a\,(1 - \delta^a_a) = \V{PINTA}_a\,\V{QINTA}_a\,\delta^a_a
+\tag{Q1C$'$, Q2C$'$}\label{eq:Q1CD}
+\end{equation}
+In every case \eqref{eq:P7} sets the activity price. An activity without
+intermediate inputs keeps the Leontief top nest.
+
+\subsection{Value added}
+
+Factors enter value added in efficiency units,
+\begin{equation*}
+\widetilde{\V{QF}}_{fa} = \V{af}_f\,\V{EFF}_f\,\V{DW}_f\,\V{QF}_{fa},
+\end{equation*}
+where $\V{af}_f$ is the exogenous efficiency of the factor, $\V{EFF}_f$ its
+efficiency from health services \eqref{eq:H2} and $\V{DW}_f$ the days worked
+per worker \eqref{eq:H3}; all three are one in the base. Factor quantities
+$\V{QF}_{fa}$, supplies $\V{QFS}_f$ and prices $\V{W}_f$ remain in physical
+units, so a more efficient factor earns more per unit.
+
+With CES value added ($\sigma^{va}_a \ne 1$),
+\begin{equation}
+\V{QVA}_a = \V{ad}_a\Bigl[\sum_f \delta^{va}_{fa}\,\widetilde{\V{QF}}_{fa}^{\,-\rho^{va}_a}\Bigr]^{-1/\rho^{va}_a}
+\tag{Q3}\label{eq:Q3}
+\end{equation}
+and the demand for each factor equates its cost to the value of its marginal
+product:
+\begin{equation}
+\V{W}_f\,\V{WFDIST}_{fa}\,(1 + \V{tf}_{fa}) = \V{PVA}_a\,\V{QVA}_a
+  \Bigl[\sum_{f'} \delta^{va}_{f'a}\,\widetilde{\V{QF}}_{f'a}^{\,-\rho^{va}_a}\Bigr]^{-1}
+  \delta^{va}_{fa}\,\widetilde{\V{QF}}_{fa}^{\,-\rho^{va}_a - 1}\,\V{af}_f\,\V{EFF}_f\,\V{DW}_f
+\tag{Q4}\label{eq:Q4}
+\end{equation}
+where $\V{tf}_{fa}$ is the tax on the use of the factor (zero without factor
+taxes; \secref{sec:factortax}). With Cobb--Douglas value added
+($\sigma^{va}_a = 1$),
+\begin{equation}
+\V{QVA}_a = \V{ad}_a \prod_f \widetilde{\V{QF}}_{fa}^{\,\delta^{va}_{fa}},
+\qquad \sum_f \delta^{va}_{fa} = 1
+\tag{Q3$'$}\label{eq:Q3CD}
+\end{equation}
+\begin{equation}
+\V{W}_f\,\V{WFDIST}_{fa}\,(1 + \V{tf}_{fa})\,\V{QF}_{fa} = \delta^{va}_{fa}\,\V{PVA}_a\,\V{QVA}_a
+\tag{Q4$'$}\label{eq:Q4CD}
+\end{equation}
+Value added may also combine nests of factors and commodities, each with its
+own elasticity; equations \eqref{eq:Q3} and \eqref{eq:Q4} then take the form
+of \secref{sec:nests}.
+
+\subsection{Health services and factor efficiency}
+
+When some factor's efficiency depends on health services
+(\secref{sec:efficiency}), or a health outcome of chapter~\ref{chap:health}
+has a non-zero elasticity, the volume of health services bought by
+households, the government and the health insurance fund, at base prices, is
+\begin{equation}
+\V{HS} = \sum_{c \in HC} \Bigl(\sum_h \V{QH}_{ch} + \V{QG}_c + \V{QSHI}_c\Bigr)
+\tag{H1}\label{eq:H1}
+\end{equation}
+and the efficiency of factor $f$ is
+\begin{equation}
+\V{EFF}_f = \left(\V{HS} / \V{HS}^0\right)^{\eta_f}, \qquad \eta_f > 0
+\tag{H2}\label{eq:H2}
+\end{equation}
+with $\V{EFF}_f = 1$ otherwise. With a fixed population, $\V{HS}/\V{HS}^0$ is
+also the ratio of health services per head to its base value; in dynamic runs
+$\V{HS}^0$ grows with the population (chapter~\ref{chap:dynamics}).
+
+\subsection{Intermediate input and output}
+
+Intermediate inputs are Leontief within the aggregate:
+\begin{equation}
+\V{QINT}_{ca} = \V{ica}_{ca}\,\V{QINTA}_a
+\tag{Q5}\label{eq:Q5}
+\end{equation}
+Output of each commodity is the sum of the yields of the activities that
+produce it, applied to their marketed output:
+\begin{equation}
+\V{QX}_c = \sum_a \theta_{ac}\,\Bigl(\V{QA}_a - \sum_h \V{QHA}_{ah}\Bigr), \qquad c \in CX
+\tag{Q6}\label{eq:Q6}
+\end{equation}
+Output that households consume at home ($\V{QHA}_{ah}$, \secref{sec:home})
+does not reach the commodity market. The output of a commodity from different
+activities is a perfect substitute and sells at one producer price
+$\V{PX}_c$, unless it is aggregated by a CES function
+(\secref{sec:outputces}).
+
+\section{Trade}\label{sec:trade}
+
+\subsection{Exports}
+
+For commodities exported from domestic output, $c \in CE$, a CET function
+transforms output into exports and domestic sales:
+\begin{equation}
+\V{QX}_c = \V{at}_c\Bigl[\delta^t_c\,\V{QE}_c^{\rho^t_c} + (1 - \delta^t_c)\,\V{QD}_c^{\rho^t_c}\Bigr]^{1/\rho^t_c}
+\tag{T1}\label{eq:T1}
+\end{equation}
+\begin{equation}
+\frac{\V{QE}_c}{\V{QD}_c} = \left[\frac{\V{PE}_c}{\V{PD}_c}\cdot\frac{1 - \delta^t_c}{\delta^t_c}\right]^{1/(\rho^t_c - 1)}
+\tag{T2}\label{eq:T2}
+\end{equation}
+Produced commodities that are not exported, $c \in CNE$, are sold at home:
+\begin{equation}
+\V{QX}_c = \V{QD}_c
+\tag{T3}\label{eq:T3}
+\end{equation}
+and export-only commodities, $c \in CXE$, are exported in full, in place of
+\eqref{eq:T1} and \eqref{eq:T2}:
+\begin{equation}
+\V{QX}_c = \V{QE}_c
+\tag{T3E}\label{eq:T3E}
+\end{equation}
+Exports that face a finite elasticity of world demand, $c \in CED$, fall as
+the world price rises:
+\begin{equation}
+\V{QE}_c = \overline{\V{qe}}_c \left(\frac{\V{PWE}_c}{\V{pwe}_c}\right)^{-\eta^e_c}
+\tag{T10}\label{eq:T10}
+\end{equation}
+where $\V{pwe}_c$ now shifts the demand curve: at the base world price the
+world buys $\overline{\V{qe}}_c$ (\secref{sec:exportdemand}).
+
+Some SAMs record exports that domestic output cannot supply: re-exports of
+imported goods, exports from inventories (with a matching fall in stocks), or
+exports valued at purchaser prices, including the sales taxes and margins on
+the exported goods. For such a commodity the CET is not defined, because its
+domestic sales would be zero or negative. Its exports, $c \in CR$, are instead
+drawn from composite supply, like any other demand, and sold at the composite
+price, with elasticity $\sigma^t_c$ with respect to the world price in local
+currency:
+\begin{equation}
+\V{QER}_c = \overline{\V{qer}}_c\left(\frac{\V{PQ}_c}{\V{EXR}\cdot\V{pwe}_c}\right)^{-\sigma^t_c}
+\tag{T9}\label{eq:T9}
+\end{equation}
+The commodity's domestic output, if any, is sold at home \eqref{eq:T3}.
+
+\subsection{Imports and composite supply}
+
+For imported commodities with domestic output, $c \in CM \cap CX$, an
+Armington function combines imports and domestic sales:
+\begin{equation}
+\V{QQ}_c = \V{aq}_c\Bigl[\delta^q_c\,\V{QM}_c^{-\rho^q_c} + (1 - \delta^q_c)\,\V{QD}_c^{-\rho^q_c}\Bigr]^{-1/\rho^q_c}
+\tag{T4}\label{eq:T4}
+\end{equation}
+\begin{equation}
+\frac{\V{QM}_c}{\V{QD}_c} = \left[\frac{\V{PDD}_c}{\V{PM}_c}\cdot\frac{\delta^q_c}{1 - \delta^q_c}\right]^{1/(1 + \rho^q_c)}
+\tag{T5}\label{eq:T5}
+\end{equation}
+For commodities that are not imported, $c \in CNM$ (all of which have
+domestic output),
+\begin{equation}
+\V{QQ}_c = \V{aq}_c\,\V{QD}_c
+\tag{T6}\label{eq:T6}
+\end{equation}
+with $\V{aq}_c = \V{QQ}^0_c / \V{QD}^0_c$. With base prices of one, a sales tax
+makes composite supply exceed domestic sales in value units,
+$\V{QQ}^0_c = \V{QD}^0_c + \SAM(tax_{sal}, c)$, so the coefficient is not one.
+For commodities that are imported only, $c \in CM \setminus CX$,
+\begin{equation}
+\V{QQ}_c = \V{aq}_c\,\V{QM}_c
+\tag{T7}\label{eq:T7}
+\end{equation}
+with $\V{aq}_c = \V{QQ}^0_c / \V{QM}^0_c$, which exceeds one when the commodity
+pays a tariff, sales tax or margins.
+
+\subsection{Margins}
+
+Margins are a fixed quantity of services per unit of composite supply, and,
+for margin accounts declared by market, per unit of domestic sales, imports
+or exports (\secref{sec:margins-market}). Demand for margin services,
+$c \in CT$, is
+\begin{equation}
+\V{QT}_c = \sum_{c'} \bigl(\V{icm}_{cc'}\,\V{QQ}_{c'} + \V{icd}_{cc'}\,\V{QD}_{c'}
+  + \V{ici}_{cc'}\,\V{QM}_{c'} + \V{ice}_{cc'}\,\V{QE}_{c'}\bigr)
+\tag{T8}\label{eq:T8}
+\end{equation}
+and their cost enters the prices through \eqref{eq:P1}, \eqref{eq:P2} and
+\eqref{eq:P3}. SAMs often record one margin payment per commodity, without a
+split between domestic sales, imports and exports; such margins are
+attributed to composite supply, as sales taxes are.
+
+\section{Institutions}\label{sec:institutions}
+
+\subsection{Factor income}
+
+The income of a factor is its earnings in every activity, factor income from
+abroad, and any rents paid to it:
+\begin{equation}
+\V{YF}_f = \sum_a \V{W}_f\,\V{WFDIST}_{fa}\,\V{QF}_{fa} + \V{trnsfr}_{f,row}\,\V{EXR} + R_f
+\tag{I1}\label{eq:I1}
+\end{equation}
+Here and below $R_\varrho$ is the sum of the rents paid to the recipient
+$\varrho$ (\secref{sec:rents}); it is zero without constraints. Factor income
+is distributed, after contributions to the health insurance fund and taxes on
+factor income, in fixed shares:
+\begin{equation}
+\V{YIF}_{if} = \V{shif}_{if}\,(1 - \V{tshi}_f - \V{tfy}_f)\,\V{YF}_f, \quad i \in I \setminus \{shi\};
+\qquad \V{YIF}_{shi,f} = \V{tshi}_f\,\V{YF}_f
+\tag{I2}\label{eq:I2}
+\end{equation}
+Without a fund, $\V{tshi}_f = 0$; without a tax on factor income,
+$\V{tfy}_f = 0$.
+
+\subsection{Households and enterprises}
+
+The income of a domestic institution is its factor income, transfers from
+other domestic institutions out of their income after direct taxes and
+savings, transfers from the government and from abroad, interest on the
+domestic public debt it holds, and any rents:
+\begin{equation}
+\begin{split}
+\V{YI}_d = {}& \sum_f \V{YIF}_{df} + \sum_{d' \in D} \V{shii}_{dd'}\,(1 - \V{MPS}_{d'})(1 - \V{TINS}_{d'})\,\V{YI}_{d'}\\
+&+ \V{trnsfr}_{d,gov}\,\V{CPI} + \V{trnsfr}_{d,row}\,\V{EXR} + \V{hold}_d\,r^d\,\V{DD} + R_d
+\end{split}
+\tag{I3}\label{eq:I3}
+\end{equation}
+A household spends a fixed share of its income after direct taxes and
+savings on consumption:
+\begin{equation}
+\V{EH}_h = \V{hc}_h\,(1 - \V{MPS}_h)(1 - \V{TINS}_h)\,\V{YI}_h
+\tag{I4}\label{eq:I4}
+\end{equation}
+Enterprises do not consume: for $e \in E$, $\sum_d \V{shii}_{de} + \V{shir}_e = 1$,
+so all their income after direct taxes and savings is transferred. For
+households, $\V{hc}_h = 1 - \sum_d \V{shii}_{dh} - \V{shir}_h$. A transfer
+from an institution to itself (a diagonal SAM cell) is allowed; it appears on
+both sides of its accounts.
+
+Household demand is a linear expenditure system: households buy subsistence
+quantities and spend the rest of their consumption budget, their
+supernumerary spending
+\begin{equation*}
+\V{SN}_h = \V{EH}_h - \sum_c \V{PH}_c\,\gamma_{ch} - \sum_a \V{PA}_a\,\gamma^h_{ah},
+\end{equation*}
+in fixed marginal shares:
+\begin{equation}
+\V{PH}_c\,\V{QH}_{ch} = \V{PH}_c\,\gamma_{ch} + \beta_{ch}\,\V{SN}_h
+\tag{I5}\label{eq:I5}
+\end{equation}
+\begin{equation}
+\V{PA}_a\,\V{QHA}_{ah} = \V{PA}_a\,\gamma^h_{ah} + \beta^h_{ah}\,\V{SN}_h
+\tag{I5H}\label{eq:I5H}
+\end{equation}
+With $\gamma_{ch} = 0$ this is Cobb--Douglas demand, the default: fixed budget
+shares and income elasticities of one. Home consumption \eqref{eq:I5H} is
+valued at the activity price, without taxes or margins; the marginal shares of
+marketed and home goods together sum to one.
+
+\subsection{Investment and government demand}
+
+\begin{equation}
+\V{QINV}_c = \overline{\V{qinv}}_c\,\V{IADJ}
+\tag{I6}\label{eq:I6}
+\end{equation}
+\begin{equation}
+\V{QG}_c = \overline{\V{qg}}_c\,\V{GADJ}
+\tag{I7}\label{eq:I7}
+\end{equation}
+
+\subsection{Government}
+
+Government revenue is the direct taxes, the taxes on sales, imports, exports,
+activities and factors, net VAT, the government's factor income, transfers
+from abroad and within government, and any rents paid to it:
+\begin{equation}
+\begin{split}
+\V{YG} = {}& \sum_d \V{TINS}_d\,\V{YI}_d + \sum_c \V{tq}_c\,\V{TQADJ}\,\V{PQ}_c\,\V{QQ}_c
+  + \sum_{c \in CM} \V{tm}_c\,\V{TMADJ}\,\V{pwm}_c\,\V{QM}_c\,\V{EXR}\\
+&+ \sum_{c \in CE} \V{te}_c\,\V{PWE}_c\,\V{QE}_c\,\V{EXR} + \sum_a \V{ta}_a\,\V{PA}_a\,\V{QA}_a + \V{VAT}\\
+&+ \sum_{f,a} \V{tf}_{fa}\,\V{W}_f\,\V{WFDIST}_{fa}\,\V{QF}_{fa} + \sum_f \V{tfy}_f\,\V{YF}_f
+  + \sum_f \V{YIF}_{gov,f}\\
+&+ \V{trnsfr}_{gov,row}\,\V{EXR} + \V{trnsfr}_{gov,gov}\,\V{CPI} + R_{gov}
+\end{split}
+\tag{I8}\label{eq:I8}
+\end{equation}
+with VAT revenue, net of the credits that activities recover,
+\begin{equation*}
+\V{VAT} = \V{TVADJ} \sum_c \V{tv}_c\,\V{PQ}_c \Bigl(\sum_h \V{QH}_{ch} + \V{QG}_c + \V{QINV}_c + \V{QSHI}_c
+  + \sum_a (1 - \kappa_a)\,\V{QINT}_{ca}\Bigr).
+\end{equation*}
+Government spending is its consumption, its transfers, and the interest on
+public debt:
+\begin{equation}
+\begin{split}
+\V{EG} = {}& \sum_c \V{PH}_c\,\V{QG}_c + \sum_d \V{trnsfr}_{d,gov}\,\V{CPI} + \V{trnsfr}_{gov,gov}\,\V{CPI}
+  + \V{trnsfr}_{shi,gov}\,\V{CPI}\\
+&+ \V{trnsfr}_{row,gov}\,\V{EXR} + r^d\,\V{DD} + r^f\,\V{DF}\,\V{EXR}
+\end{split}
+\tag{I9}\label{eq:I9}
+\end{equation}
+Direct tax and savings rates are their base values times scaling factors that
+the closure fixes or frees:
+\begin{equation}
+\V{TINS}_d = \overline{\V{tins}}_d\,\V{TINSADJ}
+\tag{I10}\label{eq:I10}
+\end{equation}
+\begin{equation}
+\V{MPS}_d = \overline{\V{mps}}_d\,\V{MPSADJ}
+\tag{I11}\label{eq:I11}
+\end{equation}
+
+\subsection{The health insurance fund}
+
+When a social health insurance fund is mapped (\secref{sec:fund}), its
+revenue is the contributions on factor income and the transfers from the
+government and from abroad:
+\begin{equation}
+\V{YSHI} = \sum_f \V{YIF}_{shi,f} + \V{trnsfr}_{shi,gov}\,\V{CPI} + \V{trnsfr}_{shi,row}\,\V{EXR}
+\tag{I12}\label{eq:I12}
+\end{equation}
+It buys a fixed basket of health services, scaled so that it spends its
+revenue less a fixed share saved:
+\begin{equation}
+\V{QSHI}_c = \overline{\V{qshi}}_c\,\V{SHIADJ}
+\tag{I13}\label{eq:I13}
+\end{equation}
+\begin{equation}
+\sum_c \V{PH}_c\,\V{QSHI}_c = (1 - \V{sshi})\,\V{YSHI}
+\tag{I14}\label{eq:I14}
+\end{equation}
+
+\section{System constraints}\label{sec:system}
+
+Factor markets clear:
+\begin{equation}
+\sum_a \V{QF}_{fa} = \V{QFS}_f
+\tag{S1}\label{eq:S1}
+\end{equation}
+Commodity markets clear: composite supply equals intermediate demand,
+household, government and investment demand, margin services, exports from
+composite supply and the purchases of the health insurance fund:
+\begin{equation}
+\V{QQ}_c = \sum_a \V{QINT}_{ca} + \sum_h \V{QH}_{ch} + \V{QG}_c + \V{QINV}_c + \V{QT}_c + \V{QER}_c + \V{QSHI}_c
+\tag{S2}\label{eq:S2}
+\end{equation}
+where $\V{QT}_c$ applies only for $c \in CT$ and $\V{QER}_c$ only for
+$c \in CR$. The balance of payments, in foreign currency, equates payments
+abroad (imports, factor income paid abroad, transfers abroad from domestic
+institutions and the government, interest on foreign debt, and rents paid
+abroad) to receipts (exports, transfers and factor income from abroad, and
+foreign savings):
+\begin{equation}
+\begin{split}
+&\sum_{c \in CM} \V{pwm}_c\,\V{QM}_c + \sum_f \frac{\V{YIF}_{row,f}}{\V{EXR}}
+  + \sum_d \frac{\V{shir}_d\,(1 - \V{MPS}_d)(1 - \V{TINS}_d)\,\V{YI}_d}{\V{EXR}}\\
+&\qquad + \V{trnsfr}_{row,gov} + r^f\,\V{DF} + \frac{R_{row}}{\V{EXR}}\\
+&\quad = \sum_{c \in CE} \V{PWE}_c\,\V{QE}_c + \sum_{c \in CR} \frac{\V{PQ}_c\,\V{QER}_c}{\V{EXR}}
+  + \sum_d \V{trnsfr}_{d,row} + \sum_f \V{trnsfr}_{f,row}\\
+&\qquad + \V{trnsfr}_{gov,row} + \V{trnsfr}_{shi,row} + \V{FSAV}
+\end{split}
+\tag{S3}\label{eq:S3}
+\end{equation}
+The government's budget defines its savings:
+\begin{equation}
+\V{YG} = \V{EG} + \V{GSAV}
+\tag{S4}\label{eq:S4}
+\end{equation}
+and savings equal investment:
+\begin{equation}
+\sum_d \V{MPS}_d\,(1 - \V{TINS}_d)\,\V{YI}_d + \V{GSAV} + \V{sshi}\,\V{YSHI} + \V{EXR}\cdot\V{FSAV}
+  = \sum_c \V{PH}_c\,\V{QINV}_c + \V{WALRAS}
+\tag{S5}\label{eq:S5}
+\end{equation}
+The price level is set by the numeraire:
+\begin{equation}
+\V{CPI} = \overline{\V{CPI}} \quad\text{or}\quad \V{DPI} = \overline{\V{DPI}}
+\tag{S6}\label{eq:S6}
+\end{equation}
+which is imposed by fixing the numeraire variable in the closure
+(chapter~\ref{chap:closures}); it is not counted as a separate equation.
+
+By Walras's law one equation is redundant: if every other market clears and
+every institution meets its budget, savings equal investment. The variable
+$\V{WALRAS}$ makes the system square, and must be zero, to the solver's
+tolerance, at every solution. \manref{cge_results} and \manref{cge_check}
+report it.

@@ -1,0 +1,20 @@
+. list account role group row_total column_total difference, noobs clean
+
+    account          role   group           row_total        column_total           difference
+    act_agr    activities                     95.0903   97.30879999999999   -2.218499999999992
+    act_man    activities                    138.4698            138.8606   -.3908000000000129
+    act_ser    activities                     158.729            146.6431    12.08590000000001
+    com_agr   commodities                    125.3554            125.1786    .1768000000000143
+    com_man   commodities                     218.935            217.9935    .9414999999999907
+    com_ser   commodities                    184.1488            189.5941   -5.445300000000032
+        lab       factors                    135.0493            134.4151    .6341999999999928
+        cap       factors                    122.9286            130.3917   -7.463099999999983
+        hhd    households      hh             247.888            255.1076   -7.219600000000014
+        npi    households      hh   9.383199999999999   9.445600000000001    -.062400000000002
+        ent   enterprises                    108.8762            105.0257    3.850499999999997
+        gov    government                     70.9528   70.67999999999999    .2728000000000037
+    tax_dir        dirtax                     28.6243             29.2452   -.6209000000000025
+    tax_sal        saltax                     30.3698             30.4754   -.1056000000000026
+    tax_imp        imptax                      7.6589   8.395200000000001   -.7363000000000008
+        sav        savinv                     51.8279             47.6634    4.164499999999997
+        row           row                    126.1696            124.0333    2.136299999999977

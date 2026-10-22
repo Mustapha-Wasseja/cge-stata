@@ -1,0 +1,4 @@
+. cge_gams using gams_notariff, sim(notariff)
+gams_notariff/cge_model.gms already exists; specify replace
+
+r(602);

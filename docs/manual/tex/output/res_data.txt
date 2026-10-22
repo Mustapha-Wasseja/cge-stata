@@ -1,0 +1,20 @@
+. cge_results, sim(notariff) clear nodisplay
+
+. describe, short
+
+Contains data
+  obs:           118
+ vars:             5
+ size:        13,216
+Sorted by:
+     Note:  dataset has changed since last saved
+
+. list if variable == "QA", noobs
+
+  +---------------------------------------------------+
+  | variable   element1   element2   base       value |
+  |---------------------------------------------------|
+  |       QA    act_agr               100   99.590677 |
+  |       QA    act_man               140   138.04142 |
+  |       QA    act_ser               150   151.86047 |
+  +---------------------------------------------------+

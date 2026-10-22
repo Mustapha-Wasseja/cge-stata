@@ -1,0 +1,31 @@
+. cge_synthetic, clear
+(16 vars, 15 obs)
+
+Synthetic SAM loaded (standard layout): 15 accounts, total   1743.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 15 accounts, total 1743
+Largest row-column imbalance:  0.00e+00
+
+. cge_template using roles.csv, replace
+Template of 15 accounts
+Template saved to roles.csv
+
+. type roles.csv
+account,role,pair,group,row_total,column_total,difference
+act_agr,,,,100,100,0
+act_man,,,,140,140,0
+act_ser,,,,150,150,0
+com_agr,,,,130,130,0
+com_man,,,,218,218,0
+com_ser,,,,180,180,0
+lab,,,,135,135,0
+cap,,,,127,127,0
+hhd,,,,287,287,0
+gov,,,,63,63,0
+tax_dir,,,,25,25,0
+tax_sal,,,,30,30,0
+tax_imp,,,,8,8,0
+sav,,,,50,50,0
+row,,,,100,100,0

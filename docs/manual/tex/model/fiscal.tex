@@ -1,0 +1,112 @@
+\chapter{Fiscal instruments}\label{chap:fiscal}
+
+\section{Revenue-neutral tax replacement}\label{sec:replacement}
+
+The sales tax, import tariff and VAT rates are scaled by $\V{TQADJ}$,
+$\V{TMADJ}$ and $\V{TVADJ}$ (in \eqref{eq:P1}, \eqref{eq:P3}, \eqref{eq:P6},
+\eqref{eq:P8} and \eqref{eq:I8}), as direct tax rates are scaled by
+$\V{TINSADJ}$ \eqref{eq:I10}. All four are fixed at one, except under a closure
+that fixes government savings and names one of them as the instrument that
+adjusts (\cmd{government(fixgsav direct)}, \cmd{fixgsav sales},
+\cmd{fixgsav import} or \cmd{fixgsav vat}; chapter~\ref{chap:closures}).
+
+The instrument scales every base rate of that tax in proportion, so rates that
+are zero in the base stay zero; the tax must raise revenue in the base. With
+$\V{GADJ}$ fixed, government consumption is unchanged in real terms, so the
+closure keeps government savings at their base value: in real terms under the
+CPI numeraire, in terms of domestic producer prices under the DPI numeraire.
+It replaces lost revenue, for example from a tariff cut, with whichever tax
+the user chooses, and the scaling factor shows the rise in rates required.
+Under these closures a shock to the instrument's own rates, such as removing
+tariffs while tariffs adjust, is not meaningful: the scaling factor offsets
+it.
+
+\section{Value added tax with input credits}\label{sec:vat}
+
+VAT is charged on sales of each commodity at the rate $\V{tv}_c$, on the price
+$\V{PQ}_c$ before VAT. Final users (households, the government, investment and
+the health insurance fund) pay $\V{PH}_c = \V{PQ}_c(1 + \V{tv}_c)$. An activity
+recovers the share $\kappa_a$ of the VAT on its inputs as a credit, and so pays
+$\V{PQ}_c\,(1 + \V{tv}_c\,(1 - \kappa_a))$ \eqref{eq:P6}. $\kappa_a = 1$, the
+default, is a registered activity with full credits; $\kappa_a = 0$ an exempt
+or unregistered one, which bears VAT on its inputs. Exports, whether from
+domestic output or from composite supply, and purchases of margin services
+are zero-rated. Net VAT revenue \eqref{eq:I8} is therefore the VAT on final
+demand plus the VAT that activities cannot recover.
+
+\subsection{The SAM}
+
+VAT is recorded in a VAT account whose row collects VAT from the commodity
+columns, $\SAM(vat, c)$, net of credits, and whose column pays the government
+(\manref{cge_map}, option \cmd{vattax()}). When the SAM records VAT within the
+sales tax account, the option \cmd{vatshare()} gives the VAT share of each
+commodity's sales tax, which is moved to an internal VAT account before the
+checks (\secref{sec:layouts}). VAT cells may be negative.
+
+\subsection{Calibration}
+
+With $\V{PQ}^0_c = 1$, each use $u$ of commodity $c$ recorded in the SAM at the
+value $V_{cu}$, at purchaser prices, is a quantity $V_{cu}/(1 + \V{tv}_c\,k_u)$,
+where the VAT liability $k_u$ is 1 for final users, $1 - \kappa_a$ for
+activity $a$ and 0 for exports and margin services. The rate $\V{tv}_c$ solves
+\begin{equation*}
+\SAM(vat, c) = \sum_u V_{cu}\,\frac{\V{tv}_c\,k_u}{1 + \V{tv}_c\,k_u},
+\end{equation*}
+which is increasing in $\V{tv}_c$ when the uses are positive. It is solved by
+Newton's method from $\V{tv}_c = \SAM(vat, c) / \sum_u k_u V_{cu}$, to a
+relative change of $10^{-15}$; $\V{tv}_c = 0$ when $\SAM(vat, c) = 0$. A
+commodity with VAT but no use that bears it is an error. Then
+\begin{itemize}
+\item $\V{QINT}^0_{ca} = \SAM(c, a) / (1 + \V{tv}_c(1 - \kappa_a))$,
+$\V{QINTA}^0_a = \sum_c \V{QINT}^0_{ca}$, $\V{ica}_{ca} = \V{QINT}^0_{ca} / \V{QINTA}^0_a$
+and $\V{PINTA}^0_a = \sum_c \SAM(c, a) / \V{QINTA}^0_a$;
+\item $\V{QH}^0_{ch}$, $\overline{\V{qg}}_c$, $\overline{\V{qinv}}_c$ and
+$\overline{\V{qshi}}_c$ are the SAM values divided by $1 + \V{tv}_c$, and
+$\V{PH}^0_c = 1 + \V{tv}_c$;
+\item $\V{QQ}^0_c$ (section~\ref{sec:cal-trade}) equals the sum of these
+quantities, margin services and exports from composite supply; calibration
+checks this.
+\end{itemize}
+Spending values, budget shares and the accounts of the government and the
+fund are unchanged, because they are values at purchaser prices. Without VAT
+every quantity equals its SAM value. The VAT rates and credit shares can be
+shocked (\cmd{tv}, \cmd{kappa}).
+
+\section{Public debt and interest}\label{sec:debt}
+
+National SAMs record the interest on public debt within government
+transfers: to domestic institutions, $\SAM(d, gov)$, and to the rest of the
+world, $\SAM(row, gov)$. Given the debt stocks at the start of the base year,
+held at home, $\V{DD}^0$ (local currency), and abroad, $\V{DF}^0$ (foreign
+currency, equal to local currency at $\V{EXR}^0 = 1$), and their interest
+rates $r^d$ and $r^f$, calibration separates the interest from the other
+transfers:
+\begin{equation*}
+\V{trnsfr}_{d,gov} = \SAM(d, gov) - \V{hold}_d\,r^d\,\V{DD}^0,
+\qquad
+\V{trnsfr}_{row,gov} = \SAM(row, gov) - r^f\,\V{DF}^0,
+\end{equation*}
+where $\V{hold}_d$ is the share of domestic interest received by institution
+$d$. By default it is proportional to $\SAM(d, gov)$, so that interest is the
+same share of every institution's transfers; the user may give other shares,
+which must be non-negative and sum to one. A non-interest transfer that would
+be negative is an error: the SAM's transfers are then too small for the stated
+debt and rate. The base equilibrium is unchanged, since at base prices the
+interest terms of \eqref{eq:I3}, \eqref{eq:I9} and \eqref{eq:S3} equal the
+transfers they replace.
+
+Interest is then paid in nominal terms, on domestic debt in local currency and
+on foreign debt in foreign currency, while the other transfers keep their
+indexation. A static simulation can change the interest rates or the stocks,
+for example a rise in $r^f$ or debt relief that lowers $\V{DF}$ (shocks
+\cmd{rd}, \cmd{rf}, \cmd{ddebt}, \cmd{fdebt}).
+
+In a dynamic run the deficit is borrowed, the share $\phi$ abroad
+(chapter~\ref{chap:dynamics}); by default $\phi$ is the foreign share of the
+base debt, $\V{DF}^0 / (\V{DD}^0 + \V{DF}^0)$. Net borrowing is modelled, not
+gross borrowing and amortisation separately: maturing debt is assumed to be
+refinanced. The change in the stock of foreign debt measured in local currency
+is net foreign borrowing plus a valuation change,
+$\V{DF}_{t-1}\,(\V{EXR}_t - \V{EXR}_{t-1})$. Neither default risk nor a link
+from debt to interest rates is modelled; the rates are exogenous and can be
+changed by shocks.

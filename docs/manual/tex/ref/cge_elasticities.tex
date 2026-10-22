@@ -1,0 +1,223 @@
+\cgeentry{cge_elasticities}{Published elasticities, with their sources}
+
+\cgesec{Description}
+
+\cmd{cge_elasticities} lists, loads, or turns into values for the options of
+\manref{cge_calibrate}, the entries of the package's elasticity library. Each
+entry is a published estimate, with its source, the table and page where it is
+printed, its definition and the check made when it was read from the source.
+Elasticities have no defaults in \manref{cge_calibrate}; the library documents
+where values come from, and nothing is applied without a command. Entries of
+the user's own, from a file in the library's layout, may be added.
+
+\cgesec{Quick start}
+
+List the Armington elasticities of Togo, Sierra Leone and Botswana
+\begin{stcode}
+cge_elasticities sigmaq, country(TGO SLE BWA)
+\end{stcode}
+Load the income elasticities of Togo, with their definitions and sources, into
+memory
+\begin{stcode}
+cge_elasticities incelas, country(TGO) clear
+\end{stcode}
+After \manref{cge_map}, one Armington elasticity per commodity, for
+\cmd{sigmaq()}
+\begin{stcode}
+cge_elasticities sigmaq, country(TGO) values
+local sq `r(values)'
+\end{stcode}
+Income elasticities by commodity, with the consumption category of each
+commodity
+\begin{stcode}
+cge_elasticities incelas, country(TGO) values map(com_agr:food com_hlt:health) others(other)
+\end{stcode}
+Add the entries of a file to the library and list those of one source,
+\cmd{MY2026}
+\begin{stcode}
+cge_elasticities using myvalues.csv, source(MY2026)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_elasticities} [\argu{parameter}] [\texttt{using} \argu{filename}]
+[\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\argu{parameter} is the \manref{cge_calibrate} option that a value is for:
+\cmd{sigmaq}, \cmd{sigmat}, \cmd{sigmava}, \cmd{incelas}, \cmd{frisch},
+\cmd{wagecurve} or \cmd{mortelas} in the package's library.
+
+\begin{opttable}
+\optgroup{Selection}
+\optarg{c}{ountry}{codes} & entries for these countries or groups\\
+\optarg{cat}{egory}{names} & entries in these categories\\
+\optarg{sou}{rce}{ids} & entries from these sources\\
+\optarg{}{id}{ids} & these entries\\
+\optgroup{Output}
+\opt{}{clear} & load the selected entries into memory\\
+\opt{val}{ues} & return values for \manref{cge_calibrate} in \res{r(values)}\\
+\optarg{}{map}{spec} & with \cmd{values}, categories of commodities or activities\\
+\optarg{oth}{ers}{category} & with \cmd{values}, the category of those not in \cmd{map()}\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{c}{ountry}{codes}, \optarg{cat}{egory}{names},
+\optarg{sou}{rce}{ids} and \optarg{}{id}{ids}] select entries. Each takes one
+or more values, and an entry is selected when it matches every option given,
+and \argu{parameter} if it is given. Countries are ISO 3166 alpha-3 codes, for
+example \cmd{TGO}, or the groups \cmd{AFR} (Africa), \cmd{WLD} (international)
+and \cmd{DEV} (developing countries). The case of the values does not matter.
+If no entry is selected, the command stops with error 111.
+
+\item[\cmd{using} \argu{filename}] adds the entries of a CSV file in the
+library's layout, with at least the columns \cmd{id}, \cmd{parameter},
+\cmd{country}, \cmd{category}, \cmd{value} and \cmd{source}, for example values
+that the user is licensed to use or has estimated. Other columns of the layout
+are empty when absent. Entry identifiers must be unique across the library and
+the file, and every entry needs a numeric value.
+
+\item[\opt{}{clear}] loads the selected entries into memory, replacing the
+data, with every column of the library and the authors, year, title,
+publication and address of each source. \cmd{value}, \cmd{se}, \cmd{lower} and
+\cmd{upper} are numeric; the other variables are strings. \cmd{clear} may not
+be combined with \cmd{values}.
+
+\item[\opt{val}{ues}] returns values for \manref{cge_calibrate} in
+\res{r(values)} and displays the entries used, with their definitions, sources
+and notes. For \cmd{sigmaq}, \cmd{sigmat} and \cmd{incelas} it returns one value
+per commodity, and for \cmd{sigmava} one per activity, in the order of
+\manref{cge_map}, which must have been run. Each commodity or activity takes
+the selected entry of its category, given by \cmd{map()} or \cmd{others()}, or
+the single selected entry if it has no category; if no entry or more than one
+matches, the command stops and names the entries. For \cmd{frisch},
+\cmd{wagecurve}, \cmd{mortelas} and \cmd{sickelas} it returns one number, from
+the single selected entry; \cmd{wagecurve()} of \manref{cge_calibrate} takes it
+with the factor, as in
+\texttt{wagecurve(lab:\textasciigrave r(values)\textquotesingle)}. \argu{parameter} is
+required.
+
+\item[\optarg{}{map}{spec}] gives categories to commodities or activities, as
+\argu{element}\cmd{:}\argu{category} pairs, for example
+\cmd{map(com_agr:food com_hlt:health)}. It needs \cmd{values}.
+
+\item[\optarg{oth}{ers}{category}] gives a category to the commodities or
+activities not listed in \cmd{map()}. It needs \cmd{values}.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The library holds 531 entries (\chapref{chap:elasticities}):
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.08\linewidth}>{\raggedright\arraybackslash}p{0.41\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}
+\toprule
+Parameter & Entries & Coverage & Source\\
+\midrule
+\cmd{sigmaq} & 51 & aggregate Armington elasticities, African countries & Devarajan, Go and Robinson (2023)\\
+\cmd{sigmat} & 51 & aggregate CET elasticities, the same countries & Devarajan, Go and Robinson (2023)\\
+\cmd{incelas} & 423 & income elasticities for nine consumption categories, 47 African countries & Muhammad et al.\ (2011)\\
+\cmd{frisch} & 1 & the Frisch parameter, 144 countries pooled & Muhammad et al.\ (2011)\\
+\cmd{sigmava} & 1 & substitution between capital and labour, 30 African countries pooled & Hosni and Ouakil (2024)\\
+\cmd{wagecurve} & 2 & international, and South Africa & Blanchflower and Oswald (1995); Kingdon and Knight (2006)\\
+\cmd{mortelas} & 2 & under-five and maternal mortality with respect to government health expenditure & Bokhari, Gai and Gottret (2007)\\
+\bottomrule
+\end{cgetable}
+
+The categories of the income elasticities are \cmd{food} (with beverages and
+tobacco), \cmd{clothing}, \cmd{housing}, \cmd{furnishings}, \cmd{health},
+\cmd{transport} (with communication), \cmd{recreation}, \cmd{education} and
+\cmd{other}; the trade elasticities have the category \cmd{aggregate}. The
+mortality elasticities are for reference: their outcome and driver differ from
+those of \cmd{mortelas()} of \manref{cge_calibrate}.
+
+Read the definitions before using a value. Aggregate trade elasticities are
+lower than sector ones, so they set a level rather than every sector's value
+(Devarajan, Go and Robinson 2023). The income elasticities come from a
+cross-country demand system for 2005, not from a household survey of the
+country. Two values follow the package's conventions rather than the sources:
+the wage-curve elasticity is the absolute value of the published negative
+elasticity, and the Frisch parameter is the inverse of the published income
+flexibility.
+
+\cgesubsec{Example 1: listing and loading entries}
+
+Without \cmd{clear} or \cmd{values}, the selected entries are listed, up to 60,
+with the location of each value in its source:
+\stlog[\scriptsize]{elas_list}
+With \cmd{clear}, the entries are loaded with all their details:
+\stlog{elas_load}
+The library has no standard errors for these income elasticities.
+
+\cgesubsec{Example 2: values for calibration}
+
+The values are given for the commodities and activities of a mapped model,
+here the synthetic SAM:
+\stlog{elas_setup}
+\stlog{elas_values}
+The one Armington elasticity of Togo is given to every commodity. The income
+elasticities need a category for each commodity: agriculture takes the
+elasticity of food, and the other commodities that of other goods and services.
+The values are then options of \manref{cge_calibrate}:
+\stlog{elas_calibrate}
+With two countries selected, each commodity matches two entries, and the
+command stops:
+\stlog{elas_ambiguous}
+The results name the entry used for each element:
+\stlog{elas_return}
+
+\cgesubsec{Example 3: a file of the user's own entries}
+
+A file of additional entries has one row per entry and at least the columns
+\cmd{id}, \cmd{parameter}, \cmd{country}, \cmd{category}, \cmd{value} and
+\cmd{source}. The library's other columns, \cmd{country_name}, \cmd{se},
+\cmd{lower}, \cmd{upper}, \cmd{published}, \cmd{definition}, \cmd{method},
+\cmd{observations}, \cmd{period}, \cmd{location}, \cmd{check} and \cmd{notes},
+may be added. Here a file gives two sector Armington elasticities, with their
+own categories:
+\stlog{elas_user}
+The file has no \cmd{location} column, so none is displayed after the source.
+
+\cgesec{Stored results}
+
+\cmd{cge_elasticities} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N)} & number of entries selected, or of values returned\\
+\resgroup{Macros}
+\res{r(ids)} & entries selected, or the entry used for each value\\
+\res{r(values)} & values for \manref{cge_calibrate} (with \cmd{values})\\
+\res{r(parameter)} & parameter (with \cmd{values})\\
+\end{storedres}
+
+\cgesec{References}
+
+\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\itemindent}{-2em}%
+  \setlength{\itemsep}{2pt}\setlength{\parsep}{0pt}}
+\item Blanchflower, D. G., and A. J. Oswald. 1995. An introduction to the wage
+curve. \textit{Journal of Economic Perspectives} 9(3): 153--167.
+\item Bokhari, F. A. S., Y. Gai, and P. Gottret. 2007. Government health
+expenditures and health outcomes. \textit{Health Economics} 16(3): 257--273.
+\item Devarajan, S., D. S. Go, and S. Robinson. 2023. Trade elasticities in
+aggregate models: Estimates for 191 countries. World Bank Policy Research
+Working Paper 10490.
+\item Hosni, M., and H. Ouakil. 2024. Estimation de l'\'elasticit\'e de
+substitution entre le capital et le travail de l'\'economie africaine~: une
+analyse en donn\'ees de panel. \textit{Revue AME} 6(3): 247--269.
+\item Kingdon, G. G., and J. Knight. 2006. How flexible are wages in response
+to local unemployment in South Africa? \textit{ILR Review} 59(3): 471--495.
+\item Muhammad, A., J. L. Seale Jr., B. Meade, and A. Regmi. 2011.
+\textit{International Evidence on Food Consumption Patterns: An Update Using
+2005 International Comparison Program Data}. Technical Bulletin TB-1929,
+Economic Research Service, U.S. Department of Agriculture.
+\end{list}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_calibrate}{Calibrate the model to the SAM}
+\seeentry{cge_sensitivity}{Sensitivity of a scenario's results to the elasticities}
+\seechapter{chap:elasticities}{The elasticity library}
+\end{alsosee}

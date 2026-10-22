@@ -1,0 +1,25 @@
+. cge_sam, labels(account)
+SAM read: 17 accounts, total 1860.4569
+Largest row-column imbalance:  1.21e+01
+
+. cge_balance, method(ce) totals(act_agr:97 hhd:290) fixed(row:* hhd:lab)
+Cross entropy: converged in 4 iterations
+Largest row-column imbalance:  1.21e+01 before,  1.80e-10 after
+SAM total: 1860.4569 before, 1954.96573 after
+Cells changed: 58 of 68 non-zero; largest relative change  8.92e-01
+
+Largest changes
+  row                  column                       before          after   change %
+  hhd                  ent                          61.883        80.3948     29.914
+  com_ser              hhd                         74.1971        84.9784     14.531
+  cap                  act_ser                      49.801        60.3448     21.172
+  com_man              hhd                         81.1112        91.3107     12.575
+  hhd                  cap                         25.3804        34.7014     36.725
+  hhd                  gov                         15.8542        23.5792     48.725
+  cap                  act_man                     38.3355        45.4594     18.583
+  com_agr              hhd                         66.3231        72.9289      9.960
+  hhd                  row                          9.4004         15.103     60.663
+  act_man              com_man                      138.47        143.523      3.649
+
+Balanced SAM: 17 accounts, total 1954.96573
+Largest row-column imbalance:  1.80e-10

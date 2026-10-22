@@ -1,0 +1,263 @@
+\cgeentry{cge_optimize}{Choose policy instruments to maximise an outcome or reach targets}
+
+\cgesec{Description}
+
+\cmd{cge_optimize} chooses the values of a few policy instruments to maximise
+or minimise a report measure, or to reach targets for report measures,
+solving the model at every trial value. An instrument is one element of a
+parameter that \manref{cge_shock} changes, such as a tariff rate, or one
+element of a variable that the closure fixes, such as a tax adjustment
+factor. The optimisation starts from the instruments' current values, with
+any shocks already applied, under the current closure. The optimum is stored
+as a simulation, and the instruments are left at their optimal values as
+current shocks, so that \mbox{\manref{cge_report}} and \mbox{\manref{cge_results}} show it.
+
+\cgesec{Quick start}
+
+The tariff on manufactures, between $-0.5$ and 1, that maximises the
+equivalent variation of household \cmd{hhd}
+\begin{stcode}
+cge_optimize, instruments(tm(com_man)) maximize(welfare equivalent_variation hhd) ///
+    lower(tm(com_man):-0.5) upper(tm(com_man):1)
+\end{stcode}
+Both tariffs that maximise it while tariff revenue stays at 8, storing the
+optimum as simulation \cmd{two}
+\begin{stcode}
+cge_optimize, instruments(tm(com_agr) tm(com_man)) maximize(welfare equivalent_variation hhd) ///
+    targets(government tax_import = 8) name(two)
+\end{stcode}
+The direct tax adjustment factor that keeps government savings at 3, with the
+iterations displayed
+\begin{stcode}
+cge_optimize, instruments(TINSADJ) targets(government savings = 3) trace
+\end{stcode}
+Government purchases of health services and the direct tax factor that reach
+targets for real GDP and government savings
+\begin{stcode}
+cge_optimize, instruments(qg(com_hlt) TINSADJ) targets(macro gdp_real = 310, government savings = 3)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_optimize}\texttt{,} \optarg{inst}{ruments}{list}
+\{\optarg{max}{imize}{measure} $|$ \optarg{min}{imize}{measure} $|$
+\optarg{targ}{ets}{spec}\} [\argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{inst}{ruments}{list} & the instruments; required\\
+\optarg{max}{imize}{measure} & report measure to maximise\\
+\optarg{min}{imize}{measure} & report measure to minimise\\
+\optarg{targ}{ets}{spec} & targets for report measures\\
+\optarg{low}{er}{spec} & lower bounds of instruments\\
+\optarg{up}{per}{spec} & upper bounds of instruments\\
+\optarg{}{name}{name} & name of the simulation that holds the optimum; default \cmd{optimum}\\
+\optgroup{Solver}
+\optarg{tol}{erance}{\#} & tolerance of each solve of the model; default \texttt{1e-12}\\
+\optarg{iter}{ate}{\#} & maximum number of Newton iterations of each solve; default \texttt{100}\\
+\opt{}{trace} & display the iterations of the optimiser\\
+\end{opttable}
+
+A \argu{measure} is a measure of \manref{cge_report}, written
+\argu{table measure} [\argu{element}], for example
+\cmd{welfare equivalent_variation hhd} or \cmd{macro gdp_real}. An objective,
+targets or both must be given; \cmd{maximize()} and \cmd{minimize()} may not
+be combined.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{inst}{ruments}{list}] lists the instruments, separated by
+spaces. An instrument is
+\begin{itemize}\setlength{\itemsep}{0pt}\setlength{\labelsep}{0.6em}
+\item one element of a parameter that \manref{cge_shock} changes, written
+\argu{parameter}\cmd{(}\argu{element}\cmd{)}, such as \cmd{tm(com_man)} or
+\cmd{qg(com_hlt)}; the element may be left out when the parameter has only
+one;
+\item a scalar parameter, such as \cmd{trgr}; or
+\item one element of a variable that the closure fixes, such as \cmd{GADJ},
+\cmd{TINSADJ} or \cmd{QFS(lab)}. A variable that the closure does not fix is
+an error; it can be fixed by a swap (\manref{cge_closure}, \cmd{swap()}).
+\end{itemize}
+An instrument may be given only once.
+
+\item[\optarg{max}{imize}{measure}] gives the measure to maximise.
+
+\item[\optarg{min}{imize}{measure}] gives the measure to minimise.
+
+\item[\optarg{targ}{ets}{spec}] gives targets, separated by commas, as
+\argu{table measure} [\argu{element}] \cmd{=} \argu{value}, for example
+\cmd{targets(government savings = 3, macro investment_real = 50)}. Without an
+objective there must be one target for each instrument. With an objective,
+the targets are equality constraints.
+
+\item[\optarg{low}{er}{spec}] and \optarg{up}{per}{spec} give bounds, as
+\argu{instrument}\cmd{:}\argu{value} pairs with the instrument written as in
+\cmd{instruments()}, for example
+\cmd{lower(tm(com_man):0) upper(tm(com_man):0.2)}. An instrument without a
+bound is unbounded on that side. A lower bound must be below the upper
+bound, and the current value of each instrument must lie strictly within its
+bounds.
+
+\item[\optarg{}{name}{name}] names the simulation that holds the optimum;
+the default is \cmd{optimum}. A simulation of that name is replaced.
+
+\item[\optarg{tol}{erance}{\#}] sets the convergence tolerance of each solve
+of the model; the default is \texttt{1e-12}.
+
+\item[\optarg{iter}{ate}{\#}] sets the maximum number of Newton iterations of
+each solve of the model; the default is 100.
+
+\item[\opt{}{trace}] displays the objective and the largest gradient of the
+free instruments at each iteration, or, with targets alone, the largest
+scaled gap from the targets.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+\cmd{cge_optimize} is meant for a few instruments: a tax rate, the volume of
+a public service, a transfer. At each trial value of the instruments the
+model is solved by Newton's method, from the solution of the trial before,
+and the measures are computed at the solution. The objective and the targets
+are values of the measures, such as amounts in the units of the SAM, not
+percentage changes from the base; the equivalent and compensating variations
+are amounts of base-price spending, not per cent of base consumption.
+\Chapref{chap:optimize} states the problem and the algorithm.
+
+\cgesubsec{Example 1: a welfare-maximising tariff}
+
+The synthetic SAM is calibrated as in \manref{cge_solve}. The base values of
+government revenue and its components, and a closure under which government
+savings are fixed and the direct tax rates adjust, are
+\stlog{opt_base}
+The tariff on manufactures that maximises the equivalent variation of the
+household, within $[-0.5, 1]$, with the iterations displayed:
+\stlog{opt_max}
+The objective is the equivalent variation in the units of the SAM; it is zero
+at the start, the base. The gradient falls to $1.28 \times 10^{-8}$ in four
+Newton iterations, and the 67 solves of the model include those of the
+finite differences. On the synthetic SAM the optimal tariff is about 30 per
+cent, above the base rate of 10 per cent. The result depends on the SAM and
+the elasticities, which here are synthetic and illustrative, and is not a
+finding about any economy.
+
+The optimum is stored as simulation \cmd{optimum} and left as the current
+shock:
+\stlog{opt_return}
+The equivalent variation of 0.768 is 0.334 per cent of base consumption, as
+\manref{cge_report} shows it. Government savings are fixed by the closure:
+tariff revenue more than doubles and direct taxes fall by 38 per cent.
+
+\cgesubsec{Example 2: an objective with a target}
+
+Both tariffs are chosen to maximise welfare while tariff revenue stays at its
+base value of 8. The target is an equality constraint, met by the augmented
+Lagrangian method:
+\stlog{opt_revenue}
+The optimum subsidises imports of agriculture slightly and taxes those of
+manufactures at 16 per cent. Each round of the augmented Lagrangian method
+maximises again, so the optimisation took 574 solves of the model.
+
+\cgesubsec{Example 3: targets alone}
+
+With as many targets as instruments and no objective, the instruments are
+found by Newton's method on the targets. After the removal of every tariff,
+under a closure in which government savings adjust, the direct tax
+adjustment factor that keeps government savings at their base value of 3,
+found in two Newton iterations, is
+\stlog{opt_targets}
+Holding government savings fixed with the direct tax rates adjusting is what
+the closure \cmd{fixgsav} does. Solving the same shock under that closure
+gives the same factor:
+\stlog{opt_fixgsav}
+
+\cgesubsec{Bounds, failures and local optima}
+
+An instrument at a bound whose gradient points outwards is held there, and
+the display marks it \cmd{(at its bound)}. A trial value at which the model
+does not solve counts in \res{r(N_failed)}; the next trial starts from the
+last solution, and the optimiser steps back. The model must solve at the
+starting values. Derivatives are found by central differences of the solved
+model, and a smooth objective is flat at its optimum, so the optimum is
+located to about $10^{-6}$ relative to the instruments' scale. An optimum may
+be local: other starting values, set with \manref{cge_shock}, can be tried.
+
+\cgesec{Stored results}
+
+\cmd{cge_optimize} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(converged)} & 1 if the optimisation converged, 0 otherwise\\
+\res{r(objective)} & the objective at the optimum, with an objective\\
+\res{r(N_evaluations)} & number of solves of the model\\
+\res{r(N_failed)} & number of trial values at which the model did not solve\\
+\res{r(iterations)} & number of iterations of the optimiser\\
+\resgroup{Macros}
+\res{r(name)} & name of the simulation that holds the optimum\\
+\res{r(instruments_list)} & the instruments\\
+\resgroup{Matrices}
+\res{r(instruments)} & the instruments at the optimum\\
+\res{r(start)} & their starting values\\
+\res{r(targets)} & the target measures at the optimum, with targets\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+With instruments $u$, the model's solution $x(u)$ under the current closure,
+an objective measure $f$ and target measures $g_j$,
+\begin{equation*}
+\max_u\; f\bigl(x(u), u\bigr) \quad\text{subject to}\quad
+g_j\bigl(x(u), u\bigr) = \bar g_j, \qquad \underline u \le u \le \overline u,
+\end{equation*}
+with $-f$ for \cmd{minimize()}. The instruments are scaled as $u = u^0 + s
+\odot z$, with $u^0$ the starting values and $s_k = |u^0_k|$, or 1 when
+$|u^0_k| \le 10^{-12}$. The target gaps are scaled as
+$r_j = (g_j - \bar g_j)/\tau_j$, with $\tau_j = |\bar g_j|$, or 1 when
+$|\bar g_j| \le 10^{-12}$.
+
+\textit{Targets alone.} Newton's method solves $r(z) = 0$. The Jacobian comes
+from central differences with steps $h_k = 10^{-5}\max(1, |z_k|)$; the step
+$\Delta z = -J^{-1} r$ is projected on the bounds and halved, up to 30 times,
+until $\max_j |r_j|$ falls. The iterations stop, converged, when
+$\max_j |r_j| < 10^{-11}$; they stop without converging when a trial
+value does not solve, when 30 halvings do not reduce the gap, and after 50
+iterations.
+
+\textit{An objective.} A projected Newton method maximises
+\begin{equation*}
+F(z) = \frac{f}{\max(1, |f^0|)} - \lambda' r - \frac{\rho}{2}\, r' r,
+\end{equation*}
+with $f^0$ the objective at the start; without targets, $F$ is the scaled
+objective alone. The gradient comes from central differences with step
+$10^{-5}$ (one-sided at a bound); an instrument at a bound whose gradient
+points outwards is held there. The iterations converge when the largest
+gradient of the free instruments is below $10^{-8}$. The Hessian of the free
+instruments comes from central second differences with step $10^{-3}$. The
+step is $-H^{-1}\nabla F$ when $H$ is negative definite, and the gradient,
+divided by $\max(1, \max_k |\partial F/\partial z_k|)$, otherwise; it is
+projected on the bounds and halved, up to 40 times, until $F$ rises. If no
+halving raises $F$, the iterations stop, and they are counted as converged
+if the largest free gradient is below $10^{-6}$; they also stop, converged,
+when a step changes $z$ by less than $10^{-12}$, and after at most 100
+iterations.
+
+\textit{Targets with an objective.} By the augmented Lagrangian method, with
+$\lambda = 0$ and $\rho = 100$ at the start, each round maximises $F$ and
+then sets $\lambda \leftarrow \lambda + \rho\,r$; $\rho$ is multiplied by 10
+when $\max_j |r_j|$ has fallen by less than three quarters since the round
+before. The rounds stop, converged, when $\max_j |r_j| < 10^{-10}$, and after
+at most 40 rounds.
+
+\Chapref{chap:optimize} gives the details.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seechapter{chap:optimize}{Policy optimisation}
+\end{alsosee}

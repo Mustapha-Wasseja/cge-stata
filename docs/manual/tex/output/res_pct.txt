@@ -1,0 +1,16 @@
+. generate double pct = 100 * (value - base) / abs(base)
+(15 missing values generated)
+
+. list variable element1 base value pct if inlist(variable, "PQ", "QM"), noobs
+
+  +-----------------------------------------------------+
+  | variable   element1   base       value          pct |
+  |-----------------------------------------------------|
+  |       PQ    com_agr      1   .99948068   -.05193189 |
+  |       PQ    com_man      1   .97900528   -2.0994718 |
+  |       PQ    com_ser      1   1.0214491    2.1449122 |
+  |       QM    com_agr     20   22.236866     11.18433 |
+  |       QM    com_man     60   63.002825    5.0047091 |
+  |-----------------------------------------------------|
+  |       QM    com_ser     20   18.993677   -5.0316161 |
+  +-----------------------------------------------------+

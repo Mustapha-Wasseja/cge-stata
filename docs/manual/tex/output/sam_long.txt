@@ -1,0 +1,20 @@
+. clear
+
+. input str8 row str8 column double value
+
+           row     column       value
+  1. "act"  "com"  100
+  2. "com"  "act"   40
+  3. "com"  "hhd"   50
+  4. "com"  "s-i"   10
+  5. "lab"  "act"   60
+  6. "hhd"  "lab"   60
+  7. "s-i"  "hhd"   10
+  8. "hhd"  "com"    .
+  9. end
+
+. cge_sam, long(row column value)
+Account label s-i is not a valid Stata name; using si
+SAM read: 5 accounts, total 330
+Blank cells treated as zero: 1
+Largest row-column imbalance:  0.00e+00

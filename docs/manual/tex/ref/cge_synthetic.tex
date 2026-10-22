@@ -1,0 +1,230 @@
+\cgeentry{cge_synthetic}{Load the synthetic social accounting matrix}
+
+\cgesec{Description}
+
+\cmd{cge_synthetic} loads one of the synthetic social accounting matrices
+(SAMs) bundled with \pkg as data in memory, in the wide form that
+\manref{cge_sam} reads. It checks that the SAM is square and that its row and
+column labels match, and reports its total and the largest difference between
+an account's row and column totals.
+
+The SAMs are SYNTHETIC: they were constructed for testing and teaching and
+describe no country. The examples of this manual use them.
+
+\cgesec{Quick start}
+
+Load the standard synthetic SAM, replacing the data in memory, and read it
+\begin{stcode}
+cge_synthetic, clear
+cge_sam, labels(account)
+\end{stcode}
+Load the SAM with a health sector and a social health insurance fund
+\begin{stcode}
+cge_synthetic, clear health
+\end{stcode}
+Load the unbalanced SAM used by the examples of \cmd{cge_balance}
+\begin{stcode}
+cge_synthetic, clear unbalanced
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_synthetic} [\texttt{,} \opt{}{clear} \argu{layout}]
+\end{stsyntax}
+
+\begin{opttable}[\argu{layout}]
+\opt{nat}{ional} & national-accounts layout: exports sold by activities, taxes paid to the government (13 accounts)\\
+\opt{ins}{titutions} & an enterprise, a non-profit institution and transfers among institutions (17)\\
+\opt{mar}{gins} & margins netted out of the service activity (15)\\
+\opt{ter}{ritorial} & a territorial correction of household consumption (17)\\
+\opt{mult}{iproduct} & secondary production of a commodity (15)\\
+\opt{non}{imported} & a commodity that is not imported (15)\\
+\opt{}{sut} & supply--use layout: margin accounts, stock changes and re-exports (19)\\
+\opt{}{health} & health services and a social health insurance fund (18)\\
+\opt{unb}{alanced} & the institutions layout made unbalanced (17)\\
+\opt{}{vat} & a value added tax account (16)\\
+\opt{}{home} & home consumption (15)\\
+\opt{}{trade} & an export-only cash crop and margins by market (19)\\
+\opt{factort}{ax} & taxes on factor use and on factor income (17)\\
+\opt{nest}{s} & energy and two types of labour, for nests of value added (19)\\
+\end{opttable}
+
+At most one \argu{layout} may be given; the default is the standard layout of
+15 accounts.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{}{clear}] allows the data in memory to be replaced.
+
+\item[\opt{nat}{ional}] loads the economy of the standard layout as many
+national SAMs record it: exports are recorded as sales by the activities to the
+rest of the world, and sales and direct taxes are paid directly to the
+government account, so that the \cmd{tax_sal} and \cmd{tax_dir} accounts are
+absent (13 accounts). Map it with \cmd{saltax(gov)} and \cmd{dirtax(gov)}; it
+gives the same model as the standard layout.
+
+\item[\opt{ins}{titutions}] loads a variant of 17 accounts with an enterprise
+(\cmd{ent}) and a non-profit institution (\cmd{npi}). It includes transfers
+among institutions, transfers to and from the rest of the world, factor income
+from and to abroad, transfers within the government, and negative savings. Map
+it with \cmd{households(hhd npi)} and \cmd{enterprises(ent)}.
+
+\item[\opt{mar}{gins}] loads the standard SAM with margins of 30 netted out of
+the service activity: its output is recorded as 120 and its use of its own
+product as $-10$. Map it with \cmd{margins(act_ser)}.
+
+\item[\opt{ter}{ritorial}] loads a variant of 17 accounts with a territorial
+correction (\cmd{act_tc}, \cmd{com_tc}): residents' purchases abroad of 4,
+non-residents' purchases of 9, and household consumption of the correction of
+$-5$. It also has a fall of 2 in the inventories of \cmd{com_agr}. Map it with
+\cmd{territorial(com_tc act_tc)}.
+
+\item[\opt{mult}{iproduct}] loads the standard SAM with secondary production:
+\cmd{act_agr} also produces 10 of \cmd{com_man}.
+
+\item[\opt{non}{imported}] loads the standard SAM with \cmd{com_ser}, which
+pays sales tax, not imported: its imports move to \cmd{com_man}.
+
+\item[\opt{}{sut}] loads a supply--use layout of 19 accounts: margin accounts
+\cmd{trd} and \cmd{trp} that collect margins from the commodities and buy
+margin services, a commodity that is only imported (\cmd{com_fuel}), a
+stock-change account (\cmd{dstk}), savings--investment labelled \cmd{s-i},
+which \manref{cge_sam} renames \cmd{si}, and exports at least as large as
+domestic output: \cmd{com_fuel} re-exports 2 of its imports, and \cmd{com_agr}
+exports 105 against output of 100, with a fall in its stocks. Map it with
+\cmd{commodities(com_agr com_man com_ser com_fuel)}, \cmd{savinv(si)},
+\cmd{marginaccounts(trd trp)} and \cmd{stocks(dstk)}.
+
+\item[\opt{}{health}] loads a layout of 18 accounts with health services
+(\cmd{act_hlt}, \cmd{com_hlt}, neither imported, exported nor taxed) and a
+social health insurance fund (\cmd{shi}) that receives contributions of 6 on
+labour income, 2 from the government and 1 from abroad, buys 8 of health
+services and saves 1. Map it with the four activities and commodities and
+\cmd{insurance(shi)}.
+
+\item[\opt{unb}{alanced}] loads the institutions layout made unbalanced.
+Every non-zero cell is changed by up to 6 per cent, by a fixed rule, and
+rounded to four decimals; the negative savings of \cmd{npi} and \cmd{gov} keep
+their signs. Accounts are out of balance by up to 12. The examples and tests of
+\manref{cge_balance} use it.
+
+\item[\opt{}{vat}] loads the standard layout with a VAT account
+(\cmd{tax_vat}) that collects 18 from the commodities and passes it to the
+government, which returns it to households as transfers. Map it with
+\cmd{vattax(tax_vat)}.
+
+\item[\opt{}{home}] loads the standard layout with home consumption: the
+household consumes 20 of \cmd{act_agr}'s output at home and buys 20 less of
+\cmd{com_agr}.
+
+\item[\opt{}{trade}] loads the standard layout with a cash crop,
+\cmd{com_cash}, that \cmd{act_agr} produces and the economy exports entirely,
+and margin accounts on \cmd{com_man}'s domestic sales (\cmd{mtrd}), imports
+(\cmd{mtrm}) and exports (\cmd{mtre}). Map it with the four commodities and
+\cmd{domesticmargins(mtrd)}, \cmd{importmargins(mtrm)} and
+\cmd{exportmargins(mtre)}, and calibrate with \cmd{exportonly(com_cash)}.
+
+\item[\opt{factort}{ax}] loads the standard layout with a payroll tax on labour
+of 4, 3 and 6 paid by the three activities (\cmd{tax_pay}) and a tax of 7 on
+capital income (\cmd{tax_fy}); direct taxes are 20 lower, so government
+revenue is unchanged. Map it with \cmd{factortax(tax_pay:lab)} and
+\cmd{factorincometax(tax_fy)}.
+
+\item[\opt{nest}{s}] loads a layout with four activities and commodities,
+including energy (\cmd{act_ene}, \cmd{com_ene}), two types of labour
+(\cmd{lab_hi}, \cmd{lab_lo}), capital, and a payroll tax on skilled labour
+(\cmd{tax_pay}). It is used to test nests of value added: map it with
+\cmd{factortax(tax_pay:lab_hi)} and calibrate with, for example,
+{\frenchspacing\cmd{nests(labour: lab_hi lab_lo, ke: cap com_ene)}} (see
+\manref{cge_calibrate}).
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The standard SAM has 15 accounts: three activities (\cmd{act_agr},
+\cmd{act_man}, \cmd{act_ser}), three commodities (\cmd{com_agr},
+\cmd{com_man}, \cmd{com_ser}), two factors (\cmd{lab}, \cmd{cap}), one
+household (\cmd{hhd}), the government (\cmd{gov}), direct, sales and
+import-tariff tax accounts (\cmd{tax_dir}, \cmd{tax_sal}, \cmd{tax_imp}),
+savings--investment (\cmd{sav}) and the rest of the world (\cmd{row}). The
+other layouts change it to exercise one feature of the model each: a layout
+of national accounts that the mapping rewrites, an account role, or an
+extension of the model.
+
+Each SAM is stored as a CSV file and loaded as wide data: the string variable
+\cmd{account} holds the row labels, and there is one numeric variable per
+column account. Cell $(r, c)$ is a payment from the column account $c$ to the
+row account $r$. The data are not yet a model: \manref{cge_sam} reads them.
+
+\cgesubsec{Example 1: the standard SAM}
+
+The columns of the activities record their purchases of intermediate inputs and
+their payments to the factors; the columns of the commodities record domestic
+output, sales and import taxes, and imports:
+\stlog{synth_load}
+
+\cgesubsec{Example 2: the health layout}
+
+In the health layout, the health activity sells 30 of health services, which
+it produces with intermediate inputs, labour and capital; the insurance fund
+buys 8 of health services and saves 1:
+\stlog{synth_health}
+
+\cgesubsec{Example 3: the unbalanced SAM}
+
+The unbalanced SAM is the institutions layout with every non-zero cell
+perturbed:
+\stlog{synth_unbal}
+\manref{cge_balance} balances it.
+
+\cgesec{Stored results}
+
+\cmd{cge_synthetic} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_accounts)} & number of accounts\\
+\res{r(total)} & sum of all cells\\
+\res{r(maxdiff)} & largest difference between an account's row and column totals\\
+\resgroup{Macros}
+\res{r(accounts)} & account labels, in the order of the SAM\\
+\res{r(filename)} & path of the bundled SAM file\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+The SAM file is found on the ado-path and read with \cmd{import delimited},
+with the first column as strings and the others as doubles. The SAM must have
+as many observations as account variables, and each row label must equal the
+name of the variable in the same position, unless the label is not a valid
+Stata name (as \cmd{s-i}, which Stata renames). With $x_{ij}$ the cell in row
+$i$ and column $j$ of a SAM of $n$ accounts,
+\begin{equation*}
+\text{\res{r(total)}} = \sum_{i=1}^n \sum_{j=1}^n x_{ij}, \qquad
+\text{\res{r(maxdiff)}} = \max_k \Bigl|\, \sum_{j=1}^n x_{kj} - \sum_{i=1}^n x_{ik} \Bigr| .
+\end{equation*}
+The files are
+\begin{cgetable}{ll@{\hspace{2em}}ll}
+\toprule
+Layout & File & Layout & File\\
+\midrule\endhead
+\bottomrule\endlastfoot
+standard & \cmd{cge_synthetic_sam.csv} & \opt{}{sut} & \cmd{cge_synthetic_sam_sut.csv}\\
+\opt{nat}{ional} & \cmd{cge_synthetic_sam_na.csv} & \opt{}{health} & \cmd{cge_synthetic_sam_health.csv}\\
+\opt{ins}{titutions} & \cmd{cge_synthetic_sam_inst.csv} & \opt{unb}{alanced} & \cmd{cge_synthetic_sam_unbal.csv}\\
+\opt{mar}{gins} & \cmd{cge_synthetic_sam_margins.csv} & \opt{}{vat} & \cmd{cge_synthetic_sam_vat.csv}\\
+\opt{ter}{ritorial} & \cmd{cge_synthetic_sam_tc.csv} & \opt{}{home} & \cmd{cge_synthetic_sam_home.csv}\\
+\opt{mult}{iproduct} & \cmd{cge_synthetic_sam_mp.csv} & \opt{}{trade} & \cmd{cge_synthetic_sam_trade.csv}\\
+\opt{non}{imported} & \cmd{cge_synthetic_sam_cnm.csv} & \opt{factort}{ax} & \cmd{cge_synthetic_sam_ftax.csv}\\
+ & & \opt{nest}{s} & \cmd{cge_synthetic_sam_nest.csv}\\
+\end{cgetable}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_sam}{Read a social accounting matrix}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seeentry{cge}{Computable general equilibrium modelling in Stata}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

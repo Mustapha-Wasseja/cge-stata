@@ -1,0 +1,9 @@
+. cge_elasticities sigmaq, country(TGO SLE BWA)
+
+Entry            Parameter Ctry Category        Value    S.e.  Source, location
+------------------------------------------------------------------------------------------------------------
+DGR2023-ARM-BWA  sigmaq    BWA  aggregate       0.905   0.353  DGR2023, Appendix Table A1, p. 25 (PDF p. 27)
+DGR2023-ARM-SLE  sigmaq    SLE  aggregate       0.430   0.171  DGR2023, Appendix Table A1, p. 29 (PDF p. 31)
+DGR2023-ARM-TGO  sigmaq    TGO  aggregate       0.620   0.061  DGR2023, Appendix Table A1, p. 29 (PDF p. 31)
+------------------------------------------------------------------------------------------------------------
+clear loads the entries with their definitions, notes and sources

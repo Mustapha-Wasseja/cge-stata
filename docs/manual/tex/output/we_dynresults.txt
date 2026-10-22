@@ -1,0 +1,17 @@
+. cge_dynresults, run(lib) baseline(base) clear
+
+. list period element1 value baseline dev_pct if variable == "QA" & period == 5, noobs clean
+
+    period   element1       value    baseline      dev_pct
+         5    act_agr   119.26498   120.95393   -1.3963553
+         5    act_man   171.86549   175.80722    -2.242074
+         5    act_ser   191.19135   192.75872   -.81312575
+
+. cge_closure, factors(cap:mobile)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile

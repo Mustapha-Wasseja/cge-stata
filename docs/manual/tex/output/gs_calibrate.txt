@@ -1,0 +1,11 @@
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+Calibrated: 93 equations, 93 free variables
+Benchmark replication: largest scaled residual  3.55e-16
+
+. cge_check, homogeneity perturb(0.1)
+  [ok]   SAM balance (largest imbalance)                       0.00e+00
+  [ok]   benchmark replication (largest scaled residual)       3.55e-16
+  [ok]   closure is square (free variables minus equations)    0.00e+00
+  [ok]   homogeneity (largest relative deviation)              2.49e-15
+  [ok]   perturbed start returns the base (largest deviation)  1.26e-12
+All checks passed

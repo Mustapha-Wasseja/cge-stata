@@ -1,0 +1,150 @@
+\chapter{The solution method}\label{chap:solution}
+
+\manref{cge_solve} solves the system of equations of
+chapter~\ref{chap:equations} under the closure of chapter~\ref{chap:closures}.
+The variables of all blocks are stacked in one vector. Variables that do not
+exist for an element (for example the imports of a commodity that is not
+imported) stay in the vector at zero and are left out of the system, and so
+are the variables that the closure fixes. The free variables $x$ and the
+equations $r(x) = 0$ form a square system.
+
+\section{Newton's method}\label{sec:newton}
+
+The solver works on scaled variables and scaled residuals,
+\begin{equation*}
+z_j = x_j / s_j, \qquad F_i(z) = r_i(x) / e_i,
+\end{equation*}
+where $s_j$ and $e_i$ are the base magnitudes of the variable and of the
+equation (one where the base value is zero), so that the tolerance applies
+alike to every block. Starting from the base, each Newton step solves
+\begin{equation*}
+J(z)\,\Delta z = -F(z)
+\end{equation*}
+by the LU factorisation of the Jacobian $J$, and the new point is
+$z + \lambda\,\Delta z$, with $\lambda$ the largest of $1, \tfrac12, \tfrac14,
+\dots$ (down to $10^{-8}$) such that
+\begin{equation*}
+\lVert F(z + \lambda\,\Delta z)\rVert \le (1 - 10^{-4}\lambda)\,\lVert F(z)\rVert,
+\end{equation*}
+a backtracking line search on the Euclidean norm of the residuals. Points at
+which a price or quantity is not positive are rejected, and the step is
+shortened. The solve has converged when $\max_i |F_i| < \tau$, the tolerance
+(\texttt{1e-10} by default), over every equation of the model, including the
+definitions left out of the reduced system (section~\ref{sec:reduced}).
+
+The LU factors of a Jacobian are reused for further steps while each full
+step at least halves $\lVert F\rVert$, a chord method; otherwise, or after a
+step shortened by the line search, a new Jacobian is computed. Near a
+solution Newton's method with a new Jacobian at each step converges
+quadratically, and the chord method linearly; each chord step costs one
+evaluation of the equations and two triangular solves, against a Jacobian and
+a factorisation for a Newton step, so for large models it is much faster.
+
+\section{The reduced system}\label{sec:reduced}
+
+Some equations are explicit definitions: a variable equals an expression in
+other variables, and the variable appears in none of the equations whose rows
+have exact derivatives (section~\ref{sec:jacobian}). Such definitions are left
+out of the Newton system, and their variables are computed from the other
+variables before each evaluation of the residuals. They are
+\eqref{eq:P1}, \eqref{eq:P2} and \eqref{eq:P6} (import and export prices and
+the price of intermediate input), \eqref{eq:Q5} (intermediate demand),
+\eqref{eq:Q6} (output by commodity), \eqref{eq:I5} (household demand),
+\eqref{eq:T8} (demand for margin services), \eqref{eq:I13} (the purchases of
+the health insurance fund) and \eqref{eq:H2} (factor efficiency). A definition
+is left out only when its equation elements are exactly the existing elements
+of its variable. Variables computed from their definitions cannot be fixed by
+the closure (\secref{sec:swaps}).
+
+The left-out equations still hold exactly at every point. Intermediate and
+household demand grow with the square of the number of sectors, so most of a
+large model's equations are left out: for a SAM with 250 activities and 20
+households, 4,254 of 40,190 equations remain. \cmd{cge_solve, full} keeps
+every equation; the test suite checks that both systems give the same
+solution. The pattern of the reduced system is found by substituting each
+left-out variable by the variables of its definition.
+
+\section{The Jacobian}\label{sec:jacobian}
+
+The equations that involve many variables, the price indexes \eqref{eq:P8}
+and \eqref{eq:P9}, factor income \eqref{eq:I1}, government revenue and
+spending \eqref{eq:I8} and \eqref{eq:I9}, factor markets \eqref{eq:S1}, the
+balance of payments \eqref{eq:S3}, the savings--investment balance
+\eqref{eq:S5}, commodity markets \eqref{eq:S2} and activity prices
+\eqref{eq:P7}, have exact derivatives. In the reduced system these are total
+derivatives through the left-out variables. The other rows are sparse. Their
+pattern follows from the equations and is built at calibration, and their
+derivatives are finite differences taken over groups of columns that share no
+row \citep{curtis1974}: the columns are coloured greedily, the most connected
+first, so that one evaluation of the equations gives the derivatives of every
+column of a group. For a group $G$, with $e_G$ the vector with ones in the
+columns of $G$,
+\begin{equation*}
+J_{ij} \approx \frac{F_i(z + h \odot e_G) - F_i(z)}{h_j}, \qquad j \in G,
+\qquad h_j = 10^{-7} \max(1, |z_j|),
+\end{equation*}
+one-sided differences that use the residuals at $z$, which Newton's method has
+already computed. Their error, measured against column-by-column central
+differences, is between $3 \times 10^{-7}$ and $10^{-6}$ in the test models,
+too small to change the Newton steps in those models; the test suite checks
+that Newton's method reaches the same solution with both kinds of
+differences. When Newton's method fails with them it
+is tried again from the start with central differences,
+\begin{equation*}
+J_{ij} \approx \frac{F_i(z + h \odot e_G) - F_i(z - h \odot e_G)}{2 h_j}, \qquad h_j = 10^{-6} \max(1, |z_j|),
+\end{equation*}
+whose error is about $10^{-10}$ but which need two evaluations of the
+equations for each group. The diagnostics (section~\ref{sec:diagnostics}) use
+central differences.
+
+On a 240-account SAM with 4,439 equations, computing the Jacobian column by
+column took about 250 seconds per Newton iteration in Stata 13/IC, against a
+dense LU solve of under 3 seconds; the grouped Jacobian takes a few seconds.
+Most of the time of a large solve is spent evaluating the equations for the
+Jacobian (\secref{sec:performance}).
+
+\section{Fallbacks and continuation}\label{sec:continuation}
+
+If Newton's method fails with both kinds of differences, Powell's hybrid
+method is tried (Mata's \cmd{solvenl()}, technique \cmd{broydenpowell}),
+followed by Newton steps to polish the result.
+
+If that fails too, the shock is applied by continuation: the model is solved
+for $k = 1, \dots, n$ with parameters and fixed values
+\begin{equation*}
+\theta_k = \theta^0 + \frac{k}{n}\,(\theta^1 - \theta^0),
+\end{equation*}
+between their base values $\theta^0$ and their shocked values $\theta^1$,
+each step starting from the solution of the step before; by default in
+$n = 4$ steps and then in $n = 16$. A shock that defeats continuation is often
+one that the economy cannot absorb.
+
+\section{Diagnostics}\label{sec:diagnostics}
+
+After a failure, or on request, \manref{cge_solve} displays:
+\begin{itemize}
+\item the equations with the largest scaled residuals at the last point, by
+block and element;
+\item any equation with no free variable, and any free variable in no
+equation, which make the Jacobian singular;
+\item the smallest pivot of the LU factorisation of the Jacobian relative to
+the largest, and the variable it belongs to: partial pivoting permutes rows
+only, so column $j$ of $U$ belongs to variable $j$.
+\end{itemize}
+
+\section{Constraints}\label{sec:solution-constraints}
+
+With constraints (chapter~\ref{chap:constraints}) the model is solved in two
+stages: first with smoothed complementarity conditions, which find whether each
+constraint binds, and then with the exact conditions in the regimes found,
+changing the regime of any constraint whose other condition fails, for at most
+ten rounds (\secref{sec:cons-solution}).
+
+\section{Other implementations}
+
+The Python reference implementation uses the same Newton method with a
+backtracking line search, and its own pure active-set method for constraints.
+The GAMS program written by \manref{cge_gams} is solved by the solvers that
+GAMS provides, PATH by default (chapter~\ref{chap:gams}). Their solutions agree
+with those of \cmd{cge_solve} to the precision of the solutions
+(chapter~\ref{chap:validation}).

@@ -1,0 +1,15 @@
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. quietly cge_solve, name(notariff)
+
+. cge_closure, government(fixgsav sales)
+Closure
+  external account     flexexr
+  government           fixgsav:sales
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. quietly cge_solve, name(nt_sales)

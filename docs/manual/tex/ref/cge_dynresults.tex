@@ -1,0 +1,143 @@
+\cgeentry{cge_dynresults}{Results of a dynamic run as a dataset}
+
+\cgesec{Description}
+
+\cmd{cge_dynresults} replaces the data in memory with the results of a run
+solved by \manref{cge_dynamic}: one observation for each period and each
+element of every model variable, with its base value and its value in the
+period. With \cmd{baseline()}, the value of a baseline run in the same period
+and the per cent difference from it are added. The dataset can then be
+listed, tabulated, graphed or saved with any Stata command.
+
+\cgesec{Quick start}
+
+Load every variable of every period of run \cmd{base}
+\begin{stcode}
+cge_dynresults, run(base) clear
+\end{stcode}
+Load the periods of run \cmd{exit} with their differences from run \cmd{base},
+and graph the per cent difference in the consumption of household
+\cmd{hh_ru_p}
+\begin{stcode}
+cge_dynresults, run(exit) baseline(base) clear
+line dev_pct period if variable == "EH" & element1 == "hh_ru_p"
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_dynresults}\texttt{,} \optarg{}{run}{name} \opt{}{clear}
+[\optarg{base}{line}{name}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{run}{name} & the dynamic run; required\\
+\opt{}{clear} & replace the data in memory; required\\
+\optarg{base}{line}{name} & the baseline run to compare with\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{run}{name}] names the run, as given in \cmd{name()} of
+\manref{cge_dynamic}.
+
+\item[\opt{}{clear}] is required: the data in memory are replaced. They are
+dropped before the run is read, so they are lost even if the command then
+fails, for example because no run has the name given.
+
+\item[\optarg{base}{line}{name}] names a baseline run to compare with. It
+must have every period of \cmd{run()}; it may have more.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The dataset has one observation for each period of the run and each element
+of every model variable that exists in the model, in period order. A variable
+is identified by its name, as listed in \secref{sec:variables}, and by up to
+two set elements: \cmd{QA} has one, the activity; \cmd{QF} has two, the
+factor and the activity; \cmd{EXR} has none. The variables of the dataset are
+
+\begin{cgetable}{>{\ttfamily}l p{0.78\linewidth}}
+\toprule
+\normalfont Variable & Content\\
+\midrule\endfirsthead
+\toprule
+\normalfont Variable & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+period & the period\\
+variable & the model variable\\
+element1 & its first set element, or empty\\
+element2 & its second set element, or empty\\
+base & its base value, in the calibrated SAM\\
+value & its value in the period\\
+baseline & with \cmd{baseline()}: its value in the baseline run in the same period\\
+dev\_pct & with \cmd{baseline()}: $100\,(\text{value} - \text{baseline})/\lvert\text{baseline}\rvert$, missing where the baseline value is zero\\
+\end{cgetable}
+
+The data are sorted by \cmd{period}, \cmd{variable}, \cmd{element1} and
+\cmd{element2}. \manref{cge_report} with \cmd{run()} gives the standard report
+measures of each period as changes from the base; \cmd{cge_dynresults} gives
+every variable, and its difference from a baseline in each period.
+
+\cgesubsec{Example 1: a scenario against its baseline}
+
+The two runs of Examples 1 and 2 of \manref{cge_dynamic} are solved first, on
+the synthetic SAM: a baseline \cmd{base} calibrated to 4 per cent growth of
+real value added, and a scenario \cmd{lib} that removes import tariffs from
+period 2, with the baseline's efficiency path:
+\begin{stcode}
+. cge_closure, factors(cap:specific)
+. local settings capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.025) ///
+>     population(0.025) govgrowth(0.03) foreigngrowth(0.02)
+. cge_dynamic, name(base) periods(0/4) `settings' gdpgrowth(0.04)
+. cge_dynamic, name(lib) periods(0/4) `settings' baseline(base) shocks(tariff_from2)
+\end{stcode}
+The results of the scenario, with the baseline's, replace the data in memory:
+\stlog{dynr_load}
+Capital is specific to each activity. Its stocks are the same in both runs up
+to period 2, the period of the shock, because capital is set before each
+period from the investment of the period before; from period 3 they are lower
+in the scenario:
+\stlog{dynr_capital}
+Output changes in the period of the shock; output of services rises above the
+baseline while that of agriculture and manufactures falls:
+\stlog{dynr_output}
+The SAM is synthetic: these results illustrate the command and are not
+findings about any economy.
+
+\cgesubsec{Example 2: a run on its own}
+
+Without \cmd{baseline()}, the dataset has the base value and the value in
+each period:
+\stlog{dynr_nobase}
+
+\cgesec{Stored results}
+
+\cmd{cge_dynresults} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Macros}
+\res{r(run)} & name of the run\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+For element $i$ of a variable in period $t$, with value $x_{it}$ in the run
+and $b_{it}$ in the baseline run,
+\begin{equation*}
+\text{\cmd{dev_pct}}_{it} = 100\,\frac{x_{it} - b_{it}}{\lvert b_{it}\rvert}, \qquad b_{it} \ne 0,
+\end{equation*}
+and missing when $b_{it} = 0$. The base value is the value of the variable
+in the calibrated SAM, the same in every period. \Chapref{chap:dynamics}
+describes the runs.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_dynamic}{Solve a recursive dynamic run}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seeentry{cge_results}{Report simulation results}
+\seechapter{chap:dynamics}{Recursive dynamics}
+\end{alsosee}

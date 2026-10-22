@@ -1,0 +1,40 @@
+. tabulate table
+
+Report table, or |
+      elasticity |      Freq.     Percent        Cum.
+-----------------+-----------------------------------
+      activities |        189       11.39       11.39
+     commodities |        378       22.78       34.18
+      elasticity |        252       15.19       49.37
+         factors |        168       10.13       59.49
+      government |        231       13.92       73.42
+    institutions |         42        2.53       75.95
+           macro |        357       21.52       97.47
+         welfare |         42        2.53      100.00
+-----------------+-----------------------------------
+           Total |      1,659      100.00
+
+. list draw measure element value if table == "elasticity" & draw <= 2 & measure == "sigmaq", ///
+>     noobs sepby(draw)
+
+  +--------------------------------------+
+  | draw   measure   element       value |
+  |--------------------------------------|
+  |    0    sigmaq   com_agr           2 |
+  |    0    sigmaq   com_man           2 |
+  |    0    sigmaq   com_ser           2 |
+  |--------------------------------------|
+  |    1    sigmaq   com_agr   1.9453829 |
+  |    1    sigmaq   com_man   1.9453829 |
+  |    1    sigmaq   com_ser   1.9453829 |
+  |--------------------------------------|
+  |    2    sigmaq   com_agr   2.4448375 |
+  |    2    sigmaq   com_man   2.4448375 |
+  |    2    sigmaq   com_ser   2.4448375 |
+  +--------------------------------------+
+
+. summarize pct if measure == "equivalent_variation" & draw > 0
+
+    Variable |       Obs        Mean    Std. Dev.       Min        Max
+-------------+--------------------------------------------------------
+         pct |        20    2.659612    .0210667   2.617638   2.708059

@@ -1,0 +1,28 @@
+. quietly cge_results, sim(hlt20) clear nodisplay
+
+. quietly summarize base if variable == "GSAV"
+
+. local gsav0 = r(mean)
+
+. cge_constraint, clear
+All constraints removed
+
+. cge_constraint GSAV, lower(`gsav0') adjust(GADJ) down
+Constraint GSAV >= 1, GADJ down: not solved
+
+. quietly cge_solve, name(hlt20_rule)
+
+. cge_constraint, list
+Constraints (regime in the last solution)
+  1. GSAV >= 1, GADJ down: binding
+
+. quietly cge_results, sim(hlt20_rule) clear nodisplay
+
+. list variable base value if inlist(variable, "GSAV", "GADJ"), noobs
+
+  +-----------------------------+
+  | variable   base       value |
+  |-----------------------------|
+  |     GSAV      1           1 |
+  |     GADJ      1   .95424154 |
+  +-----------------------------+

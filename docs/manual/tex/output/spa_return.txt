@@ -1,0 +1,11 @@
+. return list
+
+scalars:
+             r(total1) =  1.168382516579885
+              r(share) =  97.66013626611974
+          r(explained) =  1.771017738921657
+            r(N_paths) =  6
+             r(global) =  1.813449997751087
+
+macros:
+              r(path1) : "com_hlt > act_hlt > lab > hhd"

@@ -1,0 +1,14 @@
+. cge_synthetic, clear
+(16 vars, 15 obs)
+
+Synthetic SAM loaded (standard layout): 15 accounts, total   1743.00
+Largest row-column imbalance:  0.00e+00
+
+. save notamodel, replace
+(note: file notamodel.dta not found)
+file notamodel.dta saved
+
+. cge_use using notamodel.dta
+notamodel.dta is not a cge-stata model file
+
+r(610);

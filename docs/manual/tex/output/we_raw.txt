@@ -1,0 +1,10 @@
+. cge_synthetic, clear unbalanced
+(18 vars, 17 obs)
+
+Synthetic SAM loaded (institutions layout, unbalanced for the balancing tests): 17 accounts, total
+>  1860.46
+Largest row-column imbalance:  1.21e+01
+
+. cge_sam, labels(account)
+SAM read: 17 accounts, total 1860.4569
+Largest row-column imbalance:  1.21e+01

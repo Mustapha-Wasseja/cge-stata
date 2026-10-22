@@ -1,0 +1,2 @@
+. cge_shock, reset
+All shocks removed

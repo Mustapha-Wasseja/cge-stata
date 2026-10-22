@@ -1,0 +1,86 @@
+\chapter{Introduction}\label{chap:intro}
+
+\section{What the package does}
+
+\pkg builds, calibrates and solves single-country computable general
+equilibrium (CGE) models from a social accounting matrix (SAM), within Stata
+and Mata, without an external modelling system. The model is the standard
+SAM-based model of the IFPRI and PEP traditions \citep{lofgren2002,decaluwe2013},
+stated in full in Part~\ref{part:model}:
+\begin{itemize}
+\item production with CES or Cobb--Douglas value added and Leontief
+intermediate inputs, with an optional CES nest between them; activities may
+produce several commodities;
+\item trade through a CET function between exports and domestic sales and an
+Armington CES function between imports and domestic goods;
+\item households with Cobb--Douglas or linear expenditure system demand,
+enterprises, the government, savings--investment and the rest of the world,
+with transfers among them;
+\item direct, sales, import, export and activity taxes, taxes on factors, and
+VAT with input credits;
+\item closures for the external account, the government, savings--investment,
+the numeraire and each factor.
+\end{itemize}
+Extensions cover public debt, home consumption, finite export demand, margins
+by market, labour-market regimes, a social health insurance fund, factor
+efficiency linked to health services, health outcomes, nests of value added,
+the aggregation of output from several activities, and limits that bind in
+some scenarios and not in others. The model can be solved for one period or
+as a recursive dynamic sequence; its results can be passed to household survey
+data; the sensitivity of results to the elasticities can be measured; policy
+instruments can be chosen to maximise an outcome or reach targets; and users
+can add their own variables and equations. Tools read, aggregate, balance and
+analyse the SAM, and a library gives published elasticities with their
+sources. The model can also be written as a GAMS program, solved there and
+brought back.
+
+The package does not do intertemporal optimisation (agents do not look ahead),
+multi-region modelling, or the estimation of elasticities: its elasticities
+are inputs, stated by the user.
+
+\section{Installation}
+
+The package needs Stata 13 or later and runs on Stata/IC. Install it from
+GitHub (tested with StataNow 19.5):
+\begin{stcode}
+. net install cge, from("https://raw.githubusercontent.com/Mustapha-Wasseja/cge-stata/main/") replace
+\end{stcode}
+Stata 13 cannot connect to GitHub over HTTPS, because its TLS version is too
+old. With Stata 13, download or clone the repository and install from the
+folder:
+\begin{stcode}
+. net install cge, from("C:/path/to/cge-stata") replace
+\end{stcode}
+\cmd{help cge} lists the commands, and \cmd{cge} displays the version. The
+Mata library is compiled the first time a command runs in a session.
+
+\section{This manual}
+
+Part~\ref{part:intro} introduces the package: a first model
+(chapter~\ref{chap:start}), the workflow and its principles
+(chapter~\ref{chap:workflow}), a worked example from a raw SAM to results
+(chapter~\ref{chap:example}), and how the results are validated, how fast the
+solver is and what to do when something fails (chapter~\ref{chap:validation}).
+Part~\ref{part:model} states the model: its notation, equations, closures and
+calibration, the solution method, the checks, the reporting measures, the
+extensions, and the methods of the commands that are not part of the model
+itself. Part~\ref{part:ref} is the reference for each command, in the form of
+Stata's own manuals: syntax, options, examples with their output, stored
+results and methods.
+
+Commands typed in Stata are shown after a prompt, \cmd{. cge_solve}; output
+follows them as Stata displays it. The examples use the SYNTHETIC SAMs that come
+with the package: they are constructed for testing and describe no country, so
+the results of the examples illustrate the commands and are not findings about
+any economy. Mathematical symbols for the model's variables are written in
+capitals ($\V{PQ}_c$, $\V{QA}_a$), and parameters in lower case ($\V{tm}_c$) or
+Greek ($\sigma^{va}_a$); the names are those of the commands' results.
+
+\section{How the package is tested}
+
+The equations are implemented three times: in Stata and Mata (the package); in
+Python, a reference implementation that writes the expected results of the
+tests; and in GAMS, written from the specification and solved with PATH. The
+Stata test suite compares every result with the Python reference, and the GAMS
+implementation reproduces the same cases. Chapter~\ref{chap:validation} gives
+the details.

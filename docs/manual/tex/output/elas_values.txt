@@ -1,0 +1,33 @@
+. cge_elasticities sigmaq, country(TGO) values
+sigmaq: 0.620 0.620 0.620
+  DGR2023-ARM-TGO (TGO): aggregate Armington elasticity between imports and domestic goods, estimate
+> d from national accounts series
+    DGR2023 (Devarajan, S.; Go, D. S.; Robinson, S. 2023), Appendix Table A1, p. 29 (PDF p. 31); dat
+> a period from Table A3
+    Note: aggregate elasticities are lower than sector ones (the source, PDF p. 20); set the level,
+> not every sector
+
+. local sq `r(values)'
+
+. cge_elasticities incelas, country(TGO) values map(com_agr:food) others(other)
+incelas: 0.804 1.913 1.913
+  MSMR2011-INC-TGO-food (TGO): income (total expenditure) elasticity of demand for food, beverages a
+> nd tobacco, at geometric mean prices
+    MSMR2011 (Muhammad, A.; Seale, J. L., Jr.; Meade, B.; Regmi, A. 2011), Appendix table 1, p. 22 (
+> PDF p. 28)
+  MSMR2011-INC-TGO-other (TGO): income (total expenditure) elasticity of demand for other goods and
+> services, at geometric mean prices
+    MSMR2011 (Muhammad, A.; Seale, J. L., Jr.; Meade, B.; Regmi, A. 2011), Appendix table 1, p. 22 (
+> PDF p. 28)
+
+. local ie `r(values)'
+
+. cge_elasticities frisch, values
+frisch: -1.3661
+  MSMR2011-FRISCH (WLD): Frisch parameter, the inverse of the income flexibility phi (the inverse of
+>  the income elasticity of the marginal utility of income)
+    MSMR2011 (Muhammad, A.; Seale, J. L., Jr.; Meade, B.; Regmi, A. 2011), Table 3, p. 12 (PDF p. 18
+> )
+    Note: phi is assumed constant across countries in the source; the source system is not an LES
+
+. local fr `r(values)'

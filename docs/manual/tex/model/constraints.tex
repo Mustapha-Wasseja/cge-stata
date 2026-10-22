@@ -1,0 +1,113 @@
+\chapter{Bounds and complementarity}\label{chap:constraints}
+
+A model with only equalities cannot represent a limit that binds in some
+scenarios and not in others: an import quota, a capacity limit, a ceiling on
+borrowing. Such limits are complementarity conditions, set with
+\manref{cge_constraint} and solved with the rest of the model, so that the
+solver finds which limits bind.
+
+\section{Rents}\label{sec:rents}
+
+Three rent variables give quotas and capacity limits their price effect. Each
+is zero in the base and fixed by every closure, unless a constraint frees it
+(section~\ref{sec:cons-def}):
+
+\begin{cgetable}{>{$}l<{$}p{0.82\linewidth}}
+\toprule
+\text{Variable} & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\V{RM}_c & premium on imports of $c \in CM$, per unit of the world price in local currency\\
+\V{RE}_c & premium on exports of $c \in CE$, per unit of the world price\\
+\V{RA}_a & rent on the output of activity $a$, per unit of the activity price\\
+\end{cgetable}
+
+They enter the price equations \eqref{eq:P1}, \eqref{eq:P2} and \eqref{eq:P7}.
+A premium is a wedge between the world price and the domestic price, like a
+tariff, but its revenue is a rent. The rent on each element,
+\begin{equation*}
+R^M_c = \V{RM}_c\,\V{pwm}_c\,\V{EXR}\,\V{QM}_c, \qquad
+R^E_c = \V{RE}_c\,\V{pwe}_c\,\V{EXR}\,\V{QE}_c, \qquad
+R^A_a = \V{RA}_a\,\V{PA}_a\,\V{QA}_a,
+\end{equation*}
+is paid to one recipient $\varrho$: the government (the default, as when quota
+licences are auctioned), a household or enterprise, a factor, or the rest of
+the world (as with a voluntary export restraint, whose rents foreign exporters
+keep). Rents are added to the incomes in \eqref{eq:I1} (factors),
+\eqref{eq:I3} (households and enterprises) and \eqref{eq:I8} (government), and
+rents paid abroad to the payments abroad in \eqref{eq:S3}, at $R/\V{EXR}$. A
+premium fixed at a positive value (\cmd{cge_shock RM}) acts as a tariff whose
+revenue goes to the recipient.
+
+\textbf{GDP.} The income side adds the rents received at home and every
+capacity rent, which is value added produced at home wherever it is paid. The
+expenditure side values imports and exports net of the rents paid abroad.
+
+\section{Constraints}\label{sec:cons-def}
+
+A constraint $k$ pairs a limited variable $Y_k$ (one element of a variable,
+for example $\V{QM}_{com\_man}$) and its bound $b_k$ with an adjusting variable
+$X_k$, which the closure fixes at $\bar{x}_k$ and which may move in one
+direction only:
+\begin{equation}
+g_k = \sigma_k\,\frac{b_k - Y_k}{s^Y_k} \ge 0, \qquad
+h_k = \delta_k\,\frac{X_k - \bar{x}_k}{s^X_k} \ge 0, \qquad
+g_k\,h_k = 0
+\tag{B1}\label{eq:B1}
+\end{equation}
+with $\sigma_k = 1$ for an upper bound and $-1$ for a lower bound, and
+$\delta_k = 1$ if $X_k$ may rise and $-1$ if it may fall. The scales $s$ are
+the base magnitudes of the variables (one where the base value is zero).
+Either $Y_k$ is at its bound and $X_k$ has moved from $\bar{x}_k$ to keep it
+there, or $X_k$ is at $\bar{x}_k$ and $Y_k$ is within its bound. Each
+constraint adds one equation and frees one variable, so the system stays
+square.
+
+\begin{cgetable}{p{0.22\linewidth}p{0.16\linewidth}p{0.16\linewidth}p{0.38\linewidth}}
+\toprule
+Constraint & Limited variable & Adjusting variable & Effect when it binds\\
+\midrule\endhead
+\bottomrule\endlastfoot
+import quota & $\V{QM}_c \le b$ & $\V{RM}_c$, up & the premium rises until imports equal the quota\\
+export quota & $\V{QE}_c \le b$ & $\V{RE}_c$, up & the premium rises until exports equal the quota\\
+capacity & $\V{QA}_a \le b$ & $\V{RA}_a$, up & the activity price rises above cost; the rent goes to the owners of the capacity\\
+borrowing limit under a peg & $\V{FSAV} \le b$ & $\V{EXR}$, up & the peg holds until foreign savings reach the limit; the currency then depreciates\\
+deficit ceiling & $\V{GSAV} \ge b$ & $\V{GADJ}$, down & government consumption is cut once the deficit reaches the ceiling\\
+deficit ceiling, taxes & $\V{GSAV} \ge b$ & $\V{TINSADJ}$, up & direct tax rates rise instead\\
+nominal wage floor & $\V{W}_f \ge b$ & $\V{QFS}_f$, down & employment falls once the wage reaches the floor\\
+\end{cgetable}
+
+$Y_k$ must be free and $X_k$ fixed under the closure. With $X_k$ a rent
+variable, the constraint and the rent's recipient are given together.
+
+\section{Solution}\label{sec:cons-solution}
+
+The conditions are solved in two stages:
+\begin{enumerate}
+\item \textbf{Smoothed.} Each condition is written in the smoothed
+Fischer--Burmeister form of section~\ref{sec:minwage},
+\begin{equation*}
+g_k + h_k - \sqrt{g_k^2 + h_k^2 + 2\mu} = 0, \qquad \mu = 10^{-8},
+\end{equation*}
+and solved with the rest of the model. The solver finds the regime; none is
+chosen in advance.
+\item \textbf{Exact.} Each constraint takes the regime of the smoothed
+solution: binding, $g_k = 0$, if $h_k > g_k$, and otherwise not binding,
+$h_k = 0$. The model is solved again with these equations. A constraint whose
+other condition then fails ($h_k < 0$ when binding, $g_k < 0$ when not) changes
+regime, and the model is solved again, for at most ten rounds.
+\end{enumerate}
+The solution therefore satisfies the conditions exactly, to the solver's
+tolerance. Three implementations check one another, each with its own method:
+Stata, with the two stages above; the Python reference, with an active-set
+method that starts from the solution without constraints; and GAMS, as a mixed
+complementarity problem solved with PATH (\secref{sec:gams-types}). The
+minimum wage of chapter~\ref{chap:labour} keeps its smoothed condition and its
+calibration.
+
+\section{Reporting}
+
+\manref{cge_solve} reports each constraint's regime, and the regimes are stored
+with the simulation. The rent variables appear in the results like other
+variables. Constraints are kept when the shocks are reset, in dynamic runs and
+sensitivity analysis, and when the model is saved.

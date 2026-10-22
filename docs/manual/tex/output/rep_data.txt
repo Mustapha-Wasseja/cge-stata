@@ -1,0 +1,22 @@
+. cge_report, sims(_all) clear nodisplay
+
+. describe, short
+
+Contains data
+  obs:           134
+ vars:             7
+ size:        18,224
+Sorted by:
+     Note:  dataset has changed since last saved
+
+. list sim measure element value pct if table == "welfare", noobs sepby(sim)
+
+  +-----------------------------------------------------------------------+
+  |      sim                  measure   element        value          pct |
+  |-----------------------------------------------------------------------|
+  | notariff     equivalent_variation       hhd    6.1373219    2.6684008 |
+  | notariff   compensating_variation       hhd    6.1363604    2.6679828 |
+  |-----------------------------------------------------------------------|
+  | nt_sales     equivalent_variation       hhd   -.59016788   -.25659473 |
+  | nt_sales   compensating_variation       hhd   -.59010876   -.25656903 |
+  +-----------------------------------------------------------------------+

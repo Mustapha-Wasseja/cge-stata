@@ -1,0 +1,16 @@
+. cge_gams using gams_notariff, sim(notariff)
+Wrote the model (15 accounts) and scenario notariff (2 change(s) from the base) to gams_notariff
+Files: cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc cge_shock_par.inc cge_
+> shock_var.inc cge_constraints.inc cge_user.inc cge_user_write.inc cge_run.gms
+To solve it: gams cge_run.gms in that folder
+
+. return list
+
+scalars:
+         r(N_accounts) =  15
+          r(N_changes) =  2
+      r(N_constraints) =  0
+
+macros:
+            r(closure) : "flexexr fixgsav:sales savings cpi lab:mobile cap:mobile"
+               r(name) : "notariff"

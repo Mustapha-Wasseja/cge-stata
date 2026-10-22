@@ -1,0 +1,97 @@
+\cgeentry{cge_use}{Load a model saved with cge\_save}
+
+\cgesec{Description}
+
+\cmd{cge_use} replaces the model in memory with one saved by
+\manref{cge_save}, including its closure, current shocks and stored
+simulations. The dataset in memory is not changed.
+
+\cgesec{Quick start}
+
+Load the model saved in \cmd{mymodel.cgem}
+\begin{stcode}
+cge_use using mymodel
+\end{stcode}
+Report every simulation saved with it
+\begin{stcode}
+cge_report, sims(_all)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_use} \cmd{using} \argu{filename}
+\end{stsyntax}
+If \argu{filename} contains no period, the extension \cmd{.cgem} is added.
+
+\cgesec{Remarks and examples}
+
+A loaded model is in the state in which it was saved: the SAM, the mapping and
+the calibration; the closure, with its swaps; the shocks in force when it was
+saved; its constraints, user variables and user equations; and every stored
+simulation, with the parameters and closure under which each was solved. It
+can be reported, shocked and solved again at once. Loading a model does not
+change the data in memory, so a model can be loaded while survey or other data
+are in use.
+
+\cgesubsec{Example 1: loading a model in a new session}
+
+A model is calibrated, two simulations are solved, the second with government
+savings fixed and sales tax rates adjusting, and the model is saved as
+\cmd{mymodel.cgem}, as in \manref{cge_save}. \cmd{clear all} then removes
+everything from memory, as a new session of Stata would:
+\stlog{use_load}
+The model's closure, simulations and shocks are those of the session that saved
+it:
+\stlog{use_state}
+The closure is the one in force when the model was saved, the two simulations
+can be reported without solving them again, and the removal of import tariffs
+is still the current shock.
+
+\cgesubsec{Example 2: a file that is not a model}
+
+\cmd{cge_use} checks the file's identifier before reading it:
+\stlog{use_err}
+The model in memory, if any, is unchanged after an error.
+
+\cgesubsec{Versions of Stata and of cge-stata}
+
+Later versions of Stata read files saved in Stata 13. Stata 13 cannot read
+files saved in later versions, whose Mata file format differs (tested with
+StataNow 19.5); \cmd{cge_use} then stops with a message and leaves the model in
+memory unchanged. Save a model in Stata 13 when it is to be shared with users of
+Stata 13.
+
+A file saved by an earlier version of \pkg is upgraded as it is loaded: the
+variables, parameters and equations added since are given the values that
+leave the saved model unchanged, for example tax scaling factors fixed at one
+and rents fixed at zero. Items saved by a version that the current one no
+longer uses are ignored, with a note. \res{r(saved_by)} gives the version that
+saved the file.
+
+\cgesec{Stored results}
+
+\cmd{cge_use} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Macros}
+\res{r(filename)} & name of the file read\\
+\res{r(saved_by)} & version of \pkg that saved the file\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+\cmd{cge_use} first compares the opening bytes of the file with those that
+Mata writes for the identifier of a model file, and looks for the identifier
+\cmd{cge-stata model} in the first 512 bytes; a file that fails the test is not
+a model file. A byte of the header gives the version of the Mata file format;
+a file in a later format than the running Stata writes is rejected. The file
+is then read item by item, by name, as \manref{cge_save} wrote it, and the
+model replaces the one in memory only when the whole file has been read.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_save}{Save the model and its simulations to a file}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seeentry{cge}{Computable general equilibrium modelling in Stata}
+\end{alsosee}

@@ -1,0 +1,19 @@
+. cge_synthetic, clear health
+(19 vars, 18 obs)
+
+Synthetic SAM loaded (health layout): 18 accounts, total   1746.00
+Largest row-column imbalance:  0.00e+00
+
+. list account act_hlt com_hlt shi if act_hlt != 0 | com_hlt != 0 | shi != 0, noobs sep(0)
+
+  +-----------------------------------+
+  | account   act_hlt   com_hlt   shi |
+  |-----------------------------------|
+  | act_hlt         0        30     0 |
+  | com_man         4         0     0 |
+  | com_ser         2         0     0 |
+  | com_hlt         0         0     8 |
+  |     lab        18         0     0 |
+  |     cap         6         0     0 |
+  |     sav         0         0     1 |
+  +-----------------------------------+

@@ -1,0 +1,280 @@
+\cgeentry{cge_microsim}{Pass a simulation to household survey data}
+
+\cgesec{Description}
+
+\cmd{cge_microsim} passes the results of a simulation to the household survey
+in memory, top-down and without feedback to the model. Each survey household
+belongs to a household group of the model and keeps its own income
+composition and, if they are given, its own budget shares. Each income
+component changes as the model says that its source changes for the
+household's group; nominal consumption follows the household's income and its
+group's direct tax and savings rates; and consumption is deflated by a price
+index at the prices households pay, including VAT. The command reports real
+consumption per person, the poverty headcount and poverty gap, and the Gini
+coefficient, before and after the simulation, for all households and for
+each group, and can add the household's new consumption and price index to
+the data.
+
+\cgesec{Quick start}
+
+Pass simulation \cmd{notariff} to the survey in memory, in which \cmd{grp}
+holds each household's model group and \cmd{cons} its consumption; every
+household's consumption changes as its group's does
+\begin{stcode}
+cge_microsim, sim(notariff) group(grp) consumption(cons)
+\end{stcode}
+As above, with sampling weights \cmd{w}, consumption per person and a poverty
+line of 1,200 per person
+\begin{stcode}
+cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) line(1200)
+\end{stcode}
+Households' own incomes from wages, profits, remittances and grants, and
+their own budget shares for food, goods and services
+\begin{stcode}
+cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap remit:row grants:gov)                              ///
+    budget(food:com_agr goods:com_man services:com_ser) line(1200)
+\end{stcode}
+As above, and add the variables \cmd{nt_nom}, \cmd{nt_price}, \cmd{nt_real}
+and \cmd{nt_pc}, replacing them if they exist
+\begin{stcode}
+cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap remit:row grants:gov) line(1200) generate(nt) replace
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_microsim} [\argu{if}] [\argu{in}] [\argu{weight}]\texttt{,}
+\optarg{}{sim}{name} \optarg{}{group}{varname} \optarg{cons}{umption}{varname}
+[\argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{sim}{name} & the simulation; required\\
+\optarg{}{group}{varname} & each household's model group; required\\
+\optarg{cons}{umption}{varname} & household consumption; required\\
+\optarg{}{size}{varname} & household size; default 1\\
+\optarg{inc}{ome}{var\texttt{:}source \ldots} & income components and their sources\\
+\optarg{bud}{get}{var\texttt{:}commodity \ldots} & budget items and the commodities whose prices apply\\
+\optarg{}{line}{\#} & poverty line per person\\
+\optgroup{Results}
+\optarg{gen}{erate}{prefix} & add new consumption and the price index as variables\\
+\opt{}{replace} & allow the variables of \cmd{generate()} to be replaced\\
+\opt{nod}{isplay} & suppress the table of results\\
+\end{opttable}
+
+\cmd{pweight}s, \cmd{aweight}s, \cmd{fweight}s and \cmd{iweight}s are
+allowed; all are used as proportional household weights.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{sim}{name}] names the simulation whose results are passed to
+the survey: a simulation solved by \manref{cge_solve}, a period of a run of
+\manref{cge_dynamic}, or a solution imported by \mbox{\manref{cge_gams}}. Changes
+are measured from the calibrated base.
+
+\item[\optarg{}{group}{varname}] gives each household's group: a string
+variable whose values are labels of the model's households, or a numeric
+variable whose value labels, or failing those whose values, are. A value that
+is not a household of the model is an error.
+
+\item[\optarg{cons}{umption}{varname}] is the household's total consumption,
+the welfare measure, in the survey's units.
+
+\item[\optarg{}{size}{varname}] is the household's size, which must be
+positive. Real consumption, poverty and inequality are then measured per
+person, over persons. The default is a size of 1.
+
+\item[\optarg{inc}{ome}{var\texttt{:}source \ldots}] lists the household's
+income components, numeric variables, each with its source:
+\begin{itemize}\setlength{\itemsep}{0pt}\setlength{\labelsep}{0.6em}
+\item a factor of the model: the group's income from that factor, or the
+factor's income if the group has none in the base;
+\item \cmd{gov}: transfers from the government, set in real terms and paid at the consumer price index;
+\item \cmd{row}: transfers from abroad, such as remittances;
+\item \cmd{dom}: transfers from other domestic institutions, such as
+dividends;
+\item \cmd{cpi}: income indexed to the consumer price index;
+\item \cmd{fixed}: nominal income that does not change.
+\end{itemize}
+Without \cmd{income()}, every household's nominal consumption changes as its
+group's does.
+
+\item[\optarg{bud}{get}{var\texttt{:}commodity \ldots}] lists spending on
+budget items, numeric and not negative, and the commodity whose price applies
+to each. An item may instead name an activity, for home consumption of its
+output at the activity's price. A household's price index then uses its own
+budget shares; without \cmd{budget()}, or for a household whose items sum to
+zero, it uses its group's base budget shares, including home consumption.
+
+\item[\optarg{}{line}{\#}] is the poverty line per person, in the units of
+consumption. Without it, or with a line that is not positive, no poverty
+measures are computed.
+
+\item[\optarg{gen}{erate}{prefix}] adds the variables \argu{prefix}\cmd{_nom}
+(new nominal consumption), \argu{prefix}\cmd{_price} (the household's price
+index, relative to the base), \argu{prefix}\cmd{_real} (real consumption, at base
+prices) and \argu{prefix}\cmd{_pc} (real consumption per person). They are
+missing for observations outside the sample. \argu{prefix} may have at most
+26 characters.
+
+\item[\opt{}{replace}] allows the variables of \cmd{generate()} to be
+replaced. Without it, a variable that exists is an error.
+
+\item[\opt{nod}{isplay}] suppresses the table of results.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A model has a few household groups; poverty and inequality are measured on
+household surveys. \mbox{\cmd{cge_microsim}} links the two in the top-down way
+described by Bourguignon, Bussolo and Pereira da Silva (2008): the
+model gives, for each group, the change in each source of income and in each
+price; the survey gives each household's income composition, budget shares,
+size and weight. The survey's own income and consumption data drive the
+results, so a household that lives on wages gains more than its group when
+wages rise relative to other income. There is no feedback from the survey to
+the model. Every substantial source of income should be mapped, and the
+survey and the SAM should refer to the same year where possible.
+
+An observation is used if it satisfies \argu{if} and \argu{in} and has no
+missing value in the group, consumption, weight, size or the variables of
+\cmd{income()} and \cmd{budget()}.
+
+\cgesubsec{Example 1: every household follows its group}
+
+The synthetic SAM is calibrated as in \manref{cge_solve}, and every import
+tariff is removed, with the direct tax rates of households adjusting to keep
+government savings fixed:
+\stlog{ms_sim}
+The survey is synthetic, generated with a fixed seed: 1,000 households of one
+to six persons in the model's single group, \cmd{hhd}, with weights, incomes
+from wages, profits and government transfers, and spending on food, goods
+and services:
+\stlog{ms_survey}
+\cgeneed{16\baselineskip}
+Without \cmd{income()} and \cmd{budget()}, each household's nominal
+consumption changes as its group's, and its price index is the group's:
+\stlog[\scriptsize]{ms_group}
+The table shows, for all households and for each group in the survey, mean
+real consumption per person, weighted by persons, in the base and in the
+simulation, and its per cent change; the poverty headcount and poverty gap,
+in per cent; and the Gini coefficient of consumption per person, in per cent.
+Every household of a group changes in the same proportion, so with one group
+the Gini coefficient cannot change; the poverty measures change because
+households near the line cross it.
+
+\cgesubsec{Example 2: households' own incomes and budgets}
+
+With \cmd{income()}, each household's income components change as their
+sources do for its group; with \cmd{budget()}, each household has its own
+price index:
+\stlog[\scriptsize]{ms_income}
+Real consumption per person falls by less, 0.389 against 0.431 per cent, and
+the Gini coefficient now changes, from 36.32 to 36.33 per cent, because
+households with different shares of wages, profits and transfers, and of
+food, goods and services, are affected differently. The survey and the SAM
+are synthetic: the results illustrate the command and are not findings about
+any country.
+
+\cgesubsec{Example 3: stored results and new variables}
+
+The measures for all households are returned as scalars, and the whole table,
+with the severity of poverty (FGT2), in \res{r(table)}; poverty measures and
+Gini coefficients are stored as proportions, not per cent:
+\stlog{ms_return}
+\cmd{generate(nt)} added each household's new nominal consumption, price
+index, real consumption and real consumption per person:
+\stlog{ms_vars}
+These variables can be analysed with any Stata command, for example to
+compute other poverty or inequality measures, or measures by region.
+
+\cgesec{Stored results}
+
+\cmd{cge_microsim} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N)} & number of households used\\
+\res{r(fgt0_base)} & poverty headcount in the base, all households (missing without \cmd{line()})\\
+\res{r(fgt0_sim)} & poverty headcount in the simulation, all households\\
+\res{r(gini_base)} & Gini coefficient in the base, all households\\
+\res{r(gini_sim)} & Gini coefficient in the simulation, all households\\
+\resgroup{Matrices}
+\res{r(table)} & one row for all households (\cmd{all}) and one for each group in the survey; columns \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{fgt0_base}, \cmd{fgt0_sim}, \cmd{fgt1_base}, \cmd{fgt1_sim}, \cmd{fgt2_base}, \cmd{fgt2_sim}, \cmd{gini_base} and \cmd{gini_sim}\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Household $i$ belongs to group $h = h(i)$ and has income components
+$y_{ik}$ with sources $k$. The model gives, for each group, the ratio of the
+simulated to the base value of each source,
+
+\begin{cgetable}{p{0.20\linewidth}p{0.42\linewidth}p{0.30\linewidth}}
+\toprule
+Source & Ratio $\rho_{hk}$ & If the group's base value is zero\\
+\midrule\endhead
+\bottomrule\endlastfoot
+factor $f$ & $\V{YIF}_{hf} / \V{YIF}^0_{hf}$ & $\V{YF}_f / \V{YF}^0_f$\\
+\cmd{gov} & $\V{trnsfr}_{h,gov}\,\V{CPI} / (\V{trnsfr}^0_{h,gov}\,\V{CPI}^0)$ & $\V{CPI}/\V{CPI}^0$\\
+\cmd{row} & $\V{trnsfr}_{h,row}\,\V{EXR} / (\V{trnsfr}^0_{h,row}\,\V{EXR}^0)$ & $\V{EXR}/\V{EXR}^0$\\
+\cmd{dom} & $\sum_d \V{shii}_{hd}\,\V{DY}_d / \sum_d \V{shii}^0_{hd}\,\V{DY}^0_d$ & $\V{CPI}/\V{CPI}^0$\\
+\cmd{cpi} & $\V{CPI}/\V{CPI}^0$ & \\
+\cmd{fixed} & 1 & \\
+\end{cgetable}
+where $\V{DY}_d = (1 - \V{MPS}_d)(1 - \V{TINS}_d)\,\V{YI}_d$ is the income
+that institution $d$ passes on or spends. The household's nominal
+consumption becomes
+\begin{equation*}
+C^1_i = C^0_i\,\frac{\sum_k \rho_{hk}\,y_{ik}}{\sum_k y_{ik}}\,\kappa_h, \qquad
+\kappa_h = \frac{(1 - \V{MPS}_h)(1 - \V{TINS}_h)}{(1 - \V{MPS}^0_h)(1 - \V{TINS}^0_h)},
+\end{equation*}
+and $C^1_i = C^0_i\,\V{EH}_h / \V{EH}^0_h$ for a household whose components
+sum to zero, and for every household without \cmd{income()}. The household's
+price index is
+\begin{equation*}
+P_i = \sum_j s_{ij}\,\frac{p_j}{p^0_j},
+\end{equation*}
+over commodities and home-consumed activity outputs $j$, where $p_j$ is the
+price households pay for commodity $j$, $\V{PH}_j$, including VAT, or the
+activity price $\V{PA}_j$ for home consumption; $s_{ij}$ are the household's
+budget shares from \cmd{budget()} or else the group's base shares,
+$p^0_j\,\V{QH}^0_{jh}/\V{EH}^0_h$ (with $\V{QHA}^0_{jh}$ for home
+consumption). Real consumption is $R_i = C^1_i/P_i$, a first-order
+(Laspeyres) approximation for households with LES demand, and with household
+size $n_i$ and weight $w_i$, consumption per person is $r^0_i = C^0_i/n_i$ in
+the base and $r^1_i = R_i/n_i$ in the simulation.
+
+Over the households of a row of the table, with person weights
+$v_i = w_i n_i$, the mean is $\sum_i v_i r_i / \sum_i v_i$, and for the
+poverty line $z$
+\begin{equation*}
+\text{FGT}_\alpha = \frac{\sum_i v_i\,\mathbf{1}[r_i < z]\,\bigl((z - r_i)/z\bigr)^\alpha}{\sum_i v_i},
+\qquad \alpha = 0, 1, 2 .
+\end{equation*}
+The Gini coefficient is computed from the Lorenz curve over persons: with
+households sorted by $r_i$, $F_i$ the cumulative share of person weights and
+$L_i$ the cumulative share of $v_i r_i$, and $F_0 = L_0 = 0$,
+\begin{equation*}
+G = 1 - \sum_i (F_i - F_{i-1})(L_i + L_{i-1}).
+\end{equation*}
+\Chapref{chap:microsim} describes the link in full.
+
+\cgesec{References}
+
+Bourguignon, F., M. Bussolo and L. A. Pereira da Silva, eds. 2008.
+\textit{The Impact of Macroeconomic Policies on Poverty and Income
+Distribution: Macro-Micro Evaluation Techniques and Tools}. World Bank and
+Palgrave Macmillan.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seeentry{cge_dynamic}{Solve a recursive dynamic run}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\seechapter{chap:microsim}{The link to household surveys}
+\end{alsosee}

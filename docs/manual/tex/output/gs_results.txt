@@ -1,0 +1,21 @@
+. cge_results, sim(notariff)
+
+Simulation notariff (closure: flexexr flexgsav savings cpi lab:mobile cap:mobile)
+----------------------------------------------------
+                                       base % change
+----------------------------------------------------
+Real value added (base prices)          262   -0.000
+Exchange rate                             1    4.759
+Consumer price index                      1    0.000
+Investment volume (IADJ)                  1  -11.861
+Imports (world prices)                  100    4.233
+Exports (world prices)                   75    5.644
+Government savings                        3 -271.374
+Price of lab                              1    2.811
+Price of cap                              1    2.631
+Output of act_agr                       100   -0.409
+Output of act_man                       140   -1.399
+Output of act_ser                       150    1.240
+----------------------------------------------------
+Equivalent variation, hhd              6.137 ( 2.67% of consumption)
+WALRAS -9.43e-11; GDP identity gap -1.48e-10

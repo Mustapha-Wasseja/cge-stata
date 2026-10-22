@@ -1,0 +1,15 @@
+. program define tariff_from2
+  1.     args t
+  2.     if `t' == 2 cge_shock tm, value(0)
+  3. end
+
+. cge_dynamic, name(lib) periods(0/4) capital(cap) depreciation(0.05) rental(0.15) ///
+>     growth(lab:0.025) population(0.025) govgrowth(0.03) foreigngrowth(0.02)      ///
+>     baseline(base) shocks(tariff_from2)
+Period 0: solved in 0 iteration(s)
+Period 1: solved in 7 iteration(s); efficiency factor 1.0223831984
+Parameter tm changed for 3 element(s)
+Period 2: solved in 10 iteration(s); efficiency factor 1.0213821436
+Period 3: solved in 7 iteration(s); efficiency factor 1.0204080406
+Period 4: solved in 7 iteration(s); efficiency factor 1.0194645412
+Dynamic run lib stored as simulations: lib0 lib1 lib2 lib3 lib4

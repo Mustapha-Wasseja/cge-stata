@@ -1,0 +1,274 @@
+\cgeentry{cge_shock}{Change a parameter or a fixed variable}
+
+\cgesec{Description}
+
+\cmd{cge_shock} changes a parameter of the calibrated model, or a variable that
+the current closure fixes, before the next \manref{cge_solve}. Shocks
+accumulate until \cmd{cge_shock, reset} restores every base value.
+
+\cgesec{Quick start}
+
+Remove every import tariff
+\begin{stcode}
+cge_shock tm, value(0)
+\end{stcode}
+Raise the world import price of manufactures by 10 per cent
+\begin{stcode}
+cge_shock pwm, elements(com_man) scale(1.1)
+\end{stcode}
+Raise government purchases of health services by 20 per cent
+\begin{stcode}
+cge_shock qg, elements(com_hlt) scale(1.2)
+\end{stcode}
+Raise the supply of labour, which the default closure fixes, by 5 per cent
+\begin{stcode}
+cge_shock QFS, elements(lab) scale(1.05)
+\end{stcode}
+Remove every shock
+\begin{stcode}
+cge_shock, reset
+\end{stcode}
+
+\cgesec{Syntax}
+
+Change a parameter or a fixed variable
+\begin{stsyntax}
+\cmdb{cge_shock} \argu{name} [\texttt{,} \optarg{el}{ements}{list}]
+\texttt{\{}\optarg{sc}{ale}{\#}\,|\,\optarg{val}{ue}{\#}\texttt{\}}
+\end{stsyntax}
+Remove every shock
+\begin{stsyntax}
+\cmdb{cge_shock}\texttt{,} \opt{}{reset}
+\end{stsyntax}
+\argu{name} is a parameter, in lower case, from the table under
+\emph{Remarks and examples}, or a model variable, in upper case, that the
+current closure fixes.
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{el}{ements}{list} & elements to change; default all\\
+\optarg{sc}{ale}{\#} & multiply the current values by \argu{\#}\\
+\optarg{val}{ue}{\#} & set the values to \argu{\#}\\
+\opt{}{reset} & remove every shock\\
+\end{opttable}
+
+Exactly one of \opt{sc}{ale()} and \opt{val}{ue()} is required, except with
+\opt{}{reset}, which may not be combined with a shock.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{el}{ements}{list}] lists the elements to change: commodities,
+activities, factors, or households and enterprises, as the parameter or
+variable requires. The default is every element, as is \cmd{elements(all)}. For
+a variable indexed by factor and activity, $\V{QF}_{fa}$ or
+$\V{WFDIST}_{fa}$, the list names factors, and every activity of each factor is
+changed. A parameter or variable without index takes no elements.
+
+\item[\optarg{sc}{ale}{\#}] multiplies the current values by \argu{\#}. The
+current values include earlier shocks, so two shocks of \cmd{scale(1.1)} give
+a rise of 21 per cent.
+
+\item[\optarg{val}{ue}{\#}] sets the values to \argu{\#}.
+
+\item[\opt{}{reset}] removes every shock: all parameters and fixed variables
+return to their base values. The constraints of \manref{cge_constraint}, and
+the recipients of their rents, are kept.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A simulation compares an equilibrium under changed parameters or fixed values
+with the base. \cmd{cge_shock} makes the changes; \manref{cge_solve} then
+solves the model under them and stores the simulation, with the parameters it
+used. The shocks stay in memory after the solve, so that further shocks add to
+them, until \cmd{cge_shock, reset}. \manref{cge_calibrate} also removes them.
+
+\cgesubsec{Parameters}
+
+The parameters that \cmd{cge_shock} changes are listed below with the set over
+which each is defined; those marked ``no elements'' are scalars. Values in
+foreign currency are converted at the exchange rate, and values ``in real
+terms'' are indexed to the CPI. The symbols are those of
+\secref{sec:parameters}.
+
+\begin{cgetable}{p{0.08\linewidth}p{0.26\linewidth}p{0.59\linewidth}}
+\toprule
+Name & Elements & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\multicolumn{3}{@{}l}{\textit{Taxes}}\\
+\cmd{tm} & commodities & import tariff rates, $\V{tm}_c$\\
+\cmd{te} & commodities & export tax rates, $\V{te}_c$\\
+\cmd{tq} & commodities & sales tax rates, $\V{tq}_c$\\
+\cmd{ta} & activities & activity tax rates, $\V{ta}_a$\\
+\cmd{tv} & commodities & VAT rates, $\V{tv}_c$; needs a VAT account\\
+\cmd{kappa} & activities & VAT credit shares, $\kappa_a$, between 0 and 1; needs a VAT account\\
+\cmd{tf} & factors & rates of tax on the use of factors, $\V{tf}_{fa}$, in every activity that uses them\\
+\cmd{tfy} & factors & rates of tax on factor income, $\V{tfy}_f$\\[2pt]
+\multicolumn{3}{@{}l}{\textit{World prices}}\\
+\cmd{pwm} & commodities & world import prices, $\V{pwm}_c$, in foreign currency\\
+\cmd{pwe} & commodities & world export prices, $\V{pwe}_c$; with finite export demand, a shift in world demand\\[2pt]
+\multicolumn{3}{@{}l}{\textit{Productivity}}\\
+\cmd{ad} & activities & efficiency of value added, $\V{ad}_a$, that is productivity\\
+\cmd{af} & factors & efficiency of each factor in every activity, $\V{af}_f$; one in the base\\[2pt]
+\multicolumn{3}{@{}l}{\textit{Spending and transfers}}\\
+\cmd{qg} & commodities & base quantities of government consumption, $\overline{\V{qg}}_c$, which $\V{GADJ}$ scales\\
+\cmd{qinv} & commodities & base quantities of investment, $\overline{\V{qinv}}_c$, which $\V{IADJ}$ scales\\
+\cmd{trdg} & households and enterprises & government transfers, $\V{trnsfr}_{d,gov}$, in real terms\\
+\cmd{trdr} & households and enterprises & transfers from the rest of the world, $\V{trnsfr}_{d,row}$, in foreign currency\\
+\cmd{trfr} & factors & factor income from abroad, $\V{trnsfr}_{f,row}$, in foreign currency\\
+\cmd{trgr} & no elements & transfers from the rest of the world to the government, $\V{trnsfr}_{gov,row}$, for example budget support, in foreign currency\\
+\cmd{trrg} & no elements & government transfers to the rest of the world, $\V{trnsfr}_{row,gov}$, in foreign currency\\[2pt]
+\multicolumn{3}{@{}l}{\textit{Health insurance fund (needs a fund, mapped with \cmd{cge_map, insurance()})}}\\
+\cmd{tshi} & factors & contribution rates on factor income, $\V{tshi}_f$\\
+\cmd{qshi} & commodities & base purchases of the fund, $\overline{\V{qshi}}_c$, which $\V{SHIADJ}$ scales\\
+\cmd{trshi} & no elements & government transfers to the fund, $\V{trnsfr}_{shi,gov}$, in real terms\\
+\cmd{trshir} & no elements & transfers from the rest of the world to the fund, $\V{trnsfr}_{shi,row}$, in foreign currency\\[2pt]
+\multicolumn{3}{@{}l}{\textit{Public debt (needs debt, from \cmd{cge_calibrate, debt() interest()})}}\\
+\cmd{rd}, \cmd{rf} & no elements & interest rates on domestic and foreign public debt, $r^d$ and $r^f$\\
+\cmd{ddebt} & no elements & domestic public debt at the start of the period, $\V{DD}$, in local currency\\
+\cmd{fdebt} & no elements & foreign public debt at the start of the period, $\V{DF}$, in foreign currency; for example debt relief\\[2pt]
+\multicolumn{3}{@{}l}{\textit{Labour markets (factors with a labour force, from \cmd{cge_calibrate, unemployment()} or \cmd{minwage()})}}\\
+\cmd{qlf} & factors & labour force, $\V{QLF}_f$\\
+\cmd{wmin} & factors & real minimum wage, $\underline{w}_f$\\
+\cmd{wref} & factors & reference real wage of the wage curve, $\overline{w}_f$\\[2pt]
+\multicolumn{3}{@{}l}{\textit{Health outcomes (from \cmd{cge_calibrate, sickdays()} or \cmd{mortality()})}}\\
+\cmd{sick} & factors & share of working time lost to illness before the response to health services, $\sigma_f$; for example an epidemic\\
+\cmd{mort} & no elements & crude death rate before the response to health services, $\mu^m$\\
+\end{cgetable}
+
+A shock to a parameter that the model lacks is an error: \cmd{tv} and
+\cmd{kappa} need a VAT account, mapped with \cmd{cge_map, vattax()} or
+\cmd{vatshare()} (\cmd{vatshare(0)} creates an empty one, so that VAT can be
+introduced); \cmd{rd}, \cmd{rf}, \cmd{ddebt} and \cmd{fdebt} need public debt;
+\cmd{qlf}, \cmd{wmin} and \cmd{wref} need factors with a labour force;
+\cmd{sick} needs days lost to illness for the factors given, and \cmd{mort} a
+death rate. The values must stay in range: \cmd{kappa} between 0 and 1,
+\cmd{sick} and \cmd{mort} at least 0 and below 1, and \cmd{qlf}, \cmd{wmin} and
+\cmd{wref}, when set with \opt{val}{ue()}, positive.
+
+Some parameters call for a remark. \cmd{qg} and \cmd{qinv} are the base
+quantities that $\V{GADJ}$ and $\V{IADJ}$ scale, so changing some of them
+changes the composition of government consumption or investment. In the
+default closure government savings adjust to a change in government spending
+or transfers. \cmd{af} multiplies the efficiency of a factor: factor quantities
+and wages stay in physical units, so with mobile factors a fall of 2 per cent
+in labour efficiency has the same real effects as 2 per cent less labour. When
+\manref{cge_calibrate} links efficiency to health services, more health
+services also raise the efficiency variable $\V{EFF}_f$. For \cmd{tf},
+\opt{sc}{ale()} multiplies each rate of the factors given, and
+\opt{val}{ue()} sets one rate for every activity that uses them, which
+introduces a tax where the SAM has none. \cmd{tshi}, \cmd{qshi}, \cmd{trshi}
+and \cmd{trshir} change the revenue of the health insurance fund, which spends
+it less a fixed share saved. Under the closures \cmd{wagecurve} and
+\cmd{minwage} of \manref{cge_closure}, a larger labour force raises
+unemployment unless the demand for labour grows with it. Doubling \cmd{sick}
+doubles the share of working time lost at base health services per head. A
+higher death rate changes no result within a period; in a dynamic run it slows
+the growth of population and labour from the next period.
+
+\cgesubsec{Fixed variables}
+
+A variable can be changed while the current closure fixes it; changing a
+variable that the closure leaves free is an error. Only the elements that
+exist in the model are changed. Any variable element fixed by a swap of
+\manref{cge_closure} can be changed, including a user variable defined by
+\manref{cge_variable}. The closure options fix the following variables:
+
+\begin{cgetable}{p{0.30\linewidth}p{0.66\linewidth}}
+\toprule
+Variable & Fixed under\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{FSAV}, \cmd{EXR} & \cmd{external(flexexr)}, \cmd{external(fixexr)}\\
+\cmd{GSAV} & \cmd{government(fixgsav)}\\
+\cmd{TINSADJ}, \cmd{TQADJ}, \cmd{TMADJ}, \cmd{TVADJ} & every government closure, except the factor that \cmd{fixgsav} frees\\
+\cmd{GADJ} & every closure\\
+\cmd{MPSADJ}, \cmd{IADJ} & \cmd{savinv(savings)}, \cmd{savinv(investment)}\\
+\cmd{CPI}, \cmd{DPI} & \cmd{numeraire(cpi)}, \cmd{numeraire(dpi)}\\
+\cmd{QFS} & factors that are \cmd{mobile}\\
+\cmd{W} & factors that are \cmd{specific} or \cmd{unemployed}\\
+\cmd{QF} & factors that are \cmd{specific}\\
+\cmd{WFDIST} & factors that are \cmd{mobile}, \cmd{unemployed}, \cmd{wagecurve} or \cmd{minwage}\\
+\cmd{RM}, \cmd{RE}, \cmd{RA} & every closure, unless a constraint frees them\\
+\end{cgetable}
+
+The tax scaling factors can therefore be set while the closure fixes them. A premium on imports or exports, or a rent on
+output, set by hand acts as a tax whose revenue goes to the recipient of the
+rent, the government unless \manref{cge_constraint} names another. A shock to
+the adjusting variable of a constraint changes the level at which it is fixed
+while the constraint does not bind. Of the variables with two indexes, only
+$\V{QF}_{fa}$ and $\V{WFDIST}_{fa}$ can be shocked.
+
+\cgesubsec{Example 1: parameters}
+
+The synthetic SAM is mapped and calibrated as in \manref{cge_solve}. Each shock
+reports the number of elements changed:
+\stlog{shock_par}
+
+\cgesubsec{Example 2: shocks accumulate}
+
+Shocks build on one another. Two rises of 10 per cent in government purchases
+of services raise them by 21 per cent, from 40 to 48.4, as the current
+parameters of \manref{cge_parameters} show:
+\stlog{shock_accum}
+\cmd{cge_shock, reset} removes every shock, those of Example~1 included:
+\stlog{shock_reset}
+
+\cgesubsec{Example 3: fixed variables}
+
+Under the default closure labour supply and foreign savings are fixed, and can
+be shocked; the exchange rate is free, and cannot:
+\stlog{shock_var}
+The solution keeps the fixed variables at their new values:
+\stlog{shock_solve}
+
+\cgesubsec{Example 4: parameters the model does not have}
+
+The standard synthetic SAM has no health insurance fund, and \cmd{trgr} is a
+scalar:
+\stlog{shock_need}
+
+\cgesubsec{Example 5: health shocks}
+
+In the health layout of \manref{cge_synthetic}, with a social health insurance
+fund mapped by \cmd{cge_map, insurance(shi)}, government purchases of health
+services rise by 20 per cent, the contribution rate on labour income by half,
+and labour efficiency falls by 2 per cent:
+\stlog{shock_health}
+The higher contribution rate raises the fund's revenue, and the fund buys more
+health services with it.
+
+\cgesec{Methods and formulas}
+
+Let $\theta_e$ be the current value of element $e$ of a parameter, or of a
+fixed variable, and $E$ the elements given. \cmd{cge_shock} sets
+\begin{equation*}
+\theta_e \leftarrow s\,\theta_e \quad\text{(\cmd{scale(}$s$\cmd{)})}, \qquad
+\theta_e \leftarrow v \quad\text{(\cmd{value(}$v$\cmd{)})}, \qquad e \in E,
+\end{equation*}
+except that \cmd{value(}$v$\cmd{)} for \cmd{tf} sets
+$\V{tf}_{fa} = v$ for every activity $a$ that uses factor $f$ in the SAM and
+leaves the others at zero. \cmd{cge_shock, reset} sets every parameter and
+fixed variable to its base value, $\theta = \theta^0$. \manref{cge_solve} holds
+the fixed variables at their current values and uses the current parameters;
+continuation in $n$ steps solves at
+$\theta^0 + (k/n)(\theta - \theta^0)$, $k = 1, \dots, n$.
+
+The parameters enter the equations of \chapref{chap:equations} and of the
+extensions: VAT and public debt in \chapref{chap:fiscal}, export demand in
+\chapref{chap:trade}, the labour force and wages in \chapref{chap:labour},
+health outcomes in \chapref{chap:health}, taxes on factors in
+\secref{sec:factortax}, and the rents in \secref{sec:rents}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_constraint}{Limits that bind in some scenarios and not in others}
+\seeentry{cge_parameters}{The calibrated parameters as a dataset}
+\seechapter{chap:equations}{The equations of the standard model}
+\seechapter{chap:closures}{Closures}
+\end{alsosee}

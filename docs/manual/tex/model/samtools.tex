@@ -1,0 +1,290 @@
+\chapter{SAM tools}\label{chap:samtools}
+
+The SAM tools read, write, aggregate, balance and analyse a SAM before it is
+mapped and calibrated. They change the SAM only; the model is unchanged. Each
+command that changes the SAM starts a new model from the result, as
+\manref{cge_sam} does: earlier mappings, calibrations and simulations are
+discarded. In this chapter $\bar X$ is the SAM before a command and $X$ the SAM
+after it, with $x_{ij}$ the payment from column account $j$ to row account
+$i$.
+
+\section{Reading a SAM}\label{sec:reading}
+
+\manref{cge_sam} reads a SAM in one of three forms:
+\begin{enumerate}
+\item \textbf{Wide data}: one observation per account, a string variable with
+the account labels and one numeric variable per account, from data in memory or
+from a file read with \cmd{use}, \cmd{import delimited} or \cmd{import excel}.
+\item \textbf{A wide CSV file read directly}: the file is parsed in Mata and
+the data in memory are not changed. This is automatic when the SAM has more
+accounts than Stata can hold as variables (\cmd{c(maxvar)}; 2,048 in
+Stata/IC), and is chosen for any CSV file with the option \cmd{direct}.
+\item \textbf{Long data}: one observation per non-zero cell, with string
+variables for the row and column accounts and a numeric variable for the
+value. The number of accounts is limited only by memory. Accounts are ordered
+as they first appear as row accounts, followed by any that appear only as
+column accounts, so that a SAM written in long form and read again keeps its
+order. A cell given twice is an error.
+\end{enumerate}
+In the direct reader the first line holds the column labels, the first field of
+each following line the row label, and the remaining fields the values. Fields
+may be quoted. A blank field is a zero, counted in \res{r(N_blank)}; a field
+that is not a number (for example \cmd{1,234} with a thousands separator) is an
+error, never a zero. Row and column labels must agree, in the same order.
+
+\textbf{Labels.} Account labels are used as names in \manref{cge_map}, so they
+must be valid Stata names. In wide data, Stata renames invalid labels when the
+file is imported (\cmd{s-i} becomes \cmd{si}), and the variable names are
+used. In the direct reader and in long data the same rule is applied:
+characters other than letters, digits and the underscore are removed, then any
+leading digits, and the result is cut to 32 characters. If a label cannot be
+converted (the result is empty, a reserved word, or the same as another
+label), \cmd{cge_sam} stops and names it. Each change is displayed.
+
+\section{Writing a SAM}\label{sec:writing}
+
+\manref{cge_samexport} writes the SAM of the current model, as read, aggregated
+or balanced, to a \cmd{.csv}, \cmd{.dta} or \cmd{.xlsx} file, or loads it as
+data. Wide output has one variable per account (\cmd{.dta} and \cmd{.xlsx}
+need the accounts to fit as variables; \cmd{.csv} is written in Mata and has no
+such limit). Long output has the variables \cmd{row}, \cmd{column} and
+\cmd{value}, one observation per non-zero cell. With \cmd{mapped}, the SAM after
+the layout rewrites of section~\ref{sec:layouts} is written instead, with the
+internal tax accounts. Numbers are written in the shortest of \texttt{\%21.0g}
+and \texttt{\%24.17g} that reads back as the same double, so that a SAM written
+and read again is unchanged.
+
+\section{Mapping templates}\label{sec:template}
+
+\manref{cge_template} writes a template with one row per account and the
+columns \cmd{account}; \cmd{role}, the \cmd{cge_map} options that list the
+account; \cmd{pair}, for an activity, the commodity it is paired with;
+\cmd{group}, for aggregation, the account it is merged into; and the account's
+row and column totals and their difference. An Excel template also has a sheet
+\cmd{roles} that lists the valid entries. When the model in memory is already
+mapped, \cmd{role} and \cmd{pair} are filled from the mapping.
+
+A role is any option name of \cmd{cge_map}, in either case, with the singular
+forms (\cmd{activity}, \cmd{commodity}, \cmd{factor}, \cmd{household},
+\cmd{enterprise}, \cmd{margin}, \cmd{marginaccount}, \cmd{stock}) also
+accepted. An account may have several roles when \cmd{cge_map} allows it, for
+example \cmd{activities margins} for a margin activity, or
+\cmd{government saltax} when sales taxes are paid directly to the government.
+A blank role leaves the account unmapped, which \cmd{cge_map} accepts only for
+accounts without flows.
+
+\cmd{cge_map using} reads a template. Each option lists its accounts in the
+order of the SAM. Activities are paired with commodities by the \cmd{pair}
+column; a blank \cmd{pair} pairs the activity with the commodity whose column
+pays it most (the largest cell $x_{ac}$). A tie, no sales to any commodity, or a
+commodity paired with two activities is an error. After aggregation with the
+same template, an account of the current SAM may be a group: it takes the role
+of its members, which must agree, and is paired with the group of its members'
+pairs. The options that result are displayed, so that the same mapping can be
+written as a command.
+
+\section{Aggregation}\label{sec:aggregation}
+
+\manref{cge_aggregate} merges accounts into groups. With the indicator matrix
+$G$ of groups by accounts ($G_{gk} = 1$ if account $k$ is in group $g$),
+\begin{equation*}
+X = G\,\bar X\,G',
+\end{equation*}
+so that every cell is the sum of the cells it merges. Totals add up, and an
+account's balance is the sum of its members' balances. A group takes the
+position of its first member. Flows among the members of a group become a
+diagonal cell of the new account; they are kept, as transfers within the
+group. The model accepts diagonal cells for households, enterprises and the
+government, and \cmd{cge_map} reports any other as a flow the model does not
+represent. The option \cmd{netdiagonal} removes them; totals then fall by the
+diagonal cell, and balances do not change.
+
+\section{Balancing}\label{sec:balancing}
+
+\manref{cge_balance} makes the SAM balanced, every account's row total equal to
+its column total. Both of its methods keep the sign of every cell, every zero
+cell, and the cells listed in \cmd{fixed()} at their values in $\bar X$. Both
+minimise the same measure of the information added to $\bar X$
+\citep{junius2003,lenzen2007}, over the cells that may change,
+\begin{equation*}
+D(X, \bar X) = \sum_{ij} \Bigl(|x_{ij}|\,\ln\frac{|x_{ij}|}{|\bar x_{ij}|} - |x_{ij}| + |\bar x_{ij}|\Bigr),
+\end{equation*}
+which for non-negative matrices is the cross entropy that RAS minimises
+\citep{mcdougall1999}. They differ in what is known about the totals.
+
+\subsection{RAS}\label{sec:ras}
+
+Every account $k$ has a target total $t_k$, and the row and column totals of
+$X$ are set to it. By default $t_k$ is the average of the account's row and
+column totals in $\bar X$; the targets may instead be the row or the column
+totals, or be given for individual accounts. If an account's row has no cell
+that may change, its target is its row total (and likewise for its column); if
+both are fixed and differ, or a given target contradicts them, no balanced SAM
+exists and \cmd{cge_balance} stops.
+
+With $P$ the positive part and $N$ the absolute value of the negative part of
+the cells that may change, and $u$ and $v$ the targets less the fixed cells of
+each row and column, generalised RAS (GRAS) finds row factors $r$ and column
+factors $s$ such that
+\begin{equation*}
+x_{ij} = r_i\,p_{ij}\,s_j - \frac{n_{ij}}{r_i\,s_j}
+\end{equation*}
+has row totals $u$ and column totals $v$. Starting from $s = 1$, it alternates
+\begin{equation*}
+r_i = \frac{u_i + \sqrt{u_i^2 + 4\,p_i\,n_i}}{2\,p_i}, \qquad
+p_i = \sum_j p_{ij}\,s_j, \qquad n_i = \sum_j n_{ij} / s_j
+\end{equation*}
+($r_i = -n_i / u_i$ when $p_i = 0$), and the same for $s$ with the roles of rows
+and columns exchanged, until every row and column total is within the
+tolerance of its target. Without negative cells this is RAS. A factor that is
+not positive and finite means that the targets cannot be met with the signs of
+the cells, and \cmd{cge_balance} stops.
+
+\subsection{Cross entropy}\label{sec:ce}
+
+Only some totals are known, or none: the totals of the other accounts are
+estimated with the cells. $X$ minimises $D(X, \bar X)$ subject to
+\begin{equation*}
+\sum_j x_{kj} - \sum_i x_{ik} = 0 \quad \text{for every account } k,
+\qquad
+\sum_j x_{kj} = t_k \quad \text{for the accounts whose totals are known.}
+\end{equation*}
+The solution has the form
+\begin{equation*}
+x_{ij} = p_{ij}\,e^{a_{ij}} - n_{ij}\,e^{-a_{ij}}, \qquad a_{ij} = \mu_i - \mu_j + \varrho_i,
+\end{equation*}
+with a multiplier $\mu_k$ for the balance of each account and $\varrho_k$ for
+each known total ($\varrho_k = 0$ for the other accounts). The multipliers
+minimise the convex dual
+\begin{equation*}
+\varphi(\mu, \varrho) = \sum_{ij} p_{ij}\,e^{a_{ij}} + \sum_{ij} n_{ij}\,e^{-a_{ij}}
+  + \sum_k \mu_k\,c_k + \sum_{k\ \text{known}} \varrho_k\,(f_k - t_k),
+\end{equation*}
+where $c_k$ is the fixed cells' row total less their column total and $f_k$
+their row total. Its gradient is the vector of balances and of the
+differences from the known totals, and its Hessian is
+$H = \sum_{ij} |x_{ij}|\,d_{ij}\,d_{ij}'$ with $d_{ij} = \partial a_{ij} /
+\partial(\mu, \varrho)$. Newton's method with a backtracking line search
+minimises $\varphi$ until every balance and known total is within the
+tolerance. Adding a constant to all $\mu$ in a connected set of accounts changes
+nothing, so one $\mu$ in each set is fixed at zero; an account without cells
+that may change must already balance. If the iterations do not converge, no
+balanced SAM with the same pattern of signs and zeros may exist.
+
+When every account's total is known, the solution is the RAS solution, with
+$r_i = e^{\mu_i + \varrho_i}$ and $s_j = e^{-\mu_j}$; the test suite uses this
+identity. This is not the column-coefficient cross entropy of
+\citet{robinson2001}, which measures the distance between the column shares of
+$X$ and $\bar X$ rather than between the cells; that method is not
+implemented.
+
+\subsection{Tolerance and results}
+
+Convergence is measured against the largest absolute cell of $\bar X$: every
+balance and target is met to \cmd{tolerance()} times $\max(1, \max_{ij}
+|\bar x_{ij}|)$, by default $10^{-10}$, well within the $10^{-8}$ of the balance
+check of \cmd{cge_map}. \cmd{cge_balance} reports the largest imbalance before
+and after, the number of cells changed, the largest relative change of a cell,
+the SAM total before and after, and the cells with the largest changes. The
+balanced SAM is an estimate: which totals are known, which cells are fixed and
+which method is used should be stated with any results.
+
+\section{Accounting multipliers}\label{sec:multipliers}
+
+\manref{cge_multiplier} computes the accounting multipliers of the mapped SAM
+\citep{pyatt1979}: the effects of an injection into one account on the incomes
+of all the accounts whose spending the SAM explains, with prices fixed. It uses
+the SAM after the layout rewrites of section~\ref{sec:layouts}, and needs no
+calibration.
+
+The accounts are divided into endogenous accounts $n$ and exogenous accounts.
+By default the endogenous accounts are the activities, commodities and margin
+accounts (the production block, $b = 1$), the factors ($b = 2$), and the
+households and enterprises (the institutions block, $b = 3$); the government,
+savings--investment, the rest of the world, the tax accounts and the health
+insurance fund are exogenous. With $t_j$ the column total of account $j$, the
+average expenditure propensities among endogenous accounts are
+\begin{equation*}
+A_{ij} = \SAM(i, j) / t_j, \qquad i, j \in n,
+\end{equation*}
+(zero for an account without payments), and the incomes of the endogenous
+accounts satisfy $y = A\,y + x$, where $x$ is their income from exogenous
+accounts. Hence
+\begin{equation*}
+y = M\,x, \qquad M = (I - A)^{-1}.
+\end{equation*}
+Column $j$ of $M$ is the change in the incomes of every endogenous account for
+a unit injection into $j$. For each injection the command reports the total
+multiplier $\sum_i M_{ij}$ and its parts in gross output (the activities),
+value added (the factors) and household income (the households). $I - A$ is
+invertible when every chain of payments among the endogenous accounts
+eventually leaks to an exogenous account (taxes, savings, imports).
+
+\subsection{Decomposition}\label{sec:decomposition}
+
+With the three blocks ordered as above, $A$ has a circular structure: factors
+are paid by production ($A_{21}$), institutions by factors ($A_{32}$), and
+production by institutions ($A_{13}$), with transfers within production
+($A_{11}$), within factors ($A_{22}$) and within institutions ($A_{33}$). With
+$\tilde A$ the block-diagonal part of $A$ and $A^* = (I - \tilde A)^{-1}(A -
+\tilde A)$, \citet{pyatt1979} write
+\begin{equation*}
+M = M_3\,M_2\,M_1, \qquad M_1 = (I - \tilde A)^{-1}, \quad M_2 = I + A^* + A^{*2},
+\quad M_3 = (I - A^{*3})^{-1},
+\end{equation*}
+the transfer, open-loop and closed-loop multipliers, and additively
+\begin{equation*}
+M = I + (M_1 - I) + (M_2 - I)\,M_1 + (M_3 - I)\,M_2\,M_1 .
+\end{equation*}
+The three terms after $I$ are the transfer effects within the injected
+account's block, the open-loop effects on the other blocks, and the closed-loop
+effects of the circular flow back to the injected block. The decomposition
+requires the blocks outside the circle ($A_{12}$, $A_{23}$, $A_{31}$) to be
+zero; \cmd{decompose} stops with an error, listing the largest flows that break
+the structure, if they are not.
+
+\subsection{Injections and use}
+
+\cmd{inject()} gives a vector $x$ of injections into endogenous accounts, for
+example more government purchases of a commodity, and the command reports
+$M\,x$: the change in gross output by activity, in factor incomes and in
+household incomes, and their totals.
+
+Accounting multipliers assume fixed prices, unused capacity in every sector and
+average propensities equal to marginal ones; they are upper bounds on the
+effects that a CGE model, with its supply constraints and price changes, would
+find. They complement the CGE model; they do not replace it.
+
+\section{Structural path analysis}\label{sec:spa}
+
+\manref{cge_spa} decomposes one accounting multiplier into the paths along
+which an injection travels through the SAM \citep{defourny1984}. The accounts
+are the poles of a graph, with an arc from pole $i$ to pole $j$ when $j$
+receives part of $i$'s spending, with intensity $A_{ji}$. An elementary path
+$p$ from an origin $i$ to a destination $j$ is a sequence of arcs that passes
+through no pole twice.
+\begin{itemize}
+\item The \textbf{direct influence} of $i$ on $j$ along $p$ is the product of
+the intensities of its arcs, $I^D_p = A_{k_1 i}\,A_{k_2 k_1} \cdots A_{j k_m}$:
+the effect along the path with every other account held fixed.
+\item The \textbf{path multiplier} $M_p$ adds the feedback of the loops that
+start and end at the poles of $p$. With $P$ the set of poles of $p$,
+\begin{equation*}
+M_p = \frac{\det\bigl((I - A)_{-P,-P}\bigr)}{\det(I - A)} = \det\bigl(M_{P,P}\bigr),
+\end{equation*}
+where $(I - A)_{-P,-P}$ leaves out the rows and columns of $P$ and $M_{P,P}$ is
+the block of $M$ on $P$; the two are equal by Jacobi's identity for
+complementary minors, and the second needs only a small determinant.
+\item The \textbf{total influence} along $p$ is $I^T_p = I^D_p\,M_p$.
+\item The \textbf{global influence} of $i$ on $j$ is the multiplier $M_{ji}$,
+and it is the sum of the total influences along all elementary paths from $i$
+to $j$ ($i \ne j$).
+\end{itemize}
+The number of elementary paths grows quickly with the size of the SAM, so the
+search stops at paths of \cmd{maxlength()} arcs (default 6) and drops a path,
+and every extension of it, once its direct influence falls below
+\cmd{threshold()} times the global influence in absolute value (default 0.001).
+With intensities no larger than one, as when a SAM has no negative cells,
+extensions can only lower the direct influence, so no path above the threshold
+is missed. The share of the global influence explained by the paths found is
+reported.

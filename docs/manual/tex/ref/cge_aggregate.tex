@@ -1,0 +1,164 @@
+\cgeentry{cge_aggregate}{Merge SAM accounts into groups}
+
+\cgesec{Description}
+
+\cmd{cge_aggregate} merges accounts of the SAM of the current model into
+groups and starts a new model from the result; any earlier mapping,
+calibration and simulations are discarded. The groups are given in the
+\cmd{group} column of a template written by \manref{cge_template}, or in the
+option \opt{}{groups()}. Accounts that are not in a group keep their label.
+
+Every cell of the new SAM is the sum of the cells it merges, so totals add up
+and each group's balance is the sum of its members' balances. Flows among the
+members of a group become a diagonal cell of the group; they are kept, unless
+\opt{net}{diagonal} is given.
+
+\cgesec{Quick start}
+
+Merge the manufacturing and service activities and commodities
+\begin{stcode}
+cge_aggregate, groups(act_nag: act_man act_ser, com_nag: com_man com_ser)
+\end{stcode}
+Merge two households and remove every diagonal cell of the new SAM
+\begin{stcode}
+cge_aggregate, groups(hh: hhd npi) netdiagonal
+\end{stcode}
+Merge the accounts as the \cmd{group} column of a template says, and map the
+result with the same template
+\begin{stcode}
+cge_aggregate using sam_roles.xlsx
+cge_map using sam_roles.xlsx
+\end{stcode}
+
+\cgesec{Syntax}
+
+Groups from a template
+\begin{stsyntax}
+\cmdb{cge_aggregate} \cmd{using} \argu{template} [\texttt{,}
+\optarg{}{sheet}{string} \opt{net}{diagonal}]
+\end{stsyntax}
+
+Groups given as an option
+\begin{stsyntax}
+\cmdb{cge_aggregate}\texttt{,} \optarg{}{groups}{\argu{new}\texttt{:}
+\argu{old} \argu{old} \dots\texttt{,} \argu{new}\texttt{:} \argu{old} \dots}
+[\opt{net}{diagonal}]
+\end{stsyntax}
+
+\argu{template} ends in \cmd{.xlsx}, \cmd{.xls}, \cmd{.csv} or \cmd{.dta}.
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{groups}{spec} & the groups and the accounts they merge\\
+\optarg{}{sheet}{string} & worksheet of an Excel template; default \cmd{accounts}, or else the first sheet\\
+\opt{net}{diagonal} & remove the diagonal cells of the new SAM\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{groups}{spec}] lists the groups, separated by commas, each as
+a new label, a colon and the accounts it merges, for example
+{\frenchspacing\cmd{groups(hh: hhd npi)}}. An account may be in only one group. A group label
+must be a valid Stata name; it may be the label of one of its members, but not
+of another account. \opt{}{groups()} and a template may not be combined.
+
+\item[\optarg{}{sheet}{string}] names the worksheet of an Excel template. The
+default is the sheet \cmd{accounts}, which \manref{cge_template} writes, or
+else the first sheet.
+
+\item[\opt{net}{diagonal}] removes every diagonal cell of the new SAM,
+including those of accounts that are not merged. Totals then fall by the
+diagonal cells, and balances do not change.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+Aggregation reduces the number of accounts of a SAM, for example to the
+sectors of a policy question, or to a size at which every account has flows
+large enough to calibrate the model. Each group takes the position of its
+first member in the SAM. The number of accounts merged, the number of groups
+and any diagonal cells are displayed, followed by the size, total and largest
+imbalance of the new SAM, as \manref{cge_sam} displays them.
+
+\cgesubsec{Example 1: merging accounts}
+
+In the institutions layout of the synthetic SAM, the manufacturing and service
+activities and commodities are merged, and so are the household and the
+non-profit institution:
+\stlog{agg_groups}
+The new SAM has 14 accounts and the same total. Three of its diagonal cells are
+non-zero:
+\stlog{agg_show}
+The diagonal cell of \cmd{hh}, 3, is the household's transfer to itself in the
+original SAM, 1, and its transfer to the non-profit institution, 2. The other
+two, the transfers of the enterprise and of the government to themselves, were
+in the original SAM. The model accepts diagonal cells for households,
+enterprises and the government, as transfers within the account, and the new
+SAM maps:
+\stlog{agg_map}
+\manref{cge_map} reports a diagonal cell of any other account as a flow that
+the model does not support.
+
+\cgesubsec{Example 2: removing the flows within groups}
+
+With \opt{net}{diagonal}, every diagonal cell of the new SAM is removed, and
+the total falls by their sum:
+\stlog{agg_net}
+The SAM stays balanced: a diagonal cell is in both the row and the column of
+its account.
+
+\cgesubsec{Example 3: groups from a template}
+
+Example~2 of \manref{cge_template} fills in the \cmd{group} column of a
+template, aggregates the SAM with it and maps the result with the same
+template. When the template has roles, the members of each group must have the
+same role. A template written from a mapping that lists the non-profit
+institution as a household and \cmd{ent} as an enterprise cannot merge them:
+\stlog{agg_roles}
+After aggregation, the template's accounts are no longer the accounts of the
+SAM; \cmd{cge_aggregate using} the same template again is an error, while
+\cmd{cge_map using} it maps each group with its members' role.
+
+\cgesec{Stored results}
+
+\cmd{cge_aggregate} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_accounts)} & number of accounts after aggregation\\
+\res{r(total)} & sum of all cells\\
+\res{r(maxdiff)} & largest difference between an account's row and column totals\\
+\res{r(N_diagonal)} & number of non-zero diagonal cells, before \opt{net}{diagonal}\\
+\res{r(diagonal)} & their total\\
+\res{r(N_blank)} & always 0\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $\bar X$ be the SAM of $n$ accounts before aggregation and $G$ the
+indicator matrix of $m$ groups by $n$ accounts, with $G_{gk} = 1$ if account
+$k$ is in group $g$ (an account in no group is a group of its own). The
+aggregated SAM is
+\begin{equation*}
+X = G \bar X G', \qquad x_{gh} = \sum_{i \in g} \sum_{j \in h} \bar x_{ij},
+\end{equation*}
+so that each cell is the sum of the cells it merges. The row and column
+totals of a group are the sums of its members' totals, and so is its balance:
+\begin{equation*}
+\sum_h x_{gh} - \sum_h x_{hg} = \sum_{k \in g} \Bigl( \sum_j \bar x_{kj} - \sum_i \bar x_{ik} \Bigr).
+\end{equation*}
+The diagonal cell $x_{gg}$ holds the flows among the members of $g$ and any
+diagonal cells of its members. With \opt{net}{diagonal}, the SAM is
+$X - \operatorname{diag}(x_{11}, \dots, x_{mm})$; each account's row and
+column totals both fall by its diagonal cell, so balances do not change.
+Aggregation is described in \secref{sec:aggregation}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_template}{Write a template that maps SAM accounts to roles and groups}
+\seeentry{cge_balance}{Balance a SAM by RAS or cross entropy}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seeentry{cge_samexport}{Write the SAM to a file or to memory}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

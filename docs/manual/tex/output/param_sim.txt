@@ -1,0 +1,15 @@
+. quietly cge_shock tm, value(0)
+
+. quietly cge_solve, name(notariff)
+
+. cge_parameters, clear sim(notariff)
+
+. list if parameter == "tm", noobs abbreviate(9)
+
+  +-----------------------------------------+
+  | parameter   element1   element2   value |
+  |-----------------------------------------|
+  |        tm    com_agr                  0 |
+  |        tm    com_man                  0 |
+  |        tm    com_ser                  0 |
+  +-----------------------------------------+

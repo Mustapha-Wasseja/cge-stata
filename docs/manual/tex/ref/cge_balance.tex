@@ -1,0 +1,284 @@
+\cgeentry{cge_balance}{Balance a SAM by RAS or cross entropy}
+
+\cgesec{Description}
+
+\cmd{cge_balance} makes the SAM of the current model balanced, so that every
+account's row total equals its column total, and starts a new model from the
+result; any earlier mapping, calibration and simulations are discarded. Two
+methods are available: RAS, which sets every account's total to a target, and
+cross entropy, which estimates the totals that are not known together with the
+cells. Both keep the sign of every cell, every zero cell and the cells listed
+in \opt{fix}{ed()}, and both minimise the same measure of the information added
+to the SAM.
+
+\cgesec{Quick start}
+
+Balance the SAM by RAS, with each account's target the average of its row and
+column totals
+\begin{stcode}
+cge_balance
+\end{stcode}
+As above, with the row totals as targets and two totals given
+\begin{stcode}
+cge_balance, targets(rows) totals(act_agr:97 hhd:290)
+\end{stcode}
+Balance by cross entropy, with the household's total known, keeping every
+payment to the rest of the world and every import tariff
+\begin{stcode}
+cge_balance, method(ce) totals(hhd:290) fixed(row:* tax_imp:*)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_balance} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{meth}{od}{method} & \cmd{ras} or \cmd{ce}; default \cmd{ras}\\
+\optarg{targ}{ets}{rule} & RAS targets of the accounts not in \opt{tot}{als()}: \cmd{average}, \cmd{rows} or \cmd{columns}; default \cmd{average}\\
+\optarg{tot}{als}{\argu{account}\texttt{:}\argu{value} \dots} & known account totals\\
+\optarg{fix}{ed}{list} & cells kept at their values\\
+\optgroup{Iteration}
+\optarg{tol}{erance}{\#} & tolerance, relative to the largest absolute cell; default \texttt{1e-10}\\
+\optarg{iter}{ate}{\#} & maximum number of iterations; default 10,000 for RAS and 100 for cross entropy\\
+\optgroup{Reporting}
+\opt{nod}{isplay} & suppress the table of the largest changes\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{meth}{od}{method}] chooses the method: \cmd{ras}, generalised
+RAS (the default), or \cmd{ce}, cross entropy.
+
+\item[\optarg{targ}{ets}{rule}] sets the RAS targets of the accounts not given
+in \opt{tot}{als()}: \cmd{average}, the average of the account's row and column
+totals (the default); \cmd{rows}, its row total; or \cmd{columns}, its column
+total. It applies only to RAS: with \cmd{method(ce)}, \cmd{rows} and
+\cmd{columns} are errors, and known totals are given in \opt{tot}{als()}.
+
+\item[\optarg{tot}{als}{\argu{account}\texttt{:}\argu{value} \dots}] gives
+known account totals, separated by spaces: targets for RAS, constraints for
+cross entropy. For example, \cmd{totals(act_agr:97 hhd:290)} gives the totals
+of two accounts. An account may be given only once.
+
+\item[\optarg{fix}{ed}{list}] lists, separated by spaces, the cells kept at
+their values: a cell \argu{row}\cmd{:}\argu{col}, a whole row
+\argu{row}\cmd{:*}, a whole column \cmd{*:}\argu{col}, or an account's row and
+column, \argu{account}. Every account named must be in the SAM; \cmd{*:*} is an
+error.
+
+\item[\optarg{tol}{erance}{\#}] sets the convergence tolerance: every balance
+and every target or known total is met to \argu{\#} times the larger of one
+and the largest absolute cell of the SAM before balancing. The default is
+\texttt{1e-10}, well within the balance that \manref{cge_map} requires.
+
+\item[\optarg{iter}{ate}{\#}] sets the maximum number of iterations: RAS
+iterations, each a row and a column step, or Newton steps of cross entropy. The
+default is 10,000 for RAS and 100 for cross entropy.
+
+\item[\opt{nod}{isplay}] suppresses the table of the cells with the largest
+changes.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+SAMs assembled from national accounts, supply--use tables, household surveys
+and government budgets rarely balance. \cmd{cge_balance} adjusts the cells so
+that every account balances, changing the SAM as little as possible in the
+sense of the measure given in Methods and formulas. Neither method changes the
+sign of a cell or turns a zero into a flow, so structural zeros stay zero, and
+cells in \opt{fix}{ed()} keep their values. The methods differ in what is known
+about the totals:
+\begin{itemize}
+\item RAS needs a target for every account's total. The default target is the
+average of the account's row and column totals; \opt{targ}{ets()} and
+\opt{tot}{als()} choose others. Negative cells are handled by generalised RAS
+(GRAS).
+\item Cross entropy needs no targets. It estimates every total that is not
+given in \opt{tot}{als()} together with the cells, subject to balance. With
+every total given, it gives the RAS solution.
+\end{itemize}
+\cmd{cge_balance} displays the number of iterations, the largest imbalance and
+the SAM total before and after, the number of cells changed and the largest
+relative change of a cell, and the ten cells with the largest absolute changes,
+followed by the size, total and imbalance of the new SAM, as \manref{cge_sam}
+displays them.
+
+The balanced SAM is an estimate. Which totals were given, which cells were
+fixed and which method was used should be stated with any results from it.
+
+\cgesubsec{Example 1: RAS}
+
+The unbalanced synthetic SAM is out of balance by up to 12. RAS to the average
+totals balances it:
+\stlog{bal_ras}
+The largest imbalance after balancing, \texttt{1.53e-08}, is within the
+tolerance: \texttt{1e-10} times the largest cell, 158.729. With the average
+targets, the SAM total is unchanged, since the targets add up to it. Every
+non-zero cell may change, and every one does.
+
+\cgesubsec{Example 2: cross entropy with known totals and fixed cells}
+
+Suppose that the output of agriculture, 97, and household income, 290, are
+known, and that the payments to the rest of the world and households' labour
+income are taken as reliable. Cross entropy estimates every other total:
+\stlog{bal_ce}
+The eight fixed cells, the seven non-zero payments to the rest of the world
+and \cmd{hhd:lab}, keep their values, and so do the transfers of the enterprise
+and of the government to themselves: a diagonal cell is in both the row and
+the column of its account, and balance alone does not change it. The other 58
+non-zero cells change. Household income of 290 is above both the household's
+row total, 247.9, and its column total, 255.1, in the unbalanced SAM, so its
+receipts and its payments rise, and the SAM total with them.
+
+The results are stored in \cmd{r()}:
+\stlog{bal_return}
+
+\cgesubsec{Example 3: a SAM that cannot be balanced}
+
+Zeros and fixed cells may make the targets impossible to meet. Fixing the
+household's row and column leaves its two totals as they are, and they differ:
+\stlog{bal_fixed}
+\cmd{cge_balance} checks such contradictions before it starts: an account whose
+row and column cannot change but differ, or a given total that differs from
+the total of cells that cannot change. Other contradictions arise from the
+pattern of zeros and fixed cells. For example, in a SAM whose activities and
+product-tax accounts are paid only by commodities, fixing every import cell
+fixes the difference between the commodities' totals and theirs; RAS targets
+that do not respect it cannot be met, and RAS stops with error 430 when its gap
+no longer falls. Cross entropy, which needs fewer totals, can often balance
+such a SAM.
+
+\cgesec{Stored results}
+
+\cmd{cge_balance} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(iterations)} & RAS iterations or Newton steps of cross entropy\\
+\res{r(maxdiff_before)} & largest row--column imbalance before balancing\\
+\res{r(maxdiff)} & largest row--column imbalance after balancing\\
+\res{r(total_before)} & sum of all cells before balancing\\
+\res{r(total)} & sum of all cells after balancing\\
+\res{r(N_changed)} & number of cells changed\\
+\res{r(maxrelchange)} & largest relative change of a cell\\
+\res{r(N_accounts)} & number of accounts\\
+\res{r(N_blank)} & always 0\\
+\resgroup{Macros}
+\res{r(method)} & \cmd{ras} or \cmd{ce}\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $\bar X$ be the SAM before balancing and $X$ the SAM after it. A cell may
+change if it is not zero and not in \opt{fix}{ed()}; let $Z$ be the set of such
+cells, and write $P$ for the positive cells of $\bar X$ in $Z$, $N$ for the
+absolute values of its negative cells in $Z$, and $F$ for all other cells,
+which keep their values. Both methods minimise
+\begin{equation*}
+D(X, \bar X) = \sum_{(i,j) \in Z} \Bigl( |x_{ij}| \ln \frac{|x_{ij}|}{|\bar x_{ij}|} - |x_{ij}| + |\bar x_{ij}| \Bigr),
+\end{equation*}
+a measure of the information added to $\bar X$ (Junius and Oosterhaven 2003;
+Lenzen, Wood and Gallego 2007), which for a SAM without negative cells is the
+cross entropy that RAS minimises (McDougall 1999). It is not the
+column-coefficient cross entropy of Robinson, Cattaneo and El-Said (2001),
+which measures the distance between the column shares of $X$ and $\bar X$;
+that method is not implemented. Convergence is measured against
+$\sigma = \max(1, \max_{ij} |\bar x_{ij}|)$: the iterations stop when every
+balance, target and known total is met to $\text{\opt{tol}{erance()}} \times
+\sigma$.
+
+\textit{RAS.} Every account $k$ has a target total $t_k$: the average of its
+row and column totals in $\bar X$, one of them as \opt{targ}{ets()} says, or
+the value in \opt{tot}{als()}. If an account's row has no cell that may change,
+its target is its row total, and likewise for its column; if both are fixed and
+differ, or a given total contradicts them, there is no balanced SAM and
+\cmd{cge_balance} stops. With $f^r_i = \sum_j f_{ij}$ and $f^c_j = \sum_i
+f_{ij}$, the row and column totals of the cells that may change must be $u_i =
+t_i - f^r_i$ and $v_j = t_j - f^c_j$. Generalised RAS finds row factors $r_i$
+and column factors $s_j$ such that
+\begin{equation*}
+x_{ij} = r_i\, p_{ij}\, s_j - \frac{n_{ij}}{r_i\, s_j} + f_{ij}
+\end{equation*}
+has these totals. Starting from $s = 1$, it alternates a row step and a column
+step. The row step solves $r_i p_i - n_i / r_i = u_i$ for each row, with
+$p_i = \sum_j p_{ij} s_j$ and $n_i = \sum_j n_{ij} / s_j$:
+\begin{equation*}
+r_i = \frac{u_i + \sqrt{u_i^2 + 4 p_i n_i}}{2 p_i} \quad (u_i \ge 0), \qquad
+r_i = \frac{2 n_i}{\sqrt{u_i^2 + 4 p_i n_i} - u_i} \quad (u_i < 0),
+\end{equation*}
+two forms of the same root that avoid cancellation. The column step is the
+same with the roles of rows and columns exchanged. Without negative cells
+this is RAS. A factor that is not positive and finite means that the target
+cannot be met with the signs of the cells, and \cmd{cge_balance} stops. After
+100 iterations, RAS also stops, with error 430, when the gap has not fallen by
+a relative $10^{-6}$ over the last 100 iterations.
+
+\textit{Cross entropy.} Let $K$ be the accounts in \opt{tot}{als()}. $X$
+minimises $D(X, \bar X)$ subject to
+\begin{equation*}
+\sum_j x_{kj} - \sum_i x_{ik} = 0 \quad \text{for every account } k, \qquad
+\sum_j x_{kj} = t_k \quad \text{for } k \in K.
+\end{equation*}
+The solution has the form
+\begin{equation*}
+x_{ij} = p_{ij}\, e^{a_{ij}} - n_{ij}\, e^{-a_{ij}} + f_{ij}, \qquad
+a_{ij} = \mu_i - \mu_j + \rho_i,
+\end{equation*}
+with a multiplier $\mu_k$ for the balance of each account and $\rho_k$ for
+each known total ($\rho_k = 0$ for $k \notin K$). The multipliers minimise the
+convex dual
+\begin{equation*}
+\varphi(\mu, \rho) = \sum_{ij} p_{ij}\, e^{a_{ij}} + \sum_{ij} n_{ij}\, e^{-a_{ij}}
++ \sum_k \mu_k \bigl(f^r_k - f^c_k\bigr) + \sum_{k \in K} \rho_k \bigl(f^r_k - t_k\bigr),
+\end{equation*}
+whose gradient is the vector of the balances and of the differences from the
+known totals, and whose Hessian is
+\begin{equation*}
+H = \sum_{ij} \bigl(p_{ij}\, e^{a_{ij}} + n_{ij}\, e^{-a_{ij}}\bigr)\, d_{ij} d_{ij}', \qquad
+d_{ij} = \frac{\partial a_{ij}}{\partial (\mu, \rho)}.
+\end{equation*}
+Newton's method minimises $\varphi$, with a backtracking line search that
+halves the step until $\varphi$ falls by at least $10^{-4}$ times the decrease
+the step predicts. Adding a constant to every $\mu_k$ in a set of accounts
+connected by cells that may change leaves $X$ unchanged, so one $\mu$ in each
+such set is fixed at zero; the fixed cells of each set must balance among
+themselves. A known total whose row or column cannot change must equal the
+total of its fixed cells, and needs no multiplier. If Newton's method does not
+converge, no balanced SAM with the same pattern of signs and zeros may exist.
+When every total is known, the solution is the RAS solution, with $r_i =
+e^{\mu_i + \rho_i}$ and $s_j = e^{-\mu_j}$.
+
+\textit{Results.} The number of cells changed counts the cells with $x_{ij} \ne
+\bar x_{ij}$, and the largest relative change is $\max_{ij} |x_{ij} - \bar
+x_{ij}| / |\bar x_{ij}|$ over the non-zero cells of $\bar X$.
+Balancing is described in \secref{sec:balancing}, RAS in \secref{sec:ras} and
+cross entropy in \secref{sec:ce}.
+
+\cgesec{References}
+
+\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\itemindent}{-2em}%
+  \setlength{\itemsep}{2pt}\setlength{\parsep}{0pt}}
+\item Junius, T., and J. Oosterhaven. 2003. The solution of updating or
+regionalizing a matrix with both positive and negative entries.
+\textit{Economic Systems Research} 15: 87--96.
+\item Lenzen, M., R. Wood, and B. Gallego. 2007. Some comments on the GRAS
+method. \textit{Economic Systems Research} 19: 461--465.
+\item McDougall, R. A. 1999. Entropy theory and RAS are friends. GTAP Working
+Paper 6, Center for Global Trade Analysis, Purdue University.
+\item Robinson, S., A. Cattaneo, and M. El-Said. 2001. Updating and estimating
+a social accounting matrix using cross entropy methods. \textit{Economic
+Systems Research} 13: 47--64.
+\end{list}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_sam}{Read a social accounting matrix}
+\seeentry{cge_aggregate}{Merge SAM accounts into groups}
+\seeentry{cge_samexport}{Write the SAM to a file or to memory}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

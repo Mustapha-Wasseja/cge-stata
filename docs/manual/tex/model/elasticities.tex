@@ -1,0 +1,92 @@
+\chapter{The elasticity library}\label{chap:elasticities}
+
+The model's free parameters, the elasticities of substitution and
+transformation, the income elasticities, the Frisch parameter, the wage-curve
+elasticity and the health-outcome elasticities, have no defaults: they are
+part of the specification and must be stated. The library records published
+estimates, with the source, the table and page where each is printed, its
+definition, and the check made when it was read. \manref{cge_elasticities}
+lists or loads entries, or returns them as options for \manref{cge_calibrate};
+nothing is applied without a command.
+
+\section{Contents}
+
+\begin{cgetable}{p{0.12\linewidth}p{0.08\linewidth}p{0.37\linewidth}p{0.31\linewidth}}
+\toprule
+Parameter & Entries & Coverage & Source\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{sigmaq} & 51 & aggregate Armington elasticity, African countries (series to 2018) & \citet{devarajan2023}, Appendix Table A1\\
+\cmd{sigmat} & 51 & aggregate CET elasticity, the same countries & \citet{devarajan2023}, Appendix Table A2\\
+\cmd{incelas} & 423 & income elasticities for nine categories of consumption, 47 African countries (2005) & \citet{muhammad2011}, Appendix table 1\\
+\cmd{frisch} & 1 & inverse of the income flexibility, 144 countries pooled & \citet{muhammad2011}, Table 3\\
+\cmd{sigmava} & 1 & capital--labour substitution, 30 African countries pooled (1970--2017) & \citet{hosni2024}, Tableau 9\\
+\cmd{wagecurve} & 2 & international (12 countries) and South Africa (1993) & \citet{blanchflower1995}; \citet{kingdon2006}\\
+\cmd{mortelas} & 2 & under-five and maternal mortality with respect to government health expenditure, developing countries & \citet{bokhari2007}\\
+\end{cgetable}
+
+Somalia, South Sudan and Sudan are not covered by \citet{devarajan2023};
+\citet{muhammad2011} cover 47 African countries (the 2005 round of the
+International Comparison Program, without Comoros, which the authors exclude).
+
+Each entry records its identifier (for example \cmd{DGR2023-ARM-TGO}); the
+parameter, named as the option of \manref{cge_calibrate} that the value is for;
+the country, as an ISO 3166 alpha-3 code or a group (\cmd{AFR} Africa,
+\cmd{WLD} international, \cmd{DEV} developing countries), and its name as
+printed; the category (\cmd{aggregate} for the trade elasticities, the
+consumption category for income elasticities: \cmd{food}, \cmd{clothing},
+\cmd{housing}, \cmd{furnishings}, \cmd{health}, \cmd{transport},
+\cmd{recreation}, \cmd{education}, \cmd{other}); the value in the package's
+convention, its standard error and bounds where the source gives them; the
+value as printed; what was estimated, how, and on what data; the source and
+where the value is printed; and the check made, with any qualifications. The
+files are plain ASCII, which Stata 13 displays, so accents are dropped.
+
+The package's conventions differ from some sources in two places: the
+wage-curve elasticity is the absolute value of the published negative
+elasticity (\eqref{eq:L1}), and the Frisch parameter is the inverse of the
+published income flexibility ($-1/0.732 = -1.3661$).
+
+\section{How the values were read and checked}
+
+The two multi-country tables were read from the source documents, with a check
+on every value.
+\begin{itemize}
+\item \citet{devarajan2023} print each estimate with its standard error and
+$t$-statistic. The $t$-statistic must equal the estimate divided by the
+standard error, within the rounding of the printed values; 101 of the 102
+African entries pass. One fails in the source itself: the CET elasticity of
+the Democratic Republic of Congo is printed as 0.503 with standard error 0.245
+and $t$-statistic 56.713, although $0.503/0.245 = 2.05$. The entry keeps the
+printed values and a note.
+\item In \citet{muhammad2011} each income elasticity is
+$\eta = \theta / (\theta - \beta)$, with the marginal share $\theta$ in their
+Appendix table 7 and the coefficient $\beta$ in their Table 3. All 408 African
+entries that can be checked lie within the range that the rounding of $\theta$
+and $\beta$ allows; the 15 that the authors computed from actual budget shares
+cannot be checked this way and are marked.
+\end{itemize}
+The other values were read from the source pages or from the published
+abstracts. Not included are default parameters of global models (for example
+GTAP) and values derived from IFPRI SAMs or models; a user who holds such values
+can add them in a file of the same layout.
+
+\section{Using the values}
+
+\begin{itemize}
+\item \textbf{Definitions.} Match the definition, coverage and period before
+using a value. The mortality elasticities of \citet{bokhari2007} are with
+respect to government health expenditure per head, not the death rate with
+respect to health services per head of \secref{sec:mortality}; they are
+recorded for reference.
+\item \textbf{Aggregate and sector values.} Aggregate trade elasticities are
+lower than sector ones, because aggregate imports and exports are composites of
+many goods \citep{devarajan2023}. They set a level rather than every sector's
+value; using one aggregate value for every commodity is a strong
+simplification.
+\item \textbf{Income elasticities.} They come from a cross-country demand
+system for 2005, evaluated for each country, not from the country's household
+survey. They map to model commodities through the nine categories.
+\item \textbf{Uncertainty.} Standard errors and bounds can guide the range of
+a sensitivity analysis (chapter~\ref{chap:sensitivity}).
+\end{itemize}

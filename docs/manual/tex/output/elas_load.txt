@@ -1,0 +1,19 @@
+. cge_elasticities incelas, country(TGO) clear
+9 entries of the elasticity library loaded
+
+. list id category value se, noobs
+
+  +---------------------------------------------------------+
+  |                           id      category   value   se |
+  |---------------------------------------------------------|
+  |        MSMR2011-INC-TGO-food          food    .804    . |
+  |    MSMR2011-INC-TGO-clothing      clothing    .968    . |
+  |     MSMR2011-INC-TGO-housing       housing   1.076    . |
+  | MSMR2011-INC-TGO-furnishings   furnishings   1.055    . |
+  |      MSMR2011-INC-TGO-health        health   1.886    . |
+  |---------------------------------------------------------|
+  |   MSMR2011-INC-TGO-transport     transport   1.228    . |
+  |  MSMR2011-INC-TGO-recreation    recreation   3.733    . |
+  |   MSMR2011-INC-TGO-education     education    .932    . |
+  |       MSMR2011-INC-TGO-other         other   1.913    . |
+  +---------------------------------------------------------+

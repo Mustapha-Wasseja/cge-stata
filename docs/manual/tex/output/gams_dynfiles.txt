@@ -1,0 +1,32 @@
+. return list
+
+scalars:
+         r(N_accounts) =  15
+          r(N_periods) =  3
+          r(N_changes) =  16
+      r(N_constraints) =  0
+
+macros:
+            r(closure) : "flexexr flexgsav savings cpi lab:mobile cap:specific"
+               r(sims) : "dn0 dn1 dn2"
+               r(name) : "dn"
+
+. type gams_dn/cge_dn1_par.inc
+* Parameter changes and the closure, written by cge_gams
+qgbar('com_man') = 1.03 * qgbar('com_man');
+qgbar('com_ser') = 1.03 * qgbar('com_ser');
+trdg('hhd') = 1.03 * trdg('hhd');
+hs0 = 1.02 * hs0;
+clext = 1;
+clgov = 1;
+clsi = 1;
+clnum = 1;
+fclo('lab') = 1;
+fclo('cap') = 2;
+
+. type gams_dn/cge_dn1_var.inc
+* Changes to fixed variables, written by cge_gams
+QF.fx('cap', 'act_agr') = 1.0090551181102363 * QF.l('cap', 'act_agr');
+QF.fx('cap', 'act_man') = 1.0090551181102363 * QF.l('cap', 'act_man');
+QF.fx('cap', 'act_ser') = 1.009055118110236 * QF.l('cap', 'act_ser');
+QFS.fx('lab') = 1.02 * QFS.l('lab');

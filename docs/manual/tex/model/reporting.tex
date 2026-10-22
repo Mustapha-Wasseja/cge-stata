@@ -1,0 +1,72 @@
+\chapter{Reporting measures and welfare}\label{chap:reporting}
+
+\manref{cge_report} computes standard measures at the base point and at each
+solution, in tables, and \manref{cge_results} summarises one simulation.
+The Python reference implementation computes the same measures, and the test
+suite compares them. Real measures are valued at base prices $\V{PQ}^0_c$
+(with VAT, $\V{PH}^0_c$), $\V{PVA}^0_a$ and $\V{EXR}^0$, and trade at base world
+prices $\V{pwm}^0_c$ and $\V{pwe}^0_c$; nominal measures use current prices and
+parameters.
+
+\section{Measures}\label{sec:measures}
+
+\begin{cgetable}{p{0.27\linewidth}p{0.69\linewidth}}
+\toprule
+Measure & Definition\\
+\midrule\endhead
+\bottomrule\endlastfoot
+Nominal GDP & $\sum_c \V{PH}_c\bigl(\sum_h \V{QH}_{ch} + \V{QG}_c + \V{QINV}_c + \V{QSHI}_c\bigr) + \sum_c \V{PQ}_c\,\V{QER}_c + \sum_{a,h} \V{PA}_a\,\V{QHA}_{ah} + \V{EXR}\sum_c \V{PWE}_c\,\V{QE}_c - \V{EXR}\sum_c \V{pwm}_c\,\V{QM}_c$, less the premiums paid abroad\\
+Real GDP & the same at base prices and base world prices\\
+GDP deflator & nominal GDP / real GDP\\
+Real consumption, government consumption, investment, fund purchases & $\sum_c \V{PH}^0_c$ times $\sum_h \V{QH}_{ch}$, $\V{QG}_c$, $\V{QINV}_c$ and $\V{QSHI}_c$\\
+Real exports, imports & $\V{EXR}^0\sum_c \V{pwe}^0_c\,\V{QE}_c + \sum_c \V{PQ}^0_c\,\V{QER}_c$; \ $\V{EXR}^0\sum_c \V{pwm}^0_c\,\V{QM}_c$\\
+Real value added & $\sum_a \V{PVA}^0_a\,\V{QVA}_a$, without the commodities in nests of value added\\
+Real exchange rate & $\V{EXR} / \V{DPI}$\\
+Private savings & $\sum_d \V{MPS}_d\,(1 - \V{TINS}_d)\,\V{YI}_d$\\
+Revenue by tax & direct $\sum_d \V{TINS}_d\,\V{YI}_d$; sales $\sum_c \V{tq}_c\,\V{TQADJ}\,\V{PQ}_c\,\V{QQ}_c$; import $\V{EXR}\sum_c \V{tm}_c\,\V{TMADJ}\,\V{pwm}_c\,\V{QM}_c$; export $\V{EXR}\sum_c \V{te}_c\,\V{PWE}_c\,\V{QE}_c$; activity $\sum_a \V{ta}_a\,\V{PA}_a\,\V{QA}_a$; VAT; taxes on factor use and on factor income\\
+Public debt (when the model has debt) & interest paid at home $r^d\,\V{DD}$ and abroad $r^f\,\V{DF}\,\V{EXR}$; primary balance $\V{GSAV} + r^d\,\V{DD} + r^f\,\V{DF}\,\V{EXR}$; debt at the end of the period at home, $\V{DD} + (1 - \phi)(-\V{GSAV})$, and abroad in local currency, $\bigl[\V{DF} + \phi(-\V{GSAV})/\V{EXR}\bigr]\V{EXR}$; their total, and the total in per cent of nominal GDP\\
+Real wage & $\V{W}_f / \V{CPI}$\\
+Labour force, unemployment rate ($f \in FL$) & $\V{QLF}_f$; \ $100\,(1 - \V{QFS}_f / \V{QLF}_f)$\\
+Exports of a commodity & $\V{QE}_c + \V{QER}_c$\\
+Health & health services per head $R = \V{HS}/\V{HS}^0$; the share of working time lost, $100\,S_f$ per cent, and days worked $\V{DW}_f$ for $f \in FS$; the death rate per 1,000, $1000\,\V{MR}$; the population index $\V{POP}$ (\chapref{chap:health})\\
+\end{cgetable}
+
+The other measures are model variables: $\V{CPI}$, $\V{DPI}$, $\V{EXR}$,
+$\V{FSAV}$, $\V{YG}$, $\V{EG}$, $\V{GSAV}$, $\V{YI}_d$, $\V{EH}_h$, $\V{W}_f$,
+$\V{YF}_f$, $\V{QFS}_f$, $\V{QA}_a$, $\V{PA}_a$, $\V{QVA}_a$, $\V{QQ}_c$,
+$\V{PQ}_c$, $\V{QX}_c$, $\V{QD}_c$, $\V{QM}_c$ and, when the model has them,
+$\V{HS}$, $\V{EFF}_f$, $\V{YSHI}$ and $\V{SHIADJ}$.
+
+The measures are grouped in the tables \cmd{macro}, \cmd{government},
+\cmd{debt}, \cmd{institutions}, \cmd{factors}, \cmd{activities},
+\cmd{commodities}, \cmd{health} and \cmd{welfare} (\manref{cge_report}).
+
+\section{Welfare}\label{sec:welfare}
+
+The welfare of household $h$ is measured with its expenditure function,
+\begin{equation*}
+E_h(\V{PQ}, u) = \sum_c \V{PQ}_c\,\gamma_{ch} + u \prod_c \V{PQ}_c^{\beta_{ch}},
+\end{equation*}
+which is that of Cobb--Douglas demand when $\gamma = 0$ (with VAT, $\V{PQ}$
+stands for $\V{PH}$, and home goods are valued at $\V{PA}_a$). With base
+spending $\V{EH}^0_h$ and new spending $\V{EH}_h$, the equivalent variation is
+the change in spending at base prices that gives the new utility, and the
+compensating variation the change in spending at new prices that would restore
+base utility:
+\begin{align*}
+\V{EV}_h &= \sum_c \V{PQ}^0_c\,\gamma_{ch} + \Bigl(\V{EH}_h - \sum_c \V{PQ}_c\,\gamma_{ch}\Bigr)
+  \prod_c \Bigl(\frac{\V{PQ}^0_c}{\V{PQ}_c}\Bigr)^{\beta_{ch}} - \V{EH}^0_h,\\
+\V{CV}_h &= \V{EH}_h - \sum_c \V{PQ}_c\,\gamma_{ch} - \Bigl(\V{EH}^0_h - \sum_c \V{PQ}^0_c\,\gamma_{ch}\Bigr)
+  \prod_c \Bigl(\frac{\V{PQ}_c}{\V{PQ}^0_c}\Bigr)^{\beta_{ch}}.
+\end{align*}
+Both are positive for a gain and are reported in per cent of $\V{EH}^0_h$.
+Neither values public goods, the environment or leisure.
+
+\section{Changes}
+
+Reports express a measure $x$ as a change from its base value $x^0$: rates in
+per cent (public debt in per cent of GDP, unemployment rates, the share of
+time lost to illness, the death rate) change by $x - x^0$ percentage points;
+other measures by $100\,(x - x^0)/|x^0|$ per cent, so that a fall is negative
+even when the base is negative, as for a government deficit. A change from a
+base of zero is missing.

@@ -1,0 +1,8 @@
+. cge_closure, external(fixexr) savinv(investment) factors(cap:specific)
+Closure
+  external account     fixexr
+  government           flexgsav
+  savings-investment   investment
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           specific

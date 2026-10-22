@@ -1,0 +1,41 @@
+. clear
+
+. set seed 2026
+
+. set obs 1000
+obs was 0, now 1000
+
+. generate str3 group = "hhd"
+
+. generate double hhsize = 1 + floor(6 * runiform())
+
+. generate double weight = 100 + 50 * runiform()
+
+. generate double wage = exp(rnormal(5, 0.7)) * hhsize
+
+. generate double profit = cond(runiform() < 0.3, exp(rnormal(5, 1)), 0)
+
+. generate double transfer = cond(runiform() < 0.2, 50 * runiform(), 0)
+
+. generate double cons = 0.9 * (wage + profit + transfer)
+
+. generate double food = cons * (0.6 - 0.3 * runiform())
+
+. generate double services = (cons - food) / 2
+
+. generate double goods = cons - food - services
+
+. summarize hhsize weight wage profit transfer cons food goods services
+
+    Variable |       Obs        Mean    Std. Dev.       Min        Max
+-------------+--------------------------------------------------------
+      hhsize |      1000       3.533    1.698763          1          6
+      weight |      1000    125.3665    14.48972   100.0673    149.834
+        wage |      1000    656.0342    616.9286   31.80859   5619.254
+      profit |      1000    64.56535    183.1834          0    2612.67
+    transfer |      1000    4.574924    11.33942          0   49.75252
+-------------+--------------------------------------------------------
+        cons |      1000     652.657    577.8481   28.62773   5413.999
+        food |      1000    298.2126    286.0872   11.90586   2977.315
+       goods |      1000    177.2222    155.8523   6.217155    1384.16
+    services |      1000    177.2222    155.8523   6.217155    1384.16

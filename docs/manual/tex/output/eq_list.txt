@@ -1,0 +1,13 @@
+. cge_equation, list
+variable LAM: value 1
+variable PIX(c): value 1
+variable CVOL: value 1
+equation lam: QG(com_ser) = LAM * base(QG(com_ser))
+equation pix(c): ln(PIX(c)) = ln(PQ(c)) - ln(CPI)
+equation cvol: sum(c, PQ(c) * QH(c, hhd)) = CVOL * sum(c, PQ(c) * base(QH(c, hhd)))
+
+. return list
+
+scalars:
+        r(N_equations) =  5
+        r(N_variables) =  3

@@ -1,0 +1,15 @@
+. cge_sensitivity, scenario(tariff_cut) draws(20) seed(2026) vary(q t) common ///
+>     distribution(triangular) tables(welfare) clear
+Sensitivity analysis: 20 draws of the elasticities (triangular within +/-50 per cent)
+  10 draws done
+  20 draws done
+
+Sensitivity of the scenario to the elasticities: 20 of 20 draws converged
+Per cent changes from the base (welfare: per cent of base consumption)
+
+welfare
+----------------------------------------------------------------------------------
+                               central       mean         sd         p5        p95
+equivalent_variation hhd         2.668      2.660      0.021      2.618      2.685
+compensating_variation hhd       2.668      2.659      0.021      2.617      2.684
+----------------------------------------------------------------------------------

@@ -1,0 +1,38 @@
+. cge_synthetic, clear national
+(14 vars, 13 obs)
+
+Synthetic SAM loaded (national-accounts layout): 13 accounts, total   1613.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 13 accounts, total 1613
+Largest row-column imbalance:  0.00e+00
+
+. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+>     dirtax(gov) saltax(gov) imptax(tax_imp)
+Exports recorded as sales by activities, moved to the paired commodities: 75
+Direct taxes paid to government, routed through account _dirtax: 25
+Sales taxes paid to government, routed through account _saltax: 30
+Accounts mapped: 3 activities, 3 commodities, 2 factors, 1 households, 0 enterprises, 0 margin accou
+> nts
+
+. cge_template using roles_na.csv, replace
+Template of 13 accounts, with roles from the current mapping
+Template saved to roles_na.csv
+
+. type roles_na.csv
+account,role,pair,group,row_total,column_total,difference
+act_agr,activities,com_agr,,100,100,0
+act_man,activities,com_man,,140,140,0
+act_ser,activities,com_ser,,150,150,0
+com_agr,commodities,,,110,110,0
+com_man,commodities,,,178,178,0
+com_ser,commodities,,,165,165,0
+lab,factors,,,135,135,0
+cap,factors,,,127,127,0
+hhd,households,,,287,287,0
+gov,government dirtax saltax,,,63,63,0
+tax_imp,imptax,,,8,8,0
+sav,savinv,,,50,50,0
+row,row,,,100,100,0

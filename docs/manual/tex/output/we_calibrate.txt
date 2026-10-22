@@ -1,0 +1,12 @@
+. cge_calibrate, sigmava(`va') sigmaq(`sq') sigmat(`st') incelas(`ie') frisch(`fr')
+Household demand: linear expenditure system
+Calibrated: 98 equations, 98 free variables
+Benchmark replication: largest scaled residual  6.66e-16
+
+. cge_check, homogeneity perturb(0.1)
+  [ok]   SAM balance (largest imbalance)                       5.68e-14
+  [ok]   benchmark replication (largest scaled residual)       6.66e-16
+  [ok]   closure is square (free variables minus equations)    0.00e+00
+  [ok]   homogeneity (largest relative deviation)              3.78e-14
+  [ok]   perturbed start returns the base (largest deviation)  5.55e-13
+All checks passed

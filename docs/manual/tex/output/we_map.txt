@@ -1,0 +1,7 @@
+. cge_map using roles.csv
+Mapping from the template:
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) h
+> ouseholds(hh) enterprises(ent) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal
+> ) imptax(tax_imp)
+Accounts mapped: 3 activities, 3 commodities, 2 factors, 1 households, 1 enterprises, 0 margin accou
+> nts

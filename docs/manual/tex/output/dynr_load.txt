@@ -1,0 +1,23 @@
+. cge_dynresults, run(lib) baseline(base) clear
+
+. describe
+
+Contains data
+  obs:           590
+ vars:             8
+ size:        80,240
+----------------------------------------------------------------------------------------------------
+              storage   display    value
+variable name   type    format     label      variable label
+----------------------------------------------------------------------------------------------------
+period          double  %10.0g                Period
+variable        str32   %32s                  Model variable
+element1        str32   %32s                  First set element
+element2        str32   %32s                  Second set element
+base            double  %10.0g                Base value (calibrated SAM)
+value           double  %10.0g                Value in the period
+baseline        double  %10.0g                Baseline value in the period
+dev_pct         double  %10.0g                Per cent difference from the baseline
+----------------------------------------------------------------------------------------------------
+Sorted by:  period  variable  element1  element2
+     Note:  dataset has changed since last saved

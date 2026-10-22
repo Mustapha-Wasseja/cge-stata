@@ -1,0 +1,153 @@
+\chapter{The GAMS implementation}\label{chap:gams}
+
+\manref{cge_gams} writes the calibrated model and one scenario as a GAMS
+program, so that anyone with GAMS can solve the model with PATH, CONOPT, KNITRO,
+IPOPT or another solver; check the results of \pkg with a second, independent
+implementation; and extend the equations. The GAMS model is the one that the
+package's own tests use to check the Stata model.
+
+\section{What is written}\label{sec:gams-files}
+
+GAMS receives what a user supplies, not the parameters that Stata calibrated:
+the SAM after the layout rewrites of \manref{cge_map}
+(section~\ref{sec:layouts}); the roles of its accounts; and the settings given
+to \manref{cge_calibrate}: elasticities, income elasticities and Frisch
+parameters, VAT credit shares, public debt and interest rates, export-only
+commodities and export demand, labour-market settings, days lost to illness,
+and factor quantities. The GAMS program calibrates every parameter itself,
+solves the base, and then solves the scenario. Its equations are an
+independent implementation of the equations of this part, written in GAMS
+rather than translated from Mata.
+
+\begin{cgetable}{p{0.27\linewidth}p{0.69\linewidth}}
+\toprule
+File & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{cge_run.gms} & driver: includes the model, then the scenario\\
+\cmd{cge_model.gms} & data, calibration, equations and base solve\\
+\cmd{cge_closure.gms} & bounds, variables that do not exist, and the closure\\
+\cmd{cge_solve.gms} & the solve statement, for the chosen solver and model type\\
+\cmd{cge_write.gms} & writes a solution\\
+\cmd{cge_data.inc} & the SAM, the roles of its accounts and the calibration settings\\
+\cmd{cge_shock_par.inc} & parameter changes and the closure\\
+\cmd{cge_shock_var.inc} & changes to fixed variables\\
+\cmd{cge_constraints.inc} & constraints, as complementarity pairs, and the model \cmd{cgecon}\\
+\cmd{cge_user.inc}, \cmd{cge_user_write.inc} & user variables and equations, and their results (chapter~\ref{chap:user})\\
+\end{cgetable}
+
+The scenario is either the shocks and closure in memory (what the next
+\cmd{cge_solve} would solve) or those of a stored simulation. Changed
+parameters and fixed variables are written as ratios to their base values, for
+example
+\begin{filecode}
+tm('com_man') = 0 * tm('com_man');
+QFS.fx('lab') = 1.05 * QFS.l('lab');
+\end{filecode}
+so that GAMS applies them to its own calibrated values. A parameter whose base
+value is zero is set to its new value. Numbers are written with the fewest
+significant digits (15, 16 or 17) that give back the same double. GAMS writes
+\cmd{cge_base.csv} and \cmd{cge_}\argu{name}\cmd{.csv}, with one row per
+variable and element (scenario, variable, element1, element2, value) and the
+model status in the first row.
+
+The equations of \cmd{cge_model.gms} carry the labels of
+chapter~\ref{chap:equations} with a prefix for their block: \cmd{EP} for prices
+(\cmd{EP1} is \eqref{eq:P1}), \cmd{EQ} for production, \cmd{ET} for trade,
+\cmd{EI} for institutions, \cmd{ES} for the system constraints, \cmd{EH} for the
+health links and \cmd{EL} for the labour-market regimes. To add an equation,
+declare a new variable and its equation after the existing ones, fix one
+variable less or free one more so that the system stays square, and give the
+new variable a starting level before the base solve.
+
+\textbf{Dynamic runs.} Every period of a run of \manref{cge_dynamic} can be
+exported. Each period's changes from the period before are written as ratios,
+to parameters (for example capital accumulation, population growth of
+subsistence quantities and of the base of the health link, and growth of
+government and foreign flows) and to fixed variables, in files named after
+the period's simulation: \cmd{cge_dn1_par.inc} and \cmd{cge_dn1_var.inc} for
+the simulation \cmd{dn1}. The driver solves the base
+and then the periods in order, each from the solution of the period before.
+Runs with constraints, microsimulation and sensitivity analysis are not
+exported.
+
+\section{Solvers and model types}\label{sec:gams-types}
+
+\begin{cgetable}{p{0.12\linewidth}p{0.55\linewidth}p{0.27\linewidth}}
+\toprule
+\cmd{type()} & GAMS model & Solvers\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{cns} (default) & a constrained nonlinear system: the equations, square, with no objective & PATH, CONOPT, KNITRO\\
+\cmd{nlp} & the same equations and a constant objective, \cmd{OBJ =e= 0} & IPOPT, CONOPT, KNITRO, MINOS, SNOPT\\
+\cmd{mcp} (the default with constraints) & a mixed complementarity problem: the equations, unpaired, and each constraint's bound paired with a slack & PATH\\
+\end{cgetable}
+
+\textbf{Constraints.} A scenario with constraints
+(chapter~\ref{chap:constraints}) can only be written as a mixed complementarity
+problem. For constraint $k$, \cmd{cge_constraints.inc} declares a slack
+$\V{SLK}_k \ge 0$; the bound $\V{BND}_k$, $\sigma_k(b_k - Y_k)/s^Y_k \ge 0$,
+paired with the slack; and the link $\V{LNK}_k$,
+$X_k = \bar x_k + \delta_k\,s^X_k\,\V{SLK}_k$, an unpaired equality that frees
+the adjusting variable. When the slack is zero, $Y_k$ may lie within its bound
+and $X_k$ stays at $\bar x_k$; when it is positive, $Y_k$ is at its bound. This
+is the condition \eqref{eq:B1}, which GAMS passes to PATH exactly, without
+smoothing. The variables with no pair must be free or fixed, so the bounds that
+keep prices and quantities positive in the CNS form are left out. The base is
+solved as the model \cmd{cgebase}, the scenario as \cmd{cgecon}.
+
+\textbf{Tolerances.} Convergence tolerances in GAMS solvers are absolute, so
+they are scaled to the largest SAM cell, within what double precision allows:
+$p = \max(10^{-11}, 10^{-13} \max_{rc} |\SAM(r, c)|)$. When it runs, the GAMS
+program writes an option file for four solvers: PATH (\cmd{convergence_tolerance} $= p$), CONOPT
+(\cmd{rtnwma}, $p$ relative to the largest cell), IPOPT (\cmd{tol} $= 10^{-12}$,
+\cmd{constr_viol_tol} $= p$) and KNITRO (\cmd{feastol_abs} $= p$,
+\cmd{feastol} $= 10^{-12}$). Other solvers use their defaults.
+
+\textbf{Running GAMS.} In the folder written, \cmd{gams cge_run.gms} solves the
+base and the scenario with PATH; \texttt{-{}-cgesolver=conopt} chooses another
+CNS solver, and \texttt{-{}-cgesolver=ipopt -{}-cgetype=nlp} an NLP solver. From
+interactive Stata, \cmd{cge_gams} can start GAMS itself; Stata for Windows
+cannot start other programs in batch mode. A GAMS licence is needed; GAMS runs
+solvers outside the licence only for small models. Listing files name the
+licence holder.
+
+\section{Comparison and import}\label{sec:gams-import}
+
+\textbf{Comparison.} \cmd{compare} reads the GAMS results and computes, for
+every variable and element that exists in the model,
+\begin{equation*}
+\frac{|x^{\text{GAMS}} - x^{\text{Stata}}|}{\max(1, |x^{\text{Stata}}|)},
+\end{equation*}
+and reports the largest value, for the base and for the scenario, with the
+variable where it occurs.
+
+\textbf{The GAMS solution in Stata.} \cmd{import()} stores the GAMS solution as
+a Stata simulation: the free variables take the values of GAMS, the fixed ones
+those of Stata, and Stata evaluates the model's equations at the result and
+reports the largest scaled residual. For a model too large for Stata's dense
+solver (\secref{sec:performance}) the route is to build, calibrate and shock
+the model in Stata, export it, solve it with PATH, and import the solution for
+reports, microsimulation or comparison.
+
+\textbf{Agreement.} On 31 exported cases, which together cover every layout,
+extension and closure of the package, the solutions of GAMS agree with those of
+Stata to these relative differences:
+
+\begin{cgetable}{lllll}
+\toprule
+Solver & Type & Cases solved & Base & Scenario\\
+\midrule\endhead
+\bottomrule\endlastfoot
+PATH & CNS & 26 of 26 & $4.3 \times 10^{-16}$ & $1.6 \times 10^{-11}$\\
+PATH & MCP, with constraints & 5 of 5 & $2.8 \times 10^{-17}$ & $4.0 \times 10^{-12}$\\
+CONOPT & CNS & 17 of 17 & $4.3 \times 10^{-16}$ & $3.6 \times 10^{-9}$\\
+KNITRO & CNS & 17 of 17 & $4.3 \times 10^{-16}$ & $1.6 \times 10^{-11}$\\
+IPOPT & NLP & 17 of 17 & $5.6 \times 10^{-15}$ & $1.6 \times 10^{-11}$\\
+\end{cgetable}
+
+Stata solved every case with a tolerance of $10^{-12}$ on the scaled
+residuals, so differences of about $10^{-11}$ are at the precision of the two
+solutions; CONOPT stops at a looser feasibility tolerance. CONOPT, KNITRO and
+IPOPT do not solve complementarity problems, so they were not run on the cases
+with constraints.

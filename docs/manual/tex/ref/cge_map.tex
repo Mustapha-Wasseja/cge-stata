@@ -1,0 +1,472 @@
+\cgeentry{cge_map}{Assign SAM accounts to model roles}
+
+\cgesec{Description}
+
+\cmd{cge_map} assigns the accounts of the SAM read by \manref{cge_sam} to the
+roles of the model: activities, commodities, factors, institutions, tax
+accounts, margin accounts and the other accounts described below. It then
+checks every cell of the SAM against the flows that the model represents and
+reports, in one table, every account that is not balanced, every account with
+flows but no role, every flow that the model does not represent and every
+negative cell where the model needs a non-negative value. If there is any such
+problem, \cmd{cge_map} stops with error 459.
+
+Before the checks, layouts that are common in national SAMs are rewritten into
+the layout of the model, and the amounts moved are displayed. The data in
+memory are not changed. With \cmd{using}, the roles are read from a template
+written by \manref{cge_template}.
+
+\cgesec{Quick start}
+
+Map the synthetic SAM, with direct, sales and import tax accounts
+\begin{stcode}
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)        ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+\end{stcode}
+As above, for a SAM that records sales and direct taxes as payments to the
+government account
+\begin{stcode}
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)        ///
+    dirtax(gov) saltax(gov) imptax(tax_imp)
+\end{stcode}
+Save every cell that the checks report to \cmd{problems.csv}
+\begin{stcode}
+cge_map, ... report(problems.csv) replace
+\end{stcode}
+Map the SAM from a template filled in Excel
+\begin{stcode}
+cge_map using roles.xlsx
+\end{stcode}
+
+\cgesec{Syntax}
+
+Assign the roles with options
+
+\begin{stsyntax}
+\cmdb{cge_map}\texttt{,} \optarg{}{activities}{namelist}
+\optarg{}{commodities}{namelist} \optarg{}{factors}{namelist}
+\optarg{}{households}{namelist} \optarg{}{government}{name}
+\optarg{}{savinv}{name} \optarg{}{row}{name} [\argu{options}]
+\end{stsyntax}
+
+Assign the roles from a template
+
+\begin{stsyntax}
+\cmdb{cge_map using} \argu{template} [\texttt{,} \argu{template\_options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{activities}{namelist} & activity accounts, each paired with the commodity in the same position of \cmd{commodities()}; required\\
+\optarg{}{commodities}{namelist} & commodity accounts: the paired ones first, then any without a producing activity; required\\
+\optarg{}{factors}{namelist} & factor accounts; required\\
+\optarg{}{households}{namelist} & household accounts; required\\
+\optarg{}{government}{name} & government account; required\\
+\optarg{}{savinv}{name} & savings-investment account; required\\
+\optarg{}{row}{name} & rest-of-world account; required\\
+\optgroup{Institutions}
+\optarg{}{enterprises}{namelist} & enterprise accounts\\
+\optarg{}{insurance}{name} & social health insurance fund\\
+\optgroup{Taxes}
+\optarg{}{dirtax}{name} & direct tax account\\
+\optarg{}{saltax}{name} & sales tax account\\
+\optarg{}{imptax}{name} & import tariff account\\
+\optarg{}{exptax}{name} & export tax account\\
+\optarg{}{acttax}{name} & activity tax account\\
+\optarg{}{vattax}{name} & value added tax (VAT) account\\
+\optarg{vats}{hare}{spec} & share of each commodity's sales tax that is VAT\\
+\optarg{factort}{ax}{account\texttt{:}factor \ldots} & accounts of taxes on the use of factors, each with the factor it taxes\\
+\optarg{factorinc}{ometax}{name} & account of taxes on factor income\\
+\optgroup{Margins, inventories and the territorial correction}
+\optarg{}{marginaccounts}{namelist} & margin accounts paid per unit of composite supply\\
+\optarg{domestic}{margins}{namelist} & margin accounts paid per unit of domestic sales\\
+\optarg{import}{margins}{namelist} & margin accounts paid per unit of imports\\
+\optarg{export}{margins}{namelist} & margin accounts paid per unit of exports\\
+\optarg{}{margins}{namelist} & activities whose margins the SAM nets out of their output\\
+\optarg{}{stocks}{namelist} & stock-change accounts, merged into savings-investment\\
+\optarg{}{territorial}{commodity [activity]} & territorial-correction commodity and, optionally, its activity\\
+\optgroup{Reporting}
+\optarg{}{report}{filename} & save every cell that the checks report to a CSV file\\
+\opt{}{replace} & allow \cmd{report()} to overwrite an existing file\\
+\end{opttable}
+
+\begin{opttable}[\argu{template\_options}]
+\optarg{vats}{hare}{spec} & share of each commodity's sales tax that is VAT\\
+\optarg{}{sheet}{sheetname} & worksheet of an Excel template; default \cmd{accounts}, or else the first sheet\\
+\optarg{}{report}{filename} & save every cell that the checks report to a CSV file\\
+\opt{}{replace} & allow \cmd{report()} to overwrite an existing file\\
+\end{opttable}
+
+All options other than \cmd{vatshare()}, \cmd{domesticmargins()},
+\cmd{importmargins()}, \cmd{exportmargins()}, \cmd{factortax()} and
+\cmd{factorincometax()} must be typed in full.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{activities}{namelist} and \optarg{}{commodities}{namelist}]
+list the activity and commodity accounts. They are paired by position: the
+\argu{k}th commodity is the primary commodity of the \argu{k}th activity, used
+when layouts are rewritten. An activity may also produce other commodities,
+in the proportions that the SAM records. Each activity needs a paired
+commodity; commodities without a producing activity, such as commodities that
+are only imported, are listed after the paired ones. A payment from a
+household to an activity, $\SAM(\textit{activity}, \textit{household})$, is
+consumption of own produce at home (\secref{sec:home}).
+
+\item[\optarg{}{factors}{namelist} and \optarg{}{households}{namelist}] list
+the factor and household accounts. Non-profit institutions serving households
+can be listed as households.
+
+\item[\optarg{}{government}{name}, \optarg{}{savinv}{name} and
+\optarg{}{row}{name}] name the government, savings-investment and
+rest-of-world accounts.
+
+\item[\optarg{}{enterprises}{namelist}] lists enterprise accounts
+(corporations). Enterprises receive factor income and transfers, pay direct
+taxes and save; the rest of their income is transferred to other institutions
+or abroad. They do not consume, so a purchase of commodities by an enterprise
+is reported as a flow that the model does not represent.
+
+\item[\optarg{}{insurance}{name}] names a social health insurance fund. The
+fund may receive contributions from factors (its row, the factors' columns),
+transfers from the government and from the rest of the world, and may buy
+commodities and save; it may have no other flows. Contributions enter the
+model as a fixed rate on each factor's income, taken before that income is
+distributed to institutions, and the fund buys a fixed basket of commodities
+with its revenue less a fixed share saved, as in equations \eqref{eq:I2} and
+\eqref{eq:I12} to \eqref{eq:I14}. A non-profit institution financed by donors that buys health
+services is mapped as a household instead.
+
+\item[\optarg{}{dirtax}{name}, \optarg{}{saltax}{name},
+\optarg{}{imptax}{name}, \optarg{}{exptax}{name} and \optarg{}{acttax}{name}]
+name the accounts that collect direct taxes, sales taxes, import tariffs,
+export taxes and activity taxes. The rates of a tax that is not mapped are
+zero. If the SAM records a tax as a payment to the government account itself,
+name the government account in the option, for example \cmd{saltax(gov)}: the
+government row's cells in the columns that pay the tax (households and
+enterprises for \cmd{dirtax()}, commodities for \cmd{saltax()},
+\cmd{imptax()} and \cmd{exptax()}, activities for \cmd{acttax()}) are then
+routed through an internal tax account, \cmd{_dirtax}, \cmd{_saltax},
+\cmd{_imptax}, \cmd{_exptax} or \cmd{_acttax}. At most one of \cmd{saltax()},
+\cmd{imptax()}, \cmd{exptax()} and \cmd{vattax()} may name the government
+account, because their cells would otherwise be ambiguous.
+
+\item[\optarg{}{vattax}{name}] names the account that collects VAT from the
+commodities, net of input credits, and pays it to the government. VAT is then
+a tax on final demand at a rate by commodity, with credits for the VAT on
+inputs in the shares given by \cmd{vatcredit()} of \manref{cge_calibrate};
+exports and margin services are zero-rated (\secref{sec:vat}). The government
+account may be named, as for the other taxes; the VAT is then routed through
+the internal account \cmd{_vattax}.
+
+\item[\optarg{vats}{hare}{spec}] is for SAMs that record VAT within the sales
+tax account. It moves the given share of each commodity's sales tax to an
+internal VAT account, \cmd{_vatshare}, and the same amount of the sales tax
+account's payment to the government to the payment of \cmd{_vatshare}.
+\argu{spec} is \argu{commodity}\cmd{:}\argu{share} pairs, or one share for
+every commodity; shares lie between 0 and 1, and commodities not listed have
+share 0. \cmd{vatshare(0)} creates an empty VAT account, so that a VAT can be
+introduced by a shock to \cmd{tv}. \cmd{vatshare()} needs \cmd{saltax()} and
+may not be combined with \cmd{vattax()}.
+
+\item[\optarg{factort}{ax}{account\texttt{:}factor \ldots}] names accounts of
+taxes on the use of factors, such as payroll taxes on labour or taxes on
+capital, which activities pay and which pay the government. Each account is
+followed by the factor whose use it taxes. The rate on each factor in each
+activity is the tax over the factor payment; it raises the cost of the factor
+to the activity, and value added at factor cost includes it
+(\secref{sec:factortax}).
+
+\item[\optarg{factorinc}{ometax}{name}] names the account of taxes on factor
+income, which factors pay and which pays the government. The rate on each
+factor's income is taken before the income is distributed to institutions, as
+the contributions to a health insurance fund are.
+
+\item[\optarg{}{marginaccounts}{namelist}] lists margin accounts: accounts that
+collect trade or transport margins from commodities (the margin account's row,
+the commodities' columns) and spend them on margin services (the commodities'
+rows, the margin account's column). A margin account may have no other flows.
+Margins enter the model as a fixed quantity of margin services per unit of
+each commodity's composite supply, and their cost enters the commodity's
+price, as in equations \eqref{eq:P3} and \eqref{eq:T8}.
+
+\item[\optarg{domestic}{margins}{namelist}, \optarg{import}{margins}{namelist}
+and \optarg{export}{margins}{namelist}] list margin accounts whose margins are
+paid per unit of domestic sales, of imports and of exports, for SAMs that
+separate them (\secref{sec:margins-market}). Domestic buyers then pay the
+producer price plus domestic margins, the import price includes import
+margins, and exporters receive the world price less export taxes and export
+margins. A commodity that pays such margins must have domestic sales, imports
+or exports respectively; \manref{cge_calibrate} checks this.
+
+\item[\optarg{}{margins}{namelist}] lists activities, typically trade and
+transport, whose margin revenue the SAM nets out of their output by recording
+a negative use of their own product. That negative cell is moved to the
+activity's output, so that the margins enter the model as the purchases of
+trade and transport services by the activities that pay them, as the SAM
+records them. The activity's own use of its product cannot be separated from
+the netted margins and becomes zero. An activity named here must be one of
+the activities, and must have a negative use of its paired commodity.
+
+\item[\optarg{}{stocks}{namelist}] lists stock-change accounts: accounts
+financed by savings-investment that buy commodities, with negative cells for a
+fall in inventories. Their purchases are moved to the savings-investment
+account, so that changes in inventories become part of investment demand. A
+stock-change account may receive payments only from savings-investment and may
+have no other role.
+
+\item[\optarg{}{territorial}{commodity [activity]}] names the
+territorial-correction commodity and, optionally, its activity. The
+correction's imports (purchases abroad by residents) become household payments
+to the rest of the world, and its exports (purchases in the country by
+non-residents) become transfers from the rest of the world to households, both
+divided among households in proportion to their consumption of the correction.
+The correction may have only household consumption, imports and exports, and
+the activity only exports, which are first moved to the commodity. Both
+accounts then have no flows, and may have no other role.
+
+\item[\optarg{}{report}{filename}] saves every cell that the checks report to a
+CSV file with the columns \cmd{problem}, \cmd{paid_by}, \cmd{paid_by_role},
+\cmd{received_by}, \cmd{received_by_role} and \cmd{value}. The file is written
+whether or not problems are found.
+
+\item[\opt{}{replace}] allows \cmd{report()} to overwrite an existing file.
+
+\item[\optarg{}{sheet}{sheetname}] names the worksheet of an Excel template.
+The default is the sheet \cmd{accounts}, which \manref{cge_template} writes,
+or else the first sheet. It may be given only with \cmd{using}.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The mapping tells the model what each account of the SAM is. Each account has
+one role, given by the option that lists it, except that the government
+account may also be named in tax options and a margin activity is listed in
+both \cmd{activities()} and \cmd{margins()}. An account with no flows needs no
+role. The mapping replaces any earlier mapping, and the model must be
+calibrated again with \manref{cge_calibrate}.
+
+\cgesubsec{The checks}
+
+After the layouts are rewritten, \cmd{cge_map} checks the SAM and collects four
+kinds of problem:
+\begin{itemize}
+\item an account that is not balanced: its row total differs from its column
+total;
+\item an account with flows but no role;
+\item a non-zero cell that is not one of the flows of the model, listed below;
+\item a negative cell where the model needs a non-negative value.
+\end{itemize}
+The problems are summarised in one table, grouped by problem and by the roles
+of the paying and receiving accounts, the largest group first, with the number
+of cells, their sum in SAM units and their share of the sum of the absolute
+values of all cells. For an account with no role, the value is its row total,
+and its flows are also listed by role. Unknown account names (error 111) and an
+account given two roles (error 198) stop the command before the checks.
+
+The model represents the following payments, from the column account to the
+row account:
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.26\linewidth}>{\raggedright\arraybackslash}p{0.70\linewidth}}
+\toprule
+Paid by (column) & Received by (row)\\
+\midrule
+commodity & activities (domestic output); rest of the world (imports); sales, import and export tax accounts; VAT account; margin accounts\\
+activity & commodities (intermediate inputs); factors; activity tax account; accounts of taxes on factor use\\
+factor & households; enterprises; government; rest of the world; health insurance fund; account of taxes on factor income\\
+household & commodities; activities (home consumption); direct tax account; savings-investment; households and enterprises; rest of the world\\
+enterprise & direct tax account; savings-investment; households and enterprises; rest of the world\\
+government & commodities; households and enterprises; government; rest of the world; savings-investment; health insurance fund\\
+tax account & government\\
+savings-investment & commodities (investment, including changes in inventories)\\
+margin account & commodities (margin services)\\
+health insurance fund & commodities; savings-investment\\
+rest of the world & commodities (exports); households, enterprises and government; factors (factor income from abroad); savings-investment; health insurance fund\\
+\bottomrule
+\end{cgetable}
+
+Negative cells are allowed in the rows of the tax accounts and of
+savings-investment, in transfers (the payments among households, enterprises,
+the government and the rest of the world, and factor income from abroad), in
+the payments of tax accounts to the government, in investment demand (a fall in
+inventories) and in sales of commodities by activities. A negative sale gives
+a negative yield; it is displayed as a note and counted in
+\res{r(N_negative_sales)}. Section~\ref{sec:flows} gives the rules in full.
+
+\cgesubsec{Layouts rewritten before the checks}
+
+National SAMs often record flows differently from the model. \cmd{cge_map}
+rewrites these layouts, in this order, and displays the amounts moved:
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.40\linewidth}>{\raggedright\arraybackslash}p{0.17\linewidth}>{\raggedright\arraybackslash}p{0.37\linewidth}}
+\toprule
+The SAM records & Option & Rewrite\\
+\midrule
+exports as sales by activities to the rest of the world & (always) & moved to the commodity paired with the activity\\
+margins netted out of margin activities, as a negative use of their own product & \cmd{margins()} & moved to the activity's output\\
+a territorial correction & \cmd{territorial()} & household payments to, and transfers from, the rest of the world\\
+changes in inventories in a stock-change account & \cmd{stocks()} & merged into savings-investment\\
+taxes paid to the government account & tax option naming the government & routed through an internal tax account\\
+VAT within the sales tax & \cmd{vatshare()} & moved to the internal account \cmd{_vatshare}\\
+\bottomrule
+\end{cgetable}
+
+The rewrites leave unchanged every total that enters the model, except that a
+margin rewrite raises the output of the margin activity, and the supply and
+demand of its product, by the margins, and a territorial rewrite replaces the
+correction's imports, exports and consumption by transfers
+(\secref{sec:layouts}). \manref{cge_samexport} with \cmd{mapped} writes the SAM
+after the rewrites.
+
+\cgesubsec{Example 1: the standard layout}
+
+The synthetic SAM has separate tax accounts and records exports as sales of
+commodities:
+\stlog{map_standard}
+
+\cgesubsec{Example 2: a problem, and a layout rewrite}
+
+The national-accounts layout of the synthetic SAM describes the same economy,
+but records exports as sales by activities, and sales and direct taxes as
+payments to the government account. Mapped with an import tax account only, it
+gives two groups of problems:
+\stlog[\scriptsize]{map_problem}
+The exports of the activities, 75 in all, were moved to their paired
+commodities before the checks. The cells left are payments by the commodities
+and by the household to the government, which the model represents only
+through tax accounts. With \cmd{report()}, every cell of the table was saved:
+\stlog{map_cells}
+Naming the government account in \cmd{saltax()} and \cmd{dirtax()} routes the
+taxes through internal accounts, and the mapping succeeds:
+\stlog{map_national}
+\manref{cge_calibrate} gives the same model for this layout as for the
+standard one.
+
+\cgesubsec{Example 3: a template}
+
+A template lists the roles in a file, one row per account, which is easier to
+check and to keep than a long command. Written after a mapping, it holds that
+mapping, and \cmd{cge_map using} maps the SAM from it and displays the
+equivalent command:
+\stlog{map_template}
+The government account has three roles, \cmd{government dirtax saltax}, so the
+taxes are routed through internal accounts as in example~2. Because the model
+is kept in Mata, the data in memory, here the template, can be replaced at
+any time.
+
+In a template, the \cmd{role} column names the options that list the account,
+separated by spaces or commas, in either case; the singular forms
+\cmd{activity}, \cmd{commodity}, \cmd{factor}, \cmd{household},
+\cmd{enterprise}, \cmd{margin}, \cmd{marginaccount}, \cmd{stock},
+\cmd{vat}, \cmd{domesticmargin}, \cmd{importmargin} and \cmd{exportmargin} are
+also accepted. The accounts of each option are listed in the order of the SAM,
+and the correction commodity of \cmd{territorial} before its activity. The
+\cmd{pair} column pairs an activity with a commodity; where it is blank, the
+activity is paired with the commodity whose column pays it most. A tie, an
+activity with no sales to commodities, and a commodity paired with two
+activities are errors. For an account of taxes on factor use, the \cmd{pair}
+column names the factor it taxes. The template may be a \cmd{.csv},
+\cmd{.xls}, \cmd{.xlsx} or \cmd{.dta} file with a string variable
+\cmd{account}.
+
+If the SAM was aggregated with the same template (\manref{cge_aggregate}), its
+accounts are the template's groups: each group takes the role of its members,
+which must agree, and is paired with the group of its members' pairs.
+
+\cgesubsec{Example 4: a supply-use layout}
+
+The supply-use layout of the synthetic SAM has two margin accounts, a
+commodity that is only imported, \cmd{com_fuel}, listed after the paired
+commodities, and a stock-change account:
+\stlog{map_sut}
+The stock-change account received 3 from savings-investment; its purchases are
+now investment demand.
+
+\cgesec{Stored results}
+
+\cmd{cge_map} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_negative_sales)} & number of negative sales of commodities by activities\\
+\res{r(exports_moved)} & exports recorded as sales by activities, moved to commodities\\
+\res{r(margins_moved)} & margins moved to the output of margin activities\\
+\res{r(territorial_imports)} & purchases abroad by residents, made household payments abroad\\
+\res{r(territorial_exports)} & purchases by non-residents, made transfers from abroad to households\\
+\res{r(stocks_merged)} & payments of savings-investment to stock-change accounts\\
+\res{r(taxes_rerouted)} & direct, sales, import, export and activity taxes routed through internal tax accounts\\
+\res{r(vat_moved)} & VAT moved out of the sales tax by \cmd{vatshare()}\\
+\resgroup{Macros}
+\res{r(command)} & with \cmd{using}, the equivalent \cmd{cge_map} command\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $\SAM(r, c)$ be the payment from column account $c$ to row account $r$
+before a rewrite and $\SAM'(r, c)$ after it, $c(a)$ the commodity paired with
+activity $a$, and \textit{row}, \textit{sav} and \textit{gov} the
+rest-of-world, savings-investment and government accounts. Cells not shown are
+unchanged. The rewrites are made in the following order.
+
+Exports recorded as sales by activity $a$:
+\begin{gather*}
+\SAM'(c(a), \textit{row}) = \SAM(c(a), \textit{row}) + \SAM(a, \textit{row}), \qquad
+\SAM'(a, c(a)) = \SAM(a, c(a)) + \SAM(a, \textit{row}),\\
+\SAM'(a, \textit{row}) = 0 .
+\end{gather*}
+Margins netted out of activity $a$, with $\SAM(c(a), a) < 0$:
+\begin{equation*}
+\SAM'(a, c(a)) = \SAM(a, c(a)) - \SAM(c(a), a), \qquad \SAM'(c(a), a) = 0 .
+\end{equation*}
+Territorial correction $k$: the exports of its activity, if any, are first
+moved to $k$ as above. With $\mathit{IM} = \SAM(\textit{row}, k)$,
+$\mathit{EX} = \SAM(k, \textit{row})$ and the shares
+$s_h = \SAM(k, h) / \sum_{h'} \SAM(k, h')$ of the households,
+\begin{equation*}
+\SAM'(\textit{row}, h) = \SAM(\textit{row}, h) + s_h\,\mathit{IM}, \qquad
+\SAM'(h, \textit{row}) = \SAM(h, \textit{row}) + s_h\,\mathit{EX},
+\end{equation*}
+and the cells of $k$ are set to zero. Stock-change account $k$:
+$\SAM'(r, \textit{sav}) = \SAM(r, \textit{sav}) + \SAM(r, k)$ for every account
+$r$, and the row and column of $k$ are set to zero.
+
+A tax paid to the government by the accounts $j \in P$ (the payers of that
+tax) is routed through a new account $t$:
+\begin{equation*}
+\SAM'(t, j) = \SAM(\textit{gov}, j), \qquad \SAM'(\textit{gov}, j) = 0, \qquad
+\SAM'(\textit{gov}, t) = \sum_{j \in P} \SAM(\textit{gov}, j) .
+\end{equation*}
+With VAT shares $v_c$ of the sales tax account \textit{sal}, the new account
+$t$, \cmd{_vatshare}, has
+\begin{gather*}
+\SAM'(t, c) = v_c\,\SAM(\textit{sal}, c), \qquad
+\SAM'(\textit{sal}, c) = (1 - v_c)\,\SAM(\textit{sal}, c),\\
+\SAM'(\textit{gov}, t) = \sum_c v_c\,\SAM(\textit{sal}, c), \qquad
+\SAM'(\textit{gov}, \textit{sal}) = \SAM(\textit{gov}, \textit{sal}) - \SAM'(\textit{gov}, t) .
+\end{gather*}
+
+The checks use the tolerance $\tau = 10^{-8} \max\bigl(1, \max_{r,c}
+|\SAM(r, c)|\bigr)$ on the rewritten SAM. A cell is non-zero if
+$|\SAM(r, c)| > \tau$, and account $i$ is not balanced if
+\begin{equation*}
+\Bigl|\sum_c \SAM(i, c) - \sum_r \SAM(r, i)\Bigr| > \tau .
+\end{equation*}
+The share of a group of problem cells $G$ in the report is
+$\sum_{(r,c) \in G} |\SAM(r, c)| \big/ \sum_{r,c} |\SAM(r, c)|$.
+
+Section~\ref{sec:flows} lists the flows of the model and the cells that may be
+negative, and \secref{sec:layouts} gives the rewrites and the totals they
+change.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_sam}{Read a social accounting matrix}
+\seeentry{cge_template}{Write a template that maps SAM accounts to roles and groups}
+\seeentry{cge_aggregate}{Merge SAM accounts into groups}
+\seeentry{cge_samexport}{Write the SAM to a file or to memory}
+\seeentry{cge_calibrate}{Calibrate the model to the SAM}
+\seechapter{chap:calibration}{Calibration}
+\end{alsosee}

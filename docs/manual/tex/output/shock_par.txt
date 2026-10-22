@@ -1,0 +1,8 @@
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_shock pwm, elements(com_man) scale(1.1)
+Parameter pwm changed for 1 element(s)
+
+. cge_shock ad, elements(act_agr) scale(1.05)
+Parameter ad changed for 1 element(s)

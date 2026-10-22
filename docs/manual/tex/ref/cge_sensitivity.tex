@@ -1,0 +1,244 @@
+\cgeentry{cge_sensitivity}{Sensitivity of a scenario's results to the elasticities}
+
+\cgesec{Description}
+
+\cmd{cge_sensitivity} shows how much the results of a scenario depend on the
+elasticities. For each of a number of draws, it multiplies the elasticities
+by random factors around one, calibrates the model again from the SAM,
+restores the closure, runs a program that applies the scenario's shocks, and
+solves. It then summarises every report measure of \manref{cge_report} across
+the draws that converged: the result with the central elasticities, the
+mean, the standard deviation and the 5th and 95th percentiles. The model in
+memory, with its simulations, is restored exactly at the end.
+
+\cgesec{Quick start}
+
+200 draws of every value-added, Armington and CET elasticity within 50 per
+cent of its central value, for the shocks applied by program \cmd{tariff_cut}
+\begin{stcode}
+cge_sensitivity, scenario(tariff_cut) draws(200)
+\end{stcode}
+As above, with factors drawn within 25 per cent from a triangular distribution,
+and every report table displayed
+\begin{stcode}
+cge_sensitivity, scenario(tariff_cut) draws(200) spread(0.25) distribution(triangular) tables(all)
+\end{stcode}
+Vary only the Armington and CET elasticities, with one factor for each type
+applied to every commodity, and load every draw as data
+\begin{stcode}
+cge_sensitivity, scenario(tariff_cut) draws(200) vary(q t) common clear
+\end{stcode}
+Save every draw to \cmd{sens.dta} without displaying the summary
+\begin{stcode}
+cge_sensitivity, scenario(tariff_cut) draws(200) saving(sens, replace) nodisplay
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_sensitivity}\texttt{,} \optarg{scen}{ario}{program} \optarg{draw}{s}{\#}
+[\argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{scen}{ario}{program} & program that applies the scenario's shocks; required\\
+\optarg{draw}{s}{\#} & number of draws; required\\
+\optarg{}{seed}{\#} & random-number seed; default \texttt{12345}\\
+\optgroup{Draws}
+\optarg{spr}{ead}{\#} & factors drawn between $1-\#$ and $1+\#$; default \texttt{0.5}\\
+\optarg{dist}{ribution}{name} & \cmd{uniform} or \cmd{triangular}; default \cmd{uniform}\\
+\opt{}{common} & one factor for each type of elasticity, applied to every sector\\
+\optarg{var}{y}{list} & elasticities to vary: \cmd{va}, \cmd{q}, \cmd{t}, \cmd{a}; default \cmd{va q t}\\
+\optgroup{Reporting}
+\optarg{tab}{les}{list} & report tables to display; default \cmd{macro welfare}\\
+\opt{nod}{isplay} & suppress the summary\\
+\opt{}{clear} & replace the data in memory with every draw\\
+\optarg{sav}{ing}{filename\textup{[}\texttt{, replace}\textup{]}} & save every draw to a Stata dataset\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{scen}{ario}{program}] names a program, without arguments, that
+applies the scenario's shocks with \manref{cge_shock} to the freshly
+calibrated model. It is run quietly for every draw. If it fails, the model is
+restored and the command stops.
+
+\item[\optarg{draw}{s}{\#}] sets the number of draws, at least 1. Draw 0, with
+the central elasticities, is always added, so the model is calibrated and
+solved \# + 1 times.
+
+\item[\optarg{}{seed}{\#}] sets the random-number seed; the default is 12345.
+It sets the seed of Stata's random-number generator. The same seed gives the
+same draws, whichever elasticities are varied.
+
+\item[\optarg{spr}{ead}{\#}] sets the range of the factors, from $1 - \#$ to
+$1 + \#$; the default is 0.5. \# must be at least 0 and less than 1, so
+that every drawn elasticity keeps its sign.
+
+\item[\optarg{dist}{ribution}{name}] draws the factors from a
+\cmd{uniform} distribution on that range, the default, or from a symmetric
+\cmd{triangular} distribution on the same range, which puts more weight near
+the central values.
+
+\item[\opt{}{common}] draws one factor for each type of elasticity and each
+draw, applied to every sector, so that the elasticities of a type move
+together. By default, each sector's elasticity is drawn separately.
+
+\item[\optarg{var}{y}{list}] lists the elasticities to vary: \cmd{va}, the
+elasticity of substitution in value added of each activity; \cmd{q}, the
+Armington elasticity of each commodity; \cmd{t}, the CET elasticity of each
+commodity, which also applies to exports drawn from composite supply; and
+\cmd{a}, the elasticity of the top nest of each activity. The default is
+\cmd{va q t}. A Leontief top nest, with elasticity 0, stays Leontief. Other
+elasticities and calibration settings keep their values.
+
+\item[\optarg{tab}{les}{list}] lists the tables of \manref{cge_report} whose
+measures are displayed in the summary, or \cmd{all}; the default is
+\cmd{macro welfare}. The dataset of \opt{}{clear} and \opt{sav}{ing()} holds
+every table.
+
+\item[\opt{nod}{isplay}] suppresses the summary. The progress of the draws is
+still displayed.
+
+\item[\opt{}{clear}] replaces the data in memory with the results described
+under Remarks and examples below.
+
+\item[\optarg{sav}{ing}{filename\textup{[}\texttt{, replace}\textup{]}}]
+saves the same dataset as a Stata dataset, leaving the data in memory
+unchanged unless \opt{}{clear} is also given; \cmd{replace} allows an existing
+file to be replaced.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+Elasticities are rarely estimated for the country and period of a SAM, and a
+scenario's results can depend on them. \cmd{cge_sensitivity} solves the
+scenario again for many sets of elasticities around those used. Each draw
+calibrates the model from the SAM with the drawn elasticities and the other
+settings of the last \manref{cge_calibrate}, so that every draw replicates
+the SAM; it then restores the closure, including swaps, and any constraints,
+runs the scenario program and solves. A model calibrated by a version of
+\pkg that did not record its calibration settings must be calibrated again
+first (error 459). The solution of each draw is
+summarised by the report measures of \manref{cge_report}: percentage changes
+from the base, changes in points for rates, and per cent of base consumption
+for the welfare measures.
+
+The draws do not estimate uncertainty about the elasticities. They show how
+the results change over a range chosen by the user, so the range, the
+distribution and whether sectors move together should be stated with the
+results (\chapref{chap:sensitivity}). Standard errors of published estimates,
+such as those of \mbox{\manref{cge_elasticities}}, can guide the choice of range.
+
+\cgesubsec{Example 1: the elasticities of every sector drawn separately}
+
+The synthetic SAM is calibrated as in \manref{cge_solve}, with
+\cmd{sigmava(0.8) sigmaq(2) sigmat(2)}. The scenario removes every import
+tariff; its program applies the shock and nothing else:
+\stlog{sens_program}
+Twenty draws, each elasticity of each sector drawn uniformly within 50 per
+cent of its central value:
+\stlog{sens_draws}
+The column \cmd{central} is the result of the scenario with the central
+elasticities, the result of \mbox{\manref{cge_solve}}; the other columns summarise
+the 20 draws. Real consumption and household welfare vary little across the
+draws, by a standard deviation of about 0.02 points around 2.7 per cent; real
+exports and imports, and the exchange rate, vary much more. With 20 draws,
+\cmd{p5} is the smallest result and \cmd{p95} the second largest; with more
+draws the percentiles are more precise. The results come from a synthetic SAM and
+illustrative elasticities and are not findings about any economy.
+
+\cgesubsec{Example 2: common factors, and the draws as data}
+
+With \opt{}{common}, the Armington and CET elasticities of every commodity
+are multiplied by the same factor in each draw, here drawn from a triangular
+distribution; only the welfare table is displayed, and every draw is loaded:
+\stlog{sens_common}
+The dataset holds the report measures of each draw that converged, draw 0
+included, and the elasticities of every draw (table \cmd{elasticity}). With
+\opt{}{common}, the Armington elasticities are the same for every commodity
+in each draw:
+\stlog{sens_data}
+The mean and standard deviation of the equivalent variation over draws 1 to
+20 are those of the summary.
+
+\cgesubsec{The dataset}
+
+The dataset of \opt{}{clear} and \opt{sav}{ing()} has the variables
+\begin{cgetable}{>{\ttfamily}l p{0.80\linewidth}}
+\toprule
+\normalfont Variable & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+draw & the draw; 0 for the central elasticities\\
+table & the report table, or \cmd{elasticity}\\
+measure & the report measure, or \cmd{sigmava}, \cmd{sigmaq}, \cmd{sigmat} or \cmd{sigmaa}\\
+element & the set element\\
+base & the base value of the measure\\
+value & its value in the draw, or the value of the elasticity\\
+pct & the per cent change from the base (rates: points; welfare: per cent of base consumption)\\
+\end{cgetable}
+Report measures are included for the draws that converged; elasticities for
+every draw, with \cmd{base} and \cmd{pct} missing. A draw that does not
+calibrate or does not solve is counted as not converged and left out of the
+summary. If the scenario does not solve with the central elasticities, the
+command stops with error 430 after restoring the model.
+
+\cgesubsec{The model in memory}
+
+The model is saved before the first draw and loaded again after the last, so
+the elasticities, closure, shocks and simulations in memory are those before
+the command. The simulation that each draw solves is not kept. The time taken
+is about \argu{\#} + 1 times that of a calibration and a solve.
+
+\cgesec{Stored results}
+
+\cmd{cge_sensitivity} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_draws)} & number of draws\\
+\res{r(N_converged)} & number of draws that converged\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $\sigma^0_k$ be the central value of elasticity $k$ of a varied type,
+and $s$ the value of \cmd{spread()}. In draw $d = 1, \dots, D$,
+\begin{equation*}
+\sigma^d_k = \sigma^0_k\,(1 + s\,u_{kd}), \qquad
+u_{kd} =
+\begin{cases}
+2\,U_{kd} - 1 & \text{uniform},\\
+U_{kd} + U'_{kd} - 1 & \text{triangular},
+\end{cases}
+\end{equation*}
+where $U_{kd}$ and $U'_{kd}$ are independent uniform draws on $(0, 1)$, so
+that $u_{kd}$ is uniform, or symmetric triangular with density $1 - |u|$, on
+$(-1, 1)$. With \opt{}{common}, $u_{kd} = u_d$ for every element $k$ of a
+type. The draws are made after the seed is set, for the four types in a
+fixed order (value added, Armington, CET, top nest), whether or not a type is
+varied, so that a seed gives the same factors for a type whichever types are
+varied. $\sigma^0_k = 0$ gives $\sigma^d_k = 0$.
+
+For a report measure with results $y_d$ in the set $S$ of draws $d \ge 1$
+that converged, $n = |S|$, the summary gives the central result $y_0$,
+\begin{equation*}
+\bar y = \frac{1}{n}\sum_{d \in S} y_d, \qquad
+s_y = \Bigl[\frac{1}{n-1}\sum_{d \in S} (y_d - \bar y)^2\Bigr]^{1/2},
+\end{equation*}
+and the order statistics $y_{(\lceil 0.05\,n\rceil)}$ and
+$y_{(\lceil 0.95\,n\rceil)}$ as the 5th and 95th percentiles, with
+$y_{(1)} \le \dots \le y_{(n)}$. \Chapref{chap:sensitivity} discusses the method
+and its interpretation.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_calibrate}{Calibrate the model to the SAM}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seeentry{cge_elasticities}{Published elasticities, with their sources}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seechapter{chap:sensitivity}{Sensitivity analysis}
+\end{alsosee}

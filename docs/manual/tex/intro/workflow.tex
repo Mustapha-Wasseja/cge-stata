@@ -1,0 +1,70 @@
+\chapter{The workflow}\label{chap:workflow}
+
+\section{Steps}
+
+A model is built in a fixed order. Each step is a command:
+
+\begin{cgetable}{p{0.40\linewidth}p{0.56\linewidth}}
+\toprule
+Step & Commands\\
+\midrule\endhead
+\bottomrule\endlastfoot
+Read the SAM & \manref{cge_sam}, \manref{cge_synthetic}\\
+Prepare it: template, aggregation, balancing, export & \manref{cge_template}, \manref{cge_aggregate}, \manref{cge_balance}, \manref{cge_samexport}\\
+SAM multipliers and structural paths & \manref{cge_multiplier}, \manref{cge_spa}\\
+Assign accounts to model roles & \manref{cge_map}\\
+Choose elasticities & \manref{cge_elasticities}\\
+Calibrate and check & \manref{cge_calibrate}, \manref{cge_check}, \manref{cge_parameters}\\
+Choose a closure, add limits, apply shocks, solve & \manref{cge_closure}, \manref{cge_constraint}, \manref{cge_shock}, \manref{cge_solve}\\
+Add variables and equations & \manref{cge_variable}, \manref{cge_equation}\\
+Report & \manref{cge_results}, \manref{cge_report}\\
+Choose instruments & \manref{cge_optimize}\\
+Dynamic runs & \manref{cge_dynamic}, \manref{cge_dynresults}\\
+Sensitivity, household surveys & \manref{cge_sensitivity}, \manref{cge_microsim}\\
+Solve in GAMS & \manref{cge_gams}\\
+Save and reload & \manref{cge_save}, \manref{cge_use}\\
+\end{cgetable}
+
+\section{Where the model lives}
+
+The model lives in Mata, not in the data in memory. \manref{cge_sam} starts a
+new model, and the later commands add to it: the mapping, the calibrated
+parameters and base solution, the closure, the shocks in force, and every
+simulation solved. Commands that load data (the \cmd{clear} options of the
+results commands, \manref{cge_microsim}) leave the model intact, and
+\manref{cge_save} stores it, with its simulations, in a file that
+\manref{cge_use} loads. Commands that change the SAM
+(\manref{cge_aggregate}, \manref{cge_balance}) start a new model from the
+result.
+
+A simulation records the closure, the shocks, the solution and its residual.
+Shocks accumulate until \cmd{cge_shock, reset}, and a closure stays until it
+is changed; \manref{cge_calibrate} resets both to the defaults.
+
+\section{Principles}
+
+\begin{itemize}
+\item \textbf{No defaults for economic assumptions.} Elasticities have no
+default values. The closure starts from a documented default and is
+displayed and stored with every simulation.
+\item \textbf{Checks bound to the values used.} Every calibration checks that
+the base solves every equation and stops if it does not; \manref{cge_check}
+runs the validation checks on the model actually solved; and every solution
+reports its residual and the slack of Walras's law.
+\item \textbf{Errors, not guesses.} A SAM cell that the model cannot represent,
+an unbalanced account, or a number that cannot be read stops the command with
+a report; nothing is set to zero silently.
+\item \textbf{Results as data.} Every result is available as a Stata dataset,
+in a long layout that keeps the names of the model's variables and
+measures.
+\end{itemize}
+
+\section{Reporting results}
+
+State with every result the SAM, its year and source, and how it was prepared
+(aggregation, balancing, the totals given); the elasticities and their
+sources; the closure; and the sensitivity of the main results to the
+elasticities. A simulation is a counterfactual equilibrium compared with the
+base: the change once the economy has adjusted under the closure's
+assumptions, not a forecast. Compare simulations that differ in one respect:
+the same shock under two closures, or two shocks under one closure.

@@ -1,0 +1,192 @@
+\cgeentry{cge_template}{Write a template that maps SAM accounts to roles and groups}
+
+\cgesec{Description}
+
+\cmd{cge_template} writes a template with one row per account of the SAM of
+the current model, as read, aggregated or balanced. The template is filled in,
+in a spreadsheet or any editor, and then used by \manref{cge_map}
+\cmd{using} to map the SAM to the model's roles and by
+\manref{cge_aggregate} \cmd{using} to merge accounts into groups. A template is
+easier to check and to keep than a long \cmd{cge_map} command, and it has no
+limit on the number of accounts.
+
+If the model is mapped, the roles and pairs of the template are filled in from
+the mapping. The data in memory are not changed.
+
+\cgesec{Quick start}
+
+Write a template of the SAM read by \cmd{cge_sam} to an Excel file
+\begin{stcode}
+cge_template using sam_roles.xlsx
+\end{stcode}
+As above, to a CSV file, replacing the file if it exists
+\begin{stcode}
+cge_template using sam_roles.csv, replace
+\end{stcode}
+Aggregate and map the SAM with the template, once it has been filled in
+\begin{stcode}
+cge_aggregate using sam_roles.xlsx
+cge_map using sam_roles.xlsx
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_template} \cmd{using} \argu{filename} [\texttt{,} \opt{}{replace}]
+\end{stsyntax}
+
+\argu{filename} ends in \cmd{.xlsx}, \cmd{.xls} or \cmd{.csv}.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{}{replace}] allows an existing file to be replaced.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The template has the columns
+\begin{cgetable}{>{\ttfamily}lp{0.72\linewidth}}
+\toprule
+\normalfont Column & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+account & the account label\\
+role & the \cmd{cge_map} options that list the account, separated by spaces\\
+pair & for an activity, the commodity it is paired with; for a tax on the use of a factor, the factor it taxes\\
+group & for aggregation, the account it is merged into\\
+row\_total & the account's row total (receipts)\\
+column\_total & the account's column total (payments)\\
+difference & the row total less the column total\\
+\end{cgetable}
+An Excel template has the columns in the sheet \cmd{accounts}, and a second
+sheet, \cmd{roles}, with notes on the entries of the \cmd{role}, \cmd{pair}
+and \cmd{group} columns. Only the columns
+\cmd{account}, \cmd{role}, \cmd{pair} and \cmd{group} are read back; the
+totals are there to help assign the roles.
+
+\cgesubsec{Roles}
+
+A role is the name of a \manref{cge_map} option:
+\begin{cgetable}{>{\ttfamily}lp{0.68\linewidth}}
+\toprule
+\normalfont Role & Account\\
+\midrule\endhead
+\bottomrule\endlastfoot
+activities & an activity (production sector)\\
+commodities & a commodity\\
+factors & a factor of production\\
+households & a household group, or a non-profit institution serving households\\
+enterprises & an enterprise\\
+government & the government (one account)\\
+savinv & savings--investment (one account)\\
+row & the rest of the world (one account)\\
+dirtax & the direct tax account, or the government account if direct taxes are paid to it\\
+saltax & the sales tax account, or the government account\\
+imptax & the import tariff account, or the government account\\
+exptax & the export tax account, or the government account\\
+acttax & the activity tax account, or the government account\\
+vattax & the value added tax account\\
+margins & an activity whose margins are netted out of its output (also an activity)\\
+territorial & a territorial correction: its commodity and, if there is one, its activity\\
+marginaccounts & a margin account paid per unit of composite supply\\
+domesticmargins & a margin account paid per unit of domestic sales\\
+importmargins & a margin account paid per unit of imports\\
+exportmargins & a margin account paid per unit of exports\\
+stocks & a stock-change account, merged into savings--investment\\
+insurance & the social health insurance fund (one account)\\
+factortax & an account of taxes on the use of a factor, named in the pair column\\
+factorincometax & the account of taxes on factor income (one account)\\
+\end{cgetable}
+Roles may be typed in either case, and the singular forms \cmd{activity},
+\cmd{commodity}, \cmd{factor}, \cmd{household}, \cmd{enterprise},
+\cmd{margin}, \cmd{marginaccount}, \cmd{domesticmargin},
+\cmd{importmargin}, \cmd{exportmargin}, \cmd{stock} and \cmd{vat} are also
+accepted. An account may have several roles, separated by spaces or commas, where
+\cmd{cge_map} allows it: \cmd{activities margins} for a margin activity, or
+\cmd{government saltax} when sales taxes are paid to the government account.
+A role that is not in the list is an error. Leave the role blank only for an
+account without flows, which \cmd{cge_map} accepts unmapped. A share of the
+sales tax that is VAT is not a role: it is given to \cmd{cge_map using} with
+its option \cmd{vatshare()}.
+
+\cgesubsec{Pairs}
+
+Each activity is paired with a commodity, its primary product. A blank
+\cmd{pair} pairs an activity with the commodity whose column pays it most. Give
+the pair when the largest sale is not the activity's main product, when two
+activities would be paired with the same commodity, or when an activity sells
+equal amounts to several commodities; the last two are errors otherwise.
+
+\cgesubsec{Groups}
+
+A blank \cmd{group} keeps the account. Accounts with the same group are merged
+by \manref{cge_aggregate}, and must have the same role. After aggregation,
+\cmd{cge_map using} the same template maps each group with its members' role,
+and pairs it with the group of its members' pairs.
+
+\cgesubsec{Example 1: a template of a SAM that is not mapped}
+
+The template of the standard synthetic SAM, written as a CSV file, has blank
+roles, pairs and groups:
+\stlog{tmpl_write}
+
+\cgesubsec{Example 2: filling in the template}
+
+Roles and groups are filled in, here with Stata commands; the template is
+usually edited in a spreadsheet. The manufacturing and service activities and
+commodities are put in the groups \cmd{act_nag} and \cmd{com_nag}:
+\stlog{tmpl_fill}
+The template then aggregates the SAM and maps the result. \cmd{cge_map}
+displays the command that the template stands for: each group takes the role of
+its members, and the activities are paired with the commodities that pay them
+most.
+\stlog{tmpl_use}
+
+\cgesubsec{Example 3: a template of a mapped SAM}
+
+When the model is mapped, the template records the mapping. In the
+national-accounts layout, direct and sales taxes are paid directly to the
+government account, which therefore has the roles \cmd{government},
+\cmd{dirtax} and \cmd{saltax}:
+\stlog{tmpl_mapped}
+A template written from a mapping can be extended with groups and used again.
+
+\cgesec{Stored results}
+
+\cmd{cge_template} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_accounts)} & number of accounts\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+With $x_{ij}$ the cell in row $i$ and column $j$ of the SAM, the totals of
+account $k$ are
+\begin{equation*}
+\text{\cmd{row_total}}_k = \sum_j x_{kj}, \qquad
+\text{\cmd{column_total}}_k = \sum_i x_{ik}, \qquad
+\text{\cmd{difference}}_k = \text{\cmd{row_total}}_k - \text{\cmd{column_total}}_k .
+\end{equation*}
+When \cmd{cge_map using} pairs an activity $a$ whose pair is blank, it chooses
+the commodity
+\begin{equation*}
+c(a) = \operatorname*{arg\,max}_{c \in C} x_{ac},
+\end{equation*}
+the largest payment of a commodity's column to the activity's row; a tie, or
+no positive payment, is an error. The \cmd{commodities()} list then starts with
+the paired commodities, in the order of the activities, followed by the other
+commodities in the order of the SAM. Every other option lists its accounts in
+the order of the SAM, except that for \cmd{territorial()} the commodity that
+households consume is listed before its activity. \Chapref{chap:samtools}
+describes the template in \secref{sec:template}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seeentry{cge_aggregate}{Merge SAM accounts into groups}
+\seeentry{cge_sam}{Read a social accounting matrix}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

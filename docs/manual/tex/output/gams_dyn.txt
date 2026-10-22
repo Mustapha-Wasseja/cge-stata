@@ -1,0 +1,27 @@
+. cge_constraint, clear
+All constraints removed
+
+. cge_shock, reset
+All shocks removed
+
+. cge_closure, government(flexgsav) factors(cap:specific)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           specific
+
+. cge_dynamic, name(dn) periods(0/2) capital(cap) depreciation(0.05) rental(0.15) ///
+>     growth(lab:0.02) population(0.02) govgrowth(0.03)
+Period 0: solved in 0 iteration(s)
+Period 1: solved in 6 iteration(s)
+Period 2: solved in 6 iteration(s)
+Dynamic run dn stored as simulations: dn0 dn1 dn2
+
+. cge_gams using gams_dn, dynamic(dn)
+Wrote the model (15 accounts) and the 3 periods of dynamic run dn (16 change(s) in all) to gams_dn
+Files: cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc cge_constraints.inc cg
+> e_user.inc cge_user_write.inc cge_run.gms and the scenario files of each period
+To solve it: gams cge_run.gms in that folder

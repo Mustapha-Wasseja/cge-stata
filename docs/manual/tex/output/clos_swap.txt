@@ -1,0 +1,19 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_closure, government(flexgsav) swap(QG(com_ser) GADJ)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+  swap                 QG(com_ser) fixed, GADJ free
+
+. cge_shock QG, elements(com_ser) scale(1.1)
+Variable QG changed for 1 element(s)
+
+. cge_solve, name(qgser)
+Simulation qgser solved in 5 iteration(s) (newton)
+Largest scaled residual  2.78e-12; WALRAS = -5.68e-11

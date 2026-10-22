@@ -1,0 +1,28 @@
+. type gams_notariff/cge_run.gms
+$title cge-stata model exported by cge_gams: notariff
+$ontext
+Written by cge_gams (cge-stata 0.6.3). GAMS calibrates the model from the
+SAM and settings in cge_data.inc, solves the base and then scenario notariff,
+whose parameter changes and closure are in cge_shock_par.inc and whose
+changes to fixed variables are in cge_shock_var.inc. The equations are in
+cge_model.gms (docs/model_spec.md). To run it:
+  gams cge_run.gms                                    path, as a constrained nonlinear system
+  gams cge_run.gms --cgesolver=conopt                 CONOPT (or KNITRO, PATH)
+  gams cge_run.gms --cgesolver=ipopt --cgetype=nlp    an NLP solver
+Results: cge_base.csv and cge_notariff.csv, as scenario, variable, element1,
+element2, value; the first row holds the model status.
+$offtext
+$if not set cgesolver $setglobal cgesolver path
+$if not set cgetype $setglobal cgetype cns
+$setglobal data cge_data.inc
+$setglobal out cge_base.csv
+$include cge_model.gms
+
+* Scenario notariff: parameter changes and the closure, then fixed variables
+$include cge_shock_par.inc
+$include cge_closure.gms
+$include cge_shock_var.inc
+$include cge_constraints.inc
+$batinclude cge_solve.gms cgecon
+file rescen / 'cge_notariff.csv' /;
+$batinclude cge_write.gms rescen notariff

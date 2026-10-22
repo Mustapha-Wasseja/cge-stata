@@ -1,0 +1,4 @@
+. cge_calibrate, sigmava(0.8) sigmaq(1) sigmat(2)
+sigmaq must differ from 1 for imported commodities with domestic sales
+
+r(198);

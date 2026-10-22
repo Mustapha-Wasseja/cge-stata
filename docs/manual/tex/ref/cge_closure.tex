@@ -1,0 +1,246 @@
+\cgeentry{cge_closure}{Choose the model closure}
+
+\cgesec{Description}
+
+\cmd{cge_closure} sets the closure of the calibrated model: which variables
+are fixed and which the model determines, for the external account, the
+government, the savings--investment balance, the numeraire and each factor,
+and, element by element, through swaps. It checks that the closure has as many
+free variables as equations and that no equation is left without a free
+variable, and displays the closure. Without options, it displays the current
+closure.
+
+\cgesec{Quick start}
+
+Display the current closure
+\begin{stcode}
+cge_closure
+\end{stcode}
+A fixed exchange rate, investment-driven savings and capital fixed in each
+activity
+\begin{stcode}
+cge_closure, external(fixexr) savinv(investment) factors(cap:specific)
+\end{stcode}
+Fixed government savings, with sales tax rates adjusting
+\begin{stcode}
+cge_closure, government(fixgsav sales)
+\end{stcode}
+Fix government savings and let real government consumption adjust
+\begin{stcode}
+cge_closure, swap(GSAV GADJ)
+\end{stcode}
+Remove the swaps
+\begin{stcode}
+cge_closure, swap(none)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_closure} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\opt{ext}{ernal}\cmd{(flexexr|fixexr)} & external account; default \cmd{flexexr}\\
+\optarg{gov}{ernment}{spec} & government: \cmd{flexgsav}, the default, or \cmd{fixgsav} with the adjusting tax\\
+\opt{sav}{inv}\cmd{(savings|investment)} & savings--investment balance; default \cmd{savings}\\
+\opt{num}{eraire}\cmd{(cpi|dpi)} & numeraire; default \cmd{cpi}\\
+\optarg{fac}{tors}{spec} & closure of each factor, as \argu{factor}\cmd{:}\argu{type}; default \cmd{mobile}\\
+\optgroup{Swaps}
+\optarg{}{swap}{fix free \textup{[}fix free \dots\textup{]}} & fix and free variable elements in pairs; \cmd{swap(none)} removes the swaps\\
+\end{opttable}
+
+The defaults are those that \manref{cge_calibrate} sets. An option that is not
+specified keeps its current setting.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{ext}{ernal}\cmd{(flexexr|fixexr)}] sets the closure of the
+external account. \cmd{flexexr} fixes foreign savings, $\V{FSAV}$, in foreign
+currency, and the exchange rate, $\V{EXR}$, adjusts; \cmd{fixexr} fixes the
+exchange rate, and foreign savings adjust.
+
+\item[\optarg{gov}{ernment}{spec}] sets the closure of the government.
+\cmd{flexgsav} fixes tax rates and real government consumption, and
+government savings, $\V{GSAV}$, adjust. \cmd{fixgsav} fixes government savings
+and scales the rates of one tax in proportion to keep them: direct tax rates
+(\cmd{fixgsav} or \cmd{fixgsav direct}, scaled by $\V{TINSADJ}$), sales tax
+rates (\cmd{fixgsav sales}, $\V{TQADJ}$), import tariffs
+(\cmd{fixgsav import}, $\V{TMADJ}$) or VAT rates (\cmd{fixgsav vat},
+$\V{TVADJ}$). The adjusting tax must raise revenue in the base; rates that are
+zero in the base stay zero. A colon may replace the space, as in
+\cmd{fixgsav:vat}, which is how the closure is displayed. With real government
+consumption fixed, \cmd{fixgsav} keeps a policy change revenue neutral: the
+scaling factor shows the rise in the rates of the adjusting tax that replaces
+the revenue lost.
+
+\item[\opt{sav}{inv}\cmd{(savings|investment)}] sets the
+savings--investment closure. \cmd{savings} fixes the savings rates, scaled by
+$\V{MPSADJ}$, and investment adjusts to the savings available, through
+$\V{IADJ}$; \cmd{investment} fixes real investment, and the savings rates of
+the domestic institutions are scaled to finance it.
+
+\item[\opt{num}{eraire}\cmd{(cpi|dpi)}] chooses the numeraire, the
+price index fixed in the closure: \cmd{cpi}, the consumer price index, or
+\cmd{dpi}, the producer price index of domestic sales.
+
+\item[\optarg{fac}{tors}{spec}] sets the closure of each factor, with
+\argu{spec} a list of \argu{factor}\cmd{:}\argu{type}. Factors that are not
+listed are \cmd{mobile}, whatever their earlier closure. The types are
+\cmd{mobile}, fully employed and mobile across activities, with a fixed supply
+and one average price; \cmd{specific}, fixed in each activity, which pays its
+own price; \cmd{unemployed}, a fixed price, with the supply adjusting;
+\cmd{wagecurve}, under which the real wage falls as the unemployment rate
+rises; and \cmd{minwage}, under which the real wage cannot fall below a floor:
+either the floor binds and unemployment absorbs the shock, or the wage is
+above the floor and the labour force is fully employed, and the solver finds
+which. \cmd{wagecurve} and \cmd{minwage} need a labour force, from
+\manref{cge_calibrate} with \opt{}{unemployment()} or \opt{}{minwage()};
+\cmd{wagecurve} also needs the elasticity of \opt{}{wagecurve()}. Under both,
+the wage and employment are free and the labour force is fixed
+(chapter~\ref{chap:labour}).
+
+\item[\optarg{}{swap}{fix free \textup{[}fix free \dots\textup{]}}] changes the
+closure element by element, after the options above. Each pair fixes the first
+element, which the closure leaves free, and frees the second, which it fixes.
+Elements are written \argu{NAME}, \argu{NAME}\cmd{(}\argu{e1}\cmd{)} or
+\argu{NAME}\cmd{(}\argu{e1}\cmd{,}\argu{e2}\cmd{)}, for example \cmd{W(lab)};
+each element may appear once. Swaps replace any earlier ones and stay until
+changed; \cmd{swap(none)} removes them. Variables that the reduced system
+computes from their definitions, such as household demand, cannot be fixed.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The model has more variables than equations. The closure chooses which
+variables are fixed, at their current values, and which the model determines.
+It states how the economy is assumed to adjust to a shock, and results can
+depend on it as much as on the shock. \manref{cge_calibrate} sets the default
+closure, with no swaps; the closure set by \cmd{cge_closure} then stays until it
+is changed or the model is calibrated again. \manref{cge_solve} solves under
+the current closure and stores it with each simulation; it is saved with the
+model by \manref{cge_save}, kept in sensitivity analysis and written into the
+GAMS program by \manref{cge_gams}. \Chapref{chap:closures} lists the variables
+that each option fixes and frees.
+
+In the examples, the synthetic SAM is mapped and calibrated as in
+\manref{cge_solve}.
+
+\cgesubsec{Example 1: the default closure}
+
+Without options, \cmd{cge_closure} displays the closure. After calibration it
+is the default:
+\stlog{clos_default}
+\res{r(closure)} gives the closure in one line, as it is stored with each
+simulation.
+
+\cgesubsec{Example 2: other closure options}
+
+A fixed exchange rate, investment fixed in real terms and capital fixed in
+each activity:
+\stlog{clos_alt}
+The government and numeraire closures, which were not specified, keep their
+settings, as does labour, which \opt{fac}{tors()} does not list and which is
+therefore mobile.
+
+\cgesubsec{Example 3: revenue-neutral tax replacement}
+
+The other blocks are first returned to their defaults. With government savings
+fixed and sales tax rates adjusting, the revenue lost when import tariffs are
+removed is replaced by higher sales taxes:
+\stlog{clos_fixgsav}
+Government savings stay at their base value, direct tax rates and real
+government consumption are unchanged, and the scaling factor of the sales tax
+rates, \cmd{TQADJ}, rises by about 29 per cent:
+\stlog{clos_fixgsav_res}
+Under such a closure a shock to the rates of the adjusting tax itself, such as
+removing tariffs while tariffs adjust, is not meaningful: the scaling factor
+offsets it.
+
+\cgesubsec{Example 4: swaps}
+
+Government purchases of services can be fixed, and so shocked, by freeing the
+scaling factor of government consumption, $\V{GADJ}$:
+\stlog{clos_swap}
+The swap is displayed with the closure. Government purchases are
+$\V{QG}_c = \overline{\V{qg}}_c\,\V{GADJ}$ \eqref{eq:I7}, so the other purchases
+rise in the same proportion:
+\stlog{clos_swap_res}
+Other common swaps are \cmd{swap(GSAV GADJ)}, which fixes government savings
+and lets real government consumption adjust, and \cmd{swap(EXR CPI)}, which
+makes the exchange rate the numeraire. A user variable defined by
+\manref{cge_variable} can also be swapped into the closure, which fixes the
+expression that defines it.
+
+\cgesubsec{Example 5: closures that are rejected}
+
+A closure is checked when it is set. Fixing government purchases of services
+while freeing the direct tax scaling factor leaves the number of free variables
+unchanged, but the equation of government demand for services then has no free
+variable:
+\stlog{clos_singular}
+Such a closure makes the Jacobian singular, and \cmd{cge_closure} names the
+equation. A swap must also fix a variable that is free and free one that is
+fixed:
+\stlog{clos_fixed}
+After an error the closure in memory is unchanged; here the swap of
+Example~4 was still in force until \cmd{swap(none)} removed it.
+
+\cgesubsec{Closures, constraints and user equations}
+
+Each constraint set by \manref{cge_constraint} adds an equation and solves for
+a variable that the closure fixes, so the system stays square; the limited
+variable must be free under the closure and the adjusting variable fixed, and
+every later closure is checked against the constraints. The rents
+$\V{RM}_c$, $\V{RE}_c$ and $\V{RA}_a$ are fixed at zero by every closure unless
+a constraint frees them. A user variable given a value by \manref{cge_variable}
+is free and needs a user equation of its own (\manref{cge_equation}).
+
+\cgesec{Stored results}
+
+\cmd{cge_closure} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_swaps)} & number of swaps\\
+\resgroup{Macros}
+\res{r(closure)} & closure in one line, with the swaps\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $x$ be the vector of every element of every variable that exists in the
+model, $\mathcal{F}$ the set of elements that the closure fixes, $N$ the number
+of equation elements and $K$ the number of constraints. The closure options
+build $\mathcal{F}$ block by block; each swap $(y_k, x_k)$ then requires
+$y_k \notin \mathcal{F}$ and $x_k \in \mathcal{F}$, and replaces $\mathcal{F}$ by
+$(\mathcal{F} \cup \{y_k\}) \setminus \{x_k\}$. The closure is accepted only if
+it is square,
+\begin{equation*}
+\#\{\, j : x_j \text{ exists},\ j \notin \mathcal{F} \,\} + K = N,
+\end{equation*}
+where the adjusting variable of each constraint, although fixed, is solved
+for. It must also leave every equation with at least one free variable, over
+the pattern of the Jacobian (the variables that each equation element
+contains); the equations with exact derivatives, which contain many
+variables, are not part of this check. Swaps leave the count of free
+variables unchanged. A square closure that passes the check can still be
+singular at a point; \manref{cge_solve} then reports the smallest pivot of
+the Jacobian.
+
+\Chapref{chap:closures} gives the variables that each option fixes and
+frees (\secref{sec:closure-options}) and the rules for swaps
+(\secref{sec:swaps}).
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_constraint}{Limits that bind in some scenarios and not in others}
+\seeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+\seeentry{cge_calibrate}{Calibrate the model to the SAM}
+\seechapter{chap:closures}{Closures}
+\seechapter{chap:labour}{Labour-market regimes}
+\end{alsosee}

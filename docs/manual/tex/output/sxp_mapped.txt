@@ -1,0 +1,29 @@
+. cge_synthetic, clear national
+(14 vars, 13 obs)
+
+Synthetic SAM loaded (national-accounts layout): 13 accounts, total   1613.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 13 accounts, total 1613
+Largest row-column imbalance:  0.00e+00
+
+. quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)             ///
+>     dirtax(gov) saltax(gov) imptax(tax_imp)
+
+. cge_samexport, clear mapped long
+SAM loaded as data: 48 observations
+
+. list if inlist("_dirtax", row, column) | inlist("_saltax", row, column), noobs sep(0)
+
+  +---------------------------+
+  |     row    column   value |
+  |---------------------------|
+  |     gov   _dirtax      25 |
+  |     gov   _saltax      30 |
+  | _dirtax       hhd      25 |
+  | _saltax   com_agr       8 |
+  | _saltax   com_man      12 |
+  | _saltax   com_ser      10 |
+  +---------------------------+

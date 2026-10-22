@@ -1,0 +1,54 @@
+\chapter{Validation checks}\label{chap:checks}
+
+Every model built with \pkg must pass the checks below, on the synthetic SAMs
+and on any SAM it calibrates. \manref{cge_calibrate} checks benchmark
+replication; \manref{cge_check} runs the others on the model actually solved,
+and reports each with the value tested. In the formulas $m = \max\bigl(1,
+\max_{rc} |\SAM(r, c)|\bigr)$ is the largest SAM cell, so that the checks give
+the same result whatever the units of the SAM.
+
+\begin{enumerate}
+\item \textbf{SAM balance.} Every row total equals its column total:
+$\max_k \bigl|\sum_c \SAM(k, c) - \sum_r \SAM(r, k)\bigr| \le 10^{-8} m$.
+\item \textbf{Benchmark replication.} At the calibrated parameters and base
+values, every scaled residual is at most $10^{-9}$, and the solver started at
+the base returns it.
+\item \textbf{A square closure.} The closure leaves as many free variables as
+equations, counting one equation for each constraint. (\manref{cge_closure}
+also rejects a closure that leaves an equation without a free variable.)
+\item \textbf{The solution of a simulation.} Its largest scaled residual is
+at most $10^{-8}$.
+\item \textbf{Walras's law.} $|\V{WALRAS}| \le 10^{-8} m$ in every solution.
+\item \textbf{The GDP identity.} GDP measured by expenditure equals GDP
+measured by income, to $10^{-8} m$:
+\begin{multline*}
+\sum_c \V{PH}_c\Bigl(\sum_h \V{QH}_{ch} + \V{QG}_c + \V{QINV}_c + \V{QSHI}_c\Bigr)
+  + \sum_c \V{PQ}_c\,\V{QER}_c + \sum_{a,h} \V{PA}_a\,\V{QHA}_{ah}\\
+  + \V{EXR}\sum_c \V{PWE}_c\,\V{QE}_c - \V{EXR}\sum_c \V{pwm}_c\,\V{QM}_c - R^{abroad}
+  = \sum_a \V{PVA}_a\,\V{QVA}_a - N + T + R^{home},
+\end{multline*}
+where $T$ is the revenue from sales, import, export and activity taxes and
+VAT; $N$ is the cost of the commodities in nests of value added, which are
+intermediate inputs (\secref{sec:nests}); $R^{abroad}$ is the import and
+export premiums paid to the rest of the world; and $R^{home}$ is the premiums
+received at home and every rent on activity output (\secref{sec:rents}).
+\item \textbf{Homogeneity.} Doubling every fixed nominal value, the numeraire
+among them, doubles every price and nominal value and leaves every quantity
+unchanged: the largest deviation, relative to each value with a floor of one,
+is at most $10^{-8}$.
+\item \textbf{A robust start.} The solver started from base values perturbed
+uniformly within $\pm p$ times their values (for example $p = 0.1$) returns the
+base, to a relative deviation of at most $10^{-7}$.
+\end{enumerate}
+In the last two checks a variable whose base value is zero ($\V{WALRAS}$) is
+measured relative to $m$, as in the check of Walras's law.
+
+\section{Agreement between implementations}
+
+The model is implemented three times: in Stata and Mata, in a Python
+reference implementation, and in GAMS. The Python model writes the expected
+results of every test case, and the Stata test suite compares every variable
+of every case with them. The GAMS model is written from the equations of this
+part, calibrates the model from the SAM and the user's settings alone, and is
+solved with PATH. Chapter~\ref{chap:validation} gives the cases and the
+agreement found.

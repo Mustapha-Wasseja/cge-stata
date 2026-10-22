@@ -1,0 +1,18 @@
+. cge_elasticities sigmat, country(SLE) values
+sigmat: 0.571 0.571 0.571
+  DGR2023-CET-SLE (SLE): aggregate CET elasticity between exports and domestic sales, estimated from
+>  national accounts series
+    DGR2023 (Devarajan, S.; Go, D. S.; Robinson, S. 2023), Appendix Table A2, p. 35 (PDF p. 37); dat
+> a period from Table A3
+    Note: aggregate elasticities are lower than sector ones (the source, PDF p. 20); set the level,
+> not every sector
+
+. return list
+
+scalars:
+                  r(N) =  3
+
+macros:
+          r(parameter) : "sigmat"
+                r(ids) : "DGR2023-CET-SLE DGR2023-CET-SLE DGR2023-CET-SLE"
+             r(values) : "0.571 0.571 0.571"

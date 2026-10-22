@@ -1,0 +1,39 @@
+. cge_sensitivity, scenario(tariff_cut) draws(50) spread(0.5) seed(2026)
+Sensitivity analysis: 50 draws of the elasticities (uniform within +/-50 per cent)
+  10 draws done
+  20 draws done
+  30 draws done
+  40 draws done
+  50 draws done
+
+Sensitivity of the scenario to the elasticities: 50 of 50 draws converged
+Per cent changes from the base (welfare: per cent of base consumption)
+
+macro
+--------------------------------------------------------------------------------
+                             central       mean         sd         p5        p95
+gdp_nominal                   -0.425     -0.421      0.036     -0.480     -0.372
+gdp_real                       0.033      0.032      0.006      0.022      0.043
+gdp_deflator                  -0.458     -0.453      0.039     -0.512     -0.398
+consumption_real               2.496      2.496      0.004      2.490      2.503
+government_real                0.000      0.000      0.000      0.000      0.000
+investment_real              -11.860    -11.882      0.213    -12.189    -11.569
+insurance_fund_real                .          .          .          .          .
+exports_real                   1.342      1.317      0.302      0.854      1.788
+imports_real                   1.355      1.328      0.245      0.999      1.713
+value_added_real              -0.000     -0.000      0.000     -0.000     -0.000
+cpi                            0.000      0.000      0.000      0.000      0.000
+dpi                            0.976      0.990      0.125      0.797      1.165
+exchange_rate                  4.622      4.577      0.409      3.998      5.195
+real_exchange_rate             3.610      3.552      0.534      2.800      4.363
+private_savings                2.464      2.467      0.024      2.424      2.506
+investment_value             -13.080    -13.103      0.233    -13.435    -12.756
+foreign_savings                0.000      0.000      0.000      0.000      0.000
+--------------------------------------------------------------------------------
+
+welfare
+---------------------------------------------------------------------------------
+                              central       mean         sd         p5        p95
+equivalent_variation hh         2.483      2.483      0.004      2.477      2.489
+compensating_variation hh       2.484      2.484      0.004      2.478      2.490
+---------------------------------------------------------------------------------

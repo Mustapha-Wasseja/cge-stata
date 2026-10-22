@@ -1,0 +1,23 @@
+. cge_constraint, clear
+All constraints removed
+
+. cge_shock, reset
+All shocks removed
+
+. cge_constraint QM, elements(com_man) upper(1.02) scale
+Constraint QM(com_man) <= 61.2, RM(com_man) up, rents to gov: not solved
+
+. quietly cge_solve, name(quota_base)
+
+. cge_constraint, list
+Constraints (regime in the last solution)
+  1. QM(com_man) <= 61.2, RM(com_man) up, rents to gov: not binding
+
+. cge_shock tm, value(0)
+Parameter tm changed for 4 element(s)
+
+. quietly cge_solve, name(quota)
+
+. cge_constraint, list
+Constraints (regime in the last solution)
+  1. QM(com_man) <= 61.2, RM(com_man) up, rents to gov: binding

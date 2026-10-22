@@ -1,0 +1,22 @@
+. cge_shock qg, elements(com_hlt) scale(1.2)
+Parameter qg changed for 1 element(s)
+
+. cge_shock tshi, elements(lab) scale(1.5)
+Parameter tshi changed for 1 element(s)
+
+. cge_shock af, elements(lab) scale(0.98)
+Parameter af changed for 1 element(s)
+
+. cge_solve, name(health)
+Simulation health solved in 10 iteration(s) (newton)
+Largest scaled residual  9.48e-11; WALRAS = -2.52e-10
+
+. cge_report, sims(health) tables(health)
+
+Health
+-------------------------------------------------
+                                  base     health
+fund_revenue                         9     33.518
+fund_volume                          1     32.359
+-------------------------------------------------
+Percentage changes from the base (rates: changes in points)

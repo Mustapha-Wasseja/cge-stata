@@ -1,0 +1,5 @@
+. cge_save using worked.cgem, replace
+Model saved to worked.cgem (calibrated, 15 simulation(s))
+
+. cge_use using worked.cgem
+Model loaded from worked.cgem (saved by cge-stata 0.6.3; calibrated, 15 simulation(s))

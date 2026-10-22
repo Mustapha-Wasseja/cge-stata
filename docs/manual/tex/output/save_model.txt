@@ -1,0 +1,7 @@
+. cge_save using mymodel, replace
+Model saved to mymodel.cgem (calibrated, 1 simulation(s))
+
+. return list
+
+macros:
+           r(filename) : "mymodel.cgem"

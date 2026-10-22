@@ -1,0 +1,427 @@
+\cgeentry{cge_dynamic}{Solve a recursive dynamic run}
+
+\cgesec{Description}
+
+\cmd{cge_dynamic} solves the calibrated model for a sequence of periods. The
+first period is the calibrated base; each later period is an equilibrium of
+the static model given stocks and exogenous values that are updated from the
+solution of the period before. Agents do not look ahead. Each period is
+stored as a simulation named after the run and the period, such as
+\cmd{base2025}, so that \manref{cge_report}, \manref{cge_results},
+\manref{cge_dynresults}, \manref{cge_save} and \manref{cge_gams} work with it.
+The run uses the current closure and starts from the base; the parameters and
+fixed values that the model had before the run are restored when it ends.
+
+\cgesec{Quick start}
+
+A baseline from 2018 to 2030 in which capital accumulates, labour grows at 3
+per cent, the population at 2.5 per cent, and efficiency at the rate that
+gives 5 per cent growth of real value added
+\begin{stcode}
+cge_dynamic, name(base) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) ///
+    growth(lab:0.03) population(0.025) gdpgrowth(0.05)
+\end{stcode}
+A scenario with the same settings, the baseline's efficiency path and the
+shocks applied by program \cmd{policy}
+\begin{stcode}
+cge_dynamic, name(policy) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) ///
+    growth(lab:0.03) population(0.025) baseline(base) shocks(policy)
+\end{stcode}
+Ten periods with efficiency growth of 1 per cent in every activity and
+government flows that grow at 3 per cent
+\begin{stcode}
+cge_dynamic, name(run) periods(0/10) tfp(0.01) govgrowth(0.03)
+\end{stcode}
+Labour that loses the deaths at working ages, in a model calibrated with a
+death rate
+\begin{stcode}
+cge_dynamic, name(hb) periods(0/10) growth(lab:0.02) population(0.02) ///
+    deathfactors(lab) deathshare(0.3) workingage(0.55)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_dynamic}\texttt{,} \optarg{}{name}{name} \optarg{per}{iods}{numlist}
+[\argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{name}{name} & name of the run; required\\
+\optarg{per}{iods}{numlist} & periods, the base first; required\\
+\optarg{shock}{s}{program} & program that applies the shocks of each period\\
+\optgroup{Capital}
+\optarg{cap}{ital}{factors} & factors that accumulate\\
+\optarg{dep}{reciation}{numlist} & depreciation rates of the capital factors\\
+\optarg{rent}{al}{numlist} & base gross rental rates of the capital factors\\
+\optarg{sens}{itivity}{\#} & response of the allocation of new capital to rental rates; default \texttt{1}\\
+\optgroup{Growth}
+\optarg{grow}{th}{factor\texttt{:}rate \ldots} & growth rates of other factors\\
+\optarg{pop}{ulation}{\#} & population growth rate; default \texttt{0}\\
+\optarg{gov}{growth}{\#} & growth rate of government consumption and transfers; default \texttt{0}\\
+\optarg{for}{eigngrowth}{\#} & growth rate of flows in foreign currency; default \texttt{0}\\
+\optgroup{Efficiency}
+\optarg{}{tfp}{numlist} & growth rate of efficiency, one or one per activity\\
+\optarg{gdp}{growth}{numlist} & growth targets for real value added, one or one per period after the base\\
+\optarg{base}{line}{name} & reuse the efficiency path of run \argu{name}\\
+\optgroup{Deaths}
+\optarg{deathf}{actors}{factors} & labour factors that lose workers to deaths\\
+\optarg{deaths}{hare}{\#} & share of deaths at working ages; default \texttt{0}\\
+\optarg{work}{ingage}{\#} & working-age share of the population; default \texttt{1}\\
+\optgroup{Solver}
+\optarg{tol}{erance}{\#} & tolerance of each period's solve; default \texttt{1e-12}\\
+\optarg{iter}{ate}{\#} & maximum number of Newton iterations of each solve; default \texttt{100}\\
+\end{opttable}
+
+Growth rates are per period and are zero unless they are given. At most one
+of \cmd{tfp()}, \cmd{gdpgrowth()} and \cmd{baseline()} may be specified.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{name}{name}] names the run. Each period is stored as the
+simulation \argu{name} followed by the period, for example \cmd{base2025}, so
+\argu{name} with each period must form a valid Stata name of at most 32
+characters. Simulations of the same name are replaced.
+
+\item[\optarg{per}{iods}{numlist}] lists the periods: at least two integers,
+zero or positive, in ascending order, for example \cmd{periods(2018/2030)} or
+\cmd{periods(0/5)}. The first is the base. Each step from one listed period to
+the next is one period of the rates, whatever the difference between the two
+numbers.
+
+\item[\optarg{shock}{s}{program}] names a program that is called as
+\argu{program period} before each period after the first, once stocks and
+exogenous values have been updated and before efficiency is set. It may apply
+any shock with \manref{cge_shock}, for example to cancel debt with
+\cmd{cge_shock fdebt}. Shocks persist in later periods, so a shock with
+\cmd{scale()} should be applied in one period only. If the program fails, the
+run stops.
+
+\item[\optarg{cap}{ital}{factors}] lists the factors that accumulate capital.
+Each must be mobile or specific to each activity in the closure, not
+unemployed or under a wage curve or minimum wage. \cmd{capital()} needs
+\cmd{depreciation()} and \cmd{rental()}, which need it.
+
+\item[\optarg{dep}{reciation}{numlist}] gives the depreciation rates of the
+capital factors, at least 0 and less than 1: one rate for all, or one for each
+factor in the order of \cmd{capital()}.
+
+\item[\optarg{rent}{al}{numlist}] gives the base gross rental rates of the
+capital factors, the rental per unit of capital at base prices, so that the
+base capital stock is base capital income divided by the rate. One unit of
+real investment adds \argu{rental} units of the factor. Rates are positive:
+one for all, or one for each factor in the order of \cmd{capital()}.
+
+\item[\optarg{sens}{itivity}{\#}] sets how strongly new capital specific to
+each activity moves to activities whose rental rate is above the average; 0
+allocates it in proportion to capital stocks. The default is 1; \# must be
+zero or positive. It has no effect on mobile capital.
+
+\item[\optarg{grow}{th}{factor\texttt{:}rate \ldots}] sets the growth rates of
+factors that are not capital; factors that are not listed do not grow. With
+\cmd{growth(lab_f:0.03 lab_i:0.025)}, for example, \cmd{lab_f} grows at 3 per
+cent a period and \cmd{lab_i} at 2.5 per cent. The supply of an unemployed factor is
+endogenous, so its rate must be zero, unless the factor has a labour force
+(\manref{cge_calibrate}, \cmd{unemployment()}). The labour force of a factor
+that has one grows at the factor's rate, whatever its closure, so that under
+\cmd{unemployed}, \cmd{wagecurve} or \cmd{minwage} employment and
+unemployment follow from labour demand.
+
+\item[\optarg{pop}{ulation}{\#}] sets the population growth rate. Subsistence
+consumption of LES demand, the base of the health link and the population
+index grow at this rate. With a death rate (\mbox{\manref{cge_calibrate}},
+\cmd{mortality()}), the rate is taken to hold at the base death rate:
+population then grows at \cmd{population()} plus the base death rate less the
+death rate of the period before.
+
+\item[\optarg{gov}{growth}{\#}] sets the growth rate of government
+consumption and of real transfers from the government to domestic
+institutions, within the government and to the health insurance fund.
+
+\item[\optarg{for}{eigngrowth}{\#}] sets the growth rate of flows in foreign
+currency: transfers from abroad to domestic institutions, factors, the
+government and the health insurance fund, transfers from the government
+abroad, and foreign savings when the closure fixes them.
+
+\item[\optarg{}{tfp}{numlist}] sets the growth rate of value-added efficiency:
+one rate, used for every activity, or one for each activity in the order of
+the model's activities.
+
+\item[\optarg{gdp}{growth}{numlist}] calibrates a baseline to growth targets:
+in each period, efficiency in every activity grows by the uniform factor for
+which real value added at base prices grows at the target. Give one target,
+used in every period, or one for each period after the first. The efficiency
+factor of each period is displayed and stored with its simulation.
+
+\item[\optarg{base}{line}{name}] reuses the efficiency factors of run
+\argu{name}, which must have been solved with \cmd{gdpgrowth()} and must
+include every period of this run, so that a policy scenario does not change
+efficiency.
+
+\item[\optarg{deathf}{actors}{factors}] lists the labour factors that lose
+workers to deaths at working ages. They may not be capital factors, nor
+unemployed factors without a labour force, and the model needs a death rate.
+Each listed factor, and its labour force, then grows at its \cmd{growth()}
+rate plus $\text{\cmd{deathshare()}}/\text{\cmd{workingage()}}$ times the base
+death rate less the death rate of the period before.
+
+\item[\optarg{deaths}{hare}{\#}] is the share of deaths at working ages,
+between 0 and 1; the default is 0. It needs \cmd{deathfactors()}.
+
+\item[\optarg{work}{ingage}{\#}] is the working-age share of the population,
+above 0 and at most 1; the default is 1. It needs \cmd{deathfactors()}.
+
+\item[\optarg{tol}{erance}{\#}] and \optarg{iter}{ate}{\#} are passed to the
+solver of each period; the defaults are \texttt{1e-12} and 100.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A dynamic run strings static equilibria together. Before each period after
+the first, \cmd{cge_dynamic} updates, in this order, capital, the supply of
+other factors, the population, government and foreign flows and public debt;
+it then calls the \cmd{shocks()} program and sets efficiency, and solves the
+period from the solution of the period before. The updates follow the
+recursive dynamic extension of the standard model (Thurlow 2004);
+Methods and formulas below gives them, and \chapref{chap:dynamics} the
+details. None of the rates has a default other than zero, and none is
+estimated by the package: they are the user's assumptions about the economy.
+
+\cgesubsec{Example 1: a baseline calibrated to a growth target}
+
+The synthetic SAM is calibrated as in \manref{cge_solve}, and capital is made
+specific to each activity, so that new capital is allocated among activities:
+\stlog{dyn_setup}
+A baseline of four periods after the base, in which capital depreciates at 5
+per cent a period, labour and the population grow at 2.5 per cent, government
+flows at 3 per cent and foreign flows at 2 per cent, and efficiency grows at
+the rate that gives 4 per cent growth of real value added:
+\stlog{dyn_base}
+Period 0 is the base and needs no iteration. In each later period, the
+efficiency factor is the uniform growth factor of value-added efficiency
+that, given the growth of capital and labour, meets the target; it is found by
+secant iterations, each of which solves the model. The run returns the names
+of its simulations:
+\stlog{dyn_return}
+\manref{cge_report} with \cmd{run()} reports every period as a change from the
+base:
+\stlog{dyn_basereport}
+Real value added grows at 4 per cent a period, 16.986 per cent in four
+periods ($1.04^4 = 1.16986$). The SAM is synthetic: the run illustrates the
+command and is not a projection for any economy.
+
+\cgesubsec{Example 2: a policy scenario against the baseline}
+
+A scenario removes every import tariff from period 2. The program
+\cmd{tariff_from2} receives the period as its argument; the shock is set once
+and stays in force in later periods. The scenario takes the baseline's
+settings and, with \cmd{baseline(base)}, its efficiency factors:
+\stlog{dyn_scenario}
+The efficiency factors are those of the baseline, period by period, so that
+efficiency does not respond to the policy. The shock is reported before
+period 2, the first period that it changes. Periods of the two runs can be
+compared side by side:
+\stlog{dyn_compare}
+Both columns are changes from the base, period 0. In period 4 real investment
+is 3.5 per cent above the base in the scenario, against 18.9 per cent in the
+baseline, and real value added grows less, 16.1 against 17.0 per cent; real
+consumption and the equivalent variation of the household are higher. New
+capital is proportional to real investment in the period before, so lower
+investment means less capital in later periods. The differences
+from the baseline, period by period and for every variable, are the dataset
+of \manref{cge_dynresults}.
+
+\cgesubsec{Example 3: population, deaths and labour}
+
+With a death rate (\manref{cge_calibrate}, \cmd{mortality()} and
+\cmd{mortelas()}), the deaths of one period change the population and labour
+of the next. The health layout of the synthetic SAM is calibrated with a base
+death rate of 10 per 1,000 and an elasticity of $-0.3$ with respect to health
+services per head. In the run, 30 per cent of deaths are at working ages, and
+55 per cent of the population is of working age:
+\stlog{dyn_deaths}
+\cgeneed{22\baselineskip}
+\stlog{dyn_health}
+Health services per head rise, and the death rate falls by 0.022 points per
+1,000 in period 1. Period 0 has the base death rate, so the population grows
+at \cmd{population()}, 2 per cent, in period 1. From period 2, the lower death
+rate of the period before adds to population growth: the population index is
+4.042 per cent above the base in period 2, against 4.040 at a constant 2 per
+cent ($1.02^2 = 1.0404$). Labour supply grows by $0.3/0.55$ times the fall in
+the death rate in addition to its rate of 2 per cent, and is 4.041 per cent
+above the base in period 2. Because rising health services per head lower the
+death rate in a baseline as well, scenarios should be compared with a
+baseline run with the same settings.
+
+\cgesubsec{Capital}
+
+Capital factors are listed in \cmd{capital()}. New capital comes from the
+previous period's real investment at base prices, shared among capital
+factors in proportion to their base income. When capital is mobile, it adds to
+the factor's supply. When it is specific to each activity
+(\manref{cge_closure}, \cmd{factors(cap:specific)}), new capital is allocated
+among the activities that use the factor in proportion to their capital,
+tilted towards those whose rental rate is above the average by
+\cmd{sensitivity()}; an activity's share cannot fall below zero. The rental
+rate of \cmd{rental()} converts investment, measured at base prices, into the
+factor's units, whose base quantity is the factor's base income: with a
+single capital factor and a rate of 0.15, one unit of real investment adds
+0.15 units of the factor, and the base stock is base capital income divided
+by 0.15.
+
+\cgesubsec{Labour force and unemployment}
+
+A factor with a labour force (\manref{cge_calibrate}, \cmd{unemployment()} or
+\cmd{minwage()}) has its labour force grow at the factor's growth rate. Under
+unemployment at a fixed wage, a wage curve or a minimum wage, employment is
+then determined by labour demand, and the unemployment rate changes
+(\chapref{chap:labour}).
+
+\cgesubsec{Public debt}
+
+When the model has public debt (\manref{cge_calibrate}, \cmd{debt()}), the
+deficit of each period is borrowed in the next, the share given by
+\cmd{foreignborrowing()} of \manref{cge_calibrate} abroad, and interest is paid
+on the new stocks; a surplus repays debt in the same shares
+(\secref{sec:debt}). A program in \cmd{shocks()} may change the stocks and the
+interest rates, for example \cmd{cge_shock fdebt, scale(0.5)} in one period for
+debt relief.
+
+\cgesubsec{Shocks and the model in memory}
+
+A run starts from the base: shocks set with \manref{cge_shock} before the run
+are not used, and a note is displayed when fixed values have been changed.
+Constraints set by \manref{cge_constraint} are kept. Other fixed values,
+including the numeraire, keep their base values unless a program in
+\cmd{shocks()} changes them. When the run ends, or stops with an error, the
+parameters and fixed values that the model had before it are restored. A
+period that does not converge stops the run with error 430; the periods
+solved before it remain stored.
+
+\cgesubsec{Results}
+
+\manref{cge_report} with \cmd{run()} reports every period of a run, and
+\manref{cge_dynresults} returns every variable of every period as a dataset,
+with the differences from a baseline run. A period can be passed to
+\manref{cge_microsim} like any other simulation; its changes are measured from
+the base. \mbox{\manref{cge_gams}} with \cmd{dynamic()} writes a run as a GAMS
+program that solves the periods in order.
+
+\cgesec{Stored results}
+
+\cmd{cge_dynamic} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Macros}
+\res{r(name)} & name of the run\\
+\res{r(sims)} & simulations of the run, in period order\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let periods $t = 0, 1, \dots, T$ be the steps of \cmd{periods()}, with $t=0$
+the base. Before period $t \ge 1$, from the solution of period $t-1$:
+
+\textit{Capital.} For each capital factor $f \in K$, with depreciation rate
+$\delta_f$ and base gross rental rate $\rho_f$, new capital is
+\begin{equation*}
+N_{f,t} = \rho_f\,\omega_f\,\V{INV}_{t-1}, \qquad
+\V{INV}_{t-1} = \sum_c \V{PQ}^0_c\,\V{QINV}_{c,t-1}, \qquad
+\omega_f = \frac{\V{YF}^0_f}{\sum_{f' \in K} \V{YF}^0_{f'}} .
+\end{equation*}
+For mobile capital, $\V{QFS}_{f,t} = (1-\delta_f)\,\V{QFS}_{f,t-1} + N_{f,t}$.
+For capital specific to each activity,
+\begin{equation*}
+\V{QF}_{fa,t} = (1-\delta_f)\,\V{QF}_{fa,t-1} + N_{f,t}\,\eta_{fa,t}, \qquad
+\eta_{fa,t} = \frac{\max\bigl[0,\; s_{fa}\bigl(1 + \beta(R_{fa}/\bar R_f - 1)\bigr)\bigr]}
+{\sum_{a'} \max\bigl[0,\; s_{fa'}\bigl(1 + \beta(R_{fa'}/\bar R_f - 1)\bigr)\bigr]},
+\end{equation*}
+over the activities that use the factor, with
+\begin{equation*}
+s_{fa} = \frac{\V{QF}_{fa,t-1}}{\sum_{a'} \V{QF}_{fa',t-1}}, \qquad
+R_{fa} = \V{W}_{f,t-1}\,\V{WFDIST}_{fa,t-1}, \qquad
+\bar R_f = \sum_a s_{fa}\,R_{fa},
+\end{equation*}
+and $\beta$ the value of \cmd{sensitivity()}.
+
+\textit{Population and other factors.} With a death rate, base rate $m^0$ and
+elasticity $\epsilon^m$, the death rate of period $t-1$, with the parameters
+and health services of that period, is
+\begin{equation*}
+\V{MR}_{t-1} = \mu^m \left(\frac{\V{HS}_{t-1}}{\V{HS}^0_{t-1}}\right)^{\epsilon^m},
+\end{equation*}
+where $\mu^m = m^0$ unless it is shocked, and
+\begin{equation*}
+g_{P,t} = g_P + \bigl(m^0 - \V{MR}_{t-1}\bigr), \qquad
+g_{f,t} = g_f + d_f\,\frac{\theta^D}{\alpha^W}\bigl(m^0 - \V{MR}_{t-1}\bigr),
+\end{equation*}
+where $g_P$ is \cmd{population()}, $g_f$ the rate of factor $f$ in
+\cmd{growth()}, $d_f = 1$ for the factors in \cmd{deathfactors()} and 0
+otherwise, $\theta^D$ is \cmd{deathshare()} and $\alpha^W$ \cmd{workingage()}.
+Without a death rate, $g_{P,t} = g_P$ and $g_{f,t} = g_f$. A factor that is
+not capital grows as
+\begin{equation*}
+\V{QFS}_{f,t} = (1 + g_{f,t})\,\V{QFS}_{f,t-1} \quad\text{(mobile)}, \qquad
+\V{QF}_{fa,t} = (1 + g_{f,t})\,\V{QF}_{fa,t-1} \quad\text{(specific)},
+\end{equation*}
+and its labour force, if it has one, as $\V{qlf}_{f,t} = (1+g_{f,t})\,\V{qlf}_{f,t-1}$.
+The subsistence quantities $\gamma_{ch}$ and $\gamma^h_{ah}$, the base of the
+health link $\V{HS}^0$ and the population index grow at $g_{P,t}$.
+
+\textit{Government and foreign flows.} With $g_G$ the rate of
+\cmd{govgrowth()} and $g_W$ that of \cmd{foreigngrowth()},
+\begin{align*}
+&\overline{\V{qg}}_c,\ \V{trnsfr}_{d,gov},\ \V{trnsfr}_{gov,gov},\ \V{trnsfr}_{shi,gov}
+  && \text{grow at } g_G,\\
+&\V{trnsfr}_{d,row},\ \V{trnsfr}_{f,row},\ \V{trnsfr}_{gov,row},\ \V{trnsfr}_{row,gov},\
+  \V{trnsfr}_{shi,row} && \text{grow at } g_W,
+\end{align*}
+and so does $\V{FSAV}$ when the closure fixes it.
+
+\textit{Public debt.} With debt and a share $\phi$ borrowed abroad,
+\begin{equation*}
+\V{DD}_t = \V{DD}_{t-1} + (1-\phi)\,(-\V{GSAV}_{t-1}), \qquad
+\V{DF}_t = \V{DF}_{t-1} + \phi\,(-\V{GSAV}_{t-1})/\V{EXR}_{t-1} .
+\end{equation*}
+
+\textit{Shocks and efficiency.} The program in \cmd{shocks()} is called, and
+efficiency is set to
+\begin{equation*}
+\V{ad}_{a,t} = \lambda_{a,t}\,\V{ad}_{a,t-1},
+\end{equation*}
+with $\lambda_{a,t} = 1 + g^{ad}_a$ under \cmd{tfp()}, the uniform factor
+$\lambda_t$ of the baseline's period $t$ under \cmd{baseline()}, and $1$
+otherwise. Under \cmd{gdpgrowth()}, $\lambda_t$ is uniform and solves
+\begin{equation*}
+\V{VA}_t(\lambda_t) = (1 + g^Y_t)\,\V{VA}_{t-1}, \qquad
+\V{VA}_t = \sum_a \V{PVA}^0_a\,\V{QVA}_{a,t},
+\end{equation*}
+real value added at base prices, less commodities bought within nests of
+value added (\secref{sec:nests}). It is found by secant iterations that
+start from $\lambda = 1$ and $\lambda = 1 + g^Y_t$, each of which solves the
+model, until $\lvert \V{VA}_t / ((1+g^Y_t)\,\V{VA}_{t-1}) - 1 \rvert < 10^{-13}$,
+in at most 50 iterations; otherwise the run stops with error 430.
+
+Period $t$ is then solved from the solution of period $t-1$ by the solver of
+\manref{cge_solve}, without continuation. \Chapref{chap:dynamics} states the
+dynamics in full, and \secref{sec:population} the population and labour
+updates.
+
+\cgesec{References}
+
+Thurlow, J. 2004. \textit{A dynamic computable general equilibrium (CGE) model
+for South Africa: Extending the static IFPRI model}. Working Paper 1-2004,
+Trade and Industrial Policy Strategies.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_dynresults}{Results of a dynamic run as a dataset}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_calibrate}{Calibrate the model to the SAM}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\seechapter{chap:dynamics}{Recursive dynamics}
+\end{alsosee}

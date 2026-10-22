@@ -1,0 +1,22 @@
+. return list
+
+scalars:
+           r(gini_sim) =  .3632654507489664
+          r(gini_base) =  .3632179401351559
+           r(fgt0_sim) =  .2690883392367442
+          r(fgt0_base) =  .2674509902763488
+                  r(N) =  1000
+
+matrices:
+              r(table) :  2 x 11
+
+. matrix list r(table), format(%9.4f)
+
+r(table)[2,11]
+     mean_base   mean_sim   mean_pct  fgt0_base   fgt0_sim  fgt1_base   fgt1_sim  fgt2_base
+all   184.2888   183.5727    -0.3886     0.2675     0.2691     0.0872     0.0880     0.0392
+hhd   184.2888   183.5727    -0.3886     0.2675     0.2691     0.0872     0.0880     0.0392
+
+      fgt2_sim  gini_base   gini_sim
+all     0.0396     0.3632     0.3633
+hhd     0.0396     0.3632     0.3633

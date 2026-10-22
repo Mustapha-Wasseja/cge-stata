@@ -1,0 +1,28 @@
+. cge_variable GEXP = sum(c, PQ(c) * QG(c)), nominal
+User variable GEXP: 1 element(s), base value 45
+and its definition, equation GEXP
+
+. return list
+
+scalars:
+         r(N_elements) =  1
+
+macros:
+               r(name) : "GEXP"
+
+. cge_closure, swap(GEXP GADJ)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+  swap                 GEXP fixed, GADJ free
+
+. cge_shock pwm, scale(1.1)
+Parameter pwm changed for 3 element(s)
+
+. cge_solve, name(budget)
+Simulation budget solved in 7 iteration(s) (newton)
+Largest scaled residual  7.38e-11; WALRAS =  6.61e-10

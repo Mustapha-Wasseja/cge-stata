@@ -1,0 +1,336 @@
+\cgeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+
+\cgesec{Description}
+
+\cmd{cge_gams} writes the calibrated model and one scenario as a GAMS program
+in a folder. Anyone with GAMS can then solve the model with PATH, CONOPT,
+KNITRO, IPOPT or another solver, check the results of \pkg with a second
+implementation, or extend the equations. GAMS receives what a user supplies,
+not the parameters that Stata calibrated: the SAM after the layout rewrites
+of \manref{cge_map}, the roles of its accounts and the settings given to
+\manref{cge_calibrate}. The GAMS program calibrates every parameter itself,
+solves the base and then the scenario. Its equations are an implementation
+of the model written in GAMS, not translated from Mata.
+
+\cmd{cge_gams} can also start GAMS from interactive Stata, compare the GAMS
+results with the Stata solution, export every period of a dynamic run, and
+import a GAMS solution as a Stata simulation.
+
+\cgesec{Quick start}
+
+Write the model and the scenario of simulation \cmd{notariff} to folder
+\cmd{gams_notariff}, to solve with \cmd{gams cge_run.gms} there
+\begin{stcode}
+cge_gams using gams_notariff, sim(notariff)
+\end{stcode}
+Write it again, solve it in GAMS with PATH and compare the results with Stata's
+\begin{stcode}
+cge_gams using gams_notariff, sim(notariff) replace run compare gams(C:/GAMS/54/gams.exe)
+\end{stcode}
+Solve the files already written with CONOPT, and compare
+\begin{stcode}
+cge_gams using gams_notariff, sim(notariff) noexport run compare solver(conopt) ///
+    gams(C:/GAMS/54/gams.exe)
+\end{stcode}
+Compare results that GAMS wrote earlier, for example after a batch run
+\begin{stcode}
+cge_gams using gams_notariff, sim(notariff) noexport compare
+\end{stcode}
+Export the current shocks, and after solving in GAMS store the solution as
+simulation \cmd{big_path}
+\begin{stcode}
+cge_gams using big, replace
+cge_gams using big, noexport import(big_path)
+\end{stcode}
+Export every period of dynamic run \cmd{base}
+\begin{stcode}
+cge_gams using gams_base, dynamic(base)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_gams} \cmd{using} \argu{folder} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Scenario}
+\optarg{}{sim}{name} & export the shocks and closure of a stored simulation\\
+\optarg{dyn}{amic}{name} & export every period of a dynamic run\\
+\opt{}{replace} & replace the files of an earlier export\\
+\optgroup{GAMS}
+\opt{}{run} & solve the exported model in GAMS\\
+\optarg{}{gams}{path} & the GAMS executable; default \cmd{gams}\\
+\optarg{}{solver}{name} & the solver; default \cmd{path}\\
+\optarg{}{type}{name} & GAMS model type: \cmd{cns}, \cmd{nlp} or \cmd{mcp}\\
+\optgroup{Results}
+\opt{}{compare} & compare the GAMS results with the Stata solution\\
+\optarg{imp}{ort}{name} & store the GAMS solution as simulation \argu{name}\\
+\opt{}{noexport} & use the files already in \argu{folder}\\
+\end{opttable}
+
+\cmd{sim()} and \cmd{dynamic()} may not be combined, nor \cmd{import()} and
+\cmd{dynamic()}. \opt{}{compare} needs \cmd{sim()} or \cmd{dynamic()}, and
+\opt{}{noexport} needs \opt{}{run}, \opt{}{compare} or \cmd{import()}.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{sim}{name}] exports the shocks and closure of a stored
+simulation. Without \cmd{sim()} or \cmd{dynamic()}, the shocks and closure in
+memory are exported, the scenario that the next \manref{cge_solve} would
+solve, under the name \cmd{current}. A period of a dynamic run is exported
+with \cmd{dynamic()}.
+
+\item[\optarg{dyn}{amic}{name}] exports every period of a run of
+\manref{cge_dynamic}. The changes of each period from the period before, to
+parameters and to fixed variables, are written to
+\mbox{\cmd{cge_}\argu{sim}\cmd{_par.inc}} and \mbox{\cmd{cge_}\argu{sim}\cmd{_var.inc}},
+where \argu{sim} is the period's simulation, such as \cmd{base2025}, and the
+driver solves the periods in order, each from the solution of the one before.
+The periods must have the same closure, and runs with constraints are not
+exported.
+
+\item[\opt{}{replace}] allows the files of an earlier export in \argu{folder}
+to be replaced. The folder, and any parent folder, is created if it does not
+exist.
+
+\item[\opt{}{run}] solves the exported model in GAMS. Stata deletes any
+earlier result files, writes a script in the folder, \cmd{cge_run.cmd} on
+Windows and \cmd{cge_run.sh} elsewhere, and runs it with \cmd{shell}; the
+script can be run again by hand. It runs
+\cmd{gams cge_run.gms lo=2 lf=cge_run.log} with the solver and model type
+chosen. Stata for Windows cannot start other programs in batch mode: there,
+\opt{}{run} is an error, and \cmd{cge_run.gms} is run with GAMS separately and
+the results compared with \opt{}{noexport} \opt{}{compare}.
+
+\item[\optarg{}{gams}{path}] gives the GAMS executable, for example
+\cmd{gams(C:/GAMS/54/gams.exe)}. By default, \cmd{gams} must be on the system
+path.
+
+\item[\optarg{}{solver}{name}] chooses the solver; the default is \cmd{path}.
+When GAMS runs, it writes an option file with tolerances scaled to the size
+of the SAM for PATH, CONOPT, IPOPT and KNITRO; other solvers use their
+defaults.
+
+\item[\optarg{}{type}{name}] chooses the GAMS model type: \cmd{cns}, a
+constrained nonlinear system (PATH, CONOPT, KNITRO); \cmd{nlp}, the same
+equations with a constant objective, for NLP solvers; or \cmd{mcp}, a mixed
+complementarity problem (PATH), which a scenario with constraints needs. The
+default is \cmd{mcp} for a static scenario with constraints, \cmd{nlp} for
+the solvers \cmd{ipopt}, \cmd{ipopth}, \cmd{minos} and \cmd{snopt}, and
+\cmd{cns} otherwise; a scenario with constraints cannot be exported as
+another type. Both the solver and the type can also be set when GAMS is run,
+as in \texttt{gams cge\_run.gms -{}-cgesolver=ipopt -{}-cgetype=nlp}.
+
+\item[\opt{}{compare}] compares the GAMS results with the Stata base and with
+simulation \cmd{sim()}, or with every period of the run of \cmd{dynamic()}.
+It reports the GAMS model status and, for the base and for the scenario or
+each period, the number of values compared and the largest relative
+difference, with the variable where it occurs.
+
+\item[\optarg{imp}{ort}{name}] stores the GAMS solution of a static scenario
+as simulation \argu{name}: the free variables take the values of GAMS, the
+fixed variables those of Stata, and the model's equations are evaluated in
+Stata at the result, whose largest scaled residual is reported. A model too
+large for Stata's solver can thus be solved by PATH and its results used in
+Stata with \manref{cge_report}, \manref{cge_results} or \manref{cge_microsim}.
+With \opt{}{noexport}, the results already in \argu{folder} are imported.
+
+\item[\opt{}{noexport}] uses the files already in \argu{folder}, which must
+hold \cmd{cge_run.gms}: with \opt{}{run} it solves them again, for example
+after they have been edited, and with \opt{}{compare} or \cmd{import()} alone
+it uses results that GAMS wrote earlier.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The GAMS program is a second implementation of the model of Part~II. GAMS
+calibrates the parameters from the SAM and the settings and solves the base
+and the scenario itself, so a GAMS solution that matches Stata's confirms the
+calibration as well as the solution. The program can also be given to a
+modeller who works in GAMS, or extended with equations that the package does
+not have. \Chapref{chap:gams} describes the GAMS implementation.
+
+\cgesubsec{Example 1: exporting a scenario}
+
+The synthetic SAM is calibrated as in \manref{cge_solve}, and every import
+tariff is removed, with the sales tax rates replacing the revenue:
+\stlog{gams_sim}
+\cmd{cge_gams} writes the model and the scenario to folder
+\cmd{gams_notariff}, which it creates:
+\stlog{gams_export}
+Two parameters change from the base: the tariffs on agriculture and
+manufactures (the base tariff on services is zero). The changes are written as
+ratios to the base values, so that GAMS applies them to its own calibrated
+values, and the closure follows as codes for the GAMS program:
+\stlog{gams_par}
+The driver, \cmd{cge_run.gms}, includes the model, then the scenario, and
+states how to run it:
+\stlog{gams_driver}
+An earlier export is not overwritten without \opt{}{replace}:
+\stlog{gams_again}
+
+\cgesubsec{Example 2: solving in GAMS}
+
+In interactive Stata, \opt{}{run} starts GAMS and \opt{}{compare} reads its
+results, for example
+\begin{stcode}
+. cge_gams using gams_notariff, sim(notariff) replace run compare gams(C:/GAMS/54/gams.exe)
+\end{stcode}
+Stata for Windows cannot start GAMS in batch mode, so a do-file run in batch
+mode stops:
+\stlog{gams_batch}
+In batch mode, \cmd{gams cge_run.gms} is run in the folder outside Stata, and
+\begin{stcode}
+. cge_gams using gams_notariff, sim(notariff) noexport compare
+\end{stcode}
+then compares the results. A GAMS licence covering the solver is needed to
+solve a model of realistic size; GAMS runs solvers outside the licence only
+for small models. GAMS listing files (\cmd{.lst}) name the holder of the
+licence.
+
+\cgesubsec{Example 3: a scenario with constraints}
+
+A constraint set by \manref{cge_constraint} makes the scenario a mixed
+complementarity problem. Here imports of manufactures may rise by at most 2
+per cent when tariffs are removed, with the premium on the quota going to the
+government:
+\stlog{gams_quota}
+The constraint becomes a slack variable \cmd{SLK1}, zero or positive, paired
+with the bound \cmd{BND1}, and the adjusting variable, the import premium
+\cmd{RM(com_man)}, is freed and linked to the slack by \cmd{LNK1}. The model
+type is \cmd{mcp} by default, for PATH; CONOPT, KNITRO and IPOPT do not solve
+complementarity problems.
+
+\cgesubsec{Example 4: a dynamic run}
+
+With \cmd{dynamic()}, every period of a run is exported. A run of two periods
+after the base, with capital specific to each activity:
+\stlog{gams_dyn}
+Each period has its own pair of scenario files, with its changes from the
+period before: the growth of government flows and of the base of the health
+link in the parameter file, and the stocks of capital and labour, which are
+fixed variables, in the variable file:
+\stlog{gams_dynfiles}
+
+\cgesubsec{The files}
+
+\begin{cgetable}{>{\ttfamily}l p{0.66\linewidth}}
+\toprule
+\normalfont File & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+cge\_run.gms & the driver: run \cmd{gams cge_run.gms} in the folder\\
+cge\_model.gms & data, calibration, equations and the base solve\\
+cge\_closure.gms & bounds, variables that do not exist, and the closure\\
+cge\_solve.gms & the solve statement, for the solver and model type\\
+cge\_write.gms & writes a solution\\
+cge\_data.inc & the SAM, the roles of its accounts and the calibration settings\\
+cge\_shock\_par.inc & parameter changes and the closure\\
+cge\_shock\_var.inc & closure swaps and changes to fixed variables\\
+cge\_constraints.inc & constraints, as complementarity pairs, and the scenario model \cmd{cgecon}\\
+cge\_user.inc & user variables and equations (\manref{cge_variable}, \manref{cge_equation})\\
+cge\_user\_write.inc & the results of the user variables\\
+\end{cgetable}
+The four \cmd{.gms} files of the model are copied from the package. With
+\cmd{dynamic()}, the files \cmd{cge_}\argu{sim}\cmd{_par.inc} and
+\cmd{cge_}\argu{sim}\cmd{_var.inc} of each period replace the two scenario
+files. GAMS writes \cmd{cge_base.csv} and \cmd{cge_}\argu{name}\cmd{.csv},
+with \argu{name} the value of \cmd{sim()} or \cmd{current}, or
+\cmd{cge_}\argu{sim}\cmd{.csv} for each period of a dynamic run: one row per
+variable and element (scenario, variable, element1, element2, value), with
+the model status in the first row. The files are described in detail in
+\secref{sec:gams-files}.
+
+\cgesubsec{What is not exported}
+
+Microsimulation and sensitivity analysis stay in Stata. The death rate is not
+a GAMS parameter: it enters dynamic runs only through the population and
+labour supply of the next period, which are exported; a static scenario that
+changes it is exported with a note.
+
+\cgesec{Stored results}
+
+\cmd{cge_gams} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_accounts)} & accounts in the exported SAM\\
+\res{r(N_changes)} & parameter and fixed-variable changes, from the base or, with \cmd{dynamic()}, from the period before, in all\\
+\res{r(N_constraints)} & constraints exported\\
+\res{r(N_periods)} & periods exported or compared (\cmd{dynamic()})\\
+\res{r(modelstat)} & GAMS model status of the scenario (\opt{}{compare}, \cmd{import()}); 1, 2, 15 and 16 mean solved\\
+\res{r(base_modelstat)} & GAMS model status of the base (\opt{}{compare})\\
+\res{r(maxdiff)} & largest relative difference from the simulation, or from any period (\opt{}{compare})\\
+\res{r(base_maxdiff)} & largest relative difference from the Stata base (\opt{}{compare})\\
+\res{r(N_compared)} & values compared, over the scenario or every period (\opt{}{compare})\\
+\res{r(walras)} & value of \cmd{WALRAS} in GAMS, largest over periods with \cmd{dynamic()} (\opt{}{compare})\\
+\res{r(N_imported)} & values imported (\cmd{import()})\\
+\res{r(max_residual)} & largest scaled residual of the imported solution in Stata (\cmd{import()})\\
+\res{r(converged)} & 1 if the imported solution solves the model in Stata (\cmd{import()})\\
+\resgroup{Macros}
+\res{r(name)} & name of the exported scenario or run; with \cmd{import()}, of the simulation imported\\
+\res{r(closure)} & closure of the exported scenario\\
+\res{r(sims)} & simulations of the periods of the run (\cmd{dynamic()})\\
+\res{r(compared_with)} & the simulation or dynamic run compared (\opt{}{compare})\\
+\res{r(worst_period)} & the period with the largest difference (\cmd{dynamic()} and \opt{}{compare})\\
+\res{r(script)} & the script that ran GAMS (\opt{}{run})\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+\textit{Scenario files.} A parameter or fixed variable whose scenario value
+$\theta^1$ differs from its base value $\theta^0$ is written as
+\begin{equation*}
+\theta \leftarrow \frac{\theta^1}{\theta^0}\,\theta \quad (\theta^0 \ne 0),
+\qquad \theta \leftarrow \theta^1 \quad (\theta^0 = 0),
+\end{equation*}
+so that GAMS applies the change to its own calibrated value; for a fixed
+variable the right-hand side uses its level, as in
+\cmd{QFS.fx('lab') = 1.02 * QFS.l('lab');}. With \cmd{dynamic()}, $\theta^0$
+is the value of the period before. Numbers are written with the fewest
+significant digits, 15, 16 or 17, that give back the same double.
+
+\textit{Model types.} Under \cmd{cns} the model is the square system of
+equations; under \cmd{nlp} the same equations with the constant objective
+$\text{OBJ} = 0$; under \cmd{mcp} the equations, unpaired, and for each
+constraint $k$ on variable $Y$ with bound $b_k$ and adjusting variable $X$,
+\begin{equation*}
+\text{SLK}_k \ge 0 \;\perp\; \sigma_k\,\frac{b_k - Y}{s^Y} \ge 0, \qquad
+X = \bar x_k + \delta_k\,s^X\,\text{SLK}_k,
+\end{equation*}
+with $\sigma_k = 1$ for an upper and $-1$ for a lower bound, $\delta_k = 1$
+when $X$ rises and $-1$ when it falls as the constraint binds, $s^Y$ and
+$s^X$ the scales of the variables, and $\bar x_k$ the fixed level of $X$
+(\secref{sec:cons-def}, \secref{sec:gams-types}). The base is solved as model
+\cmd{cgebase} and a scenario with constraints as \cmd{cgecon}.
+
+\textit{Tolerances.} The option files that GAMS writes scale the solvers'
+absolute tolerances to the largest SAM cell, with
+$p = \max(10^{-11},\, 10^{-13}\max_{rc} |\SAM(r,c)|)$: PATH
+\cmd{convergence_tolerance} $p$; CONOPT \cmd{rtnwma} $p / \max(1, \max_{rc}
+|\SAM(r,c)|)$; IPOPT \cmd{tol} $10^{-12}$ and \cmd{constr_viol_tol} $p$;
+KNITRO \cmd{feastol_abs} $p$ and \cmd{feastol} $10^{-12}$.
+
+\textit{Comparison.} For the values $g_i$ of GAMS and $x_i$ of Stata, over
+the variable elements that exist in the model, except \cmd{WALRAS},
+\begin{equation*}
+d = \max_i \frac{|g_i - x_i|}{\max(1, |x_i|)} .
+\end{equation*}
+
+\textit{Import.} Every free variable that exists in the model, and the
+adjusting variable of each constraint, takes its GAMS value; a free variable
+missing from the GAMS results is an error. The imported solution is counted
+as converged when the GAMS model status is 1, 2, 15 or 16 and the largest
+scaled residual of the model's equations in Stata is below $10^{-8}$
+(\secref{sec:gams-import}).
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_constraint}{Limits that bind in some scenarios and not in others}
+\seeentry{cge_dynamic}{Solve a recursive dynamic run}
+\seeentry{cge_results}{Report simulation results}
+\seechapter{chap:gams}{The GAMS implementation}
+\end{alsosee}

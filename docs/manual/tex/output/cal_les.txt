@@ -1,0 +1,4 @@
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)
+Household demand: linear expenditure system
+Calibrated: 93 equations, 93 free variables
+Benchmark replication: largest scaled residual  3.55e-16

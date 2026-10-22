@@ -1,0 +1,307 @@
+\cgeentry{cge_constraint}{Limits that bind in some scenarios and not in others}
+
+\cgesec{Description}
+
+\cmd{cge_constraint} puts an upper or a lower bound on elements of a model
+variable, such as the imports of a commodity or the output of an activity, and
+pairs each bound with an adjusting variable, which the closure fixes and which
+may move in one direction only. In every solution one of two things holds:
+either the limited variable is within its bound and the adjusting variable is
+at its fixed level, or the limited variable is at its bound and the adjusting
+variable has moved to keep it there. \manref{cge_solve} finds which, for each
+constraint. \cmd{cge_constraint, list} displays the constraints, and
+\cmd{cge_constraint, clear} removes them.
+
+\cgesec{Quick start}
+
+An import quota on manufactures, 2 per cent above base imports, with the
+premium on imports adjusting
+\begin{stcode}
+cge_constraint QM, elements(com_man) upper(1.02) scale
+\end{stcode}
+A capacity limit on health services, 3 per cent above base output, with the
+rent going to households
+\begin{stcode}
+cge_constraint QA, elements(act_hlt) upper(1.03) scale rents(hhd)
+\end{stcode}
+Under a fixed exchange rate, a limit of 30 on foreign savings, after which the
+currency depreciates
+\begin{stcode}
+cge_constraint FSAV, upper(30) adjust(EXR) up
+\end{stcode}
+Government consumption is cut once government savings fall to zero
+\begin{stcode}
+cge_constraint GSAV, lower(0) adjust(GADJ) down
+\end{stcode}
+Display the constraints, with their regimes in the last solution; remove them
+\begin{stcode}
+cge_constraint, list
+cge_constraint, clear
+\end{stcode}
+
+\cgesec{Syntax}
+
+Add constraints
+\begin{stsyntax}
+\cmdb{cge_constraint} \argu{variable}\texttt{,}
+\texttt{\{}\optarg{up}{per}{\#}\,|\,\optarg{lo}{wer}{\#}\texttt{\}}
+[\argu{options}]
+\end{stsyntax}
+Display the constraints
+\begin{stsyntax}
+\cmdb{cge_constraint}\texttt{,} \opt{}{list}
+\end{stsyntax}
+Remove the constraints
+\begin{stsyntax}
+\cmdb{cge_constraint}\texttt{,} \opt{}{clear}
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{up}{per}{\#} & upper bound\\
+\optarg{lo}{wer}{\#} & lower bound\\
+\optarg{el}{ements}{list} & elements of \argu{variable} to bound; default every element\\
+\opt{sc}{ale} & read the bound as a multiple of each element's base value\\
+\optgroup{Adjusting variable}
+\optarg{adj}{ust}{variable \textup{[}elements\textup{]}} & the variable that adjusts when the bound binds\\
+\opt{}{up} & the adjusting variable may rise\\
+\opt{}{down} & the adjusting variable may fall\\
+\optarg{rent}{s}{account} & recipient of the rent; default the government\\
+\end{opttable}
+
+\argu{variable} is one model variable, in upper case. Exactly one of
+\opt{up}{per()} and \opt{lo}{wer()} is required, and at most one of
+\opt{}{up} and \opt{}{down} is allowed.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{up}{per}{\#} \textrm{or} \optarg{lo}{wer}{\#}] gives the bound,
+as a level or, with \opt{sc}{ale}, as a multiple of the base value.
+
+\item[\optarg{el}{ements}{list}] names the elements of the limited variable;
+there is one constraint for each. Without it, every existing element of a
+variable with one index is bounded. A variable with two indexes takes one
+element of each, as in \cmd{elements(lab act_agr)}, and a variable without
+index takes none.
+
+\item[\opt{sc}{ale}] reads the bound as a multiple of each element's base
+value. An element whose base value is zero needs a bound given as a level.
+
+\item[\optarg{adj}{ust}{variable \textup{[}elements\textup{]}}] names the
+adjusting variable, which must be fixed under the closure. Without elements it
+takes the element of the limited variable, when the two variables have the
+same index; a variable without index, or an adjusting variable whose elements
+are given, serves one constraint. A bound on \cmd{QM}, \cmd{QE} or \cmd{QA} is
+paired by default with the rent of the same element: \cmd{RM}, \cmd{RE} or
+\cmd{RA}. Other limited variables need \opt{adj}{ust()}.
+
+\item[\opt{}{up} \textrm{or} \opt{}{down}] gives the direction in which the
+adjusting variable may move from its fixed level. Rents rise by default; for
+other adjusting variables the direction is required.
+
+\item[\optarg{rent}{s}{account}] names the recipient of the rent of
+\cmd{RM}, \cmd{RE} or \cmd{RA}: a factor, a household or enterprise, the
+government or the rest of the world, by the label of its account. The default
+is the government.
+
+\item[\opt{}{list}] displays the constraints, with their regime in the last
+solution: \cmd{binding}, \cmd{not binding}, or \cmd{not solved} for a
+constraint added since.
+
+\item[\opt{}{clear}] removes every constraint and sends every rent to the
+government.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A model with only equalities cannot represent a limit that binds in some
+scenarios and not in others: an import quota, the capacity of an activity, a
+ceiling on borrowing or a floor under a wage. \cmd{cge_constraint} writes each
+limit as a complementarity condition between the limited variable and an
+adjusting variable, and \manref{cge_solve} solves the conditions with the
+rest of the model, so that the solver finds which limits bind; none is chosen
+in advance.
+
+Each constraint adds one equation and frees one variable, the adjusting
+variable, so the system stays square. The limited variable must be free and
+the adjusting variable fixed under the closure, and every later closure set by
+\manref{cge_closure} is checked against the constraints. A constraint on the
+same element with the same type of bound replaces the earlier one, and each
+element of an adjusting variable serves one constraint. Constraints are kept
+by \cmd{cge_shock, reset}, in dynamic runs, in sensitivity analysis and by
+\manref{cge_save}; they are written into the GAMS program by
+\manref{cge_gams}, which solves them as a mixed complementarity problem.
+\manref{cge_calibrate} removes them.
+
+\cgesubsec{Rents}
+
+Quotas and capacity limits work through rents, which are zero in the base and
+fixed by every closure unless a constraint frees them:
+
+\begin{cgetable}{p{0.12\linewidth}p{0.82\linewidth}}
+\toprule
+Variable & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+$\V{RM}_c$ & premium on imports of commodity $c$, per unit of the world price\\
+$\V{RE}_c$ & premium on exports of commodity $c$, per unit of the world price\\
+$\V{RA}_a$ & rent on the output of activity $a$, per unit of its price\\
+\end{cgetable}
+
+A premium is a wedge between the world price and the domestic price, like a
+tariff, but its revenue is a rent, paid to the recipient given in
+\opt{rent}{s()}: the government by default, as with auctioned quota licences;
+a household or enterprise; a factor, such as the owners of capital; or the
+rest of the world, as with a voluntary export restraint, whose rents foreign
+exporters keep. A rent set by hand with \manref{cge_shock}, without a
+constraint, acts as a tax whose revenue goes to the recipient: for example
+\cmd{cge_shock RM, elements(com_man) value(0.05)} acts as a tariff of 5 per
+cent.
+
+\cgesubsec{Typical constraints}
+
+\begin{cgetable}{p{0.22\linewidth}llp{0.44\linewidth}}
+\toprule
+Limit & Limited & Adjusting & Effect when it binds\\
+\midrule\endhead
+\bottomrule\endlastfoot
+import quota & $\V{QM}_c \le b$ & $\V{RM}_c$, up & the premium rises until imports equal the quota\\
+export quota & $\V{QE}_c \le b$ & $\V{RE}_c$, up & the premium rises until exports equal the quota\\
+capacity & $\V{QA}_a \le b$ & $\V{RA}_a$, up & the activity price rises above cost; the rent goes to the owners of the capacity\\
+borrowing limit under a peg & $\V{FSAV} \le b$ & $\V{EXR}$, up & the peg holds until foreign savings reach the limit; the currency then depreciates\\
+deficit ceiling & $\V{GSAV} \ge b$ & $\V{GADJ}$, down & government consumption is cut once the deficit reaches the ceiling\\
+deficit ceiling, taxes & $\V{GSAV} \ge b$ & $\V{TINSADJ}$, up & direct tax rates rise instead\\
+nominal wage floor & $\V{W}_f \ge b$ & $\V{QFS}_f$, down & employment falls once the wage reaches the floor\\
+\end{cgetable}
+
+The commands are, for example,
+\begin{stcode}
+cge_constraint QM, elements(com_man) upper(1.02) scale
+cge_constraint QA, elements(act_hlt) upper(1.03) scale rents(hhd)
+cge_constraint FSAV, upper(30) adjust(EXR) up
+cge_constraint GSAV, lower(0) adjust(GADJ) down
+cge_constraint W, elements(lab) lower(1) scale adjust(QFS) down
+\end{stcode}
+The borrowing limit needs the closure \cmd{external(fixexr)}, under which
+$\V{EXR}$ is fixed and $\V{FSAV}$ free, and the wage floor a closure under
+which the wage is free and the supply of labour fixed, such as \cmd{mobile}.
+
+\cgesubsec{Example 1: a capacity limit}
+
+The health layout of \manref{cge_synthetic} is mapped, with its social health
+insurance fund, and calibrated as in the examples of \manref{cge_solve}.
+Government purchases of health services rise by 20 per cent, first without and
+then with a limit on what health providers can deliver, 3 per cent above the
+base:
+\stlog{cons_cap}
+A new constraint is \cmd{not solved} until the model is solved. After a solve,
+\manref{cge_solve} displays the regime of each constraint and the values of
+its two variables: the limit binds, output is at the bound of 30.9, and the
+rent on output is 5.9 per cent of the activity price. The report shows the
+effect of the limit:
+\stlog{cons_cap_res}
+Without the limit, the output of health services rises by 6.6 per cent and
+their price by 0.2 per cent. With it, output rises by exactly 3 per cent and
+the price by 6 per cent: the rent on output fills the gap between price and
+cost, and goes to households, the owners of the capacity here.
+
+\cgesubsec{Example 2: a ceiling on the deficit}
+
+The same spending, with a government that may not let its savings fall below
+their base value: spending on other goods and services is cut once the limit
+is reached.
+\stlog{cons_deficit}
+The command echo shows the local macro as typed; its value, 1, is the base
+value of government savings. The constraint binds, and the scaling factor of
+government consumption, $\V{GADJ}$, falls by 4.6 per cent.
+
+\cgesubsec{Example 3: a quota that binds in one scenario and not in another}
+
+An import quota on manufactures, 2 per cent above base imports, does not bind
+in the base. When import tariffs are removed, demand for imports rises and the
+quota binds:
+\stlog{cons_quota}
+Imports are at the quota, and the premium on imports is 4.1 per cent of the
+world price; the rent goes to the government:
+\stlog{cons_quota_res}
+
+\cgesubsec{Example 4: a borrowing limit under a peg}
+
+Foreign savings are fixed under the default closure and cannot be bounded. Under
+a fixed exchange rate they are free, and the peg can hold until they reach a
+limit, here 5 per cent above the base, with the tariff removal of Example~3
+still in force:
+\stlog{cons_peg}
+The limit binds: foreign savings are at 14.7, and the exchange rate has
+depreciated by 4.7 per cent. A closure that makes the constraint invalid is
+itself rejected: with this constraint, \cmd{cge_closure, external(flexexr)}
+fails, since it would fix foreign savings and free the exchange rate.
+
+\cgesubsec{The minimum wage}
+
+The minimum real wage of the closure \cmd{minwage} of \manref{cge_closure} is
+a complementarity condition of the same kind, with its own calibration and its
+own smoothed condition (\secref{sec:minwage}). It is not set with
+\cmd{cge_constraint}.
+
+\cgesec{Stored results}
+
+\cmd{cge_constraint} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_constraints)} & number of constraints\\
+\res{r(N_binding)} & number binding in the last solution (\opt{}{list} only)\\
+\end{storedres}
+\manref{cge_solve} stores the regimes of a solution in \res{r(constraints)},
+with \res{r(N_constraints)} and \res{r(N_binding)}.
+
+\cgesec{Methods and formulas}
+
+A constraint $k$ pairs a limited variable $Y_k$, one element of a model
+variable, and its bound $b_k$ with an adjusting variable $X_k$, which the
+closure fixes at $\bar{x}_k$, its current value including any shock. With
+\opt{sc}{ale}, $b_k$ is the number given times the base value $Y^0_k$. The
+conditions are
+\begin{equation*}
+g_k = \sigma_k\,\frac{b_k - Y_k}{s^Y_k} \ge 0, \qquad
+h_k = \delta_k\,\frac{X_k - \bar{x}_k}{s^X_k} \ge 0, \qquad
+g_k\,h_k = 0,
+\end{equation*}
+with $\sigma_k = 1$ for an upper bound and $-1$ for a lower bound,
+$\delta_k = 1$ for \opt{}{up} and $-1$ for \opt{}{down}, and $s$ the base
+magnitudes of the variables (one where the base value is zero).
+
+\manref{cge_solve} solves them in two stages. First each condition is written
+in the smoothed Fischer--Burmeister form
+\begin{equation*}
+g_k + h_k - \sqrt{g_k^2 + h_k^2 + 2\mu} = 0, \qquad \mu = 10^{-8},
+\end{equation*}
+and solved with the rest of the model. Then each constraint takes the regime
+of that solution, binding ($g_k = 0$) if $h_k > g_k$ and otherwise not binding
+($h_k = 0$), and the model is solved again with these exact equations. A
+constraint whose other condition then fails ($h_k < 0$ when binding,
+$g_k < 0$ when not) changes regime, and the model is solved again, for at most
+ten rounds.
+
+The rent on each element,
+\begin{equation*}
+R^M_c = \V{RM}_c\,\V{pwm}_c\,\V{EXR}\,\V{QM}_c, \qquad
+R^E_c = \V{RE}_c\,\V{PWE}_c\,\V{EXR}\,\V{QE}_c, \qquad
+R^A_a = \V{RA}_a\,\V{PA}_a\,\V{QA}_a,
+\end{equation*}
+is income of its recipient, and rents paid abroad are payments to the rest of
+the world. The premiums enter the import and export prices, \eqref{eq:P1} and
+\eqref{eq:P2}, and the rent on output the activity price, \eqref{eq:P7}.
+\Chapref{chap:constraints} gives the details (\secref{sec:rents},
+\secref{sec:cons-def} and \secref{sec:cons-solution}).
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\seechapter{chap:constraints}{Bounds and complementarity}
+\end{alsosee}

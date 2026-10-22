@@ -1,0 +1,20 @@
+. cge_synthetic, clear sut
+(20 vars, 19 obs)
+
+Synthetic SAM loaded (supply-use layout): 19 accounts, total   1952.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+Account label s-i is not a valid Stata name; using si
+SAM read: 19 accounts, total 1952
+Largest row-column imbalance:  0.00e+00
+
+. quietly cge_map, activities(act_agr act_man act_ser)                    ///
+>     commodities(com_agr com_man com_ser com_fuel) factors(lab cap)      ///
+>     households(hhd) government(gov) savinv(si) row(row) dirtax(tax_dir) ///
+>     saltax(tax_sal) imptax(tax_imp) marginaccounts(trd trp) stocks(dstk)
+
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+Calibrated: 103 equations, 103 free variables
+Benchmark replication: largest scaled residual  3.55e-16
+Exports drawn from composite supply (equation T9): com_agr com_fuel

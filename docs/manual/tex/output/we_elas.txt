@@ -1,0 +1,28 @@
+. quietly cge_elasticities sigmaq, country(TGO) values
+
+. local sq `r(values)'
+
+. quietly cge_elasticities sigmat, country(TGO) values
+
+. local st `r(values)'
+
+. quietly cge_elasticities sigmava, country(AFR) values
+
+. local va `r(values)'
+
+. quietly cge_elasticities incelas, country(TGO) values map(com_agr:food) others(other)
+
+. local ie `r(values)'
+
+. quietly cge_elasticities frisch, values
+
+. local fr `r(values)'
+
+. display "sigmava(`va')"
+sigmava(0.5897 0.5897 0.5897)
+
+. display "sigmaq(`sq') sigmat(`st')"
+sigmaq(0.620 0.620 0.620) sigmat(0.542 0.542 0.542)
+
+. display "incelas(`ie') frisch(`fr')"
+incelas(0.804 1.913 1.913) frisch(-1.3661)

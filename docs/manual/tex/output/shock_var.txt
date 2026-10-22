@@ -1,0 +1,10 @@
+. cge_shock QFS, elements(lab) scale(1.05)
+Variable QFS changed for 1 element(s)
+
+. cge_shock FSAV, scale(0.8)
+Variable FSAV changed for 1 element(s)
+
+. cge_shock EXR, scale(1.1)
+EXR is not fixed under the current closure, so it cannot be set
+
+r(459);

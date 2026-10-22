@@ -1,0 +1,155 @@
+\cgeentry{cge_results}{Report simulation results}
+
+\cgesec{Description}
+
+\cmd{cge_results} displays a summary of a simulation: real value added, the
+exchange rate, the CPI, investment, imports, exports, government savings,
+factor prices and activity output, as percentage changes from the base; the
+equivalent variation of each household; and the checks of Walras's law and of
+the GDP identity. With \opt{}{clear} or \opt{sav}{ing()}, it writes every
+variable of the solution as a dataset, with one observation per variable
+element.
+
+\cgesec{Quick start}
+
+Display the summary of simulation \cmd{notariff}
+\begin{stcode}
+cge_results, sim(notariff)
+\end{stcode}
+Load every variable of the simulation as data, without the summary
+\begin{stcode}
+cge_results, sim(notariff) clear nodisplay
+\end{stcode}
+Save the results of the last simulation as a Stata dataset
+\begin{stcode}
+cge_results, saving(results, replace)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_results} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{sim}{name} & simulation; default the last one stored\\
+\optgroup{Data}
+\opt{}{clear} & replace the data in memory with the results\\
+\optarg{sav}{ing}{filename\textup{[\texttt{, replace}]}} & save the results as a Stata dataset\\
+\optgroup{Reporting}
+\opt{nod}{isplay} & do not display the summary\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{sim}{name}] selects the simulation. The default is the last
+simulation stored, which is the one most recently added: solving again under
+an existing name replaces that simulation where it stands.
+
+\item[\opt{}{clear}] replaces the data in memory with the results of the
+simulation. The data in memory need not have been saved.
+
+\item[\optarg{sav}{ing}{filename\textup{[\texttt{, replace}]}}] saves
+the results as a Stata dataset, leaving the data in memory unchanged;
+\cmd{replace} allows an existing file to be overwritten.
+
+\item[\opt{nod}{isplay}] suppresses the summary. The summary also stores the
+results in \cmd{r()}, so nothing is stored with \opt{nod}{isplay}.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+\cmd{cge_results} is the quick look at one simulation, and the way to every
+variable of its solution. \manref{cge_report} computes the standard report
+measures, such as real GDP and revenue by tax, for several simulations side by
+side.
+
+\cgesubsec{Example 1: the summary}
+
+In the synthetic SAM, mapped and calibrated as in \manref{cge_solve}, every
+import tariff is removed and the model solved as simulation \cmd{notariff}:
+\stlog{res_show}
+The heading gives the closure under which the simulation was solved. The
+percentage changes are relative to the absolute value of the base, so a fall is
+negative even when the base is negative: here government savings, 3 in the
+base, fall by 271 per cent to a deficit of about 5. The household gains, with
+an equivalent variation of 6.1, 2.7 per cent of its base consumption. The two
+checks are zero to the precision of the solution: the slack of the
+savings--investment balance, \cmd{WALRAS}, and the gap between nominal GDP
+measured from expenditure and from income.
+
+The equivalent variations are returned in a row vector, one column per
+household:
+\stlog{res_return}
+
+\cgesubsec{Example 2: the results as data}
+
+With \opt{}{clear}, every variable element of the solution becomes an
+observation, with its base and simulated values:
+\stlog{res_data}
+The variables are \cmd{variable}, the name of the model variable as in
+\secref{sec:variables}; \cmd{element1} and \cmd{element2}, its set elements,
+empty for a variable without index; \cmd{base}, the base value; and
+\cmd{value}, the value in the simulation. Every variable is included, fixed or
+free, with the rents of constraints, the slack \cmd{WALRAS} and the user
+variables of \manref{cge_variable}; elements that do not exist in the model,
+such as imports of a commodity that is not imported, are left out. Percentage
+changes are then a line away:
+\stlog{res_pct}
+The 15 missing values are the elements whose base value is zero.
+
+\cgesubsec{Example 3: saving the results}
+
+\opt{sav}{ing()} writes the same dataset to a file and leaves the data in
+memory unchanged:
+\stlog{res_saving}
+
+\cgesec{Stored results}
+
+\cmd{cge_results} stores the following in \cmd{r()}, unless
+\opt{nod}{isplay} is specified:
+\begin{storedres}
+\resgroup{Macros}
+\res{r(sim)} & name of the simulation\\
+\resgroup{Matrices}
+\res{r(ev)} & equivalent variation of each household, $1 \times H$\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $x^0$ be a variable at the base and $x$ in the simulation. The summary
+shows $100\,(x - x^0)/|x^0|$, missing when $x^0 = 0$. Its rows are real value
+added, $\sum_a \V{PVA}^0_a\,\V{QVA}_a$ less the commodities in nests of value
+added at base prices (\secref{sec:nests}); $\V{EXR}$; $\V{CPI}$; $\V{IADJ}$;
+imports, $\sum_c \V{pwm}_c\,\V{QM}_c$, and exports,
+$\sum_c \V{pwe}_c\,(\V{QE}_c + \V{QER}_c)$, both at the world prices of the
+simulation for the base and for the solution alike; $\V{GSAV}$; $\V{SHIADJ}$,
+when the model has a health insurance fund; $\V{W}_f$; and $\V{QA}_a$.
+
+The equivalent variation of household $h$ is the change in spending at base
+prices that gives its new utility,
+\begin{equation*}
+\V{EV}_h = \sum_c P^0_c\,\gamma_{ch}
+  + \Bigl(\V{EH}_h - \sum_c P_c\,\gamma_{ch}\Bigr)
+    \prod_c \Bigl(\frac{P^0_c}{P_c}\Bigr)^{\beta_{ch}} - \V{EH}^0_h,
+\end{equation*}
+where the sums and the product run over marketed commodities, at the prices
+that final users pay, $\V{PH}_c$, and over home-consumed goods, at the activity
+prices $\V{PA}_a$, with the shares and subsistence quantities of home
+consumption; $\gamma_{ch} = 0$ with Cobb--Douglas demand. It is shown in per
+cent of base consumption, $\V{EH}^0_h$. The GDP identity gap is nominal GDP
+measured from expenditure less nominal GDP measured from income, zero at any
+solution. \Chapref{chap:reporting} gives the measures, the compensating
+variation and the two sides of GDP (\secref{sec:welfare}).
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_check}{Run model validation checks}
+\seeentry{cge_parameters}{The calibrated parameters as a dataset}
+\seechapter{chap:reporting}{Reporting measures and welfare}
+\end{alsosee}

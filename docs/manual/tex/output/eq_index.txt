@@ -1,0 +1,28 @@
+. cge_variable PIX(c), value(1)
+User variable PIX(c): 3 element(s), base values 1 1 1
+Add the equations that determine it with cge_equation
+
+. cge_equation pix(c): ln(PIX(c)) = ln(PQ(c)) - ln(CPI)
+User equation pix: 3 element(s)
+
+. cge_variable CVOL, value(1)
+User variable CVOL: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation cvol: sum(c, PQ(c) * QH(c, hhd)) = CVOL * sum(c, PQ(c) * base(QH(c, hhd)))
+User equation cvol: 1 element(s)
+
+. quietly cge_solve, name(qgser)
+
+. quietly cge_results, sim(qgser) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "PIX", "CVOL"), noobs
+
+  +----------------------------------------+
+  | variable   element1   base       value |
+  |----------------------------------------|
+  |      PIX    com_agr      1    1.000056 |
+  |      PIX    com_man      1   .99985438 |
+  |      PIX    com_ser      1   1.0000966 |
+  |     CVOL                 1   1.0000516 |
+  +----------------------------------------+

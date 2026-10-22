@@ -1,0 +1,94 @@
+\cgeentry{cge_save}{Save the model and its simulations to a file}
+
+\cgesec{Description}
+
+\cmd{cge_save} writes the model in memory to a file: the SAM, the mapping, the
+calibrated parameters, the closure, the current shocks and every stored
+simulation. \manref{cge_use} loads it again, so that a calibrated model need not
+be rebuilt in a later session and its simulations can be reported without
+solving them again.
+
+\cgesec{Quick start}
+
+Save the model as \cmd{mymodel.cgem}, replacing the file if it exists
+\begin{stcode}
+cge_save using mymodel, replace
+\end{stcode}
+Load it again
+\begin{stcode}
+cge_use using mymodel
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_save} \cmd{using} \argu{filename} [\texttt{,} \opt{}{replace}]
+\end{stsyntax}
+If \argu{filename} contains no period, the extension \cmd{.cgem} is added.
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{}{replace}] allows an existing file to be overwritten.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A model may be saved at any stage after \manref{cge_sam}: with the SAM only,
+after \manref{cge_map}, or calibrated. A calibrated model is saved with
+everything that later commands set: the closure and its swaps
+(\manref{cge_closure}), the current shocks (\manref{cge_shock}), the
+constraints (\manref{cge_constraint}), the user variables and equations
+(\manref{cge_variable}, \manref{cge_equation}), and every simulation stored by
+\manref{cge_solve}, \manref{cge_dynamic} or \manref{cge_optimize}, with the
+parameters and closure under which each was solved. The dataset in memory is
+not saved.
+
+\cgesubsec{Example 1: saving a calibrated model}
+
+The synthetic SAM is mapped and calibrated as in \manref{cge_solve}, and the
+removal of import tariffs is solved as simulation \cmd{notariff}:
+\stlog{save_model}
+The message gives the stage of the model and the number of simulations saved.
+An existing file is not overwritten without \opt{}{replace}:
+\stlog{save_exists}
+
+\cgesubsec{Example 2: saving a SAM}
+
+A SAM read by \manref{cge_sam} can be saved before it is mapped:
+\stlog{save_sam}
+
+\cgesubsec{Versions of Stata and of cge-stata}
+
+Files are written in Mata's file format, which changed after Stata 13: later
+versions of Stata read files saved in Stata 13, but Stata 13 cannot read files
+saved in later versions (tested with StataNow 19.5). Save a model in Stata 13
+when it is to be shared with users of Stata 13.
+
+Each item of the model is stored with its name, so a newer version of \pkg can
+read files saved by an older one; \manref{cge_use} upgrades such a model, and
+ignores, with a note, items that the current version no longer uses.
+
+\cgesec{Stored results}
+
+\cmd{cge_save} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Macros}
+\res{r(filename)} & name of the file written\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+The file is a sequence of Mata matrices written by \cmd{fputmatrix()}: the
+identifier \cmd{cge-stata model}, the version of \pkg that wrote it, and then
+pairs of a name and a value, one pair for each item of the model, ending with
+the name \cmd{__end__}. The parameters are stored item by item for the base,
+for the current shocks and for each simulation.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_use}{Load a model saved with cge\_save}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seeentry{cge}{Computable general equilibrium modelling in Stata}
+\end{alsosee}

@@ -1,0 +1,7 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_closure, swap(QG(com_ser) TINSADJ)
+the closure is singular: equation I7 (government demand) for com_ser has no free variable
+
+r(459);

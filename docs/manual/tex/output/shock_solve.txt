@@ -1,0 +1,16 @@
+. cge_solve, name(lab_up)
+Simulation lab_up solved in 7 iteration(s) (newton)
+Largest scaled residual  5.29e-11; WALRAS = -1.49e-10
+
+. quietly cge_results, sim(lab_up) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "QFS", "FSAV", "EXR"), noobs
+
+  +---------------------------------------+
+  | variable   element1   base      value |
+  |---------------------------------------|
+  |      EXR                 1   1.007757 |
+  |      QFS        lab    135     141.75 |
+  |      QFS        cap    127        127 |
+  |     FSAV                15         12 |
+  +---------------------------------------+

@@ -1,0 +1,93 @@
+\chapter{Recursive dynamics}\label{chap:dynamics}
+
+A dynamic run of \manref{cge_dynamic} solves the static model of
+chapters~\ref{chap:equations} to~\ref{chap:calibration} for periods
+$t = 0, 1, \dots, T$. Period 0 is the calibrated base. Agents do not look
+ahead: each period is an equilibrium given the stocks and exogenous values of
+that period, which are updated from the previous period's solution. The
+updates follow the recursive dynamic extension of the standard model
+\citep{thurlow2004}; the rates are chosen by the user, and none has a default
+other than zero.
+
+\section{Updates between periods}
+
+Before period $t \ge 1$, in this order:
+
+\begin{enumerate}
+\item \textbf{Capital.} For each capital factor $f \in K$, with depreciation
+rate $\delta_f$ and base gross rental rate $\rho_f$ (rental per unit of capital
+at base prices, so that the base capital stock is $\V{YF}^0_f / \rho_f$), new
+capital in the factor's units is
+\begin{equation*}
+N_{f,t} = \rho_f\,\omega_f\,\V{INV}_{t-1}, \qquad
+\V{INV}_{t-1} = \sum_c \V{PQ}^0_c\,\V{QINV}_{c,t-1}, \qquad
+\omega_f = \V{YF}^0_f \Big/ \sum_{f' \in K} \V{YF}^0_{f'}:
+\end{equation*}
+real investment at base prices, shared among capital factors by their base
+income. If $f$ is specific to each activity,
+\begin{equation*}
+\V{QF}_{fa,t} = (1 - \delta_f)\,\V{QF}_{fa,t-1} + N_{f,t}\,\eta_{fa,t},
+\end{equation*}
+with allocation shares that favour activities whose rental rate is above the
+average,
+\begin{gather*}
+\eta_{fa,t} \propto \max\Bigl[0,\; s_{fa}\Bigl(1 + \beta\Bigl(\frac{R_{fa}}{\bar R_f} - 1\Bigr)\Bigr)\Bigr],\\
+s_{fa} = \frac{\V{QF}_{fa,t-1}}{\sum_{a'} \V{QF}_{fa',t-1}}, \qquad
+R_{fa} = \V{W}_{f,t-1}\,\V{WFDIST}_{fa,t-1}, \qquad
+\bar R_f = \sum_a s_{fa}\,R_{fa},
+\end{gather*}
+normalised to sum to one, where $\beta \ge 0$ is the sensitivity of investment
+to rental differences (default 1). If $f$ is mobile,
+$\V{QFS}_{f,t} = (1 - \delta_f)\,\V{QFS}_{f,t-1} + N_{f,t}$. A capital factor
+may not be unemployed.
+\item \textbf{Other factors.} $\V{QFS}_{f,t} = (1 + g_f)\,\V{QFS}_{f,t-1}$ for
+a mobile factor, and $\V{QF}_{fa,t} = (1 + g_f)\,\V{QF}_{fa,t-1}$ for an
+activity-specific one. The supply of an unemployed factor is endogenous, so
+$g_f$ must be zero. The labour force of a factor in $FL$ grows at $g_f$
+(chapter~\ref{chap:labour}).
+\item \textbf{Population.} $\gamma_{ch,t} = (1 + g_P)\,\gamma_{ch,t-1}$ (and
+$\gamma^h$ alike), $\V{HS}^0_t = (1 + g_P)\,\V{HS}^0_{t-1}$ and
+$\V{POP}_t = (1 + g_P)\,\V{POP}_{t-1}$: subsistence consumption grows with the
+population, and the health link compares health services per head. With a death rate, $g_P$ becomes $g_{P,t}$, and factors
+that lose workers to deaths grow at $g_{f,t}$ (section~\ref{sec:population}).
+\item \textbf{Government and foreign flows.} $\overline{\V{qg}}_c$,
+$\V{trnsfr}_{d,gov}$, $\V{trnsfr}_{gov,gov}$ and $\V{trnsfr}_{shi,gov}$ grow at
+$g_G$; flows in foreign currency ($\V{trnsfr}_{d,row}$, $\V{trnsfr}_{f,row}$,
+$\V{trnsfr}_{gov,row}$, $\V{trnsfr}_{row,gov}$, $\V{trnsfr}_{shi,row}$, and
+$\V{FSAV}$ when it is fixed) grow at $g_W$. Other fixed values, the numeraire
+among them, are unchanged.
+\item \textbf{Public debt}, when the model has debt
+(section~\ref{sec:debt}). The deficit of period $t - 1$, $-\V{GSAV}_{t-1}$, is
+borrowed, a share $\phi$ abroad:
+\begin{equation*}
+\V{DD}_t = \V{DD}_{t-1} + (1 - \phi)\,(-\V{GSAV}_{t-1}),
+\qquad
+\V{DF}_t = \V{DF}_{t-1} + \phi\,(-\V{GSAV}_{t-1}) / \V{EXR}_{t-1}.
+\end{equation*}
+A surplus repays debt in the same shares. Interest in period $t$ is paid on
+these stocks (\eqref{eq:I3}, \eqref{eq:I9}, \eqref{eq:S3}).
+\item \textbf{Shocks} for period $t$, if any, are applied by the user's
+program; they may change the debt stocks and interest rates. A shock stays in
+force in later periods unless the program changes it.
+\item \textbf{Efficiency.} $\V{ad}_{a,t} = \lambda_{a,t}\,\V{ad}_{a,t-1}$, with
+$\lambda_{a,t} = 1 + g^{ad}_a$; or a uniform $\lambda_t$ taken from a baseline
+run; or, to calibrate a baseline to growth targets, the uniform $\lambda_t$ for
+which real value added at base prices, $\sum_a \V{PVA}^0_a\,\V{QVA}_{a,t}$,
+equals $(1 + g^Y_t)$ times its value in $t - 1$. That $\lambda_t$ is found by
+secant iterations starting from $\lambda = 1$ and $\lambda = 1 + g^Y_t$, to a
+relative gap of $10^{-13}$.
+\end{enumerate}
+
+Period $t$ is then solved from the solution of $t - 1$. Each period is stored
+as an ordinary simulation, named with the run and the period, and tagged with
+its run, period and efficiency factor.
+
+\section{Baselines and scenarios}
+
+A scenario that changes policy should reuse the baseline's efficiency factors
+$\lambda_t$, so that efficiency does not respond to the scenario; its
+results are then compared with the baseline period by period
+(\manref{cge_dynresults}). Because the run is recursive, a static effect on
+investment changes the capital stock of later periods: a policy that raises
+consumption at the expense of investment can lower output in later periods,
+which a static run does not show.

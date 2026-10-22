@@ -1,0 +1,91 @@
+\chapter{Trade and household extensions}\label{chap:trade}
+
+\section{Home consumption}\label{sec:home}
+
+Households in many African economies consume part of what they produce. A SAM
+records this as a payment from the household's column to the activity's row,
+$\SAM(a, h)$, at producer prices. The model treats it as a separate good:
+\begin{itemize}
+\item the activity's output $\V{QA}_a$ is marketed output, which yields
+commodities through $\theta_{ac}$ \eqref{eq:Q6}, plus home consumption
+$\sum_h \V{QHA}_{ah}$;
+\item home consumption is valued at the activity price $\V{PA}_a$, so it bears
+no sales tax, VAT, import competition or margins;
+\item it enters household demand \eqref{eq:I5H} with its own marginal budget
+share $\beta^h_{ah}$ and, with LES demand, subsistence quantity
+$\gamma^h_{ah}$; consumption spending $\V{EH}_h$ \eqref{eq:I4} includes it.
+\end{itemize}
+
+\textbf{Calibration.} $\V{QHA}^0_{ah} = \SAM(a, h)$, with $\V{PA}^0_a = 1$;
+marketed output is $\V{QA}^0_a - \sum_h \SAM(a, h)$, which must be positive,
+and $\theta_{ac}$ is $\SAM(a, c)$ divided by it. $\V{EH}^0_h$ includes home
+consumption, and $\beta^h_{ah} = \SAM(a, h) / \V{EH}^0_h$. With LES demand,
+home consumption of the output of activity $a$ takes the income elasticity of
+$a$'s paired commodity, and
+$\gamma^h_{ah} = \V{QHA}^0_{ah} + \beta^h_{ah}\,\V{EH}^0_h / (\V{PA}^0_a\,\phi_h)$.
+The CPI keeps its weights on marketed consumption; welfare measures use the
+full expenditure function, with $\V{PA}_a$ for home goods. GDP includes home
+consumption at $\V{PA}_a$ (real GDP at $\V{PA}^0_a$). Population growth in
+dynamic runs scales $\gamma^h$ as it scales $\gamma$.
+
+\section{Export demand}\label{sec:exportdemand}
+
+By default the country is small in world markets: it sells any quantity at the
+world price $\V{pwe}_c$. For commodities given an elasticity of export demand
+$\eta^e_c > 0$ (\manref{cge_calibrate}, option \cmd{exportdemand()}), the world
+price is a variable $\V{PWE}_c$, and exports fall as it rises
+\eqref{eq:T10}. The CET (\eqref{eq:T1}, \eqref{eq:T2}) still determines how
+much producers offer at the export price $\V{PE}_c$ \eqref{eq:P2}. A larger
+$\eta^e_c$ approaches the small-country case, and a change in $\V{pwe}_c$
+shifts world demand. Export revenue \eqref{eq:S3}, export taxes
+\eqref{eq:I8} and nominal GDP use $\V{PWE}_c$; real exports are valued at base
+world prices.
+
+\section{Export-only commodities}\label{sec:exportonly}
+
+When a commodity's domestic output is all exported, the SAM shows exports
+equal to domestic output (net of export taxes and export margins), and no
+domestic sales from domestic output. By default such a commodity falls into
+$CR$, since its exports are at least its domestic output
+(section~\ref{sec:cal-trade}): its output goes to the domestic market and its
+exports are drawn from composite supply at $\V{PQ}_c$. With
+\cmd{cge_calibrate, exportonly()} its output is exported directly instead:
+$\V{QD}_c$ and $\V{PD}_c$ do not exist, the CET is replaced by \eqref{eq:T3E},
+and the export price $\V{PE}_c$ is the producer price. If the commodity is also
+imported, its composite supply is imports alone \eqref{eq:T7}; otherwise it
+has no composite supply, and $\V{PQ}_c$ and $\V{QQ}_c$ do not exist.
+Calibration lists the commodities whose exports equal domestic output, so that
+the choice is explicit. An export-only commodity may pay export taxes.
+
+\section{Margins by market}\label{sec:margins-market}
+
+Margins may differ between domestic sales, imports and exports, as in the
+IFPRI standard model \citep{lofgren2002}. A margin account can be declared as
+paid per unit of domestic sales (\manref{cge_map}, option
+\cmd{domesticmargins()}), of imports (\cmd{importmargins()}) or of exports
+(\cmd{exportmargins()}); accounts in \cmd{marginaccounts()} keep the
+treatment per unit of composite supply. With $\V{MG}_{tc} = \SAM(t, c)$ and
+the shares in which account $t$ buys margin services,
+$s_{c't} = \SAM(c', t) / \sum_{c''} \SAM(c'', t)$:
+\begin{itemize}
+\item $\V{icd}_{c'c} = \sum_{t \in T^D} s_{c't}\,\V{MG}_{tc} / \V{QD}^0_c$:
+domestic buyers pay $\V{PDD}_c$ (\eqref{eq:P3}, \eqref{eq:T5}), and producers
+receive $\V{PD}_c$;
+\item $\V{ici}_{c'c} = \sum_{t \in T^M} s_{c't}\,\V{MG}_{tc} / \V{QM}^0_c$:
+the margins are part of the import price $\V{PM}_c$ \eqref{eq:P1};
+\item $\V{ice}_{c'c} = \sum_{t \in T^E} s_{c't}\,\V{MG}_{tc} / \V{QE}^0_c$:
+exporters receive the world price, less export taxes, less margins
+\eqref{eq:P2}.
+\end{itemize}
+Export margins are part of the export value in the SAM, so
+\begin{equation*}
+\V{QE}^0_c = \SAM(c, row) - \SAM(tax_{exp}, c) - \sum_{t \in T^E} \V{MG}_{tc},
+\qquad \V{pwe}_c = \SAM(c, row) / \V{QE}^0_c,
+\end{equation*}
+which gives $\V{PE}^0_c = 1$. The base prices
+$\V{PDD}^0_c = 1 + \sum_{c'} \V{icd}_{c'c}$ and
+$\V{PM}^0_c = 1 + \V{tm}_c + \sum_{c'} \V{ici}_{c'c}$ enter the Armington shares
+(section~\ref{sec:cal-cet}) in place of $\V{PD}^0_c$ and $\V{PM}^0_c$.
+Composite supply $\V{QQ}^0_c$ excludes export margins. A commodity that pays
+domestic, import or export margins must have domestic sales, imports or
+exports respectively.

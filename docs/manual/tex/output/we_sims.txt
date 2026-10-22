@@ -1,0 +1,41 @@
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(notariff)
+Simulation notariff solved in 7 iteration(s) (newton)
+Largest scaled residual  2.22e-11; WALRAS = -5.04e-10
+
+. cge_closure, government(fixgsav direct)
+Closure
+  external account     flexexr
+  government           fixgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_solve, name(notariff_direct)
+Simulation notariff_direct solved in 7 iteration(s) (newton)
+Largest scaled residual  8.58e-12; WALRAS = -2.44e-10
+
+. cge_closure, government(flexgsav)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_shock, reset
+All shocks removed
+
+. cge_shock qg, elements(com_ser) scale(1.2)
+Parameter qg changed for 1 element(s)
+
+. cge_solve, name(gov_services)
+Simulation gov_services solved in 6 iteration(s) (newton)
+Largest scaled residual  4.41e-12; WALRAS =  4.82e-11
+
+. cge_shock, reset
+All shocks removed

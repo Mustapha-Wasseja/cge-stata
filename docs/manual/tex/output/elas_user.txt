@@ -1,0 +1,12 @@
+. type myvalues.csv
+id,parameter,country,category,value,source,definition
+MY2026-ARM-AGR,sigmaq,TGO,agriculture,1.4,MY2026,sector Armington elasticity
+MY2026-ARM-MAN,sigmaq,TGO,manufactures,2.1,MY2026,sector Armington elasticity
+
+. cge_elasticities sigmaq using myvalues.csv, source(MY2026) values ///
+>     map(com_agr:agriculture) others(manufactures)
+sigmaq: 1.4 2.1 2.1
+  MY2026-ARM-AGR (TGO): sector Armington elasticity
+    MY2026,
+  MY2026-ARM-MAN (TGO): sector Armington elasticity
+    MY2026,

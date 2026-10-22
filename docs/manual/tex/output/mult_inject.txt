@@ -1,0 +1,18 @@
+. cge_multiplier, inject(com_hlt:10)
+
+Effects of the injection (fixed prices)
+Account       Block          Base income       Change  % change
+---------------------------------------------------------------
+act_agr       production             100        4.593     4.593
+act_man       production             140        5.524     3.946
+act_ser       production             120         4.92     4.100
+act_hlt       production              30        10.77    35.915
+com_agr       production             130        5.971     4.593
+com_man       production             218        8.602     3.946
+com_ser       production             150         6.15     4.100
+com_hlt       production              30        10.77    35.915
+lab           factors                135         11.4     8.448
+cap           factors                127        7.237     5.698
+hhd           institutions           281        18.13     6.454
+---------------------------------------------------------------
+Injection 10; gross output 25.8113343; value added 18.6413813; household income 18.1345

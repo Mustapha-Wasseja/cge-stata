@@ -1,0 +1,16 @@
+. cge_closure
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. return list
+
+scalars:
+            r(N_swaps) =  0
+
+macros:
+            r(closure) : "flexexr flexgsav savings cpi lab:mobile cap:mobile"

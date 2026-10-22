@@ -1,0 +1,240 @@
+\chapter{Notation and the social accounting matrix}\label{chap:notation}
+
+This part of the manual states the model that \pkg solves: its sets,
+variables, parameters and equations, its closures, how it is calibrated to a
+social accounting matrix, how it is solved, and how its results are measured.
+The model is a single-country, static, SAM-calibrated computable general
+equilibrium model in the tradition of the IFPRI standard model
+\citep{lofgren2002} and the PEP-1-1 model \citep{decaluwe2013}. Only the
+structure of the model is taken from that literature; no data from either
+source are used. The extensions of chapters~\ref{chap:fiscal}
+to~\ref{chap:user} and the recursive dynamics of chapter~\ref{chap:dynamics}
+leave the standard model unchanged when they are not used.
+
+The Stata and Mata implementation, a Python reference implementation and an
+independent GAMS implementation follow the equations of this part; the test
+suites check that the three agree (chapter~\ref{chap:validation}).
+
+\section{The social accounting matrix}\label{sec:sam-conventions}
+
+A social accounting matrix (SAM) records every payment in the economy in one
+square matrix. Cell $\SAM(r, c)$ is a payment from the column account $c$ to
+the row account $r$: the row of an account records its receipts, and its
+column its payments. A SAM is balanced when every account's row total equals
+its column total. The model is calibrated to a balanced SAM: base values of the
+variables, and the parameters, are computed from its cells
+(chapter~\ref{chap:calibration}).
+
+Accounts are given roles by \manref{cge_map}: activities, commodities,
+factors, households, enterprises, the government, savings--investment, the
+rest of the world, tax accounts, margin accounts and, when there is one, a
+health insurance fund. Activities and commodities are separate accounts: an
+activity buys inputs and pays factors, and sells its output to commodity
+accounts, which also receive imports and sell to every user. Each activity is
+paired with a primary commodity.
+
+Base prices are normalised to one (section~\ref{sec:normalisation}), so the
+base quantity of a flow equals its value in the SAM. A superscript $0$ marks a
+base value, as in $\V{QA}^0_a$.
+
+\section{Sets}\label{sec:sets}
+
+\begin{cgetable}{>{$}l<{$}p{0.82\linewidth}}
+\toprule
+\text{Set} & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+A & activities\\
+C & commodities; $c(a)$ is the primary commodity of activity $a$. Activities and commodities are paired by position in the mapping; commodities may outnumber activities, and the commodities after the last paired one have no paired activity\\
+CX \subseteq C & commodities with domestic output (base output positive); the others, $C \setminus CX$, are imported only\\
+CR \subseteq C & commodities whose exports are drawn from composite supply: base exports positive and at least domestic output\\
+CE \subseteq CX \setminus CR & commodities exported from domestic output (base exports positive)\\
+CNE = CX \setminus CE & produced commodities not exported from domestic output\\
+CM \subseteq C & imported commodities (base imports positive)\\
+CNM = C \setminus CM & commodities that are not imported\\
+CXE \subseteq CE & export-only commodities: all domestic output is exported, with no domestic sales (when chosen; \secref{sec:exportonly})\\
+CED \subseteq CE & exported commodities that face a finite elasticity of export demand (\secref{sec:exportdemand})\\
+CAC \subseteq CX & commodities whose output from several activities is combined by a CES function (\secref{sec:outputces})\\
+CT \subseteq C & margin commodities: the services that margin accounts buy\\
+HC \subseteq C & health services whose consumption raises factor efficiency and health outcomes (may be empty; \chapref{chap:health})\\
+T & margin accounts (may be empty); $T^Q$, $T^D$, $T^M$ and $T^E$ are those paid per unit of composite supply (the default), of domestic sales, of imports and of exports (\secref{sec:margins-market})\\
+F & factors\\
+FL \subseteq F & factors with a labour force: a base unemployment rate, or a minimum wage, is given (\chapref{chap:labour})\\
+FS \subseteq F & factors with days lost to illness (\secref{sec:sickdays})\\
+H & households, including non-profit institutions mapped as households\\
+E & enterprises (may be empty)\\
+D = H \cup E & domestic non-government institutions\\
+I & institutions that receive factor income: $D$, the government $gov$, the rest of the world $row$ and, when it is mapped, the health insurance fund $shi$\\
+\end{cgetable}
+
+\section{Variables}\label{sec:variables}
+
+The variables are listed in three groups. The names are those of the results
+of \manref{cge_results}, which writes every variable of a simulation as a
+dataset.
+
+\subsection{Prices}
+
+\begin{cgetable}{>{$}l<{$}p{0.82\linewidth}}
+\toprule
+\text{Variable} & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\V{PA}_a & activity price: gross revenue per unit of activity\\
+\V{PVA}_a & price of value added\\
+\V{PINTA}_a & price of aggregate intermediate input\\
+\V{PX}_c & producer price of commodity output, $c \in CX$\\
+\V{PD}_c & price of domestic output sold domestically, $c \in CX$\\
+\V{PE}_c & export price received by producers, in local currency, $c \in CE$\\
+\V{PWE}_c & world export price, in foreign currency, $c \in CED$; elsewhere the parameter $\V{pwe}_c$\\
+\V{PM}_c & import price in local currency, $c \in CM$\\
+\V{PQ}_c & composite commodity price, including the sales tax\\
+\V{W}_f & average price of factor $f$\\
+\V{EXR} & exchange rate: local currency per unit of foreign currency\\
+\V{CPI} & consumer price index\\
+\V{DPI} & producer price index of domestic sales\\
+\V{PNA}_{na} & price of nest $n$ of value added in activity $a$ (\secref{sec:nests})\\
+\V{PXAC}_{ac} & price of the output of commodity $c$ by activity $a$, $c \in CAC$ (\secref{sec:outputces})\\
+\end{cgetable}
+
+\subsection{Quantities}
+
+\begin{cgetable}{>{$}l<{$}p{0.82\linewidth}}
+\toprule
+\text{Variable} & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\V{QA}_a & level of activity\\
+\V{QVA}_a & aggregate value added\\
+\V{QINTA}_a & aggregate intermediate input\\
+\V{QF}_{fa} & demand for factor $f$ by activity $a$\\
+\V{QINT}_{ca} & intermediate use of commodity $c$ by activity $a$\\
+\V{QX}_c & output of commodity $c \in CX$\\
+\V{QD}_c & domestic sales of domestic output, $c \in CX$\\
+\V{QE}_c & exports, $c \in CE$\\
+\V{QM}_c & imports, $c \in CM$\\
+\V{QQ}_c & composite supply of commodity $c$\\
+\V{QH}_{ch} & consumption of commodity $c$ by household $h$\\
+\V{QHA}_{ah} & home consumption by household $h$ of the output of activity $a$ (\secref{sec:home})\\
+\V{QG}_c & government consumption\\
+\V{QINV}_c & investment demand, including changes in inventories\\
+\V{QT}_c & demand for margin services, $c \in CT$\\
+\V{QER}_c & exports drawn from composite supply, $c \in CR$\\
+\V{QSHI}_c & purchases of commodity $c$ by the health insurance fund\\
+\V{QFS}_f & supply of factor $f$\\
+\V{QNA}_{na} & quantity of nest $n$ of value added in activity $a$\\
+\V{QXAC}_{ac} & output of commodity $c$ by activity $a$, $c \in CAC$\\
+\end{cgetable}
+
+\subsection{Incomes, rates and adjustment variables}
+
+\begin{cgetable}{>{$}l<{$}p{0.68\linewidth}}
+\toprule
+\text{Variable} & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\V{YF}_f & income of factor $f$\\
+\V{YIF}_{if} & income of institution $i$ from factor $f$\\
+\V{YI}_d & income of domestic institution $d$\\
+\V{EH}_h & consumption spending of household $h$\\
+\V{YG}, \V{EG} & government revenue and spending\\
+\V{GSAV} & government savings\\
+\V{FSAV} & foreign savings, in foreign currency\\
+\V{YSHI} & revenue of the health insurance fund\\
+\V{SHIADJ} & scaling factor of the fund's purchases\\
+\V{TINS}_d & direct tax rate of institution $d$\\
+\V{MPS}_d & marginal propensity to save of institution $d$\\
+\V{TINSADJ} & scaling factor of direct tax rates\\
+\V{TQADJ}, \V{TMADJ}, \V{TVADJ} & scaling factors of the sales tax, import tariff and VAT rates; one unless the closure frees one of them (\secref{sec:replacement})\\
+\V{MPSADJ} & scaling factor of savings rates\\
+\V{IADJ} & scaling factor of investment demand\\
+\V{GADJ} & scaling factor of government consumption\\
+\V{WFDIST}_{fa} & wage distortion: the price of factor $f$ in activity $a$ relative to its average price\\
+\V{EFF}_f & efficiency of factor $f$ from health services; one for a factor whose elasticity is zero (\secref{sec:efficiency})\\
+\V{DW}_f & days worked per worker of factor $f$, relative to the base; one for $f \notin FS$ (\secref{sec:sickdays})\\
+\V{HS} & volume of health services bought by households, the government and the health insurance fund\\
+\V{LSW}_f, \V{LSM}_f & slacks of the wage curve and of the minimum-wage condition, $f \in FL$; zero, and fixed, under the regime that uses the equation, free otherwise (\chapref{chap:labour})\\
+\V{RM}_c, \V{RE}_c, \V{RA}_a & premiums on imports and exports, per unit of the world price, and rents on activity output, per unit of the activity price; zero and fixed unless a constraint frees them (\secref{sec:rents})\\
+\V{WALRAS} & slack of the savings--investment balance; zero at every solution\\
+\end{cgetable}
+
+\section{Parameters}\label{sec:parameters}
+
+The parameters are computed by calibration (chapter~\ref{chap:calibration})
+unless they are given by the user. Names in brackets are those of
+\manref{cge_parameters} and \manref{cge_shock} where they differ from the
+symbol.
+
+\begin{cgetable}{>{$}l<{$}p{0.70\linewidth}}
+\toprule
+\text{Parameter} & Description\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\V{pwm}_c,\ \V{pwe}_c & world import and export prices, in foreign currency\\
+\V{tm}_c,\ \V{te}_c,\ \V{tq}_c,\ \V{ta}_a & import, export, sales and activity tax rates\\
+\V{tv}_c,\ \kappa_a & VAT rate on commodity $c$, and the share of the VAT on its inputs that activity $a$ recovers as a credit (\cmd{kappa}); $\V{tv}_c = 0$ and $\kappa_a = 1$ without VAT\\
+\V{tf}_{fa},\ \V{tfy}_f & tax rates on the use of factor $f$ by activity $a$, and on the income of factor $f$ (\secref{sec:factortax})\\
+\theta_{ac} & yield: output of commodity $c$ per unit of marketed output of activity $a$ (\cmd{theta})\\
+\V{iva}_a,\ \V{inta}_a & value added and aggregate intermediate input per unit of activity, with a Leontief top nest\\
+\V{aa}_a,\ \delta^a_a,\ \rho^a_a & efficiency, value-added share and exponent of a CES or Cobb--Douglas top nest (\cmd{aa}, \cmd{dla}, \cmd{rha})\\
+\V{ica}_{ca} & intermediate input of $c$ per unit of aggregate intermediate input of $a$\\
+\V{ad}_a,\ \delta^{va}_{fa},\ \rho^{va}_a & efficiency, factor shares and exponent of value added (\cmd{ad}, \cmd{dva}, \cmd{rva})\\
+\V{af}_f & exogenous efficiency of factor $f$ in every activity; one in the base\\
+\eta_f,\ \V{HS}^0 & elasticity of the efficiency of factor $f$ with respect to health services (\cmd{etah}), and the base volume of health services (\cmd{hs0})\\
+\V{at}_c,\ \delta^t_c,\ \rho^t_c & efficiency, export share and exponent of the CET function (\cmd{at}, \cmd{dt}, \cmd{rt})\\
+\V{aq}_c,\ \delta^q_c,\ \rho^q_c & efficiency, import share and exponent of the Armington function (\cmd{aq}, \cmd{dq}, \cmd{rq})\\
+\V{icm}_{c'c} & margin services of $c' \in CT$ per unit of composite supply of $c$\\
+\V{icd}_{c'c},\ \V{ici}_{c'c},\ \V{ice}_{c'c} & margin services per unit of domestic sales, imports and exports of $c$\\
+\V{shif}_{if} & share of the income of factor $f$, after contributions and factor income taxes, received by institution $i$\\
+\V{tshi}_f & health insurance contribution rate on the income of factor $f$\\
+\overline{\V{qshi}}_c,\ \V{sshi} & base purchases and savings rate of the health insurance fund (\cmd{qshi}, \cmd{sshi})\\
+\beta_{ch},\ \gamma_{ch} & marginal budget share and subsistence quantity of commodity $c$ for household $h$; $\gamma_{ch} = 0$ with Cobb--Douglas demand (\cmd{beta}, \cmd{gamma})\\
+\beta^h_{ah},\ \gamma^h_{ah} & marginal budget share and subsistence quantity of home consumption (\cmd{betah}, \cmd{gammah})\\
+\overline{\V{tins}}_d,\ \overline{\V{mps}}_d & base direct tax rate and savings rate of institution $d$ (\cmd{tins0}, \cmd{mps0})\\
+\V{shii}_{dd'} & share of the income of $d'$, after direct taxes and savings, transferred to $d$\\
+\V{shir}_d & share of the income of $d$, after direct taxes and savings, transferred to the rest of the world\\
+\V{hc}_h & share of the income of household $h$, after direct taxes and savings, spent on consumption\\
+\V{trnsfr}_{d,gov} & government transfers to institution $d$, in real terms (\cmd{trdg})\\
+\V{trnsfr}_{gov,gov} & transfers within government, in real terms (\cmd{trgg})\\
+\V{trnsfr}_{d,row} & transfers from the rest of the world to $d$, in foreign currency (\cmd{trdr})\\
+\V{trnsfr}_{f,row} & factor income from abroad received by factor $f$, in foreign currency (\cmd{trfr})\\
+\V{trnsfr}_{gov,row},\ \V{trnsfr}_{row,gov} & transfers from the rest of the world to the government, and from the government to the rest of the world, in foreign currency (\cmd{trgr}, \cmd{trrg})\\
+\V{trnsfr}_{shi,gov},\ \V{trnsfr}_{shi,row} & transfers to the health insurance fund from the government (real terms) and from the rest of the world (foreign currency) (\cmd{trshi}, \cmd{trshir})\\
+\overline{\V{qg}}_c,\ \overline{\V{qinv}}_c & base government consumption and investment quantities (\cmd{qg}, \cmd{qinv})\\
+\overline{\V{qer}}_c & base exports from composite supply, $c \in CR$ (\cmd{qer})\\
+\V{cwts}_c,\ \V{dwts}_c & weights of the CPI and the DPI\\
+\V{DD},\ \V{DF},\ r^d,\ r^f & public debt at the start of the period, held at home (local currency) and abroad (foreign currency), and their interest rates (\cmd{ddebt}, \cmd{fdebt}, \cmd{rd}, \cmd{rf}; \secref{sec:debt})\\
+\V{hold}_d,\ \phi & share of domestic interest received by institution $d$, and share of new borrowing from abroad\\
+\eta^e_c,\ \overline{\V{qe}}_c & elasticity of export demand and base exports, $c \in CED$ (\cmd{etae}, \cmd{qe0})\\
+\V{QLF}_f,\ u^0_f,\ \epsilon^w_f,\ \overline{w}_f,\ \underline{w}_f,\ \mu & labour force, base unemployment rate, wage-curve elasticity, reference real wage, real minimum wage, and the smoothing of the minimum-wage condition, $f \in FL$ (\cmd{qlf}, \cmd{u0}, \cmd{epsw}, \cmd{wref}, \cmd{wmin}, \cmd{mu})\\
+s^0_f,\ \sigma_f,\ \epsilon^s_f & base share of working time lost to illness, its current value and its elasticity, $f \in FS$ (\cmd{sick0}, \cmd{sick}, \cmd{epss})\\
+m^0,\ \mu^m,\ \epsilon^m,\ \V{POP} & base crude death rate, its current value, its elasticity, and the population index (\cmd{mort0}, \cmd{mort}, \cmd{epsm}, \cmd{pop})\\
+\end{cgetable}
+
+\subsection{Elasticities}
+
+The elasticities are supplied by the user; the package has no default values
+for them. They are:
+\begin{itemize}
+\item $\sigma^{va}_a$, the elasticity of substitution between factors in value
+added, with $\rho^{va}_a = 1/\sigma^{va}_a - 1$; $\sigma^{va}_a = 1$ selects the
+Cobb--Douglas form;
+\item $\sigma^q_c$, the Armington elasticity of substitution between imports
+and domestic goods, with $\rho^q_c = 1/\sigma^q_c - 1$; for imported
+commodities with domestic output $\sigma^q_c \ne 1$ is required, because the
+model has no Cobb--Douglas form of the Armington function;
+\item $\sigma^t_c$, the elasticity of transformation between exports and
+domestic sales, with $\rho^t_c = 1/\sigma^t_c + 1$; for $c \in CR$ it is
+instead the price elasticity of exports from composite supply (equation
+\eqref{eq:T9});
+\item optionally $\sigma^a_a$, the elasticity of substitution between value
+added and aggregate intermediate input, with $\rho^a_a = 1/\sigma^a_a - 1$;
+$0$, the default, is the Leontief form and $1$ the Cobb--Douglas form;
+\item optionally the income elasticities $\varepsilon_c$ and the Frisch
+parameter $\phi_h$ of linear expenditure system demand
+(section~\ref{sec:cal-institutions}), and the elasticities of the extensions
+of chapters~\ref{chap:fiscal} to~\ref{chap:production}.
+\end{itemize}
+All elasticities of substitution and transformation must be positive and
+finite. Chapter~\ref{chap:elasticities} describes the library of published
+estimates that \manref{cge_elasticities} reads.

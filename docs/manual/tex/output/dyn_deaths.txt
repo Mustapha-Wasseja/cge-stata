@@ -1,0 +1,44 @@
+. cge_synthetic, clear health
+(19 vars, 18 obs)
+
+Synthetic SAM loaded (health layout): 18 accounts, total   1746.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 18 accounts, total 1746
+Largest row-column imbalance:  0.00e+00
+
+. cge_map, activities(act_agr act_man act_ser act_hlt)                       ///
+>     commodities(com_agr com_man com_ser com_hlt) factors(lab cap)          ///
+>     households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir)   ///
+>     saltax(tax_sal) imptax(tax_imp) insurance(shi)
+Accounts mapped: 4 activities, 4 commodities, 2 factors, 1 households, 0 enterprises, 0 margin accou
+> nts
+Health insurance fund: shi
+
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) ///
+>     mortality(0.01) mortelas(-0.3)
+Death rate: .01 per head; elasticity -.3
+Calibrated: 118 equations, 118 free variables
+Benchmark replication: largest scaled residual  3.55e-16
+
+. cge_closure, factors(cap:specific)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           specific
+
+. local settings capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02) ///
+>     population(0.02) govgrowth(0.03) tfp(0.01) deathfactors(lab)           ///
+>     deathshare(0.3) workingage(0.55)
+
+. cge_dynamic, name(hbase) periods(0/4) `settings'
+Period 0: solved in 0 iteration(s)
+Period 1: solved in 6 iteration(s)
+Period 2: solved in 6 iteration(s)
+Period 3: solved in 6 iteration(s)
+Period 4: solved in 6 iteration(s)
+Dynamic run hbase stored as simulations: hbase0 hbase1 hbase2 hbase3 hbase4

@@ -1,0 +1,15 @@
+. return list
+
+scalars:
+           r(N_solved) =  69
+             r(walras) =  -7.34533617024e-13
+       r(max_residual) =  7.45359329812e-13
+         r(iterations) =  11
+          r(converged) =  1
+              r(steps) =  0
+          r(jacobians) =  1
+
+macros:
+            r(closure) : "flexexr flexgsav savings cpi lab:mobile cap:mobile"
+             r(method) : "newton"
+               r(name) : "notariff"

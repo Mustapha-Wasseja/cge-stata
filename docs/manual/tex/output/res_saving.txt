@@ -1,0 +1,3 @@
+. cge_results, sim(notariff) saving(notariff_results, replace) nodisplay
+(note: file notariff_results.dta not found)
+file notariff_results.dta saved

@@ -1,0 +1,151 @@
+\chapter{Factor taxes, nests and output aggregation}\label{chap:production}
+
+\section{Taxes on factor use and on factor income}\label{sec:factortax}
+
+Two taxes of the IFPRI standard model \citep{lofgren2002} and of the PEP
+models \citep{decaluwe2013} bear on factors.
+
+\textbf{Taxes on factor use}, such as payroll taxes on labour or taxes on
+capital, are paid by activities to accounts mapped with \manref{cge_map},
+option \cmd{factortax(}\argu{account}\cmd{:}\argu{factor}\cmd{)}. The rate on
+factor $f$ in activity $a$ is the tax over the factor payment,
+\begin{equation*}
+\V{tf}_{fa} = \SAM(acc, a) / \SAM(f, a).
+\end{equation*}
+It raises the cost of the factor to the activity: the first-order conditions
+\eqref{eq:Q4} and \eqref{eq:Q4CD} hold with
+$\V{W}_f\,\V{WFDIST}_{fa}\,(1 + \V{tf}_{fa})$, and value added at factor cost,
+$\V{PVA}_a\,\V{QVA}_a$, includes the tax. The shares of the value-added
+function are calibrated on the tax-inclusive factor costs.
+
+\textbf{Taxes on factor income} are paid by factors to the account mapped with
+\cmd{factorincometax(}\argu{account}\cmd{)}. The rate $\V{tfy}_f$ is the tax
+over factor income $\V{YF}_f$, taken before the income is distributed, like
+the contributions to a health insurance fund \eqref{eq:I2}.
+
+Both taxes are government revenue \eqref{eq:I8}. Factor income $\V{YF}_f$ is
+net of taxes on use \eqref{eq:I1}. The shocks \cmd{tf} (by factor, in every
+activity that uses it) and \cmd{tfy} change the rates; a value introduces a
+tax where the SAM has none. Reports add the rows \cmd{tax_factor_use} and
+\cmd{tax_factor_income} to the government table.
+
+\section{Nests of value added}\label{sec:nests}
+
+Value added may combine nests of inputs, each a CES or Cobb--Douglas aggregate
+with its own elasticity: labour as a combination of skill types, such as
+doctors, nurses and other staff, as in the PEP models \citep{decaluwe2013}, or
+capital with energy, as in GTAP-E \citep{burniaux2002}. The nests and their
+members, factors or commodities, are given at calibration:
+\begin{stcode}
+cge_calibrate, ... nests(labour: lab_hi lab_lo, ke: cap com_ene) sigmanest(labour:1.5 ke:0.4)
+\end{stcode}
+A factor or commodity belongs to at most one nest, and nests do not contain
+other nests. A nest exists in an activity that uses at least one of its
+members ($n \in NA_a$). The top of value added in an activity combines its
+factors in no nest and its nests, with the elasticity $\sigma^{va}_a$.
+
+\textbf{Commodities in nests.} A commodity $c$ in nest $n$ bought by activity
+$a$ leaves intermediate input: $\V{QINT}_{ca}$ is set by the nest
+\eqref{eq:N3} instead of \eqref{eq:Q5}, and is not part of $\V{QINTA}_a$ or of
+the shares $\V{ica}$. $\V{PVA}_a\,\V{QVA}_a$ then includes its cost at the
+price the activity pays, $p_{ca} = \V{PQ}_c\,(1 + \V{tv}_c\,\V{TVADJ}\,(1 -
+\kappa_a))$. Value added in reports and the income side of GDP leave it out.
+
+\textbf{Equations.} Each member $m$ of a nest has a quantity $x_{ma}$, a factor
+in efficiency units $z_f\,\V{QF}_{fa}$ with $z_f = \V{af}_f\,\V{EFF}_f\,\V{DW}_f$,
+or a commodity $\V{QINT}_{ca}$, and a cost $p_{ma}$:
+$\V{W}_f\,\V{WFDIST}_{fa}\,(1 + \V{tf}_{fa})$ for a factor, $p_{ca}$ for a
+commodity. With $\rho_n = 1/\sigma_n - 1$ and the CES sums
+\begin{equation*}
+S_a = \sum_{f \notin N} \delta^{va}_{fa}\,(z_f\,\V{QF}_{fa})^{-\rho^{va}_a}
+  + \sum_{n \in NA_a} \delta^n_{na}\,\V{QNA}_{na}^{-\rho^{va}_a},
+\qquad
+S_{na} = \sum_{m \in n} \delta_{ma}\,x_{ma}^{-\rho_n},
+\end{equation*}
+where $N$ is the set of the members of all nests, value added and its nests are
+\begin{equation*}
+\V{QVA}_a = \V{ad}_a\,S_a^{-1/\rho^{va}_a}
+\tag{Q3}
+\end{equation*}
+\begin{equation}
+\V{QNA}_{na} = \V{an}_{na}\,S_{na}^{-1/\rho_n}
+\tag{N1}\label{eq:N1}
+\end{equation}
+\begin{equation}
+\V{PNA}_{na} = \frac{\V{PVA}_a\,\V{QVA}_a}{S_a}\,\delta^n_{na}\,\V{QNA}_{na}^{-\rho^{va}_a - 1}
+\tag{N2}\label{eq:N2}
+\end{equation}
+and the demands for the members of a nest are
+\begin{equation*}
+p_{fa} = \frac{\V{PNA}_{na}\,\V{QNA}_{na}}{S_{na}}\,\delta_{fa}\,(z_f\,\V{QF}_{fa})^{-\rho_n - 1}\,z_f
+\tag{Q4}
+\end{equation*}
+\begin{equation}
+p_{ca} = \frac{\V{PNA}_{na}\,\V{QNA}_{na}}{S_{na}}\,\delta_{ca}\,\V{QINT}_{ca}^{-\rho_n - 1}
+\tag{N3}\label{eq:N3}
+\end{equation}
+Factors in no nest keep \eqref{eq:Q4}, with $S_a$ in its denominator. With
+$\sigma = 1$, a nest or the top of value added is Cobb--Douglas:
+$\V{QNA}_{na} = \V{an}_{na} \prod_m x_{ma}^{\delta_{ma}}$, and each member's
+cost is its share of the nest's value, $p_{ma}\,x_{ma} = \delta_{ma}\,\V{PNA}_{na}\,\V{QNA}_{na}$.
+
+\textbf{Calibration.} In the base $\V{PNA}^0_{na} = 1$ and $\V{QNA}^0_{na}$ is
+the cost of the nest's members: factor payments with taxes on use, and the
+SAM's purchases of its commodities. The shares within a nest follow from the
+members' costs and quantities as in section~\ref{sec:cal-production},
+$\delta_{ma} \propto p^0_{ma}\,(x^0_{ma})^{1 + \rho_n}$ (or the value shares for
+Cobb--Douglas), and $\V{an}_{na}$ makes \eqref{eq:N1} hold. At the top of value
+added the nests enter at a price of one with quantities $\V{QNA}^0_{na}$, and
+$\V{QVA}^0_a$ adds the cost of the commodities in nests.
+
+A nest of factors whose elasticity equals that of value added gives the same
+solution as no nest: a CES function of CES functions with one elasticity is a
+CES function. The test suites check this.
+
+\textbf{Parameters and results.} The parameters are $\delta^n_{na}$
+(\cmd{dvn}), $\V{an}_{na}$ (\cmd{an}), $\delta_{ca}$ (\cmd{dce}), $\sigma_n$
+(\cmd{sgn}) and $\rho_n$ (\cmd{rhn}); within a nest, the shares of factors are
+kept in \cmd{dva}. Results list $\V{QNA}$ and $\V{PNA}$. Sensitivity analysis
+keeps the nests' elasticities at the values given.
+
+\section{Output of a commodity from several activities}\label{sec:outputces}
+
+When several activities produce a commodity, \eqref{eq:Q6} adds their
+outputs: the outputs are perfect substitutes, sold at one price $\V{PX}_c$.
+The IFPRI standard model \citep{lofgren2002} instead combines them by a CES
+function, so that the output of different producers, such as public and
+private health services, can be priced differently. \manref{cge_calibrate},
+option \cmd{sigmaac(com_man:2)}, gives the elasticity of substitution for a
+commodity, or one value for every commodity with more than one producing
+activity ($c \in CAC$); the others keep \eqref{eq:Q6}. With $XAC_c$ the
+activities producing $c$ and $\rho^{ac}_c = 1/\sigma^{ac}_c - 1$:
+\begin{equation}
+\V{QXAC}_{ac} = \theta_{ac}\,\Bigl(\V{QA}_a - \sum_h \V{QHA}_{ah}\Bigr), \qquad a \in XAC_c
+\tag{Q6B}\label{eq:Q6B}
+\end{equation}
+\begin{equation}
+\V{QX}_c = \V{aac}_c\,\Bigl(\sum_{a \in XAC_c} \delta^{ac}_{ac}\,\V{QXAC}_{ac}^{-\rho^{ac}_c}\Bigr)^{-1/\rho^{ac}_c}
+\tag{Q6A}\label{eq:Q6A}
+\end{equation}
+\begin{equation}
+\V{PXAC}_{ac} = \frac{\V{PX}_c\,\V{QX}_c}{\sum_{a'} \delta^{ac}_{a'c}\,\V{QXAC}_{a'c}^{-\rho^{ac}_c}}\,
+  \delta^{ac}_{ac}\,\V{QXAC}_{ac}^{-\rho^{ac}_c - 1}
+\tag{P5A}\label{eq:P5A}
+\end{equation}
+and each activity is paid its own price in \eqref{eq:P5},
+$\V{PA}_a = \sum_c \theta_{ac}\,\V{PXAC}_{ac}$ for $c \in CAC$ and
+$\theta_{ac}\,\V{PX}_c$ otherwise. With $\sigma^{ac}_c = 1$ the aggregate is
+Cobb--Douglas, $\V{QX}_c = \V{aac}_c \prod_a \V{QXAC}_{ac}^{\delta^{ac}_{ac}}$
+and $\V{PXAC}_{ac}\,\V{QXAC}_{ac} = \delta^{ac}_{ac}\,\V{PX}_c\,\V{QX}_c$. The
+value of commodity output is the value of the activities' outputs,
+$\V{PX}_c\,\V{QX}_c = \sum_a \V{PXAC}_{ac}\,\V{QXAC}_{ac}$, so GDP and the
+reports are unchanged.
+
+\textbf{Calibration.} $\V{PXAC}^0_{ac} = 1$ and $\V{QXAC}^0_{ac} = \SAM(a, c)$;
+the shares are $\delta^{ac}_{ac} \propto (\V{QXAC}^0_{ac})^{1 + \rho^{ac}_c}$
+(value shares for Cobb--Douglas), and $\V{aac}_c$ makes \eqref{eq:Q6A} hold. As
+$\sigma^{ac}_c$ grows the aggregate tends to the sum of \eqref{eq:Q6}: with
+$\sigma^{ac} = 10^8$ the solution agrees with the model without aggregation to
+$10^{-6}$ in the test suites. The parameters are $\sigma^{ac}_c$ (\cmd{sac}),
+$\rho^{ac}_c$ (\cmd{rac}), $\V{aac}_c$ (\cmd{aac}) and $\delta^{ac}_{ac}$
+(\cmd{dac}).

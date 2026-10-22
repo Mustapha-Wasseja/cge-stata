@@ -1,0 +1,17 @@
+. cge_variable PREL(c) = PQ(c) * (1 + tv(c)) / CPI
+User variable PREL(c): 3 element(s), base values 1 1 1
+and its definition, equation PREL
+
+. quietly cge_solve, name(budget)
+
+. quietly cge_results, sim(budget) clear nodisplay
+
+. list variable element1 base value if variable == "PREL", noobs
+
+  +----------------------------------------+
+  | variable   element1   base       value |
+  |----------------------------------------|
+  |     PREL    com_agr      1   .99455161 |
+  |     PREL    com_man      1   1.0175388 |
+  |     PREL    com_ser      1   .98722855 |
+  +----------------------------------------+

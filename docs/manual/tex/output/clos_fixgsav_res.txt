@@ -1,0 +1,12 @@
+. quietly cge_results, sim(notariff_sales) clear nodisplay
+
+. list variable base value if inlist(variable, "GSAV", "TQADJ", "TINSADJ", "GADJ"), noobs
+
+  +-----------------------------+
+  | variable   base       value |
+  |-----------------------------|
+  |     GSAV      3           3 |
+  |  TINSADJ      1           1 |
+  |     GADJ      1           1 |
+  |    TQADJ      1   1.2896718 |
+  +-----------------------------+

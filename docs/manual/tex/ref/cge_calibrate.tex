@@ -1,0 +1,520 @@
+\cgeentry{cge_calibrate}{Calibrate the model to the SAM}
+
+\cgesec{Description}
+
+\cmd{cge_calibrate} computes the base value of every variable and every
+parameter of the model from the SAM mapped by \manref{cge_map} and the
+elasticities given, sets the default closure, and checks that the base solves
+every equation of the model (benchmark replication). It stops with an error if
+replication fails.
+
+Elasticities have no defaults: they are part of the specification of the model
+and must be stated. \manref{cge_elasticities} gives published values, with
+their sources, as values for the options of \cmd{cge_calibrate}.
+
+\cgesec{Quick start}
+
+Calibrate with one elasticity of each kind for every sector
+\begin{stcode}
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+\end{stcode}
+As above, with one value of \cmd{sigmava()} per activity and of \cmd{sigmaq()}
+and \cmd{sigmat()} per commodity, in the order of \manref{cge_map}
+\begin{stcode}
+cge_calibrate, sigmava(0.5 1 1.5) sigmaq(0.6 3 1.2) sigmat(0.7 4 1)
+\end{stcode}
+Linear expenditure system demand, with income elasticities by commodity and a
+Frisch parameter
+\begin{stcode}
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) incelas(0.6 1 1.4) frisch(-2)
+\end{stcode}
+A labour force for \cmd{lab}, from a base unemployment rate of 15 per cent,
+with a wage curve
+\begin{stcode}
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)
+\end{stcode}
+Armington elasticities from the elasticity library
+\begin{stcode}
+cge_elasticities sigmaq, country(TGO) values
+cge_calibrate, sigmava(0.8) sigmaq(`r(values)') sigmat(2)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_calibrate}\texttt{,} \optarg{}{sigmava}{numlist}
+\optarg{}{sigmaq}{numlist} \optarg{}{sigmat}{numlist} [\argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{sigmava}{numlist} & substitution between factors in value added, one value or one per activity; required\\
+\optarg{}{sigmaq}{numlist} & substitution between imports and domestic goods (Armington), one value or one per commodity; required\\
+\optarg{}{sigmat}{numlist} & transformation between exports and domestic sales (CET), one value or one per commodity; required\\
+\optarg{fq}{uantities}{matname} & base factor quantities, one row per factor and one column per activity\\
+\optgroup{Production}
+\optarg{}{sigmaa}{numlist} & substitution between value added and intermediate input, one value or one per activity\\
+\optarg{nest}{s}{spec} & nests of value added and their members\\
+\optarg{sigman}{est}{spec} & substitution within the nests\\
+\optarg{}{sigmaac}{spec} & substitution between the outputs of a commodity from several activities\\
+\optgroup{Household demand}
+\optarg{inc}{elas}{numlist} & income elasticities, one value or one per commodity\\
+\optarg{fris}{ch}{numlist} & Frisch parameter, one value or one per household\\
+\optgroup{Fiscal instruments}
+\optarg{vatc}{redit}{spec} & share of the VAT on its inputs that each activity recovers\\
+\optarg{}{debt}{spec} & public debt at home and abroad at the start of the base year\\
+\optarg{int}{erest}{spec} & interest rates on the debt at home and abroad\\
+\optarg{debth}{olders}{spec} & shares of domestic interest received by households and enterprises\\
+\optarg{for}{eignborrowing}{\#} & share of the deficit borrowed abroad in dynamic runs\\
+\optgroup{Trade}
+\optarg{exporto}{nly}{namelist} & commodities whose domestic output is all exported\\
+\optarg{exportd}{emand}{spec} & elasticities of export demand\\
+\optgroup{Labour market}
+\optarg{unemp}{loyment}{spec} & base unemployment rates by factor\\
+\optarg{wagec}{urve}{spec} & wage-curve elasticities by factor\\
+\optarg{minw}{age}{spec} & minimum real wages, as shares of the base real wage\\
+\optarg{smooth}{ing}{\#} & smoothing parameter of the minimum-wage condition; default \texttt{1e-10}\\
+\optgroup{Health}
+\optarg{}{healthcom}{namelist} & health commodities\\
+\optarg{}{healthfac}{namelist} & factors whose efficiency depends on health services\\
+\optarg{}{healthelas}{numlist} & elasticities of factor efficiency with respect to health services\\
+\optarg{sickd}{ays}{spec} & base shares of working time lost to illness by factor\\
+\optarg{sicke}{las}{spec} & elasticities of the share of time lost\\
+\optarg{mort}{ality}{\#} & base crude death rate\\
+\optarg{morte}{las}{\#} & elasticity of the death rate\\
+\end{opttable}
+
+\cgesec{Options}
+
+\cgesubsec{Main}
+
+\begin{optdesc}
+\item[\optarg{}{sigmava}{numlist}] gives the elasticity of substitution between
+factors in value added: one value for every activity, or one value per activity
+in the order of \cmd{activities()} of \manref{cge_map}. A value of 1 selects
+the Cobb--Douglas form. Values must be positive.
+
+\item[\optarg{}{sigmaq}{numlist}] gives the elasticity of substitution between
+imports and domestic goods in composite supply (the Armington elasticity), one
+value or one per commodity, in the order of \cmd{commodities()}. Values must be
+positive, and different from 1 for every commodity that has both imports and
+domestic sales: the model has no Cobb--Douglas form of the Armington function.
+The values of commodities without imports, or without domestic sales, are not
+used.
+
+\item[\optarg{}{sigmat}{numlist}] gives the elasticity of transformation between
+exports and domestic sales (CET), one value or one per commodity. Values must
+be positive. For a commodity whose exports are at least its domestic output
+(re-exports, or exports supplied from inventories), exports are drawn from
+composite supply instead, and its \cmd{sigmat()} value is the price elasticity
+of those exports in equation \eqref{eq:T9}; calibration lists such commodities. The
+values of commodities without exports, and of commodities in
+\cmd{exportonly()}, are not used.
+
+\item[\optarg{fq}{uantities}{matname}] supplies base factor quantities, for
+example employment, as a Stata matrix with one row per factor and one column
+per activity, in the order of \manref{cge_map}. Quantities must be positive
+exactly where the SAM has factor payments. The base price of each factor is
+then its total payments over its total quantity, and the wage distortion
+factors make each payment equal to price times quantity. Without
+\cmd{fquantities()}, factor prices are 1 in the base and quantities equal
+payments.
+\end{optdesc}
+
+\cgesubsec{Production}
+
+\begin{optdesc}
+\item[\optarg{}{sigmaa}{numlist}] gives the elasticity of substitution between
+value added and aggregate intermediate input, the top nest of production, one
+value or one per activity: 0 is the Leontief nest, 1 the Cobb--Douglas form,
+and other positive values a CES nest, under which an activity uses relatively
+less of whichever input becomes dearer. Without \cmd{sigmaa()}, the top nest is
+Leontief in every activity. Activities without intermediate inputs keep the
+Leontief nest, and are listed in a note.
+
+\item[\optarg{nest}{s}{spec}] defines nests of value added, separated by
+commas, each a name followed by a colon and its members, factors or
+commodities, for example \cmd{nests(labour: lab_hi lab_lo, ke: cap com_ene)}.
+Each nest is a CES or Cobb--Douglas aggregate of its members, and value added
+combines the factors in no nest with the nests, with the elasticity
+\cmd{sigmava()}. A commodity in a nest, such as energy, leaves intermediate
+input: activities substitute between it and the other members of its nest. A
+factor or commodity may be in one nest only, nests do not contain other nests,
+and a nest's name may not be that of a factor, a commodity or another nest.
+Results list the quantity (\cmd{QNA}) and price (\cmd{PNA}) of each nest in
+each activity (\secref{sec:nests}).
+
+\item[\optarg{sigman}{est}{spec}] gives the elasticities of substitution within
+the nests, one positive value for every nest or
+\argu{nest}\cmd{:}\argu{value} pairs for each. A value of 1 selects the
+Cobb--Douglas form. \cmd{nests()} and \cmd{sigmanest()} must be given together.
+
+\item[\optarg{}{sigmaac}{spec}] combines the outputs of a commodity from
+several activities by a CES function, instead of treating them as perfect
+substitutes, so that each activity is paid its own price for the commodity
+(\cmd{PXAC}; \secref{sec:outputces}). Give \argu{commodity}\cmd{:}\argu{value}
+pairs, for example \cmd{sigmaac(com_man:2)}, for commodities produced by more
+than one activity, or one value for every such commodity. Values must be
+positive; a value of 1 selects the Cobb--Douglas form.
+\end{optdesc}
+
+\cgesubsec{Household demand}
+
+\begin{optdesc}
+\item[\optarg{inc}{elas}{numlist} and \optarg{fris}{ch}{numlist}] select linear
+expenditure system (LES) demand instead of Cobb--Douglas demand.
+\cmd{incelas()} gives positive income elasticities, one value or one per
+commodity; they are scaled so that the marginal budget shares of each
+household sum to one, which keeps their ratios. \cmd{frisch()} gives the Frisch
+parameter, one value or one per household, below $-1$; supernumerary spending
+is then $-1/\textit{frisch}$ of consumption spending. \cmd{frisch()} is
+required with \cmd{incelas()}; given alone, it sets every income elasticity to
+1. Household consumption must be non-negative. Home consumption of the output
+of an activity takes the income elasticity of the activity's paired commodity.
+Under LES demand, the equivalent variation reported by \manref{cge_results}
+uses the LES expenditure function.
+\end{optdesc}
+
+\cgesubsec{Fiscal instruments}
+
+\begin{optdesc}
+\item[\optarg{vatc}{redit}{spec}] gives, for a model with a VAT account (see
+\cmd{vattax()} and \cmd{vatshare()} of \manref{cge_map}), the share of the VAT
+on its inputs that each activity recovers as a credit:
+\argu{activity}\cmd{:}\argu{share} pairs or one share for every activity,
+between 0 and 1. Activities not listed have share 1, full credit, so that VAT
+falls on final demand only; a share of 0 is an exempt or unregistered activity,
+which bears VAT on its inputs. The VAT rate of each commodity is calibrated so
+that the VAT on its uses, net of credits, equals the VAT that the SAM records
+(\secref{sec:vat}).
+
+\item[\optarg{}{debt}{spec} and \optarg{int}{erest}{spec}] give public debt at
+the start of the base year and its interest rates, as \cmd{domestic:}\argu{\#}
+and \cmd{foreign:}\argu{\#}; a part not given is zero. Domestic debt is in SAM
+units, foreign debt in foreign currency (equal to SAM units at the base
+exchange rate). Debt must be non-negative and interest rates above $-1$.
+Interest is taken to be recorded within the government's transfers to
+domestic institutions and abroad; it is separated from them and then paid in
+nominal terms on the debt, so that the base is unchanged and interest rates
+and debt stocks can be shocked. A transfer smaller than the interest it must
+contain is an error. In dynamic runs (\manref{cge_dynamic}) the deficit adds to
+the debt (\secref{sec:debt}).
+
+\item[\optarg{debth}{olders}{spec}] gives the shares of domestic interest
+received by households and enterprises, as \argu{institution}\cmd{:}\argu{share}
+pairs that sum to one. By default the shares are proportional to the
+government's transfers to each.
+
+\item[\optarg{for}{eignborrowing}{\#}] is the share of the deficit borrowed
+abroad in dynamic runs, between 0 and 1. By default it is the foreign share of
+the base debt.
+\end{optdesc}
+
+\cgesubsec{Trade}
+
+\begin{optdesc}
+\item[\optarg{exporto}{nly}{namelist}] lists commodities whose domestic output
+is all exported: their exports, net of export taxes and export margins, must
+equal their domestic output. Their output is then exported directly, at the
+export price, without domestic sales, and may pay export taxes
+(\secref{sec:exportonly}). Without this option such a commodity's exports are
+drawn from composite supply; calibration lists, in a note, the commodities whose
+exports equal domestic output.
+
+\item[\optarg{exportd}{emand}{spec}] gives elasticities of export demand, as
+\argu{commodity}\cmd{:}\argu{elasticity} pairs or one value for every
+commodity exported from domestic output. The world export price of these
+commodities then falls as more is exported, and a shock to \cmd{pwe} shifts
+world demand (\secref{sec:exportdemand}). Without \cmd{exportdemand()}, the
+country is small in world markets: it exports any quantity at a fixed world
+price.
+\end{optdesc}
+
+\cgesubsec{Labour market}
+
+\begin{optdesc}
+\item[\optarg{unemp}{loyment}{spec}] gives base unemployment rates, as
+\argu{factor}\cmd{:}\argu{rate} pairs with rates at least 0 and below 1, for
+example \cmd{unemployment(lab:0.15)}. SAMs record employment, not
+unemployment, so the rate comes from a labour force survey. The factor's labour
+force is then its base employment divided by one minus the rate; reports show
+the labour force and the unemployment rate, and the closures \cmd{wagecurve}
+and \cmd{minwage} of \manref{cge_closure} become available. A factor with
+unemployment in the base has a minimum wage at its base real wage
+(\chapref{chap:labour}).
+
+\item[\optarg{wagec}{urve}{spec}] gives positive wage-curve elasticities, as
+\argu{factor}\cmd{:}\argu{elasticity} pairs, for factors with unemployment in
+the base: under the closure \cmd{wagecurve} the real wage falls by about
+\argu{elasticity} per cent for each per cent rise in the unemployment rate
+(Blanchflower and Oswald 1994). A small elasticity approaches a fixed real
+wage, a large one full employment.
+
+\item[\optarg{minw}{age}{spec}] gives minimum real wages as shares of the base
+real wage, \argu{factor}\cmd{:}\argu{share}. With unemployment in the base the
+floor is the base real wage, a share of 1, the only value allowed. With full
+employment in the base (no rate, or a rate of 0, in \cmd{unemployment()}), give
+a share below 1, for example \cmd{minwage(lab:0.95)}: the floor then binds only
+after the real wage falls by 5 per cent.
+
+\item[\optarg{smooth}{ing}{\#}] sets the smoothing parameter $\mu$ of the
+minimum-wage condition; the default is \texttt{1e-10}, and it must be positive.
+Under the closure \cmd{minwage}, the condition that either unemployment is zero
+or the real wage is at its floor is solved, with the rest of the model, in the
+smoothed Fischer--Burmeister form (Fischer 1992; Kanzow 1996), in which the
+product of the unemployment rate and the proportional excess of the real wage
+over the floor is $\mu$.
+\end{optdesc}
+
+\cgesubsec{Health}
+
+\begin{optdesc}
+\item[\optarg{}{healthcom}{namelist}, \optarg{}{healthfac}{namelist} and
+\optarg{}{healthelas}{numlist}] link factor efficiency to health services.
+\cmd{healthcom()} lists the health commodities; \cmd{healthfac()} lists the
+factors whose efficiency depends on them, all factors by default; and
+\cmd{healthelas()} gives the elasticity of each factor's efficiency with
+respect to the volume of health services consumed by households, the
+government and the health insurance fund, one value or one per factor of
+\cmd{healthfac()}, zero or positive. With elasticity $e$, the factor's
+efficiency is $(\V{HS}/\V{HS}^0)^e$, where $\V{HS}$ is that volume and
+$\V{HS}^0$ its base value; the factor then enters value added in efficiency
+units, while its quantity, supply and wage stay in physical units. Without
+these options, or with elasticity 0, efficiency changes only through the
+parameter \cmd{af} of \manref{cge_shock}. \cmd{healthelas()} needs
+\cmd{healthcom()}, and \cmd{healthfac()} needs \cmd{healthelas()}. The health
+commodities must have some consumption in the base. These options must be
+typed in full.
+
+\item[\optarg{sickd}{ays}{spec}] gives the base share of working time lost to
+illness, as \argu{factor}\cmd{:}\argu{share} pairs with shares at least 0 and
+below 1, for example \cmd{sickdays(lab:0.05)} from a labour force or household
+survey. Days worked per worker then scale the factor's effective input in
+production; employment, wages and unemployment stay per worker
+(\secref{sec:sickdays}).
+
+\item[\optarg{sicke}{las}{spec}] gives the elasticity of the share of time lost
+with respect to health services per head, one value for every factor in
+\cmd{sickdays()} or \argu{factor}\cmd{:}\argu{elasticity} pairs for factors in
+\cmd{sickdays()}. With elasticity $\epsilon$, the share lost is $s\,R^\epsilon$,
+where $s$ is the share given in \cmd{sickdays()} and $R$ is health services per
+head relative to the base.
+
+\item[\optarg{mort}{ality}{\#}] gives the base crude death rate, deaths per head
+per period, at least 0 and below 1 (for example 0.008 for 8 per 1,000 a year),
+and \optarg{morte}{las}{\#} its elasticity with respect to health services per
+head; \cmd{mortelas()} needs \cmd{mortality()}. The death rate is reported; it
+does not change the solution of a period, but in dynamic runs it changes the
+growth of the population and, with \cmd{deathfactors()} of \manref{cge_dynamic},
+of labour from the next period (\secref{sec:mortality}).
+\end{optdesc}
+
+Health outcomes with a non-zero elasticity need \cmd{healthcom()}. Their
+elasticities are hypotheses about how health services become health and
+should come from studies of the country or region; the package supplies none.
+
+\cgesec{Remarks and examples}
+
+Calibration chooses the parameters of the model so that the SAM is a solution
+of it, the base. \cmd{cge_calibrate}
+\begin{enumerate}
+\item sets the base prices of activities, commodities and value added, the
+exchange rate and world import prices to one, so that base quantities are
+values of the SAM, and sets factor prices to one unless \cmd{fquantities()}
+gives factor quantities;
+\item computes tax rates, shares and the other parameters from the SAM and the
+elasticities;
+\item checks the identities that a balanced SAM implies, for example that
+composite supply equals the demand for each commodity, and stops with error
+459 if one fails;
+\item sets the default closure: a flexible exchange rate with fixed foreign
+savings, flexible government savings, savings-driven investment, the consumer
+price index as numeraire, and mobile, fully employed factors
+(\manref{cge_closure});
+\item checks benchmark replication: every equation must hold at the base, with
+a largest scaled residual of at most $10^{-9}$, or the command stops with
+error 9.
+\end{enumerate}
+Calibrating again replaces the calibration: stored simulations, shocks,
+constraints and closure swaps are discarded and the default closure is set.
+User variables and equations (\manref{cge_variable}, \manref{cge_equation}) are
+kept and compiled again from the new base.
+
+Each elasticity option takes one value for every activity or commodity, or one
+value per activity (\cmd{sigmava()}, \cmd{sigmaa()}) or commodity
+(\cmd{sigmaq()}, \cmd{sigmat()}, \cmd{incelas()}) in the order of the lists of
+\manref{cge_map}. A failure of benchmark replication points to a problem in the
+SAM or in the mapping, not in the solver.
+
+\cgesubsec{Example 1: one elasticity of each kind}
+
+The synthetic SAM is mapped as in Example~1 of \manref{cge_map} and calibrated:
+\stlog{cal_uniform}
+The model has 93 equations and, under the default closure, as many free
+variables. The largest scaled residual at the base is of the order of the
+machine precision. The results are stored in \cmd{r()}:
+\stlog{cal_return}
+
+\cgesubsec{Example 2: elasticities by sector}
+
+The elasticities may differ by activity and by commodity; a value of 1 for
+\cmd{sigmava()} gives Cobb--Douglas value added in manufacturing:
+\stlog{cal_sector}
+A value of 1 for \cmd{sigmaq()} is not allowed for a commodity with imports
+and domestic sales:
+\stlog{cal_sigmaq1}
+
+\cgesubsec{Example 3: linear expenditure system demand}
+
+With \cmd{incelas()} and \cmd{frisch()}, households first buy subsistence
+quantities and spend the rest of their budget in fixed marginal shares:
+\stlog{cal_les}
+The model has the same number of equations; only the parameters of household
+demand differ.
+
+\cgesubsec{Example 4: exports at least as large as domestic output}
+
+In the supply-use layout of the synthetic SAM, \cmd{com_agr} exports 105
+against domestic output of 100, with a fall in its stocks, and \cmd{com_fuel},
+which is only imported, re-exports part of its imports:
+\stlog{cal_sut}
+The exports of these two commodities are drawn from composite supply, by
+equation \eqref{eq:T9}, and the \cmd{sigmat()} value is the price elasticity of those
+exports.
+
+\cgesubsec{Example 5: an extension}
+
+The options of the extensions add equations and parameters to the standard
+model. A base unemployment rate gives labour a labour force, and a wage-curve
+elasticity gives the closure \cmd{wagecurve} its slope:
+\stlog{cal_labour}
+The labour force is base employment, 135, divided by $1 - 0.15$. The model has
+two more equations, the wage curve and the minimum-wage condition of
+\cmd{lab}; under the default closure, which keeps labour fully employed, both
+are inert, and \cmd{cge_closure, factors(lab:wagecurve)} or
+\cmd{factors(lab:minwage)} brings one of them into use. The real minimum wage is the
+base real wage divided by $1 + \mu/u^0$, where $u^0$ is the base unemployment
+rate, so that the smoothed condition holds at the base.
+
+The options of the extensions, and the chapters of Part~II that describe them:
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.30\linewidth}>{\raggedright\arraybackslash}p{0.43\linewidth}>{\raggedright\arraybackslash}p{0.21\linewidth}}
+\toprule
+Extension & Options & Part II\\
+\midrule
+top nest of production & \cmd{sigmaa()} & \secref{sec:production}\\
+nests of value added & \cmd{nests()}, \cmd{sigmanest()} & \secref{sec:nests}\\
+output from several activities & \cmd{sigmaac()} & \secref{sec:outputces}\\
+VAT and public debt & \cmd{vatcredit()}, \cmd{debt()}, \cmd{interest()}, \cmd{debtholders()}, \cmd{foreignborrowing()} & \chapref{chap:fiscal}\\
+trade & \cmd{exportonly()}, \cmd{exportdemand()} & \chapref{chap:trade}\\
+labour market & \cmd{unemployment()}, \cmd{wagecurve()}, \cmd{minwage()}, \cmd{smoothing()} & \chapref{chap:labour}\\
+health & \cmd{healthcom()}, \cmd{healthfac()}, \cmd{healthelas()}, \cmd{sickdays()}, \cmd{sickelas()}, \cmd{mortality()}, \cmd{mortelas()} & \chapref{chap:health}\\
+\bottomrule
+\end{cgetable}
+
+\cgesec{Stored results}
+
+\cmd{cge_calibrate} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_equations)} & number of equations\\
+\res{r(max_residual)} & largest scaled residual at the base\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Let $\SAM(r, c)$ be the payment from column account $c$ to row account $r$ of
+the mapped SAM, after the rewrites of \manref{cge_map}. Base values carry a
+superscript 0. The base prices
+$\V{PA}^0_a = \V{PX}^0_c = \V{PD}^0_c = \V{PE}^0_c = \V{PQ}^0_c = \V{PVA}^0_a = 1$,
+$\V{EXR}^0 = 1$ and $\V{pwm}_c = 1$ (\secref{sec:normalisation}); without
+\cmd{fquantities()}, $\V{W}^0_f = \V{WFDIST}^0_{fa} = 1$.
+Given base factor quantities $\V{QF}^0_{fa}$,
+\begin{equation*}
+\V{W}^0_f = \frac{\sum_a \SAM(f, a)}{\sum_a \V{QF}^0_{fa}}, \qquad
+\V{WFDIST}^0_{fa} = \frac{\SAM(f, a)}{\V{W}^0_f\,\V{QF}^0_{fa}} .
+\end{equation*}
+
+The tax rates are taken from the tax accounts:
+\begin{equation*}
+tm_c = \frac{\SAM(\textit{imp}, c)}{\SAM(\textit{row}, c)}, \qquad
+te_c = \frac{\SAM(\textit{exp}, c)}{\SAM(c, \textit{row})}, \qquad
+ta_a = \frac{\SAM(\textit{act}, a)}{\V{QA}^0_a}, \qquad
+tq_c = \frac{\SAM(\textit{sal}, c)}{\V{QQ}^0_c},
+\end{equation*}
+where $\V{QA}^0_a$ is the column total of activity $a$ and, without margins by
+market and VAT,
+$\V{QQ}^0_c = \V{QD}^0_c + (1 + tm_c)\,\V{QM}^0_c + \SAM(\textit{sal}, c) +
+\sum_{t} \SAM(t, c)$, the last sum over the margin accounts.
+
+The elasticities enter the functional forms through the exponents
+\begin{equation*}
+\rho^{va}_a = \frac{1}{\sigma^{va}_a} - 1, \qquad
+\rho^{q}_c = \frac{1}{\sigma^{q}_c} - 1, \qquad
+\rho^{t}_c = \frac{1}{\sigma^{t}_c} + 1,
+\end{equation*}
+and the share parameters follow from the first-order conditions at the base.
+For CES value added, with $w_{fa} = \V{W}^0_f\,\V{WFDIST}^0_{fa}$,
+\begin{equation*}
+\delta^{va}_{fa} = \frac{w_{fa}\,(\V{QF}^0_{fa})^{1+\rho^{va}_a}}
+  {\sum_{f'} w_{f'a}\,(\V{QF}^0_{f'a})^{1+\rho^{va}_a}}, \qquad
+ad_a = \V{QVA}^0_a \Big/ \Bigl[\sum_f \delta^{va}_{fa}\,(\V{QF}^0_{fa})^{-\rho^{va}_a}\Bigr]^{-1/\rho^{va}_a},
+\end{equation*}
+and for Cobb--Douglas value added $\delta^{va}_{fa} = \SAM(f, a)/\V{QVA}^0_a$.
+The Armington and CET shares are
+\begin{equation*}
+\delta^{q}_c = \frac{r^q_c}{1 + r^q_c}, \quad
+r^q_c = \frac{\V{PM}^0_c}{\V{PD}^0_c}\Bigl(\frac{\V{QM}^0_c}{\V{QD}^0_c}\Bigr)^{1+\rho^{q}_c};
+\qquad
+\delta^{t}_c = \frac{1}{1 + r^t_c}, \quad
+r^t_c = \frac{\V{PD}^0_c}{\V{PE}^0_c}\Bigl(\frac{\V{QE}^0_c}{\V{QD}^0_c}\Bigr)^{\rho^{t}_c - 1},
+\end{equation*}
+with the complements $1 - \delta$ computed from the same ratios, not by
+subtraction, so that no precision is lost when a share is close to one.
+
+Under LES demand, with budget shares $w_{ch} = \SAM(c, h)/\V{EH}^0_h$, income
+elasticities $\varepsilon_c$ and Frisch parameters $\phi_h < -1$,
+\begin{equation*}
+\beta_{ch} = \frac{\varepsilon_c\,w_{ch}}{\sum_{c'} \varepsilon_{c'}\,w_{c'h}}, \qquad
+\gamma_{ch} = \V{QH}^0_{ch} + \frac{\beta_{ch}\,\V{EH}^0_h}{\V{PH}^0_c\,\phi_h},
+\end{equation*}
+so that supernumerary spending is $-\V{EH}^0_h/\phi_h$; under Cobb--Douglas
+demand $\beta_{ch} = w_{ch}$ and $\gamma_{ch} = 0$.
+
+Benchmark replication evaluates every equation $i$ of the model at the base,
+as $L_i(x^0) = R_i(x^0)$, and requires
+\begin{equation*}
+\max_i \frac{|L_i(x^0) - R_i(x^0)|}{e_i} \le 10^{-9}, \qquad
+e_i = \max\bigl(|L_i(x^0)|, |R_i(x^0)|\bigr),
+\end{equation*}
+with $e_i = 1$ where that maximum is below $10^{-9}$. The same scales $e_i$ are
+used by \manref{cge_solve}.
+
+\Chapref{chap:calibration} gives every calibration formula, including those of
+the top nest, margins, VAT, institutions and the health insurance fund, and the
+chapters on the extensions give theirs.
+
+\cgesec{References}
+
+\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\itemindent}{-2em}%
+  \setlength{\itemsep}{2pt}\setlength{\parsep}{0pt}}
+\item Blanchflower, D. G., and A. J. Oswald. 1994. \textit{The Wage Curve}.
+Cambridge, MA: MIT Press.
+\item Fischer, A. 1992. A special Newton-type optimization method.
+\textit{Optimization} 24: 269--284.
+\item Kanzow, C. 1996. Some noninterior continuation methods for linear
+complementarity problems. \textit{SIAM Journal on Matrix Analysis and
+Applications} 17: 851--868.
+\end{list}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seeentry{cge_elasticities}{Published elasticities, with their sources}
+\seeentry{cge_check}{Run model validation checks}
+\seeentry{cge_parameters}{The calibrated parameters as a dataset}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_solve}{Solve the model}
+\seechapter{chap:calibration}{Calibration}
+\end{alsosee}

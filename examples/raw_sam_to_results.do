@@ -1,5 +1,5 @@
 * raw_sam_to_results.do -- worked example: the whole workflow, from a raw SAM
-* to results (docs/manual, chapters 2 to 9)
+* to results (the cge-stata Reference Manual, chapter 4)
 *
 * The SAM and the household survey are SYNTHETIC: they are constructed for
 * testing and describe no country. The elasticities are published values for

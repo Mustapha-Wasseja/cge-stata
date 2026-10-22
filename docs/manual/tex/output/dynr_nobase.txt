@@ -1,0 +1,13 @@
+. cge_dynresults, run(base) clear
+
+. list period variable element1 base value if variable == "EXR", noobs
+
+  +-------------------------------------------------+
+  | period   variable   element1   base       value |
+  |-------------------------------------------------|
+  |      0        EXR                 1           1 |
+  |      1        EXR                 1   1.0015501 |
+  |      2        EXR                 1   1.0030353 |
+  |      3        EXR                 1   1.0044564 |
+  |      4        EXR                 1   1.0058147 |
+  +-------------------------------------------------+

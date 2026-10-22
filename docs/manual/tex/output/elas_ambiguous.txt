@@ -1,0 +1,5 @@
+. cge_elasticities sigmaq, country(TGO SLE) values
+com_agr: 2 entries match (DGR2023-ARM-SLE DGR2023-ARM-TGO); narrow the choice with country(), catego
+> ry(), map() or others()
+
+r(459);

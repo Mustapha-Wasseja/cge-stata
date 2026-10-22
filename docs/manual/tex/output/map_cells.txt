@@ -1,0 +1,13 @@
+. import delimited using problems.csv, clear
+(6 vars, 4 obs)
+
+. list, noobs abbreviate(16)
+
+  +----------------------------------------------------------------------------------------+
+  |              problem   paid_by   paid_by_role   received_by   received_by_role   value |
+  |----------------------------------------------------------------------------------------|
+  | flow not represented   com_agr      commodity           gov         government       8 |
+  | flow not represented   com_man      commodity           gov         government      12 |
+  | flow not represented   com_ser      commodity           gov         government      10 |
+  | flow not represented       hhd      household           gov         government      25 |
+  +----------------------------------------------------------------------------------------+

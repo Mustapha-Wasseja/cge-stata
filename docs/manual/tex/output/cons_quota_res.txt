@@ -1,0 +1,10 @@
+. quietly cge_results, sim(quota) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "QM", "RM") & element1 == "com_man", noobs
+
+  +---------------------------------------+
+  | variable   element1   base      value |
+  |---------------------------------------|
+  |       QM    com_man     60       61.2 |
+  |       RM    com_man      0   .0409356 |
+  +---------------------------------------+

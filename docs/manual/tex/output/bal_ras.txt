@@ -1,0 +1,32 @@
+. cge_synthetic, clear unbalanced
+(18 vars, 17 obs)
+
+Synthetic SAM loaded (institutions layout, unbalanced for the balancing tests): 17 accounts, total
+>  1860.46
+Largest row-column imbalance:  1.21e+01
+
+. cge_sam, labels(account)
+SAM read: 17 accounts, total 1860.4569
+Largest row-column imbalance:  1.21e+01
+
+. cge_balance
+RAS: converged in 468 iterations
+Largest row-column imbalance:  1.21e+01 before,  1.53e-08 after
+SAM total: 1860.4569 before, 1860.4569 after
+Cells changed: 68 of 68 non-zero; largest relative change  2.10e-01
+
+Largest changes
+  row                  column                       before          after   change %
+  act_ser              com_ser                     158.729        152.686     -3.807
+  cap                  act_ser                      49.801        52.7177      5.857
+  hhd                  ent                          61.883        64.6935      4.542
+  row                  com_ser                     21.1036        23.5877     11.771
+  ent                  cap                         94.6853        92.6413     -2.159
+  com_man              hhd                         81.1112        79.0956     -2.485
+  row                  cap                          10.326        8.75133    -15.250
+  com_man              sav                         37.8098        39.2907      3.917
+  lab                  act_ser                      56.475        57.7965      2.340
+  com_ser              act_ser                      19.451        20.5922      5.867
+
+Balanced SAM: 17 accounts, total 1860.4569
+Largest row-column imbalance:  1.53e-08

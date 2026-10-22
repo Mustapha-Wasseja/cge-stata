@@ -1,0 +1,13 @@
+. return list
+
+macros:
+                r(sim) : "notariff"
+
+matrices:
+                 r(ev) :  1 x 1
+
+. matrix list r(ev)
+
+symmetric r(ev)[1,1]
+           c1
+r1  6.1373219

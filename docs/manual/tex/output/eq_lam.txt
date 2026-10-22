@@ -1,0 +1,23 @@
+. cge_variable LAM, value(1)
+User variable LAM: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation lam: QG(com_ser) = LAM * base(QG(com_ser))
+User equation lam: 1 element(s)
+
+. cge_closure, swap(LAM GADJ)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+  swap                 LAM fixed, GADJ free
+
+. cge_shock LAM, value(1.1)
+Variable LAM changed for 1 element(s)
+
+. cge_solve, name(qgser)
+Simulation qgser solved in 5 iteration(s) (newton)
+Largest scaled residual  2.77e-12; WALRAS = -5.59e-11

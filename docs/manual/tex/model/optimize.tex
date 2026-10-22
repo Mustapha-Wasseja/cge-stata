@@ -1,0 +1,49 @@
+\chapter{Policy optimisation}\label{chap:optimize}
+
+\manref{cge_optimize} chooses the values $u$ of a few instruments to maximise or
+minimise a report measure $f$ (chapter~\ref{chap:reporting}), or to reach
+targets $g_j(u) = \bar g_j$ for report measures, with the model solved at every
+trial value:
+\begin{equation*}
+\max_u\; f\bigl(x(u), u\bigr) \quad \text{subject to} \quad
+g_j\bigl(x(u), u\bigr) = \bar g_j, \qquad \underline u \le u \le \overline u,
+\end{equation*}
+where $x(u)$ solves the model under the current closure. An instrument is one
+element of a parameter that \manref{cge_shock} changes, or of a variable that
+the closure fixes.
+
+\section{Algorithm}
+
+Each trial solves the model by Newton's method from the solution of the trial
+before. Instruments are measured as $u = u^0 + s \odot z$, with $s$ the scale of
+each instrument.
+
+\textbf{Targets alone}, as many as instruments: the residuals
+$r_j = (g_j - \bar g_j)/|\bar g_j|$ are solved by Newton's method, with a
+Jacobian from central differences (step $10^{-5}\max(1, |z_k|)$ in $z$) and steps halved
+until the residuals fall.
+
+\textbf{An objective}: a projected Newton method maximises $f / \max(1,
+|f^0|)$. The gradient and Hessian come from central differences, an
+instrument at a bound whose gradient points outwards is held there, steps are
+projected on the bounds and halved until the objective rises, and the
+iterations stop when the gradient of the free instruments is below $10^{-8}$.
+
+\textbf{An objective with targets}: the targets are equality constraints, met
+by the augmented Lagrangian method. The maximiser takes
+\begin{equation*}
+f - \lambda' r - \tfrac{\rho}{2}\,r'r,
+\end{equation*}
+and the multipliers move by $\rho\,r$ after each round, $\lambda \leftarrow
+\lambda + \rho\,r$, until $\max_j |r_j| < 10^{-10}$.
+
+\section{Results}
+
+The optimum is stored as a simulation and left as the current shocks. The
+optimum may be local: a flat objective is located only to about $10^{-6}$ in
+the instruments, and other starting values may lead elsewhere. The Python
+reference solves the same problems with the SLSQP method of SciPy and with
+least squares; the test suites compare the instruments (to $10^{-5}$), the
+objective (to $10^{-9}$) and the solution, and check that a target for
+government savings reached by the direct tax rate reproduces the closure
+\cmd{fixgsav} (to $10^{-10}$).

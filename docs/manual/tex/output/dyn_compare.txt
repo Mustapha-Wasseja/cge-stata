@@ -1,0 +1,31 @@
+. cge_report, sims(base4 lib4) tables(macro welfare)
+
+Macroeconomic aggregates
+------------------------------------------------------------
+                                  base      base4       lib4
+gdp_nominal                        300     16.853     15.714
+gdp_real                           300     16.914     16.169
+gdp_deflator                         1     -0.053     -0.392
+consumption_real                   230     16.384     18.760
+government_real                     45     12.551     12.551
+investment_real                     50     18.946      3.545
+insurance_fund_real                  0          .          .
+exports_real                        75     18.170     23.982
+imports_real                       100     15.688     20.048
+value_added_real                   262     16.986     16.135
+cpi                                  1      0.000      0.000
+dpi                                  1     -0.192      0.899
+exchange_rate                        1      0.581      5.120
+real_exchange_rate                   1      0.775      4.184
+private_savings                     32     16.382     18.724
+investment_value                    50     19.312      2.058
+foreign_savings                     15      8.243      8.243
+------------------------------------------------------------
+
+Welfare (per cent of base consumption)
+--------------------------------------------------------------
+                                              base4       lib4
+equivalent_variation hhd                     16.383     18.742
+compensating_variation hhd                   16.383     18.739
+--------------------------------------------------------------
+Percentage changes from the base (rates: changes in points)

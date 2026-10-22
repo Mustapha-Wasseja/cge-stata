@@ -1,0 +1,246 @@
+\cgeentry{cge_report}{Standard report tables for one or more simulations}
+
+\cgesec{Description}
+
+\cmd{cge_report} computes the standard report measures for one or more
+simulations, at the base and at each solution, and displays them side by side
+as percentage changes from the base: macroeconomic aggregates, the government
+and public debt, institutions, factors, activities, commodities, health and
+welfare. The report can be loaded as data or saved as a Stata dataset or an
+Excel workbook.
+
+\cgesec{Quick start}
+
+Report the last simulation
+\begin{stcode}
+cge_report
+\end{stcode}
+Compare two simulations in the macroeconomic, government and welfare tables
+\begin{stcode}
+cge_report, sims(notariff nt_sales) tables(macro government welfare)
+\end{stcode}
+Save every table of every simulation to an Excel workbook
+\begin{stcode}
+cge_report, sims(_all) tables(all) saving(results.xlsx, replace) nodisplay
+\end{stcode}
+Report every period of the dynamic run \cmd{base}
+\begin{stcode}
+cge_report, run(base) tables(macro)
+\end{stcode}
+Load the report as data
+\begin{stcode}
+cge_report, sims(_all) clear nodisplay
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_report} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{sim}{s}{names} & simulations, or \cmd{_all}; default the last one stored\\
+\optarg{}{run}{name} & every period of dynamic run \argu{name}, in period order\\
+\optarg{tab}{les}{list} & tables to display, or \cmd{all}\\
+\optgroup{Data}
+\opt{}{clear} & replace the data in memory with the report\\
+\optarg{sav}{ing}{filename\textup{[\texttt{, replace}]}} & save the report as a Stata dataset or an Excel workbook\\
+\optgroup{Reporting}
+\opt{nod}{isplay} & do not display the tables\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{sim}{s}{names}] lists the simulations to report; \cmd{_all}
+selects every stored simulation. The default is the last simulation stored. At
+most six simulations are displayed; all are loaded and saved.
+
+\item[\optarg{}{run}{name}] selects every period of a run solved by
+\manref{cge_dynamic}, in period order, instead of \opt{sim}{s()}; the two
+options may not be combined.
+
+\item[\optarg{tab}{les}{list}] lists the tables to display: \cmd{macro},
+\cmd{government}, \cmd{debt}, \cmd{institutions}, \cmd{factors},
+\cmd{activities}, \cmd{commodities}, \cmd{health} and \cmd{welfare}, or
+\cmd{all}. The default is \cmd{macro government debt institutions factors
+health welfare}. A table with no measures in the model, such as \cmd{debt} in
+a model without public debt, is not displayed. Every table is loaded and saved,
+whatever \opt{tab}{les()}.
+
+\item[\opt{}{clear}] replaces the data in memory with the report, one
+observation per simulation and measure, with the variables \cmd{sim},
+\cmd{table}, \cmd{measure}, \cmd{element}, \cmd{base}, \cmd{value} and
+\cmd{pct}.
+
+\item[\optarg{sav}{ing}{filename\textup{[\texttt{, replace}]}}] saves the
+report, leaving the data in memory unchanged; \cmd{replace} allows an existing
+file to be overwritten. A file ending in \cmd{.xlsx} or \cmd{.xls} is written
+as an Excel workbook, with one sheet per table, one row per measure, and the
+base followed by a value and a percentage change for each simulation; any
+other file is saved as a Stata dataset in the format of \opt{}{clear}.
+
+\item[\opt{nod}{isplay}] suppresses the tables.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+\cmd{cge_report} turns solutions into the measures that policy reports use:
+real GDP and its components, revenue by tax, real wages, sectoral output and
+welfare. Real measures are valued at base prices, and trade at base world
+prices, so their changes are changes in volume; nominal measures use current
+prices. With VAT, final demand is valued at the prices that final users pay,
+including VAT. Consumption and GDP include home consumption at activity
+prices, which the \cmd{macro} table then also shows separately.
+
+\cgesubsec{The tables}
+
+\begin{cgetable}{p{0.16\linewidth}p{0.78\linewidth}}
+\toprule
+Table & Measures\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{macro} & nominal and real GDP and the GDP deflator; real consumption, home
+consumption, government consumption, investment, purchases of the health
+insurance fund, exports, imports and value added; the CPI and DPI; the
+exchange rate and the real exchange rate; private savings, investment in value
+and foreign savings\\
+\cmd{government} & revenue, spending and savings; revenue from direct taxes,
+sales taxes, import tariffs, export taxes, activity taxes, VAT, taxes on
+factor use and taxes on factor income\\
+\cmd{debt} & with public debt: interest paid at home and abroad, the primary
+balance, and debt at the end of the period at home, abroad (in local and in
+foreign currency), in total and in per cent of nominal GDP\\
+\cmd{institutions} & income of each household and enterprise; consumption
+spending of each household\\
+\cmd{factors} & wage, real wage, income and supply of each factor; the labour
+force and the unemployment rate (per cent) of factors with a labour force\\
+\cmd{activities} & output, price and real value added of each activity\\
+\cmd{commodities} & composite supply, price, output, domestic sales, exports
+and imports of each commodity; the world export price of commodities with
+finite export demand\\
+\cmd{health} & when the model has them: health services and services per
+head, and the efficiency of factors linked to health services; the share of
+working time lost to illness (per cent) and days worked; the death rate (per
+1,000) and the population index; the revenue and the volume of purchases of
+the health insurance fund\\
+\cmd{welfare} & equivalent and compensating variations of each household, in
+per cent of base consumption\\
+\end{cgetable}
+
+Measures are displayed as percentage changes from the base, missing where the
+base is zero. Rates---the unemployment rate, public debt in per cent of GDP,
+the share of working time lost and the death rate---are shown as changes in
+percentage points, and the welfare measures in per cent of base consumption.
+
+\cgesubsec{Example 1: two simulations side by side}
+
+In the synthetic SAM, mapped and calibrated as in \manref{cge_solve}, import
+tariffs are removed under the default closure, with government savings
+adjusting, and again with government savings fixed and sales tax rates
+adjusting (\manref{cge_closure}):
+\stlog{rep_sims}
+\stlog{rep_macro}
+Without replacement, the tariff revenue is lost, government savings fall by
+271 per cent of their base value, and with savings-driven investment real
+investment falls by 11.9 per cent; the household's consumption rises and its
+equivalent variation is 2.7 per cent of base consumption. With the revenue
+replaced by sales taxes, government savings are unchanged, sales tax revenue
+rises by 28.9 per cent, real investment rises, and the household loses 0.26 per
+cent of base consumption. Real government consumption is fixed under both
+closures. The rows with a missing change, such as the export tax, have a base
+of zero.
+
+\cgesubsec{Example 2: stored results and the report as data}
+
+\stlog{rep_return}
+\res{r(N_measures)} counts the measures of every table, 67 here, including
+those not displayed. With \opt{}{clear} they become data, one observation per
+simulation and measure:
+\stlog{rep_data}
+\cmd{pct} holds the displayed change: the percentage change, the change in
+points for rates, and, for the welfare measures, whose base is zero, the per
+cent of base consumption.
+
+\cgesubsec{Example 3: an Excel workbook}
+
+\stlog{rep_excel}
+Each sheet holds one table, with the columns \cmd{table}, \cmd{measure},
+\cmd{element} and \cmd{base}, then the values of the simulations and their
+percentage changes, labelled with the names of the simulations. The workbook
+has no sheet for the \cmd{debt} table; a Stata dataset written by
+\opt{sav}{ing()} contains every table.
+
+\cgesubsec{Dynamic runs}
+
+The periods of a dynamic run are stored as simulations named after the run and
+the period. \opt{}{run()} reports them in period order, and
+\manref{cge_dynresults} gives every variable of a run as a dataset.
+
+\cgesec{Stored results}
+
+\cmd{cge_report} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_measures)} & number of measures\\
+\res{r(N_sims)} & number of simulations\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Superscript 0 marks base values. Final demand is valued at
+$\V{PH}_c = \V{PQ}_c\,(1 + \V{tv}_c\,\V{TVADJ})$, and home consumption at the
+activity prices $\V{PA}_a$. Nominal GDP is
+\begin{equation*}
+\begin{split}
+\V{GDP} = {}& \sum_c \V{PH}_c \Bigl(\sum_h \V{QH}_{ch} + \V{QG}_c + \V{QINV}_c + \V{QSHI}_c\Bigr)
+  + \sum_c \V{PQ}_c\,\V{QER}_c + \sum_a \V{PA}_a \sum_h \V{QHA}_{ah}\\
+&+ \V{EXR} \sum_c \V{PWE}_c\,\V{QE}_c - \V{EXR} \sum_c \V{pwm}_c\,\V{QM}_c - R_{row},
+\end{split}
+\end{equation*}
+where $R_{row}$ is the premiums of constraints paid abroad, and real GDP is the
+same sum at $\V{PH}^0_c$, $\V{PQ}^0_c$, $\V{PA}^0_a$, $\V{EXR}^0$ and the base
+world prices, without $R_{row}$. The other real measures are
+\begin{align*}
+\text{consumption} &= \sum_c \V{PH}^0_c \sum_h \V{QH}_{ch} + \sum_a \V{PA}^0_a \sum_h \V{QHA}_{ah}, &
+\text{government} &= \sum_c \V{PH}^0_c\,\V{QG}_c,\\
+\text{exports} &= \V{EXR}^0 \sum_c \V{pwe}^0_c\,\V{QE}_c + \sum_c \V{PQ}^0_c\,\V{QER}_c, &
+\text{imports} &= \V{EXR}^0 \sum_c \V{pwm}^0_c\,\V{QM}_c,
+\end{align*}
+with investment and the fund's purchases as for the government, and real value
+added $\sum_a \V{PVA}^0_a\,\V{QVA}_a$, less the commodities in nests of value
+added at base prices. The real exchange rate is $\V{EXR}/\V{DPI}$, private
+savings $\sum_d \V{MPS}_d\,(1 - \V{TINS}_d)\,\V{YI}_d$, the real wage
+$\V{W}_f/\V{CPI}$ and the unemployment rate $100\,(1 - \V{QFS}_f/\V{QLF}_f)$.
+Revenue by tax is the corresponding term of government revenue \eqref{eq:I8}.
+
+The welfare measures of household $h$ use its expenditure function,
+$E_h(P, u) = \sum_c P_c\,\gamma_{ch} + u \prod_c P_c^{\beta_{ch}}$, over
+marketed goods at $\V{PH}_c$ and home-consumed goods at $\V{PA}_a$:
+\begin{align*}
+\V{EV}_h &= \sum_c P^0_c\,\gamma_{ch}
+  + \Bigl(\V{EH}_h - \sum_c P_c\,\gamma_{ch}\Bigr) \prod_c \Bigl(\frac{P^0_c}{P_c}\Bigr)^{\beta_{ch}}
+  - \V{EH}^0_h,\\
+\V{CV}_h &= \V{EH}_h - \sum_c P_c\,\gamma_{ch}
+  - \Bigl(\V{EH}^0_h - \sum_c P^0_c\,\gamma_{ch}\Bigr) \prod_c \Bigl(\frac{P_c}{P^0_c}\Bigr)^{\beta_{ch}}.
+\end{align*}
+The equivalent variation is the change in spending at base prices that gives
+the new utility; the compensating variation is the change in spending at the
+new prices that would restore base utility. Both are positive for a gain and
+are reported as $100\,\V{EV}_h/\V{EH}^0_h$ and $100\,\V{CV}_h/\V{EH}^0_h$. With
+Cobb--Douglas demand, $\gamma_{ch} = 0$.
+
+A measure $x$ is reported as $100\,(x - x^0)/|x^0|$, missing when $x^0 = 0$;
+a rate as $x - x^0$. \Chapref{chap:reporting} gives every measure
+(\secref{sec:measures}) and the welfare measures (\secref{sec:welfare}).
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_results}{Report simulation results}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_dynresults}{Results of a dynamic run as a dataset}
+\seeentry{cge_save}{Save the model and its simulations to a file}
+\seechapter{chap:reporting}{Reporting measures and welfare}
+\end{alsosee}

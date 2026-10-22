@@ -1,5 +1,5 @@
 * test_examples.do -- every worked example in examples/ runs to the end
-* (version 0.4.0; docs/manual)
+* (version 0.4.0)
 
 version 13.0
 

@@ -1,0 +1,172 @@
+\cgeentry{cge}{Computable general equilibrium modelling in Stata}
+
+\cgesec{Description}
+
+\pkg builds, calibrates and solves single-country computable general
+equilibrium (CGE) models from a social accounting matrix (SAM), in Stata and
+Mata, without an external modelling system. A model can be solved for one
+period or as a recursive dynamic sequence, its results can be reported in
+standard tables, passed to household survey data, or tested for their
+sensitivity to the elasticities, and the model can be written as a GAMS
+program. Tools read, aggregate and balance the SAM, and a library gives
+published elasticities with their sources.
+
+The command \cmd{cge} displays the version of the package and its commands.
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge}
+\end{stsyntax}
+
+\cgesec{Remarks and examples}
+
+\cgesubsec{The model}
+
+The model is the standard SAM-based model of the IFPRI and PEP traditions
+(Lofgren, Harris and Robinson 2002; Decaluw\'e et al.\ 2013); only the
+structure of the model is taken from that literature. Its standard form has
+\begin{itemize}
+\item production with CES or Cobb--Douglas value added and Leontief
+intermediate inputs, with an optional CES or Cobb--Douglas nest between them;
+activities may produce several commodities, and a commodity may have several
+producers;
+\item trade through a CET function between exports and domestic sales and an
+Armington CES function between imports and domestic goods;
+\item households with Cobb--Douglas or linear expenditure system demand,
+enterprises, the government, savings-investment and the rest of the world,
+with transfers among them;
+\item direct, sales, import, export and activity taxes;
+\item closures for the external account, the government, savings-investment,
+the numeraire and each factor.
+\end{itemize}
+Extensions, switched on by the layout of the SAM or by options of
+\manref{cge_map} and \manref{cge_calibrate}, add VAT with input credits, public
+debt, taxes on factor use and factor income, home consumption, finite export
+demand, export-only commodities, margins by market, labour-market regimes, a
+social health insurance fund, factor efficiency linked to health services,
+health outcomes, nests of value added and the aggregation of output from
+several activities. Limits that bind in some scenarios and not in others,
+such as quotas and capacity limits, are complementarity conditions solved with
+the model. Part~II of this manual gives every equation.
+
+The package has no intertemporal optimisation (agents do not look ahead), no
+multi-region model and no estimation of elasticities: the elasticities are
+inputs, stated by the user, and have no defaults.
+
+\cgesubsec{The commands}
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.34\linewidth}>{\raggedright\arraybackslash}p{0.62\linewidth}}
+\toprule
+Command & Title\\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Preparing a SAM}}\\
+\manref{cge_synthetic} & Load the synthetic social accounting matrix\\
+\manref{cge_sam} & Read a social accounting matrix\\
+\manref{cge_template} & Write a template that maps SAM accounts to roles and groups\\
+\manref{cge_aggregate} & Merge SAM accounts into groups\\
+\manref{cge_balance} & Balance a SAM by RAS or cross entropy\\
+\manref{cge_samexport} & Write the SAM to a file or to memory\\
+\manref{cge_multiplier} & SAM multipliers and their decomposition\\
+\manref{cge_spa} & Structural path analysis of a SAM multiplier\\
+\multicolumn{2}{@{}l}{\textit{Building the model}}\\
+\manref{cge_map} & Assign SAM accounts to model roles\\
+\manref{cge_elasticities} & Published elasticities, with their sources\\
+\manref{cge_calibrate} & Calibrate the model to the SAM\\
+\manref{cge_check} & Run model validation checks\\
+\manref{cge_parameters} & The calibrated parameters as a dataset\\
+\multicolumn{2}{@{}l}{\textit{Simulation}}\\
+\manref{cge_closure} & Choose the model closure\\
+\manref{cge_shock} & Change a parameter or a fixed variable\\
+\manref{cge_constraint} & Limits that bind in some scenarios and not in others\\
+\manref{cge_variable} & User variables, defined by an expression or determined by user equations\\
+\manref{cge_equation} & User equations: new relations among the model's variables\\
+\manref{cge_solve} & Solve the model\\
+\manref{cge_optimize} & Choose policy instruments to maximise an outcome or reach targets\\
+\manref{cge_dynamic} & Solve a recursive dynamic run\\
+\multicolumn{2}{@{}l}{\textit{Results}}\\
+\manref{cge_results} & Report simulation results\\
+\manref{cge_report} & Standard report tables for one or more simulations\\
+\manref{cge_dynresults} & Results of a dynamic run as a dataset\\
+\manref{cge_sensitivity} & Sensitivity of a scenario's results to the elasticities\\
+\manref{cge_microsim} & Pass a simulation to household survey data\\
+\multicolumn{2}{@{}l}{\textit{Saving the model, and GAMS}}\\
+\manref{cge_save} & Save the model and its simulations to a file\\
+\manref{cge_use} & Load a model saved with cge\_save\\
+\manref{cge_gams} & Write the model as a GAMS program, and solve it in GAMS\\
+\bottomrule
+\end{cgetable}
+
+\cgesubsec{The workflow}
+
+A model is built in a fixed order, one command for each step:
+\begin{enumerate}
+\item read the SAM with \manref{cge_sam}, and prepare it if needed with
+\manref{cge_template}, \manref{cge_aggregate} and \manref{cge_balance};
+\item assign its accounts to the roles of the model with \manref{cge_map},
+which checks every cell against the flows that the model represents;
+\item choose the elasticities, from studies of the country or from the library
+of \manref{cge_elasticities};
+\item calibrate with \manref{cge_calibrate}, which checks that the base solves
+every equation, and run the checks of \manref{cge_check};
+\item choose a closure with \manref{cge_closure}, change parameters or fixed
+variables with \manref{cge_shock}, and solve with \manref{cge_solve}, once for
+each simulation;
+\item report with \manref{cge_results} and \manref{cge_report}, and save the
+model and its simulations with \manref{cge_save}.
+\end{enumerate}
+The model is kept in Mata, not in the data in memory. Commands that load data,
+such as those with a \cmd{clear} option, leave the model intact, and
+\manref{cge_save} stores it with its simulations. Reading a SAM with
+\manref{cge_sam} starts a new model, and mapping or calibrating again replaces
+the mapping or the calibration.
+
+\cgesubsec{Example 1: the package}
+
+\stlog{cge_display}
+
+\cgesubsec{Example 2: a complete model}
+
+The shortest complete model maps the synthetic SAM, calibrates it, removes
+every import tariff, solves and displays the main results:
+\stlog{cge_workflow}
+The synthetic SAMs that come with the package are constructed for testing and
+describe no country. Chapter~\ref{chap:example} follows a SAM from its raw
+form to policy results.
+
+\cgesubsec{The Mata library}
+
+The commands of the package share a Mata library, compiled the first time a
+command runs in a Stata session. \cmd{cge} loads it if it is not in memory and
+checks that its version is that of the package. If it is not, as after an
+update of the package within a session, \cmd{cge} stops with error 498;
+restart Stata to load the new library.
+
+\cgesec{Stored results}
+
+\cmd{cge} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Macros}
+\res{r(version)} & version of the package\\
+\end{storedres}
+
+\cgesec{References}
+
+\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\itemindent}{-2em}%
+  \setlength{\itemsep}{2pt}\setlength{\parsep}{0pt}}
+\item Decaluw\'e, B., A. Lemelin, V. Robichaud, and H. Maisonnave. 2013.
+\textit{PEP-1-1: The PEP Standard Single-Country, Static CGE Model}.
+Partnership for Economic Policy.
+\item Lofgren, H., R. L. Harris, and S. Robinson. 2002. \textit{A Standard
+Computable General Equilibrium (CGE) Model in GAMS}. Microcomputers in Policy
+Research 5. International Food Policy Research Institute.
+\end{list}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seechapter{chap:intro}{Introduction}
+\seechapter{chap:start}{A first model}
+\seechapter{chap:workflow}{The workflow}
+\seechapter{chap:equations}{The equations of the standard model}
+\end{alsosee}

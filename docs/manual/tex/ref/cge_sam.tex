@@ -1,0 +1,201 @@
+\cgeentry{cge_sam}{Read a social accounting matrix}
+
+\cgesec{Description}
+
+\cmd{cge_sam} reads a social accounting matrix (SAM) and starts a new model
+from it; any earlier mapping, calibration and simulations are discarded. The
+SAM is taken from the data in memory or, with \cmd{using}, from a \cmd{.csv},
+\cmd{.dta}, \cmd{.xls} or \cmd{.xlsx} file. It may be in wide form, with one
+observation and one variable per account, or in long form, with one
+observation per cell. A wide CSV file can also be read directly, without
+loading it as data, so that a SAM may have more accounts than Stata can hold
+as variables.
+
+\cmd{cge_sam} checks that the SAM is square, with row and column labels that
+agree, and reports the largest difference between an account's row and column
+totals. The SAM is then mapped to the model with \manref{cge_map}, after any
+aggregation by \manref{cge_aggregate} and balancing by \manref{cge_balance}.
+
+\cgesec{Quick start}
+
+Read the SAM in memory, with the account labels in the string variable
+\cmd{account}
+\begin{stcode}
+cge_sam, labels(account)
+\end{stcode}
+Read a SAM from the worksheet \cmd{SAM} of an Excel file, replacing the data
+in memory
+\begin{stcode}
+cge_sam using mysam.xlsx, sheet("SAM") labels(account) clear
+\end{stcode}
+Read a wide CSV file directly, leaving the data in memory unchanged
+\begin{stcode}
+cge_sam using large_sam.csv, direct
+\end{stcode}
+Read long data, one observation per cell, from a Stata dataset
+\begin{stcode}
+cge_sam using sam_cells.dta, long(row column value) clear
+\end{stcode}
+
+\cgesec{Syntax}
+
+Wide data: one observation and one variable per account
+\begin{stsyntax}
+\cmdb{cge_sam} [\cmd{using} \argu{filename}] [\texttt{,}
+\optarg{lab}{els}{varname} \opt{}{direct} \optarg{}{sheet}{string}
+\opt{}{clear}]
+\end{stsyntax}
+
+Long data: one observation per cell
+\begin{stsyntax}
+\cmdb{cge_sam} [\cmd{using} \argu{filename}]\texttt{,}
+\optarg{}{long}{rowvar colvar valuevar} [\optarg{}{sheet}{string}
+\opt{}{clear}]
+\end{stsyntax}
+
+\argu{filename} ends in \cmd{.csv}, \cmd{.dta}, \cmd{.xls} or \cmd{.xlsx}.
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{lab}{els}{varname} & string variable with the account labels in wide data; default the first string variable\\
+\optarg{}{long}{rowvar colvar valuevar} & read long data, one observation per cell\\
+\opt{}{direct} & read a wide CSV file directly, without loading it as data\\
+\optgroup{Files}
+\optarg{}{sheet}{string} & Excel worksheet to read\\
+\opt{}{clear} & allow the data in memory to be replaced by the file\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{lab}{els}{varname}] names the string variable that holds the
+account labels in wide data. The default is the first string variable. Every
+other variable is an account and must be numeric.
+
+\item[\optarg{}{long}{rowvar colvar valuevar}] reads long data: \argu{rowvar}
+and \argu{colvar} are string variables with the row and column accounts of each
+cell, and \argu{valuevar} is a numeric variable with its value. \opt{}{long}
+may not be combined with \opt{}{direct}.
+
+\item[\opt{}{direct}] reads a wide CSV file directly in Mata, without loading
+it as data; the data in memory are not changed. It applies only to a
+\cmd{.csv} file named with \cmd{using}. A wide CSV file with more accounts
+than fit as variables (\cmd{c(maxvar)}) is read directly without the option.
+
+\item[\optarg{}{sheet}{string}] names the worksheet of an Excel file to read.
+The default is the first worksheet.
+
+\item[\opt{}{clear}] allows the data in memory to be replaced when a file is
+read as data. It has no effect with \opt{}{direct}.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+Cell $(r, c)$ of a SAM is a payment from the column account $c$ to the row
+account $r$: an account's row records its receipts and its column its
+payments. The SAM is balanced when every account's row total equals its column
+total. \cmd{cge_sam} reads the SAM in one of three forms, described below, and
+reports its size, its total and its largest imbalance. It does not require the
+SAM to be balanced; \manref{cge_map} does, and \manref{cge_balance} balances a
+SAM that is not. Blank cells are read as zero and counted.
+
+\cgesubsec{Example 1: wide data in memory}
+
+In wide data, each observation is an account, a string variable holds the
+account labels, and there is one numeric variable per account, named as the
+account and in the same order as the observations. The synthetic SAM of
+\manref{cge_synthetic} is loaded in this form:
+\stlog{sam_wide}
+A file is read as data with \cmd{import delimited} (a \cmd{.csv} file, with
+the first column read as strings and the others as doubles), \cmd{use} (a
+\cmd{.dta} file) or \cmd{import excel} (a \cmd{.xls} or \cmd{.xlsx} file, with
+the first row as variable names), and then read in the same way. The file
+replaces the data in memory, which \opt{}{clear} allows.
+
+\cgesubsec{Example 2: labels that are not Stata names}
+
+Account labels are used as names by \manref{cge_map}, so they must be valid
+Stata names. When Stata loads a wide file, it renames a variable whose label
+is not a valid name, and \cmd{cge_sam} then uses the variable name and
+displays the change. In the supply--use layout of the synthetic SAM,
+savings--investment is labelled \cmd{s-i}:
+\stlog{sam_rename}
+A row label that is a valid name but differs from its variable is an error.
+
+\cgesubsec{Example 3: long data}
+
+In long data, each observation is a cell, with string variables for the row
+and column accounts and a numeric variable for the value. Cells that are not
+listed are zero, so the data need only list the non-zero cells, and the number
+of accounts is limited only by memory. A small SAM of five accounts, with one
+cell whose value is missing:
+\stlog{sam_long}
+The accounts are ordered as they first appear as row accounts, followed by any
+accounts that appear only as column accounts, so that a SAM written in long
+form by \manref{cge_samexport} and read again keeps its order. A cell given
+twice is an error. Labels that are not valid Stata names are converted by the
+rule given in Methods and formulas, here \cmd{s-i} to \cmd{si}, and each change
+is displayed.
+
+\cgesubsec{Example 4: a wide CSV file read directly}
+
+The direct reader parses a wide CSV file in Mata. The first line holds the
+column labels, the first field of each other line the row label and the other
+fields the cells; blank lines are skipped, and fields may be quoted. The row
+labels must agree with the column labels, in the same order, and are converted
+to Stata names as in long data. The data in memory are left as they are:
+\stlog{sam_direct}
+This is the only form that can read a wide SAM with more accounts than Stata
+can hold as variables (\cmd{c(maxvar)}, 2,048 in Stata/IC): \cmd{cge_sam}
+counts the fields of the first line of a CSV file and reads it directly when
+they do not fit, displaying a note.
+
+A blank field, or a field that holds only a period, is a zero, counted as a
+blank cell. A field that is not a number is an error, never a zero. A thousands
+separator is the most common case:
+\stlog{sam_notnum}
+
+\cgesec{Stored results}
+
+\cmd{cge_sam} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_accounts)} & number of accounts\\
+\res{r(total)} & sum of all cells\\
+\res{r(maxdiff)} & largest difference between an account's row and column totals\\
+\res{r(N_blank)} & number of blank cells read as zero\\
+\resgroup{Macros}
+\res{r(source)} & \cmd{wide}, \cmd{direct} or \cmd{long}\\
+\res{r(labels)} & variable with the account labels (wide data)\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+With $x_{ij}$ the cell in row $i$ and column $j$ of a SAM of $n$ accounts,
+\cmd{cge_sam} reports
+\begin{equation*}
+\text{\res{r(total)}} = \sum_{i=1}^n \sum_{j=1}^n x_{ij}, \qquad
+\text{\res{r(maxdiff)}} = \max_k \Bigl|\, \sum_{j=1}^n x_{kj} - \sum_{i=1}^n x_{ik} \Bigr| ,
+\end{equation*}
+the largest absolute difference between an account's receipts and its
+payments.
+
+In long data and in the direct reader, a label that is not a valid Stata name
+is converted: characters other than letters, digits and the underscore are
+removed, then any leading digits, and the result is cut to 32 characters. A
+label for which this gives no valid name (an empty string or a reserved word),
+or the same name as another label, is an error that names the label. In wide
+data loaded from a file, Stata's own renaming applies, and the variable names
+are used. The three readers are described in \secref{sec:reading}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_synthetic}{Load the synthetic social accounting matrix}
+\seeentry{cge_template}{Write a template that maps SAM accounts to roles and groups}
+\seeentry{cge_aggregate}{Merge SAM accounts into groups}
+\seeentry{cge_balance}{Balance a SAM by RAS or cross entropy}
+\seeentry{cge_samexport}{Write the SAM to a file or to memory}
+\seeentry{cge_map}{Assign SAM accounts to model roles}
+\seechapter{chap:samtools}{SAM tools}
+\end{alsosee}

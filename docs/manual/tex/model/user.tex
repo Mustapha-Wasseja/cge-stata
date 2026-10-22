@@ -1,0 +1,58 @@
+\chapter{User variables and equations}\label{chap:user}
+
+\manref{cge_variable} and \manref{cge_equation} add variables and equations to
+the calibrated model, written in a small language.
+
+\section{The language}
+
+An expression is made of
+\begin{itemize}
+\item numbers, the operators \cmd{+ - * / ^}, parentheses, and the functions
+\cmd{exp()}, \cmd{ln()} (or \cmd{log()}) and \cmd{sqrt()};
+\item model and user variables, \cmd{VAR}, \cmd{VAR(e)} or \cmd{VAR(e1, e2)},
+at an element or at the index of the equation or of a sum;
+\item parameters that \manref{cge_shock} changes, \cmd{par(e)}, at their current
+values;
+\item \cmd{base(VAR(e))}, the base value of a variable;
+\item \cmd{sum(i, expression)}, a sum over the set of index \cmd{i}: \cmd{a}
+activities, \cmd{c} commodities, \cmd{f} factors, \cmd{h} households, \cmd{d}
+households and enterprises, \cmd{i} institutions that receive factor income,
+\cmd{n} nests; digits may follow, as in \cmd{c2}.
+\end{itemize}
+
+\section{Variables and equations}
+
+\cmd{cge_variable NAME(i) = expression} adds the variable $U_i$ and the
+equation
+\begin{equation*}
+U_i = e_i(x)
+\end{equation*}
+for every element $i$ of the set; its base value is $e_i(x^0)$.
+\cmd{cge_variable NAME(i), value(v)} adds a free variable without an equation,
+and \cmd{cge_equation NAME(i): lhs = rhs} an equation without a variable; each
+must be paired with the other, so that the closure stays square.
+
+A defined variable swapped into the closure (\cmd{cge_closure, swap(NAME VAR)})
+fixes the expression and frees \cmd{VAR}. For example, real government savings
+$\V{GSAV}/\V{CPI}$ held at their base value, with the direct tax rate
+adjusting, is under the CPI numeraire the closure \cmd{fixgsav}; the test
+suites check that the solutions agree to $10^{-9}$. Nominal government
+consumption, $\sum_c \V{PQ}_c\,\V{QG}_c$, fixed with volumes adjusting is
+another closure rule that the standard closures do not offer.
+
+\section{Compilation}
+
+Each equation is written out for every element of its set, and each sum over
+the elements of its set, then compiled to postfix order: numbers, variables
+(positions in the stacked vector of variables), parameters, operators and
+functions. Stata evaluates the postfix rows at every point. Their derivatives
+are found by grouped differences (section~\ref{sec:jacobian}), from a Jacobian
+pattern built from the variables that each element of an equation uses. The
+equations form a block \cmd{U} of the system. They are saved with the model
+and compiled again when it is calibrated again.
+
+\textbf{GAMS.} \manref{cge_gams} writes the user variables (\cmd{U_NAME}, with
+their base levels) and one scalar equation per element (\cmd{UE1},
+\cmd{UE2}, \dots) to the file \cmd{cge_user.inc}, which the GAMS model includes
+before its model statement, and the results of the user variables to
+\cmd{cge_user_write.inc}. GAMS then differentiates the same equations itself.

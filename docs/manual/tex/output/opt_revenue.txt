@@ -1,0 +1,15 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_optimize, instruments(tm(com_agr) tm(com_man)) maximize(welfare equivalent_variation hhd) ///
+>     targets(government tax_import = 8) name(two_tariffs)
+
+Optimisation two_tariffs: converged after 574 solve(s) of the model
+----------------------------------------------------------------
+Instrument                                start          optimum
+----------------------------------------------------------------
+tm(com_agr)                                  .1    -.03350676331
+tm(com_man)                                  .1      .1577238929
+----------------------------------------------------------------
+Maximised welfare equivalent_variation hhd:      .3775370166
+Target government tax_import  = 8:      7.999999999

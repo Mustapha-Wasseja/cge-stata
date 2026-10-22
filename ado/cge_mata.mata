@@ -2110,7 +2110,7 @@ void _cge_map_report(struct cge_model scalar M, real matrix issues, real colvect
     ord = order(-grp[., 4], 1)
     grp = grp[ord, .]
 
-    printf("{err}The SAM contains flows that version 0.1 of the model does not represent.\n")
+    printf("{err}The SAM contains flows that the model does not represent.\n")
     printf("{txt}%f problem(s) in %f group(s); values are SAM units, shares are of the sum of absolute cells.\n",
            rows(issues), rows(grp))
     printf("{txt}For an account with no role the value is its total; its flows are also listed by role.\n")
@@ -2843,7 +2843,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
         dtc[k] = ratio / (1 + ratio)
         at[k] = QX0[k] / (dt[k] * QE0[k]^r + dtc[k] * QD0[k]^r)^(1 / r)
     }
-    if (max(cm :* cdo :* (abs(sq :- 1) :< 1e-12))) _cge_fail("version 0.1 needs sigmaq different from 1 for imported commodities", 198)
+    if (max(cm :* cdo :* (abs(sq :- 1) :< 1e-12))) _cge_fail("sigmaq must differ from 1 for imported commodities with domestic sales", 198)
     rq = 1 :/ sq :- 1
     dq = J(nC, 1, 0.5)
     dqc = J(nC, 1, 0.5)
@@ -6152,7 +6152,7 @@ void _cge_param_data(string scalar sim, real scalar current)
     st_sstore(., "element1", keys[., 2])
     st_sstore(., "element2", keys[., 3])
     st_store(., "value", val)
-    st_varlabel("parameter", "Parameter (docs/model_spec.md, Section 4)")
+    st_varlabel("parameter", "Parameter")
     st_varlabel("element1", "First set element")
     st_varlabel("element2", "Second set element")
     st_varlabel("value", "Value")
@@ -7780,7 +7780,7 @@ void _cge_mult(string scalar s_endo, string scalar s_exo, string scalar s_inj, r
         }
         dy = Ma * x
         w = max((12, max(strlen(L)))) + 1
-        printf("\n{txt}Effects of the injection (fixed prices; docs/sam_tools.md, Section 6)\n")
+        printf("\n{txt}Effects of the injection (fixed prices)\n")
         printf("{txt}%-" + strofreal(w) + "s %-13s %12s %12s %9s\n", "Account", "Block", "Base income", "Change", "% change")
         printf("{txt}{hline " + strofreal(w + 50) + "}\n")
         for (k = 1; k <= n; k++) {
@@ -8106,7 +8106,7 @@ void _cge_cons_show(struct cge_model scalar M, struct cge_par scalar p, real col
 {
     real scalar k
     if (!any(p.bmode :> 0)) return
-    printf("{txt}Constraints (model_spec.md, Section 16)\n")
+    printf("{txt}Constraints\n")
     for (k = 1; k <= rows(M.bY); k++) {
         if (p.bmode[k] <= 0) continue
         printf("{txt}  %s\n", _cge_cons_one(M, p, x, k))

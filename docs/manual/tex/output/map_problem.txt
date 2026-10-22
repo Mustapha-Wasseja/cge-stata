@@ -1,0 +1,27 @@
+. cge_synthetic, clear national
+(14 vars, 13 obs)
+
+Synthetic SAM loaded (national-accounts layout): 13 accounts, total   1613.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 13 accounts, total 1613
+Largest row-column imbalance:  0.00e+00
+
+. cge_map, activities(act_agr act_man act_ser)                              ///
+>     commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) ///
+>     government(gov) savinv(sav) row(row) imptax(tax_imp) report(problems.csv)
+Exports recorded as sales by activities, moved to the paired commodities: 75
+Mapping report saved to problems.csv (4 row(s))
+The SAM contains flows that the model does not represent.
+4 problem(s) in 2 group(s); values are SAM units, shares are of the sum of absolute cells.
+For an account with no role the value is its total; its flows are also listed by role.
+--------------------------------------------------------------------------------------------------------
+Problem                        Paid by (column)     Received by (row)     Cells            Value   Share
+--------------------------------------------------------------------------------------------------------
+flow not represented           commodity            government                3               30   1.78%
+flow not represented           household            government                1               25   1.48%
+--------------------------------------------------------------------------------------------------------
+Use the report() option to save every cell to a file.
+
+r(459);

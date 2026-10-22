@@ -1,0 +1,13 @@
+. cge_parameters, clear
+
+. list parameter element1 value if inlist(parameter, "tm", "tq", "tins0"), noobs clean
+
+    parame~r   element1       value
+          tm    com_agr     .105969
+          tm    com_man   .09838221
+          tm    com_ser           0
+          tq    com_agr   .07681605
+          tq    com_man   .06786131
+          tq    com_ser   .05735944
+       tins0         hh   .06567474
+       tins0        ent   .09858013

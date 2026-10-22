@@ -1,0 +1,123 @@
+\chapter{A worked example: from a raw SAM to results}\label{chap:example}
+
+This chapter takes an unbalanced SAM through every step of the workflow: a
+template of roles, aggregation and balancing, mapping, elasticities from the
+library, calibration and checks, three policy simulations, sensitivity
+analysis, a dynamic baseline and scenario, the link to a household survey, and
+saving the model. The SAM and the household survey are SYNTHETIC: they are
+constructed for testing and describe no country. The elasticities are
+published values for Togo, applied to the synthetic SAM only to show the
+commands, so the results illustrate the workflow and are not findings about
+any country. The commands are those of the do-file
+\cmd{raw_sam_to_results.do} in the \cmd{examples} folder of the package's
+repository.
+
+\section{The raw SAM}
+
+\stlog{we_raw}
+The SAM has 17 accounts; its largest difference between an account's row and
+column totals is 12.1. It has two household accounts, households (\cmd{hhd})
+and non-profit institutions (\cmd{npi}), and an enterprise (\cmd{ent}).
+
+\section{Roles, aggregation and balancing}
+
+\manref{cge_template} writes a template with one row per account, to be filled
+in, with a real SAM usually in Excel:
+\stlog{we_template}
+The do-file fills in the roles and puts \cmd{hhd} and \cmd{npi} in one
+household group, \cmd{hh}:
+\stlog{we_roles}
+The last three columns show where the SAM does not balance. \manref{cge_aggregate}
+merges the two household accounts, and \manref{cge_balance} balances the SAM
+by cross entropy, with the income of the household group taken as known
+(\secref{sec:ce}):
+\stlog{we_balance}
+The method converges in four iterations. Every account now balances, 61 of
+the 63 non-zero cells have changed, and the SAM total has risen from 1,860.5 to
+1,943.8. The known household income, 290, is above the row total of the merged
+household accounts in the raw SAM, about 257, and the largest changes are in
+the flows that pay and spend it: the labour income of households, for
+example, rises by 10.5 per cent. These are the changes to report with any result. The
+same template then maps the balanced SAM; the options it implies are
+displayed, so that the mapping can also be written as a command:
+\stlog{we_map}
+
+\section{Elasticities and calibration}
+
+\manref{cge_elasticities} returns values from the library as options for
+\manref{cge_calibrate}: the aggregate Armington and CET elasticities estimated
+for Togo, the capital--labour elasticity estimated for Africa, income
+elasticities for food (mapped to agriculture) and for other goods and
+services, and the Frisch parameter (chapter~\ref{chap:elasticities}):
+\stlog{we_elas}
+With income elasticities and a Frisch parameter, household demand is a linear
+expenditure system:
+\stlog{we_calibrate}
+\manref{cge_parameters} shows the implied rates: import tariffs of 10.6 per
+cent on agriculture and 9.8 per cent on manufactures, sales taxes of 5.7 to 7.7
+per cent, and direct tax rates of 6.6 per cent for the household group and 9.9
+per cent for the enterprise:
+\stlog{we_parameters}
+
+\section{Three policy simulations}
+
+The do-file removes every import tariff under the default closure and with
+direct tax rates replacing the lost revenue, and then raises government
+purchases of services by 20 per cent under the default closure:
+\stlog{we_sims}
+\stlog{we_report}
+The closure matters as much as the shock. With government savings flexible,
+the lost tariff revenue (8.2, or 11 per cent of revenue) widens the deficit;
+with savings-driven investment, investment falls by 11.9 per cent and real
+consumption rises by 2.5 per cent. With direct taxes replacing the revenue,
+the direct tax take rises by 29.8 per cent, real consumption falls by 0.35 per
+cent and investment rises by 4.0 per cent. The exchange rate depreciates by 4.6
+to 4.7 per cent in both cases, and exports rise. More government purchases of
+services lower investment by 16.6 per cent under the same closure.
+\manref{cge_report} with \cmd{saving()} writes every table to Excel.
+
+\section{Sensitivity}
+
+\manref{cge_sensitivity} recalibrates the model for 50 draws of the
+elasticities, each within plus or minus 50 per cent of the central values,
+sector by sector, and runs the tariff removal:
+\stlog{we_sens}
+All 50 draws converge. The welfare result barely moves (equivalent variation
+2.48 per cent; 5th to 95th percentile 2.48 to 2.49), nor does investment
+($-12.2$ to $-11.6$ per cent), because both are set mainly by the closure.
+Trade responds more: exports rise by 0.9 to 1.8 per cent, and the exchange rate
+depreciates by 4.0 to 5.2 per cent.
+
+\section{Dynamics}
+
+A baseline grows real value added by 4 per cent a period, with capital that
+accumulates from investment and is specific to each activity; the efficiency
+factors that achieve it fall from 2.4 to 2.0 per cent a period. The scenario
+removes tariffs from period 1 with the baseline's efficiency path:
+\stlog{we_dynamic}
+\manref{cge_dynresults} compares the scenario with the baseline:
+\stlog{we_dynresults}
+Because the static closure lowers investment, capital grows more slowly: by
+period 5, output is 2.2 per cent below the baseline in manufacturing, 1.4 per
+cent in agriculture and 0.8 per cent in services. The static gain in
+consumption has a dynamic cost, which a static run does not show.
+
+\section{Poverty and inequality}
+
+The SYNTHETIC survey has 1,000 households with wages, profits and government
+transfers, and budget shares for food, goods and services. \manref{cge_microsim}
+passes the simulation with direct taxes replacing the tariff revenue to it:
+\stlog[\scriptsize]{we_microsim}
+Real consumption per person rises by 0.64 per cent; the headcount ratio falls
+from 23.09 to 22.97 per cent, and the Gini coefficient barely changes. The
+households' gain differs from the group's equivalent variation ($-0.36$ per
+cent) because they keep their own income composition (here mostly wages, with
+no transfers from enterprises) and budget shares, and because real
+consumption is not a welfare measure. A real survey would map every income
+source of the households.
+
+\section{Saving the model}
+
+\stlog{we_save}
+\manref{cge_use} reloads the model with its 15 simulations, and
+\manref{cge_report} reproduces the results without solving again.

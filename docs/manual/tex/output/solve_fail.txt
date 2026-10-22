@@ -1,0 +1,21 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_shock qg, scale(10)
+Parameter qg changed for 3 element(s)
+
+. cge_solve, name(qg10)
+Not solved directly; trying again in 4 steps
+Not solved directly; trying again in 16 steps
+Simulation qg10 did not converge (largest scaled residual  1.45e-03)
+Largest scaled residual  1.45e-03; WALRAS =  1.86e-02
+Diagnostics
+  Largest scaled residuals
+    I7   government demand                      com_man                -1.452e-03
+    I7   government demand                      com_ser                -1.452e-03
+    Q4   factor demand                          lab,act_man             1.191e-03
+    S2   commodity market                       com_man                -9.279e-04
+    S5   savings-investment balance                                    -7.564e-04
+  Smallest pivot of the Jacobian, relative to the largest:  2.27e-10 (PX(com_man))
+
+r(430);

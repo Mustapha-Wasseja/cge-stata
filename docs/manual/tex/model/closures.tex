@@ -1,0 +1,85 @@
+\chapter{Closures}\label{chap:closures}
+
+The model has more variables than equations. The closure chooses which
+variables are fixed at their current values and which the model determines.
+It expresses assumptions about how the economy adjusts to a shock, and results
+can depend on it as much as on the shock itself. \manref{cge_closure} sets the
+closure, and every simulation stores the closure under which it was solved.
+
+\section{Closure options}\label{sec:closure-options}
+
+A closure option fixes one variable of each pair and frees the other. The
+default, which \manref{cge_calibrate} sets, is listed first for each block.
+
+\begin{cgetable}{p{0.13\linewidth}p{0.29\linewidth}p{0.24\linewidth}p{0.20\linewidth}}
+\toprule
+Block & Option & Fixed & Free\\
+\midrule\endhead
+\bottomrule\endlastfoot
+External & \cmd{flexexr}: flexible exchange rate & $\V{FSAV}$ & $\V{EXR}$\\
+ & \cmd{fixexr}: fixed exchange rate & $\V{EXR}$ & $\V{FSAV}$\\[3pt]
+Government & \cmd{flexgsav}: flexible government savings & $\V{TINSADJ}$, $\V{TQADJ}$, $\V{TMADJ}$, $\V{TVADJ}$, $\V{GADJ}$ & $\V{GSAV}$\\
+ & \cmd{fixgsav} or \cmd{fixgsav direct}: direct tax rates adjust & $\V{GSAV}$, $\V{TQADJ}$, $\V{TMADJ}$, $\V{TVADJ}$, $\V{GADJ}$ & $\V{TINSADJ}$\\
+ & \cmd{fixgsav sales}: sales tax rates adjust & $\V{GSAV}$, $\V{TINSADJ}$, $\V{TMADJ}$, $\V{TVADJ}$, $\V{GADJ}$ & $\V{TQADJ}$\\
+ & \cmd{fixgsav import}: import tariffs adjust & $\V{GSAV}$, $\V{TINSADJ}$, $\V{TQADJ}$, $\V{TVADJ}$, $\V{GADJ}$ & $\V{TMADJ}$\\
+ & \cmd{fixgsav vat}: VAT rates adjust & $\V{GSAV}$, $\V{TINSADJ}$, $\V{TQADJ}$, $\V{TMADJ}$, $\V{GADJ}$ & $\V{TVADJ}$\\[3pt]
+Savings--investment & \cmd{savings}: savings-driven & $\V{MPSADJ}$ & $\V{IADJ}$\\
+ & \cmd{investment}: investment-driven & $\V{IADJ}$ & $\V{MPSADJ}$\\[3pt]
+Factor $f$ & \cmd{mobile}: fully employed and mobile & $\V{QFS}_f$, $\V{WFDIST}_{fa}$ & $\V{W}_f$, $\V{QF}_{fa}$\\
+ & \cmd{specific}: fixed in each activity & $\V{W}_f$, $\V{QF}_{fa}$ & $\V{WFDIST}_{fa}$, $\V{QFS}_f$\\
+ & \cmd{unemployed}: unemployment at a fixed wage & $\V{W}_f$, $\V{WFDIST}_{fa}$ & $\V{QFS}_f$, $\V{QF}_{fa}$\\
+ & \cmd{wagecurve}, $f \in FL$ & $\V{WFDIST}_{fa}$, $\V{LSW}_f$ & $\V{W}_f$, $\V{QFS}_f$, $\V{QF}_{fa}$\\
+ & \cmd{minwage}, $f \in FL$ & $\V{WFDIST}_{fa}$, $\V{LSM}_f$ & $\V{W}_f$, $\V{QFS}_f$, $\V{QF}_{fa}$\\[3pt]
+Numeraire & \cmd{cpi} & $\V{CPI}$ & $\V{DPI}$\\
+ & \cmd{dpi}: producer prices of domestic sales & $\V{DPI}$ & $\V{CPI}$\\
+\end{cgetable}
+
+The tax scaling factors $\V{TQADJ}$, $\V{TMADJ}$ and $\V{TVADJ}$ are fixed at
+one, except the one that the government closure frees
+(\secref{sec:replacement}). The rents $\V{RM}_c$, $\V{RE}_c$ and $\V{RA}_a$ are
+fixed at zero under every closure; a constraint frees one of them, or another
+variable, and adds an equation, so the system stays square
+(chapter~\ref{chap:constraints}). Variables that do not exist for an element,
+such as the imports of a commodity that is not imported, are neither fixed
+nor free: they are left out of the system.
+
+The closures differ in what adjusts. Under \cmd{flexexr} foreign savings are
+fixed in foreign currency and the exchange rate moves the trade balance;
+under \cmd{fixexr} the exchange rate is fixed and foreign savings absorb any
+change in the current account. Under \cmd{flexgsav} tax rates and real
+government consumption are fixed and government savings absorb changes in
+revenue; under \cmd{fixgsav} government savings are fixed and one tax's rates
+are scaled in proportion to keep them. Under \cmd{savings} the savings rates
+are fixed and investment adjusts to available savings; under
+\cmd{investment} real investment is fixed and the savings rates of all
+domestic institutions are scaled to finance it. The closures of each factor
+are described with its regime: fully employed factors that move between
+activities at one average price, factors fixed in each activity that earn
+activity-specific prices, and factors whose supply adjusts at a fixed price,
+along a wage curve or above a minimum wage (chapter~\ref{chap:labour}).
+
+\section{Swaps}\label{sec:swaps}
+
+After the options above, a closure may be changed element by element, as
+GAMS modellers do by fixing and freeing variables. A swap fixes one element of
+a variable that the closure leaves free and frees one that it fixes, so the
+number of free variables does not change. For example,
+\begin{itemize}
+\item \cmd{swap(GSAV GADJ)} fixes government savings and lets government
+consumption adjust;
+\item \cmd{swap(EXR CPI)} makes the exchange rate the numeraire;
+\item \cmd{swap(QG(com_hlt) GADJ)} fixes government purchases of health
+services, which can then be shocked, and scales the other purchases with
+them.
+\end{itemize}
+Variables that the reduced system computes from their definitions, such as
+household demand, cannot be fixed (\secref{sec:reduced}).
+
+\section{Checks}
+
+Every closure is checked when it is set. It must be square, with as many free
+variables as equations. It must also leave every equation with at least one
+free variable: a closure that leaves an equation without one makes the
+Jacobian singular, and \manref{cge_closure} names the equation. These are
+structural checks, over the pattern of the variables that each equation
+contains.

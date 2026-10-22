@@ -1,0 +1,23 @@
+. cge_synthetic, clear
+(16 vars, 15 obs)
+
+Synthetic SAM loaded (standard layout): 15 accounts, total   1743.00
+Largest row-column imbalance:  0.00e+00
+
+. list account act_agr act_man act_ser com_agr com_man com_ser in 1/6, noobs abbreviate(8)
+
+  +---------------------------------------------------------------------+
+  | account   act_agr   act_man   act_ser   com_agr   com_man   com_ser |
+  |---------------------------------------------------------------------|
+  | act_agr         0         0         0       100         0         0 |
+  | act_man         0         0         0         0       140         0 |
+  | act_ser         0         0         0         0         0       150 |
+  | com_agr        10        20         5         0         0         0 |
+  | com_man         8        30        15         0         0         0 |
+  |---------------------------------------------------------------------|
+  | com_ser         5        15        20         0         0         0 |
+  +---------------------------------------------------------------------+
+
+. cge_sam, labels(account)
+SAM read: 15 accounts, total 1743
+Largest row-column imbalance:  0.00e+00

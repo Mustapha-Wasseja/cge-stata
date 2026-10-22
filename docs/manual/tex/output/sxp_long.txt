@@ -1,0 +1,15 @@
+. cge_samexport, clear long
+SAM loaded as data: 68 observations
+
+. list in 1/6, noobs sep(0)
+
+  +-------------------------------+
+  |     row    column       value |
+  |-------------------------------|
+  | act_agr   com_agr    96.19955 |
+  | act_man   com_man    138.6652 |
+  | act_ser   com_ser   152.68605 |
+  | com_agr   act_agr   9.6749097 |
+  | com_agr   act_man   20.354716 |
+  | com_agr   act_ser   5.4718925 |
+  +-------------------------------+

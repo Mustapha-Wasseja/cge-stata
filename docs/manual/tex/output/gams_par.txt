@@ -1,0 +1,10 @@
+. type gams_notariff/cge_shock_par.inc
+* Parameter changes and the closure, written by cge_gams
+tm('com_agr') = 0 * tm('com_agr');
+tm('com_man') = 0 * tm('com_man');
+clext = 1;
+clgov = 3;
+clsi = 1;
+clnum = 1;
+fclo('lab') = 1;
+fclo('cap') = 1;

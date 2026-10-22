@@ -1,0 +1,20 @@
+. cge_closure, external(fixexr) savinv(investment) factors(cap:specific)
+Closure
+  external account     fixexr
+  government           flexgsav
+  savings-investment   investment
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           specific
+
+. cge_check, homogeneity perturb(0.2) seed(2026)
+  [ok]   SAM balance (largest imbalance)                       0.00e+00
+  [ok]   benchmark replication (largest scaled residual)       3.55e-16
+  [ok]   closure is square (free variables minus equations)    0.00e+00
+Simulation notariff:
+  [ok]     solution (largest scaled residual)                  8.13e-11
+  [ok]     Walras's law (WALRAS)                               9.43e-11
+  [ok]     GDP identity (expenditure minus income)             1.48e-10
+  [ok]   homogeneity (largest relative deviation)              5.53e-13
+  [ok]   perturbed start returns the base (largest deviation)  1.40e-12
+All checks passed

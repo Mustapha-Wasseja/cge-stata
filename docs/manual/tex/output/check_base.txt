@@ -1,0 +1,5 @@
+. cge_check
+  [ok]   SAM balance (largest imbalance)                       0.00e+00
+  [ok]   benchmark replication (largest scaled residual)       3.55e-16
+  [ok]   closure is square (free variables minus equations)    0.00e+00
+All checks passed

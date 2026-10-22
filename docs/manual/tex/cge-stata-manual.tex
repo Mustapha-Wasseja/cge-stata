@@ -1,0 +1,90 @@
+% cge-stata Reference Manual
+% Build with: python tools/build_manual.py
+\documentclass[10pt,oneside,openany]{book}
+\usepackage{cgestyle}
+\hypersetup{pdftitle={cge-stata Reference Manual},
+  pdfauthor={Mustapha Wasseja},
+  pdfsubject={Computable general equilibrium modelling in Stata},
+  pdfkeywords={CGE, social accounting matrix, Stata, Mata}}
+
+% A part of the manual that is still to be written
+\newcommand{\cgemissing}[1]{\par\textit{[\detokenize{#1}: to be written]}\par}
+\newcommand{\cgeinput}[1]{\InputIfFileExists{#1}{}{\cgemissing{#1}}}
+
+\begin{document}
+\frontmatter
+\input{front}
+\tableofcontents
+
+\mainmatter
+% ---------------------------------------------------------------------
+\part{Introduction and user's guide}\label{part:intro}
+\cgeinput{intro/introduction}
+\cgeinput{intro/getting_started}
+\cgeinput{intro/workflow}
+\cgeinput{intro/worked_example}
+\cgeinput{intro/validation}
+
+% ---------------------------------------------------------------------
+\part{The model: methods and formulas}\label{part:model}
+\cgeinput{model/notation}
+\cgeinput{model/equations}
+\cgeinput{model/closures}
+\cgeinput{model/calibration}
+\cgeinput{model/solution}
+\cgeinput{model/checks}
+\cgeinput{model/reporting}
+\cgeinput{model/fiscal}
+\cgeinput{model/trade}
+\cgeinput{model/labour}
+\cgeinput{model/health}
+\cgeinput{model/constraints}
+\cgeinput{model/production}
+\cgeinput{model/dynamics}
+\cgeinput{model/microsim}
+\cgeinput{model/sensitivity}
+\cgeinput{model/optimize}
+\cgeinput{model/user}
+\cgeinput{model/samtools}
+\cgeinput{model/gams}
+\cgeinput{model/elasticities}
+
+% ---------------------------------------------------------------------
+\part{Command reference}\label{part:ref}
+\cgeinput{ref/intro}
+\cgeinput{ref/cge}
+\cgeinput{ref/cge_aggregate}
+\cgeinput{ref/cge_balance}
+\cgeinput{ref/cge_calibrate}
+\cgeinput{ref/cge_check}
+\cgeinput{ref/cge_closure}
+\cgeinput{ref/cge_constraint}
+\cgeinput{ref/cge_dynamic}
+\cgeinput{ref/cge_dynresults}
+\cgeinput{ref/cge_elasticities}
+\cgeinput{ref/cge_equation}
+\cgeinput{ref/cge_gams}
+\cgeinput{ref/cge_map}
+\cgeinput{ref/cge_microsim}
+\cgeinput{ref/cge_multiplier}
+\cgeinput{ref/cge_optimize}
+\cgeinput{ref/cge_parameters}
+\cgeinput{ref/cge_report}
+\cgeinput{ref/cge_results}
+\cgeinput{ref/cge_sam}
+\cgeinput{ref/cge_samexport}
+\cgeinput{ref/cge_save}
+\cgeinput{ref/cge_sensitivity}
+\cgeinput{ref/cge_shock}
+\cgeinput{ref/cge_solve}
+\cgeinput{ref/cge_spa}
+\cgeinput{ref/cge_synthetic}
+\cgeinput{ref/cge_template}
+\cgeinput{ref/cge_use}
+\cgeinput{ref/cge_variable}
+
+% ---------------------------------------------------------------------
+\backmatter
+\cgeinput{references}
+
+\end{document}

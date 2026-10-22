@@ -1,0 +1,24 @@
+. cge_report, run(base) tables(macro)
+
+Macroeconomic aggregates
+---------------------------------------------------------------------------------------------
+                                  base      base0      base1      base2      base3      base4
+gdp_nominal                        300      0.000      3.968      8.095     12.388     16.853
+gdp_real                           300      0.000      3.984      8.126     12.434     16.914
+gdp_deflator                         1      0.000     -0.015     -0.029     -0.042     -0.053
+consumption_real                   230      0.000      3.861      7.875     12.047     16.384
+government_real                     45      0.000      3.000      6.090      9.273     12.551
+investment_real                     50      0.000      4.440      9.072     13.904     18.946
+insurance_fund_real                  0          .          .          .          .          .
+exports_real                        75      0.000      4.259      8.702     13.336     18.170
+imports_real                       100      0.000      3.694      7.536     11.532     15.688
+value_added_real                   262      0.000      4.000      8.160     12.486     16.986
+cpi                                  1      0.000      0.000      0.000      0.000      0.000
+dpi                                  1      0.000     -0.051     -0.100     -0.147     -0.192
+exchange_rate                        1      0.000      0.155      0.304      0.446      0.581
+real_exchange_rate                   1      0.000      0.206      0.404      0.594      0.775
+private_savings                     32      0.000      3.861      7.875     12.046     16.382
+investment_value                    50      0.000      4.532      9.256     14.180     19.312
+foreign_savings                     15      0.000      2.000      4.040      6.121      8.243
+---------------------------------------------------------------------------------------------
+Percentage changes from the base (rates: changes in points)

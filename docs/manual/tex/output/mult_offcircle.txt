@@ -1,0 +1,8 @@
+. cge_multiplier, endogenous(gov tax_sal) decompose
+decompose: the SAM has flows outside the circular structure production -> factors -> institutions ->
+>  production:
+  com_agr (production) pays tax_sal (institutions): 8
+  com_man (production) pays tax_sal (institutions): 12
+  com_ser (production) pays tax_sal (institutions): 10
+
+r(459);

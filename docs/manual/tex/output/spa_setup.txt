@@ -1,0 +1,17 @@
+. cge_synthetic, clear health
+(19 vars, 18 obs)
+
+Synthetic SAM loaded (health layout): 18 accounts, total   1746.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 18 accounts, total 1746
+Largest row-column imbalance:  0.00e+00
+
+. cge_map, activities(act_agr act_man act_ser act_hlt)                     ///
+>     commodities(com_agr com_man com_ser com_hlt) factors(lab cap)        ///
+>     households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) ///
+>     saltax(tax_sal) imptax(tax_imp) insurance(shi)
+Accounts mapped: 4 activities, 4 commodities, 2 factors, 1 households, 0 enterprises, 0 margin accou
+> nts
+Health insurance fund: shi

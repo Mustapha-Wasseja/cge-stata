@@ -1,0 +1,36 @@
+. cge_constraint, clear
+All constraints removed
+
+. cge_constraint FSAV, upper(1.05) scale adjust(EXR) up
+FSAV is fixed under the current closure, so it cannot be bounded
+
+r(459);
+
+. cge_closure, external(fixexr)
+Closure
+  external account     fixexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_constraint FSAV, upper(1.05) scale adjust(EXR) up
+Constraint FSAV <= 14.7, EXR up: not solved
+
+. quietly cge_solve, name(peg)
+
+. cge_constraint, list
+Constraints (regime in the last solution)
+  1. FSAV <= 14.7, EXR up: binding
+
+. quietly cge_results, sim(peg) clear nodisplay
+
+. list variable base value if inlist(variable, "FSAV", "EXR"), noobs
+
+  +----------------------------+
+  | variable   base      value |
+  |----------------------------|
+  |      EXR      1   1.047003 |
+  |     FSAV     14       14.7 |
+  +----------------------------+

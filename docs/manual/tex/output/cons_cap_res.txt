@@ -1,0 +1,19 @@
+. cge_report, sims(hlt20 hlt20_cap) tables(activities)
+
+Activities
+------------------------------------------------------------
+                                  base      hlt20  hlt20_cap
+output act_agr                     100     -0.575     -0.018
+price act_agr                        1      0.013     -0.331
+value_added act_agr                 77     -0.575     -0.018
+output act_man                     140     -1.197     -0.989
+price act_man                        1     -0.019     -0.346
+value_added act_man                 75     -1.197     -0.989
+output act_ser                     120     -0.294      0.041
+price act_ser                        1     -0.009     -0.341
+value_added act_ser                 86     -0.294      0.041
+output act_hlt                      30      6.631      3.000
+price act_hlt                        1      0.163      5.999
+value_added act_hlt                 24      6.631      3.000
+------------------------------------------------------------
+Percentage changes from the base (rates: changes in points)

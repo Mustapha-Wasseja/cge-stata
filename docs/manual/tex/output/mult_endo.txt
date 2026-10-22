@@ -1,0 +1,11 @@
+. cge_multiplier, endogenous(gov) accounts(com_hlt hhd gov)
+
+Accounting multipliers: effects of a unit injection into each account (fixed prices)
+Injection     Block             Total    Output Value add. Hh income
+-------------------------------------------------------------------
+com_hlt       production        9.408     2.581     1.864     1.813
+hhd           institutions      6.771     1.562     1.062     2.038
+gov           institutions      8.340     1.932     1.336     1.543
+-------------------------------------------------------------------
+Total: all endogenous accounts; output: activities; value added: factors; household income: households
+3 of 12 injections shown; accounts() chooses them and clear loads the matrix

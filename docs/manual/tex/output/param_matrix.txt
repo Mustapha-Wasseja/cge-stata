@@ -1,0 +1,13 @@
+. list element1 element2 value if parameter == "dva", noobs
+
+  +---------------------------------+
+  | element1   element2       value |
+  |---------------------------------|
+  |      lab    act_agr   .52434372 |
+  |      lab    act_man   .45836805 |
+  |      lab    act_ser   .55673016 |
+  |      cap    act_agr   .47565628 |
+  |      cap    act_man   .54163195 |
+  |---------------------------------|
+  |      cap    act_ser   .44326984 |
+  +---------------------------------+

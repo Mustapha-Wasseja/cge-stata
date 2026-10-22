@@ -1,0 +1,115 @@
+\chapter{Health}\label{chap:health}
+
+This chapter collects the parts of the model that concern health: a social
+health insurance fund, the efficiency of factors that rises with health
+services, the days of work lost to illness, and the death rate, which changes
+population and labour in dynamic runs.
+
+\section{A social health insurance fund}\label{sec:fund}
+
+A fund mapped with \manref{cge_map}, option \cmd{insurance()}, is financed by
+contributions at the rate $\V{tshi}_f$ on the income of each factor, taken
+before the income is distributed \eqref{eq:I2}, and by transfers from the
+government (in real terms) and the rest of the world (in foreign currency)
+\eqref{eq:I12}. It buys a fixed basket of health services,
+$\V{QSHI}_c = \overline{\V{qshi}}_c\,\V{SHIADJ}$ \eqref{eq:I13}, scaled so
+that it spends its revenue less a fixed share saved \eqref{eq:I14}. A higher
+contribution rate or larger transfers therefore raise its purchases. Its
+savings enter the savings--investment balance \eqref{eq:S5}. The calibration
+of the fund is given in section~\ref{sec:cal-institutions}; its parameters
+can be shocked (\cmd{tshi}, \cmd{qshi}, \cmd{trshi}, \cmd{trshir}). A
+donor-funded non-profit institution is mapped as a household that receives
+transfers from the rest of the world.
+
+\section{Health services and factor efficiency}\label{sec:efficiency}
+
+Health outcomes respond to health services per head relative to the base,
+\begin{equation*}
+R = \V{HS} / \V{HS}^0,
+\end{equation*}
+where $\V{HS}$ is the volume of the health services in $HC$ bought by
+households, the government and the health insurance fund \eqref{eq:H1}, and
+$\V{HS}^0$ its base value, which grows with the population in dynamic runs
+(chapter~\ref{chap:dynamics}). Each outcome has a constant elasticity with
+respect to $R$. These elasticities are hypotheses about how services become
+health, to be taken from studies of the country or region (for example
+\citealt{bokhari2007}); the package supplies none. An outcome whose elasticity
+is zero is constant unless shocked, and needs no health commodities.
+
+The efficiency of factor $f$ is $\V{EFF}_f = R^{\eta_f}$ \eqref{eq:H2}, with
+the elasticity $\eta_f$ given by \manref{cge_calibrate}, options
+\cmd{healthcom()}, \cmd{healthfac()} and \cmd{healthelas()}. It multiplies the
+factor's input in value added (section~\ref{sec:production}). The exogenous
+efficiency $\V{af}_f$ can be shocked directly.
+
+\section{Days lost to illness}\label{sec:sickdays}
+
+For a factor $f \in FS$ the user gives the base share of working time lost to
+illness, $0 \le s^0_f < 1$ (\cmd{sickdays()}), for example from a labour force
+or household survey, and its elasticity $\epsilon^s_f$ with respect to $R$
+(\cmd{sickelas()}; negative when more services mean fewer days lost). The
+share lost is $S_f = \sigma_f R^{\epsilon^s_f}$, with $\sigma_f = s^0_f$ unless
+shocked (\cmd{sick}, for example an epidemic), and the days worked per worker,
+relative to the base, are
+\begin{equation}
+\V{DW}_f = \frac{1 - \sigma_f R^{\epsilon^s_f}}{1 - s^0_f}, \qquad f \in FS
+\tag{H3}\label{eq:H3}
+\end{equation}
+and $\V{DW}_f = 1$ otherwise. Days worked scale the factor's effective input
+in production, $\widetilde{\V{QF}}_{fa} = \V{af}_f\,\V{EFF}_f\,\V{DW}_f\,\V{QF}_{fa}$
+(\eqref{eq:Q3}, \eqref{eq:Q4}). Factor quantities $\V{QF}_{fa}$ and
+$\V{QFS}_f$, the price $\V{W}_f$ and unemployment (chapter~\ref{chap:labour})
+stay per worker. In real terms fewer days per worker are the same as less
+labour measured in days: with $L$ workers and $D$ days each, a wage $w$ per
+effective unit pays $w\,D\,L$ whether the factor is counted in workers or in
+days. $\V{EFF}_f$ measures output per day worked, and $\V{DW}_f$ the days
+worked. $S_f$ must stay below one.
+
+\section{Mortality}\label{sec:mortality}
+
+The user may give the base crude death rate $m^0$, deaths per head per period
+(\cmd{mortality()}), and its elasticity $\epsilon^m$ with respect to $R$
+(\cmd{mortelas()}). The death rate is
+\begin{equation*}
+\V{MR} = \mu^m R^{\epsilon^m},
+\end{equation*}
+with $\mu^m = m^0$ unless shocked (\cmd{mort}). It is reported, and does not
+enter the equations of a period: deaths in period $t$ change the population
+and labour from period $t + 1$ (section~\ref{sec:population}), so each period
+is solved with its population given.
+
+\section{Population and labour in dynamic runs}\label{sec:population}
+
+The population growth rate $g_P$ given for a run (\manref{cge_dynamic},
+option \cmd{population()}) is taken to hold at the base death rate. With a
+death rate, the population grows from $t - 1$ to $t$ at
+\begin{equation*}
+g_{P,t} = g_P + \bigl(m^0 - \V{MR}_{t-1}\bigr),
+\end{equation*}
+which scales the subsistence quantities, $\V{HS}^0$ and the population index
+$\V{POP}$ (chapter~\ref{chap:dynamics}). For the factors named in
+\cmd{deathfactors()} (labour, not capital), deaths at working ages change the
+supply:
+\begin{equation*}
+g_{f,t} = g_f + \frac{\theta^D}{\alpha^W}\bigl(m^0 - \V{MR}_{t-1}\bigr),
+\end{equation*}
+where $\theta^D$ is the share of deaths at working ages (\cmd{deathshare()})
+and $\alpha^W$ the working-age share of the population (\cmd{workingage()}):
+excess deaths per head of the population, $\V{MR} - m^0$, remove a share
+$\theta^D(\V{MR} - m^0)/\alpha^W$ of the working-age population, and the
+factor's workers in the same proportion. The labour force of such a factor
+(chapter~\ref{chap:labour}) grows at the same rate. $\V{MR}_{t-1}$ uses the
+parameters and health services of period $t - 1$, including its shocks.
+
+In a baseline, rising health services per head lower the death rate and raise
+population growth above $g_P$; scenarios are therefore compared with a
+baseline run with the same settings.
+
+\section{Reporting}
+
+The health table of \manref{cge_report} shows, when the model has them:
+health services per head $R$; factor efficiency; the share of working time
+lost, $100\,S_f$ per cent, and the days worked $\V{DW}_f$ for $f \in FS$; the
+death rate per 1,000, $1000\,\V{MR}$; the population index $\V{POP}$; and the
+revenue and purchases of the insurance fund. Shares and rates change in
+points.

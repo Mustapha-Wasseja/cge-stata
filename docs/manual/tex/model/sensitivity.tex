@@ -1,0 +1,48 @@
+\chapter{Sensitivity analysis}\label{chap:sensitivity}
+
+Elasticities are rarely estimated for the country and period of a SAM, and
+results can depend on them. \manref{cge_sensitivity} shows how much: it
+recalibrates the model with elasticities drawn around the values used, runs
+the scenario and solves, draw after draw.
+
+\section{Draws}
+
+Each elasticity $\sigma$ of the types chosen (value added, Armington, CET and
+exports from composite supply, and the top nest) is multiplied, in draw $k$, by
+a factor $u^{(k)}$ around one:
+\begin{equation*}
+\sigma^{(k)} = u^{(k)}\,\sigma, \qquad u^{(k)} = 1 + s\,v^{(k)},
+\end{equation*}
+where $s < 1$ is the spread and $v^{(k)}$ is drawn from the uniform distribution
+on $[-1, 1]$, $v = 2U - 1$, or from the symmetric triangular distribution on the
+same interval, $v = U_1 + U_2 - 1$, with $U$, $U_1$ and $U_2$ independent and
+uniform on $[0, 1]$. By default each sector's elasticity has its own factor;
+with \cmd{common} one factor applies to every sector for each type of
+elasticity. A Leontief top nest (elasticity 0) stays Leontief, and the
+elasticities of nests of value added keep the values given. Draw 0, with the
+central elasticities, is always added.
+
+For each draw the model is recalibrated from the SAM with every other
+calibration setting kept (factor quantities, LES demand, the health link), the
+closure is restored, the scenario program applies its shocks and the model is
+solved. The model in memory, with its simulations, is restored at the end.
+
+\section{Summary}
+
+For every report measure of chapter~\ref{chap:reporting}, the summary gives the
+result with the central elasticities, and, across the $n$ draws that
+converged, the mean, the standard deviation and the 5th and 95th percentiles,
+taken as order statistics of the sorted results $x_{(1)} \le \dots \le
+x_{(n)}$:
+\begin{equation*}
+p_{5} = x_{(\max(1, \lceil 0.05\,n \rceil))}, \qquad
+p_{95} = x_{(\max(1, \lceil 0.95\,n \rceil))}.
+\end{equation*}
+
+\section{Interpretation}
+
+The draws do not estimate uncertainty about the elasticities. They show how
+the results change over a chosen range around the values used. The range, the
+distribution and whether sectors move together should be stated with the
+results. Standard errors and bounds of published estimates
+(chapter~\ref{chap:elasticities}) can guide the choice of the range.

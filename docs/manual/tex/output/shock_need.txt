@@ -1,0 +1,12 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_shock tshi, scale(1.1)
+tshi needs a health insurance fund: name it with cge_map, insurance()
+
+r(459);
+
+. cge_shock trgr, elements(hhd) scale(2)
+trgr has no elements
+
+r(198);

@@ -1,0 +1,84 @@
+\chapter{A first model}\label{chap:start}
+
+This chapter builds a complete model on the synthetic SAM that comes with the
+package, removes its import tariffs under two closures, and reads the results.
+Every step is one command, and each is described in Part~\ref{part:ref}.
+
+\section{The SAM}
+
+\manref{cge_synthetic} loads the standard synthetic SAM as data: one
+observation per account, a string variable with the account labels and one
+numeric variable per account. It has three activities and three commodities
+(agriculture, manufactures and services), labour and capital, one household,
+the government with direct, sales and import taxes, savings--investment and the
+rest of the world. \manref{cge_sam} reads it into a new model:
+\stlog{gs_sam}
+Cell (r, c) of the SAM is a payment from the column account c to the row
+account r. The listing shows the make matrix (activities selling their output
+to commodities) and the intermediate inputs (commodities bought by
+activities). The SAM balances: every account's receipts equal its payments.
+
+\section{Roles}
+
+\manref{cge_map} assigns each account to a role of the model and checks that
+every non-zero cell is a flow the model represents
+(section~\ref{sec:flows}). Activities and commodities are paired by position,
+each activity with its main commodity:
+\stlog{gs_map}
+
+\section{Calibration and checks}
+
+The model's elasticities have no defaults. Here value added has an elasticity
+of substitution of 0.8 between labour and capital, and the Armington and CET
+elasticities are 2 for every commodity; \manref{cge_elasticities} gives
+published values with their sources. \manref{cge_calibrate} computes every
+parameter and the base value of every variable from the SAM and the
+elasticities (chapter~\ref{chap:calibration}), sets the default closure, and
+checks that the base solves every equation; \manref{cge_check} runs the
+validation checks of chapter~\ref{chap:checks}:
+\stlog{gs_calibrate}
+The model has 93 equations. The largest scaled residual at the base is at the
+precision of double arithmetic; doubling every fixed nominal value doubles
+every price and leaves every quantity unchanged; and the solver returns to the
+base from starting values perturbed by up to 10 per cent.
+
+\section{A tariff removal}
+
+\manref{cge_shock} sets every import tariff to zero, and \manref{cge_solve}
+solves the model and stores the solution as the simulation \cmd{notariff}:
+\stlog{gs_solve}
+\manref{cge_results} summarises it, as percentage changes from the base:
+\stlog{gs_results}
+The default closure has a flexible exchange rate with fixed foreign savings,
+fixed tax rates with flexible government savings, savings-driven investment,
+the CPI as numeraire, and both factors fully employed and mobile
+(chapter~\ref{chap:closures}). Under it, the exchange rate depreciates by 4.8
+per cent, and imports and exports both rise. Government savings, 3 in the
+base, fall by 271 per cent, to a deficit of about 5: the government loses its
+tariff revenue. Investment, which adjusts to available savings, falls by 11.9
+per cent. The household's equivalent variation is 2.67 per cent of its base
+consumption.
+
+\section{The same shock under another closure}
+
+The closure matters as much as the shock. With government savings fixed and
+direct tax rates adjusting to keep them, the tariff revenue is replaced by a
+higher direct tax:
+\stlog{gs_closure}
+\manref{cge_report} shows the two simulations side by side:
+\stlog{gs_report}
+Direct tax revenue now rises by 34.9 per cent, government savings are
+unchanged, investment rises by 2.7 per cent, and real consumption falls by 0.4
+per cent; the equivalent variation is $-0.42$ per cent of consumption. Under
+both closures real GDP changes little and the exchange rate depreciates by
+about 4.8 per cent. The two simulations differ in who bears the loss of tariff
+revenue: investment under the first closure, households under the second.
+
+\section{Next steps}
+
+\manref{cge_report} with \cmd{saving()} writes every table to Excel, and
+\manref{cge_save} stores the model with its simulations. A real application
+starts from a country's SAM, prepared with the SAM tools of
+chapter~\ref{chap:samtools}, and states the source of every elasticity, the
+closure and the sensitivity of the main results to the elasticities.
+Chapter~\ref{chap:example} takes an unbalanced SAM through every step.

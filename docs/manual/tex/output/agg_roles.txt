@@ -1,0 +1,24 @@
+. cge_sam, labels(account)
+SAM read: 17 accounts, total 1866
+Largest row-column imbalance:  0.00e+00
+
+. quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd npi) enterprises(ent) government(gov) savinv(sav)      ///
+>     row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+
+. cge_template using inst.csv, replace
+Template of 17 accounts, with roles from the current mapping
+Template saved to inst.csv
+
+. import delimited using inst.csv, clear stringcols(_all)
+(7 vars, 17 obs)
+
+. quietly replace group = "dom" if inlist(account, "hhd", "npi", "ent")
+
+. export delimited account role pair group using inst.csv, replace
+file inst.csv saved
+
+. cge_aggregate using inst.csv
+accounts hhd and ent of group dom have different roles
+
+r(459);

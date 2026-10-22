@@ -1,0 +1,27 @@
+. preserve
+
+. cge_samexport, clear
+SAM loaded as data: 14 observations
+
+. list account act_agr act_nag com_agr com_nag hh ent gov, noobs sep(0)
+
+  +-------------------------------------------------------------------+
+  | account   act_agr   act_nag   com_agr   com_nag    hh   ent   gov |
+  |-------------------------------------------------------------------|
+  | act_agr         0         0       100         0     0     0     0 |
+  | act_nag         0         0         0       290     0     0     0 |
+  | com_agr        10        25         0         0    70     0     0 |
+  | com_nag        13        80         0         0   160     0    45 |
+  |     lab        40        95         0         0     0     0     0 |
+  |     cap        37        90         0         0     0     0     0 |
+  |      hh         0         0         0         0     3    64    18 |
+  |     ent         0         0         0         0     3     2     5 |
+  |     gov         0         0         0         0     0     0     3 |
+  | tax_dir         0         0         0         0    18    12     0 |
+  | tax_sal         0         0         8        22     0     0     0 |
+  | tax_imp         0         0         2         6     0     0     0 |
+  |     sav         0         0         0         0     5    18    -2 |
+  |     row         0         0        20        80     4     8     2 |
+  +-------------------------------------------------------------------+
+
+. restore

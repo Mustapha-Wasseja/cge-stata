@@ -1,0 +1,179 @@
+\cgeentry{cge_parameters}{The calibrated parameters as a dataset}
+
+\cgesec{Description}
+
+\cmd{cge_parameters} replaces the data in memory with the parameters of the
+model, one observation per parameter element, with the string variables
+\cmd{parameter}, \cmd{element1} and \cmd{element2} and the numeric variable
+\cmd{value}. It gives the base (calibrated) parameters, the parameters of a
+stored simulation, or the current parameters, including shocks not yet solved.
+Use it to inspect, document or compare a calibration.
+
+\cgesec{Quick start}
+
+Load the calibrated parameters and list the import tariff rates
+\begin{stcode}
+cge_parameters, clear
+list if parameter == "tm"
+\end{stcode}
+Load the parameters of the simulation \cmd{notariff}, with its shocks
+\begin{stcode}
+cge_parameters, clear sim(notariff)
+\end{stcode}
+Load the current parameters, with the shocks set since the last solve
+\begin{stcode}
+cge_parameters, clear current
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_parameters}\texttt{,} \opt{}{clear} [\argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\opt{}{clear} & replace the data in memory; required\\
+\optarg{}{sim}{name} & parameters of a stored simulation\\
+\opt{cur}{rent} & current parameters, including shocks not yet solved\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{}{clear}] is required: the data in memory are replaced. The model
+itself, which is kept in Mata, is not changed.
+
+\item[\optarg{}{sim}{name}] gives the parameters of a stored simulation,
+including its shocks. By default the base (calibrated) parameters are given.
+
+\item[\opt{cur}{rent}] gives the current parameters, including the shocks set
+with \manref{cge_shock} since the last solve. \cmd{sim()} and \cmd{current}
+may not be combined.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+Each parameter is stored by element: a parameter of commodities has one
+observation per commodity, with the commodity in \cmd{element1}; a parameter of
+two sets, such as the intermediate input coefficients, has one observation per
+pair, with the second element in \cmd{element2}; a scalar parameter has one
+observation with both elements empty. Every element of the set is listed,
+including elements to which the parameter does not apply; these hold a value
+that the model does not use, such as an export tax rate of zero for a
+commodity without exports. The names of the parameters are those of the table
+below.
+
+\cgesubsec{Example 1: tax rates and shares}
+
+After the synthetic SAM is mapped and calibrated as in Example~1 of
+\manref{cge_calibrate}:
+\stlog{param_base}
+The import tariff rate of \cmd{com_agr} is the tariff over the value of
+imports, $2/20$. The sales tax rate is the tax over composite supply, which
+includes the tax: for \cmd{com_agr}, with domestic sales of 80, imports of 20
+at the price 1.1, which includes the tariff, and the tax of 8,
+$\cmd{tq} = 8/(80 + 1.1 \times 20 + 8) = 8/110$.
+A parameter of two sets lists every pair:
+\stlog{param_matrix}
+These are the shares $\delta^{va}_{fa}$ of the CES value-added functions;
+with \cmd{sigmava(0.8)}, they differ from the factors' shares of value added in
+the SAM (\secref{sec:cal-production}).
+
+\cgesubsec{Example 2: the parameters of a simulation}
+
+A simulation is stored with its parameters, shocks included:
+\stlog{param_sim}
+A shock set after the last solve is in the current parameters, not yet in any
+simulation:
+\stlog{param_current}
+
+\cgesubsec{The parameters}
+
+The parameters follow the notation of \secref{sec:parameters}. In the table,
+$C$, $A$, $F$ and $H$ are the commodities, activities, factors and households,
+$D$ the households and enterprises, $I$ the institutions that receive factor
+income ($D$, the government, the rest of the world and, when mapped, the
+health insurance fund) and $N$ the nests of value added.
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.17\linewidth}>{\raggedright\arraybackslash}p{0.10\linewidth}>{\raggedright\arraybackslash}p{0.67\linewidth}}
+\toprule
+\cmd{parameter} & Elements & Description\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Trade and taxes on commodities}}\\
+\cmd{pwm}, \cmd{pwe} & $C$ & world import and export prices\\
+\cmd{tm}, \cmd{te}, \cmd{tq} & $C$ & import tariff, export tax and sales tax rates\\
+\cmd{tv} & $C$ & VAT rate\\
+\cmd{at}, \cmd{dt}, \cmd{dtc}, \cmd{rt}, \cmd{st} & $C$ & CET: efficiency, share of exports, its complement, exponent, elasticity\\
+\cmd{aq}, \cmd{dq}, \cmd{dqc}, \cmd{rq}, \cmd{sq} & $C$ & Armington: efficiency, share of imports, its complement, exponent, elasticity\\
+\cmd{qer} & $C$ & base exports drawn from composite supply\\
+\cmd{etae}, \cmd{qe0} & $C$ & elasticity of export demand (0 for a fixed world price) and base exports\\
+\cmd{icm} & $C \times C$ & margin services per unit of composite supply\\
+\cmd{icd}, \cmd{ici}, \cmd{ice} & $C \times C$ & margin services per unit of domestic sales, imports and exports\\
+\multicolumn{3}{@{}l}{\textit{Final demand and price indices}}\\
+\cmd{qg}, \cmd{qinv}, \cmd{qshi} & $C$ & base government consumption, investment and purchases of the health insurance fund\\
+\cmd{cwts}, \cmd{dwts} & $C$ & weights of the consumer and producer price indices\\
+\cmd{beta}, \cmd{gamma} & $C \times H$ & marginal budget shares and subsistence quantities\\
+\cmd{betah}, \cmd{gammah} & $A \times H$ & the same, for home consumption\\
+\multicolumn{3}{@{}l}{\textit{Production}}\\
+\cmd{theta} & $A \times C$ & yields: output of each commodity per unit of marketed activity output\\
+\cmd{ta} & $A$ & activity tax rate\\
+\cmd{iva}, \cmd{inta} & $A$ & value added and intermediate input per unit of activity (Leontief top nest)\\
+\cmd{aa}, \cmd{dla}, \cmd{dlac}, \cmd{rha}, \cmd{sa} & $A$ & top nest: efficiency, share of value added, its complement, exponent, elasticity\\
+\cmd{ica} & $C \times A$ & intermediate input per unit of aggregate intermediate input\\
+\cmd{ad}, \cmd{rva}, \cmd{sva} & $A$ & value added: efficiency, exponent, elasticity\\
+\cmd{dva} & $F \times A$ & value added: shares of the factors\\
+\cmd{kappa} & $A$ & share of the VAT on inputs recovered as a credit\\
+\cmd{tf} & $F \times A$ & tax rate on factor use\\
+\cmd{tfy} & $F$ & tax rate on factor income\\
+\cmd{dvn}, \cmd{an} & $N \times A$ & nests: share in value added, efficiency (with nests only)\\
+\cmd{dce} & $C \times A$ & nests: shares of the commodities (with nests only)\\
+\cmd{sgn}, \cmd{rhn} & $N$ & nests: elasticity, exponent (with nests only)\\
+\cmd{sac}, \cmd{rac}, \cmd{aac} & $C$ & output from several activities: elasticity, exponent, efficiency (with \cmd{sigmaac()} only)\\
+\cmd{dac} & $A \times C$ & output from several activities: shares (with \cmd{sigmaac()} only)\\
+\multicolumn{3}{@{}l}{\textit{Institutions and transfers}}\\
+\cmd{shif} & $I \times F$ & shares of factor income, after contributions and taxes, received by each institution\\
+\cmd{tshi} & $F$ & contribution rate to the health insurance fund\\
+\cmd{tins0}, \cmd{mps0} & $D$ & base direct tax rate and savings rate\\
+\cmd{shii} & $D \times D$ & share of the income of the second institution, after taxes and savings, transferred to the first\\
+\cmd{shir} & $D$ & share of income after taxes and savings transferred abroad\\
+\cmd{hc} & $H$ & share of income after taxes and savings spent on consumption\\
+\cmd{trdg}, \cmd{trdr} & $D$ & transfers from the government (real terms) and from the rest of the world (foreign currency)\\
+\cmd{trfr} & $F$ & factor income from the rest of the world (foreign currency)\\
+\cmd{trgr}, \cmd{trrg}, \cmd{trgg} & scalar & transfers from the rest of the world to the government, from the government abroad, and within government\\
+\cmd{sshi}, \cmd{trshi}, \cmd{trshir} & scalar & health insurance fund: savings rate, transfers from the government and from the rest of the world\\
+\cmd{debt}, \cmd{ddebt}, \cmd{fdebt} & scalar & 1 if the model has public debt; debt at home and abroad\\
+\cmd{rd}, \cmd{rf}, \cmd{phi} & scalar & interest rates at home and abroad; share of new borrowing from abroad\\
+\cmd{hold} & $D$ & share of domestic interest received\\
+\multicolumn{3}{@{}l}{\textit{Factors, labour market and health}}\\
+\cmd{af} & $F$ & exogenous efficiency\\
+\cmd{etah}, \cmd{hs0} & $F$; scalar & elasticity of efficiency with respect to health services; base volume of health services\\
+\cmd{inlf}, \cmd{hasmin} & $F$ & 1 if the factor has a labour force; 1 if it has a minimum wage\\
+\cmd{qlf}, \cmd{u0} & $F$ & labour force; base unemployment rate (for factors with a labour force)\\
+\cmd{epsw}, \cmd{wref}, \cmd{wmin} & $F$ & wage-curve elasticity, reference real wage, real minimum wage\\
+\cmd{mu} & scalar & smoothing parameter of the minimum-wage condition\\
+\cmd{ins} & $F$ & 1 if the factor loses working time to illness\\
+\cmd{sick0}, \cmd{sick}, \cmd{epss} & $F$ & base share of working time lost, its current value, its elasticity\\
+\cmd{hlink} & scalar & 1 if health services enter the model through efficiency or health outcomes\\
+\cmd{hasmort}, \cmd{mort0}, \cmd{mort}, \cmd{epsm} & scalar & 1 if the model has a death rate; its base value, current value and elasticity\\
+\cmd{pop} & scalar & population index\\
+\bottomrule
+\end{cgetable}
+
+\cgesec{Stored results}
+
+\cmd{cge_parameters} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N)} & number of parameter elements\\
+\end{storedres}
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_calibrate}{Calibrate the model to the SAM}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_results}{Report simulation results}
+\seeentry{cge_report}{Standard report tables for one or more simulations}
+\seechapter{chap:calibration}{Calibration}
+\end{alsosee}

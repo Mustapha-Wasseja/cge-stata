@@ -1,0 +1,5 @@
+. return list
+
+scalars:
+       r(max_residual) =  3.55271367880e-16
+        r(N_equations) =  93

@@ -1,0 +1,244 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{cgestyle}[2026/10/22 cge-stata manual style]
+
+% ---------------------------------------------------------------------
+% Fonts: Palatino for text and mathematics, Helvetica for headings, Latin
+% Modern Typewriter for commands and output
+% ---------------------------------------------------------------------
+\RequirePackage[T1]{fontenc}
+\RequirePackage[utf8]{inputenc}
+\RequirePackage{lmodern}
+\RequirePackage{mathpazo}
+\RequirePackage[scaled=0.90]{helvet}
+\RequirePackage{textcomp}
+\RequirePackage{microtype}
+\RequirePackage{amsmath,amssymb}
+\RequirePackage{bm}
+
+% ---------------------------------------------------------------------
+% Page
+% ---------------------------------------------------------------------
+\RequirePackage[a4paper,top=24mm,bottom=24mm,left=26mm,right=26mm,
+  headheight=14pt,headsep=8mm,footskip=10mm]{geometry}
+\RequirePackage{xcolor}
+\definecolor{cgeblue}{RGB}{0,51,120}
+\definecolor{cgerule}{gray}{0.62}
+\definecolor{cgegrey}{gray}{0.35}
+\RequirePackage{array,booktabs,longtable,tabularx,multirow}
+\RequirePackage{fancyvrb}
+\RequirePackage{upquote}
+\RequirePackage{titlesec,titletoc}
+\RequirePackage{fancyhdr}
+\RequirePackage{etoolbox}
+\RequirePackage{xspace}
+\RequirePackage{calc}
+\RequirePackage{float}
+\RequirePackage[font=small,labelfont=bf]{caption}
+\RequirePackage[round,authoryear]{natbib}
+\RequirePackage{url}
+\RequirePackage[colorlinks=true,linkcolor=cgeblue,citecolor=cgeblue,
+  urlcolor=cgeblue,bookmarksnumbered=true,bookmarksopen=true,
+  bookmarksopenlevel=0,pdfstartview=FitH]{hyperref}
+\RequirePackage{bookmark}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt plus 1pt minus 1pt}
+\setlength{\emergencystretch}{2em}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\LTpre}{4pt}
+\setlength{\LTpost}{6pt}
+\raggedbottom
+\setcounter{tocdepth}{1}
+\setcounter{secnumdepth}{3}
+
+% ---------------------------------------------------------------------
+% Headings
+% ---------------------------------------------------------------------
+% Start a new page unless #1 of vertical space is left on this one, so that a
+% heading is not left at the foot of a page
+\makeatletter
+\newcommand{\cgeNeedspace}[1]{\par\penalty-100\begingroup
+  \setlength{\dimen@}{#1}\dimen@ii\pagegoal\advance\dimen@ii-\pagetotal
+  \ifdim\dimen@>\dimen@ii\ifdim\dimen@ii>\z@\vfil\fi\break\fi\endgroup}
+\makeatother
+\titleformat{\part}[display]
+  {\centering\sffamily\bfseries\color{cgeblue}}
+  {\Large\partname\ \thepart}{12pt}{\Huge}
+\titleformat{\chapter}[hang]
+  {\sffamily\bfseries\huge\color{cgeblue}}{\thechapter}{0.6em}{}
+\titlespacing*{\chapter}{0pt}{0pt}{18pt}
+\titleformat{\section}[hang]
+  {\cgeNeedspace{9\baselineskip}\sffamily\bfseries\Large\color{cgeblue}}{\thesection}{0.6em}{}
+\titlespacing*{\section}{0pt}{16pt plus 4pt minus 2pt}{6pt}
+\titleformat{\subsection}[hang]
+  {\cgeNeedspace{7\baselineskip}\sffamily\bfseries\large\color{cgeblue}}{\thesubsection}{0.6em}{}
+\titlespacing*{\subsection}{0pt}{12pt plus 3pt minus 2pt}{4pt}
+\titleformat{\subsubsection}[hang]
+  {\sffamily\bfseries\normalsize}{\thesubsubsection}{0.6em}{}
+\titlespacing*{\subsubsection}{0pt}{10pt plus 2pt minus 2pt}{3pt}
+
+\titlecontents{part}[0pt]{\addvspace{12pt}\sffamily\bfseries\large}
+  {\partname\ \thecontentslabel\quad}{}{\hfill\contentspage}[\addvspace{4pt}]
+\titlecontents{chapter}[2.4em]{\addvspace{3pt}\sffamily\bfseries}
+  {\contentslabel{2.4em}}{\hspace*{-2.4em}}{\hfill\contentspage}
+\titlecontents{section}[5.2em]{\small}
+  {\contentslabel{2.8em}}{}{\titlerule*[0.6pc]{.}\contentspage}
+
+% ---------------------------------------------------------------------
+% Running heads
+% ---------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily\leftmark}
+\fancyhead[R]{\small\sffamily\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\chaptermark}[1]{\markboth{\ifnum\value{chapter}>0 \thechapter\quad\fi #1}{}}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\sffamily\thepage}%
+  \renewcommand{\headrulewidth}{0pt}}
+
+% ---------------------------------------------------------------------
+% Names, options and stored results
+% ---------------------------------------------------------------------
+% A command, variable, file or result name, typed as it is entered; a line
+% may break after an underscore, but only when it cannot be avoided
+\ExplSyntaxOn
+\tl_new:N \l__cge_name_tl
+\cs_new_protected:Npn \cge_name:n #1
+  {
+    \tl_set:Nx \l__cge_name_tl { \tl_to_str:n {#1} }
+    \tl_replace_all:NVn \l__cge_name_tl \c_underscore_str
+      { \c_underscore_str \tex_penalty:D 5000 \scan_stop: }
+    \texttt { \frenchspacing \l__cge_name_tl }
+  }
+\NewDocumentCommand{\cmd}{m}{\cge_name:n {#1}}
+\ExplSyntaxOff
+% The bold command name of a syntax diagram
+\newcommand{\cmdb}[1]{\texttt{\bfseries\detokenize{#1}}}
+% An option with its minimum abbreviation underlined: \opt{tol}{erance}
+\newcommand{\opt}[2]{\texttt{\underline{#1}#2}}
+% An option with an argument: \optarg{tol}{erance}{\#}
+\newcommand{\optarg}[3]{\texttt{\underline{#1}#2(}\textit{#3}\texttt{)}}
+% An argument in a syntax diagram
+\newcommand{\argu}[1]{\textit{#1}}
+% A Stata result, such as r(converged)
+\newcommand{\res}[1]{\cmd{#1}}
+% A reference to an entry of Part III: \manref{cge_solve}
+\newcommand{\manref}[1]{\hyperref[ref:#1]{\textbf{[CGE]}~\cmd{#1}}}
+% The package name
+\newcommand{\pkg}{\textsf{cge-stata}\xspace}
+
+% A model variable or parameter in mathematics: \V{PQ}_c
+\newcommand{\V}[1]{\mathit{#1}}
+\newcommand{\SAM}{\mathit{SAM}}
+
+% ---------------------------------------------------------------------
+% Command entries (Part III)
+% ---------------------------------------------------------------------
+% \cgeentry{cge_solve}{Solve the model}
+\newcommand{\cgeentry}[2]{%
+  \clearpage
+  \phantomsection
+  \addcontentsline{toc}{chapter}{\texorpdfstring{\protect\cmd{#1}\ --- #2}{\detokenize{#1} - #2}}%
+  \markboth{\texttt{\detokenize{#1}}\ --- #2}{}%
+  \label{ref:#1}%
+  {\noindent\raggedright\hyphenpenalty=10000\exhyphenpenalty=10000
+   \sffamily\bfseries\LARGE\color{cgeblue}\texttt{\detokenize{#1}}\ \textmd{---}\ #2\par}%
+  \vspace{3pt}{\color{cgeblue}\noindent\rule{\textwidth}{0.8pt}}\par\vspace{4pt}%
+}
+% The headings within an entry: Description, Syntax, Options, ...
+\makeatletter
+\newcommand{\cgesec}[1]{%
+  \cgeNeedspace{7\baselineskip}%
+  \par\addvspace{12pt plus 3pt}%
+  \phantomsection
+  \bookmark[level=2,dest=\@currentHref]{#1}%
+  {\noindent\sffamily\bfseries\large\color{cgeblue}#1\par}%
+  \nobreak\addvspace{3pt}\@afterheading}
+% A heading within Remarks and examples
+\newcommand{\cgesubsec}[1]{%
+  \cgeNeedspace{6\baselineskip}%
+  \par\addvspace{8pt plus 2pt}%
+  {\noindent\sffamily\bfseries\normalsize #1\par}%
+  \nobreak\addvspace{2pt}\@afterheading}
+% Keep a block on one page when it is short: \cgeneed{6\baselineskip}
+\newcommand{\cgeneed}[1]{\cgeNeedspace{#1}}
+% Lists inside option descriptions keep the usual space after their labels
+\AtBeginEnvironment{itemize}{\setlength{\labelsep}{0.5em}}
+\AtBeginEnvironment{enumerate}{\setlength{\labelsep}{0.5em}}
+\makeatother
+
+% A syntax diagram: hanging indent, ragged right
+\newenvironment{stsyntax}
+  {\par\addvspace{3pt}\begin{list}{}{\setlength{\leftmargin}{4em}%
+    \setlength{\itemindent}{-2.5em}\setlength{\listparindent}{-2.5em}%
+    \setlength{\parsep}{4pt}\setlength{\topsep}{2pt}}\raggedright\item\relax}
+  {\end{list}}
+
+% The table of options of a syntax diagram
+\newenvironment{opttable}[1][\argu{options}]
+  {\par\small
+   \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.36\linewidth}%
+                       >{\raggedright\arraybackslash}p{0.61\linewidth}@{}}
+   \toprule #1 & Description\\ \midrule \endfirsthead
+   \toprule #1 & Description\\ \midrule \endhead
+   \bottomrule \endlastfoot}
+  {\end{longtable}\par}
+% A group of options: \optgroup{Model}
+\newcommand{\optgroup}[1]{\multicolumn{2}{@{}l}{\textit{#1}}\\[1pt]}
+
+% Stored results
+\newenvironment{storedres}
+  {\par\small
+   \begin{longtable}{@{\hspace{1.5em}}>{\raggedright\arraybackslash}p{0.30\linewidth}%
+                       >{\raggedright\arraybackslash}p{0.62\linewidth}@{}}}
+  {\end{longtable}\par}
+\newcommand{\resgroup}[1]{\multicolumn{2}{@{}l}{\textit{#1}}\\}
+
+% Option descriptions under Options: \begin{optdesc} \item[\opt{tol}{erance}] ...
+\newenvironment{optdesc}
+  {\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\labelwidth}{0pt}%
+    \setlength{\itemindent}{-2em}\setlength{\labelsep}{0pt}%
+    \setlength{\itemsep}{3pt}\setlength{\parsep}{3pt}\setlength{\topsep}{2pt}%
+    \renewcommand{\makelabel}[1]{##1\hspace{0.6em}}}}
+  {\end{list}}
+
+% Also see: one entry or chapter per line
+%   \begin{alsosee}
+%   \seeentry{cge_closure}{Set the closure}
+%   \seechapter{chap:solution}{The solution method}
+%   \end{alsosee}
+\newenvironment{alsosee}
+  {\par\begin{list}{}{\setlength{\leftmargin}{2em}\setlength{\itemindent}{-2em}%
+    \setlength{\itemsep}{1pt}\setlength{\parsep}{0pt}\setlength{\topsep}{2pt}}}
+  {\end{list}}
+\newcommand{\seeentry}[2]{\item\manref{#1}\ --- #2}
+\newcommand{\seechapter}[2]{\item\hyperref[#1]{\textbf{Chapter~\ref*{#1}}}\ --- #2}
+% A reference to a chapter or section of the manual: \chapref{chap:solution}
+\newcommand{\chapref}[1]{chapter~\ref{#1}}
+\newcommand{\Chapref}[1]{Chapter~\ref{#1}}
+\newcommand{\secref}[1]{section~\ref{#1}}
+\newcommand{\Secref}[1]{Section~\ref{#1}}
+
+% ---------------------------------------------------------------------
+% Commands and output
+% ---------------------------------------------------------------------
+% Commands as typed, with the Stata prompt ". "
+\DefineVerbatimEnvironment{stcode}{Verbatim}{fontsize=\footnotesize,
+  xleftmargin=1.2em,frame=leftline,framerule=0.6pt,rulecolor=\color{cgerule},
+  framesep=8pt}
+% Output produced by the do-files in examples/, written to output/ by
+% tools/build_manual.py: \stlog{tag}. Output up to 100 characters wide fits
+% at the default size; up to 110 characters with \stlog[\scriptsize]{tag}
+\newcommand{\stlog}[2][\footnotesize]{\VerbatimInput[fontsize=#1,xleftmargin=1.2em,
+  frame=leftline,framerule=0.6pt,rulecolor=\color{cgerule},framesep=8pt]{output/#2.txt}}
+% Lines of a GAMS program or a file
+\DefineVerbatimEnvironment{filecode}{Verbatim}{fontsize=\footnotesize,
+  xleftmargin=1.2em,frame=leftline,framerule=0.6pt,rulecolor=\color{cgerule},
+  framesep=8pt}
+
+% Tables in the text
+\newenvironment{cgetable}[1]
+  {\par\small\begin{longtable}{@{}#1@{}}}
+  {\end{longtable}\par}
+
+\endinput

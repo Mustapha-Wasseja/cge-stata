@@ -1,0 +1,17 @@
+. cge_shock qg, elements(com_ser) scale(1.1)
+Parameter qg changed for 1 element(s)
+
+. cge_shock qg, elements(com_ser) scale(1.1)
+Parameter qg changed for 1 element(s)
+
+. quietly cge_parameters, clear current
+
+. list parameter element1 value if parameter == "qg", noobs abbreviate(9)
+
+  +------------------------------+
+  | parameter   element1   value |
+  |------------------------------|
+  |        qg    com_agr       0 |
+  |        qg    com_man       5 |
+  |        qg    com_ser    48.4 |
+  +------------------------------+

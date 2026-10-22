@@ -1,0 +1,30 @@
+. cge_closure
+Closure
+  external account     flexexr
+  government           fixgsav:sales
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_report, sims(_all) tables(welfare)
+
+Welfare (per cent of base consumption)
+--------------------------------------------------------------
+                                           notariff   nt_sales
+equivalent_variation hhd                      2.668     -0.257
+compensating_variation hhd                    2.668     -0.257
+--------------------------------------------------------------
+Percentage changes from the base (rates: changes in points)
+
+. quietly cge_parameters, clear current
+
+. list parameter element1 value if parameter == "tm", noobs abbreviate(9)
+
+  +------------------------------+
+  | parameter   element1   value |
+  |------------------------------|
+  |        tm    com_agr       0 |
+  |        tm    com_man       0 |
+  |        tm    com_ser       0 |
+  +------------------------------+
