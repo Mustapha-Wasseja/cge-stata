@@ -53,7 +53,8 @@ Remove the user variables and equations
 \argu{name} has at most 24 characters, letters, digits and underscores, and
 may not be the name of another user equation; a variable defined by
 \manref{cge_variable} gives its name to its definition. \argu{i} is an index,
-the letter of a set possibly followed by digits.
+the letter of a set or the name of a user set (\manref{cge_set}), possibly
+followed by digits.
 
 \cgesec{Options}
 
@@ -84,6 +85,7 @@ numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
   & a model or user variable at an element, given by its label, such as
     \cmd{com_hlt}, or by the index of the equation or of a sum\\
 \argu{par}, \argu{par}\cmd{(}\argu{e}\cmd{)} & a parameter, at its current value\\
+\argu{upar}, \argu{upar}\cmd{(}\argu{e}[\cmd{,} \argu{e2}]\cmd{)} & a user parameter (\manref{cge_parameter}), at its current value\\
 \cmd{base(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}]\cmd{)} & the base value of a variable\\
 \cmd{sum(}\argu{i}\cmd{,} \argu{expression}\cmd{)} & the sum over the elements of the set of index \argu{i}\\
 \end{cgetable}
@@ -101,8 +103,9 @@ parameter takes its value in the simulation being solved, with any shock.
 
 The indexes are \cmd{a} activities, \cmd{c} commodities, \cmd{f} factors,
 \cmd{h} households, \cmd{d} households and enterprises, \cmd{i} institutions
-that receive factor income and \cmd{n} nests of value added, each possibly
-followed by digits, as in \cmd{c2}. An equation
+that receive factor income and \cmd{n} nests of value added, and the names of
+user sets (\manref{cge_set}), each possibly followed by digits, as in
+\cmd{c2}. An equation
 \argu{name}\cmd{(}\argu{i}\cmd{)} is written for every element of the set of
 \argu{i}; an index that is neither that of the equation nor that of an
 enclosing sum is an error. Sums may contain sums.

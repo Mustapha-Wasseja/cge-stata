@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.7.1  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -35,8 +35,10 @@ transfer.
 {pstd}
 An instrument is one element of a parameter that {helpb cge_shock} changes,
 written as {it:parameter}{cmd:(}{it:element}{cmd:)}, such as {cmd:tm(com_man)}
-or {cmd:qg(com_hlt)}, a scalar parameter such as {cmd:trgr}, or one element of
-a variable that the closure fixes, such as {cmd:GADJ} or {cmd:QFS(lab)}. The
+or {cmd:qg(com_hlt)}, a scalar parameter such as {cmd:trgr}, one element of a
+user parameter ({helpb cge_parameter}, from version 0.7.1), such as {cmd:w(com_agr)}
+or {cmd:sh(com_hlt,hhd)}, or one element of a variable that the closure fixes,
+such as {cmd:GADJ} or {cmd:QFS(lab)}. The
 optimisation starts from the instruments' current values, with any shocks
 already applied, under the current closure.
 

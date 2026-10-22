@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.7.0 implements the standard single-country model described in
+Version 0.7.1 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,12 +84,20 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.7.1 adds user sets and parameters (`cge_set`, `cge_parameter`): a
+set of elements, such as the goods or the health commodities, serves as the
+index of user variables, equations and sums, and a parameter with values of
+the user's own, by element, from options or from the data in memory, enters
+user equations, is changed by `cge_shock`, may be an instrument of
+`cge_optimize`, and is written into the GAMS program. A user equation that
+does not hold at the base no longer stops the model from being calibrated
+again.
 Version 0.7.0 solves faster: the Jacobian is exact, from the derivatives of
 every equation of the model and forward differentiation of user equations,
 and Newton's method continues after each step with Broyden's updates of the
 inverse Jacobian. On a synthetic SAM with 40,190 equations (4,254 in the
-reduced system), a tariff removal takes 27 seconds in Stata 13.1/IC instead
-of 96, and 29 in StataNow/MP 19.5 instead of 72. `cge_solve` also notes
+reduced system), a tariff removal takes 27 to 32 seconds in Stata 13.1/IC
+instead of 96, and 27 to 29 in StataNow/MP 19.5 instead of 72. `cge_solve` also notes
 solutions whose quantities, prices or incomes collapse to zero or turn
 negative, which satisfy the equations but rarely make economic sense.
 Version 0.6.4 corrects the help files against the commands and fixes the

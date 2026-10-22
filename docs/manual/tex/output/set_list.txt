@@ -1,0 +1,3 @@
+. cge_set, list
+set goods (2): com_agr com_man
+set services (2): com_ser com_hlt

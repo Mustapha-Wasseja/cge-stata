@@ -1,0 +1,168 @@
+\cgeentry{cge_parameter}{User parameters for user variables and equations}
+
+\cgesec{Description}
+
+\cmd{cge_parameter} adds a parameter whose values the user gives, with no
+index, one or two, over model sets or user sets (\manref{cge_set}). User
+variables (\manref{cge_variable}) and equations (\manref{cge_equation}) refer
+to it by name. The values given are its base values; \manref{cge_shock}
+changes them in a scenario, \manref{cge_optimize} may take one of its elements
+as an instrument, continuation and dynamic runs carry it like the model's own
+parameters, and \manref{cge_gams} writes it into the GAMS program.
+
+Do not confuse \cmd{cge_parameter}, which defines a user parameter, with
+\manref{cge_parameters}, which lists every parameter of the model, user
+parameters included, as a dataset.
+
+\cgesec{Quick start}
+
+A scalar target, 1.1
+\begin{stcode}
+cge_parameter hgoal = 1.1
+\end{stcode}
+Weights by commodity, the elements not given 0
+\begin{stcode}
+cge_parameter w(c), values(com_agr:0.4 com_man:0.3 com_ser:0.2 com_hlt:0.1)
+\end{stcode}
+Shares by commodity and household, from the data in memory
+\begin{stcode}
+cge_parameter sh(c,h), from(share) labels(commodity household)
+\end{stcode}
+A scenario with a higher target
+\begin{stcode}
+cge_shock hgoal, value(1.2)
+\end{stcode}
+
+\cgesec{Syntax}
+
+A parameter with one value for all its elements
+\begin{stsyntax}
+\cmdb{cge_parameter} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}] \cmd{=} \argu{\#}
+\end{stsyntax}
+Values by element
+\begin{stsyntax}
+\cmdb{cge_parameter} \argu{name}\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}\texttt{,}
+\optarg{val}{ues}{spec} [\optarg{def}{ault}{\#}]
+\end{stsyntax}
+Values from the data in memory
+\begin{stsyntax}
+\cmdb{cge_parameter} \argu{name}\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}\texttt{,}
+\optarg{}{from}{varname} \optarg{lab}{els}{varlist} [\optarg{def}{ault}{\#}]
+\end{stsyntax}
+Display or remove the user parameters
+\begin{stsyntax}
+\cmdb{cge_parameter} \texttt{,} \opt{}{list}\\
+\cmdb{cge_parameter} \texttt{,} \opt{}{clear}
+\end{stsyntax}
+\argu{i} and \argu{j} are indexes of model sets (\cmd{a c f h d i n}) or of
+user sets. \argu{name} follows the rules of \manref{cge_set}.
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{val}{ues}{spec} & values by element, \argu{element}\cmd{:}\argu{\#} or \argu{e1}\cmd{.}\argu{e2}\cmd{:}\argu{\#}\\
+\optarg{}{from}{varname} & a variable of the data in memory with the values\\
+\optarg{lab}{els}{varlist} & the string variables with the element labels, one for each index\\
+\optarg{def}{ault}{\#} & value of the elements not given; default \texttt{0}\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{val}{ues}{spec}] gives values by element, as
+\argu{element}\cmd{:}\argu{\#} pairs separated by spaces, for example
+\cmd{values(com_agr:0.3 com_man:0.5)}; for a parameter with two indexes,
+\argu{e1}\cmd{.}\argu{e2}\cmd{:}\argu{\#}.
+
+\item[\optarg{}{from}{varname}] takes the values from the numeric variable
+\argu{varname} of the data in memory, one observation per element.
+Observations with a missing value or an empty label are skipped.
+
+\item[\optarg{lab}{els}{varlist}] names the string variables that hold the
+labels of the elements, one for each index, with \opt{}{from()}.
+
+\item[\optarg{def}{ault}{\#}] gives the value of the elements that
+\opt{val}{ues()} or \opt{}{from()} leaves out; the default is 0.
+
+\item[\opt{}{list}] displays the user parameters, with the range of their
+current and base values.
+
+\item[\opt{}{clear}] removes every user parameter. A parameter that a user
+variable or equation uses cannot be removed until they are.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The SAM with a health sector is mapped and calibrated:
+\stlog{par_setup}
+
+\cgesubsec{Example 1: a target set by a parameter}
+
+A target for government purchases of health services, 1.1 times the base,
+which a user equation enforces with the scaling factor of government
+consumption adjusting:
+\stlog{par_scalar}
+The base does not satisfy the equation, which therefore acts as a shock.
+
+\cgesubsec{Example 2: a shock to a parameter}
+
+\manref{cge_shock} changes a user parameter like a parameter of the model:
+\stlog{par_shock}
+The scaling factor of government consumption raises every government purchase
+in proportion, so real government consumption is 10 and then 20 per cent above
+the base; investment falls by about as much.
+
+\cgesubsec{Example 3: values by element}
+
+Weights by commodity, for a price index of the user's own:
+\stlog{par_values}
+From the data in memory, with the labels in a string variable; the elements
+without an observation take \opt{def}{ault()}, 0:
+\stlog{par_from}
+With two indexes, here commodity and household:
+\stlog{par_two}
+
+\cgesubsec{Example 4: the parameters as data}
+
+\manref{cge_parameters} lists user parameters after those of the model:
+\stlog{par_data}
+
+\cgesubsec{Example 5: a parameter as an instrument}
+
+The health purchase target that leaves government savings at 1.5, against 1
+in the base:
+\stlog{par_opt}
+
+\cgesec{Stored results}
+
+\cmd{cge_parameter} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_elements)} & number of values of the parameter defined\\
+\res{r(N_parameters)} & number of user parameters (\opt{}{list})\\
+\resgroup{Macros}
+\res{r(name)} & name of the parameter defined\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+The values of all user parameters are held, row by row, in one vector of the
+model's parameters, so every simulation stores them with its other
+parameters, \cmd{cge_shock, reset} returns them to their base values, and
+continuation in $n$ steps moves them as $\theta_k = \theta^0 + (k/n)(\theta^1
+- \theta^0)$ like the others. In an expression, a reference to a parameter
+element compiles to its position in that vector; its derivative is zero. When
+the model is calibrated again, the parameters keep their base values. In the
+GAMS program, \cmd{cge_user.inc} declares each parameter as
+\cmd{UP_}\argu{name}, with its base values, and the scenario file changes it
+by the ratio of its value to the base, as for the model's parameters.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_set}{User sets of elements, for indexes and sums}
+\seeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+\seeentry{cge_equation}{User equations: new relations among the model's variables}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_parameters}{The calibrated parameters as a dataset}
+\seechapter{chap:user}{User variables and equations}
+\end{alsosee}

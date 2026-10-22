@@ -1,7 +1,9 @@
 \chapter{User variables and equations}\label{chap:user}
 
 \manref{cge_variable} and \manref{cge_equation} add variables and equations to
-the calibrated model, written in a small language.
+the calibrated model, written in a small language; \manref{cge_set} and
+\manref{cge_parameter} add the sets and parameters they may use (from
+version 0.7.1).
 
 \section{The language}
 
@@ -11,14 +13,35 @@ An expression is made of
 \cmd{exp()}, \cmd{ln()} (or \cmd{log()}) and \cmd{sqrt()};
 \item model and user variables, \cmd{VAR}, \cmd{VAR(e)} or \cmd{VAR(e1, e2)},
 at an element or at the index of the equation or of a sum;
-\item parameters that \manref{cge_shock} changes, \cmd{par(e)}, at their current
+\item parameters that \manref{cge_shock} changes, \cmd{par(e)}, and user
+parameters, \cmd{upar}, \cmd{upar(e)} or \cmd{upar(e1, e2)}, at their current
 values;
 \item \cmd{base(VAR(e))}, the base value of a variable;
 \item \cmd{sum(i, expression)}, a sum over the set of index \cmd{i}: \cmd{a}
 activities, \cmd{c} commodities, \cmd{f} factors, \cmd{h} households, \cmd{d}
 households and enterprises, \cmd{i} institutions that receive factor income,
-\cmd{n} nests; digits may follow, as in \cmd{c2}.
+\cmd{n} nests, or a user set, by its name; digits may follow, as in \cmd{c2}
+or \cmd{goods2}.
 \end{itemize}
+
+\section{User sets and parameters}
+
+A user set (\manref{cge_set}) is an ordered list of element labels, such as
+\cmd{cge_set goods = c, except(com_ser com_hlt)}. Its name is an index like
+the letter of a model set: \cmd{cge_variable PREL(services) = PQ(services) /
+CPI} adds a variable for each element of \cmd{services}, and
+\cmd{sum(goods, PQ(goods) * QG(goods))} sums over the elements of
+\cmd{goods}. A user set adds no variables or equations of its own.
+
+A user parameter (\manref{cge_parameter}) has no index, one or two, over
+model sets or user sets, and values that the user gives: one value for all
+elements, values by element, or a variable of the data in memory. Its values
+are part of the model's parameters: every simulation stores them, and
+\manref{cge_shock} changes them, as in \cmd{cge_shock hgoal, value(1.2)}, so
+scenarios can be written in terms of the user's own parameters. A
+parameter's element may also be an instrument of \manref{cge_optimize}.
+User sets and parameters are saved with the model, and kept when it is
+calibrated again, the parameters at their base values.
 
 \section{Variables and equations}
 
@@ -44,8 +67,8 @@ another closure rule that the standard closures do not offer.
 
 Each equation is written out for every element of its set, and each sum over
 the elements of its set, then compiled to postfix order: numbers, variables
-(positions in the stacked vector of variables), parameters, operators and
-functions. Stata evaluates the postfix rows at every point. From version
+(positions in the stacked vector of variables), parameters, user parameters
+(positions in the vector of their values), operators and functions. Stata evaluates the postfix rows at every point. From version
 0.7.0 their derivatives are exact, by forward differentiation of the postfix
 rows (section~\ref{sec:jacobian}): each value on the stack carries its
 derivatives with respect to the variables that the element uses. Before, they
@@ -53,8 +76,9 @@ were found by grouped differences. The equations form a block \cmd{U} of the
 system. They are saved with the model
 and compiled again when it is calibrated again.
 
-\textbf{GAMS.} \manref{cge_gams} writes the user variables (\cmd{U_NAME}, with
-their base levels) and one scalar equation per element (\cmd{UE1},
+\textbf{GAMS.} \manref{cge_gams} writes the user parameters (\cmd{UP_NAME},
+with their base values, which the scenario file changes), the user variables
+(\cmd{U_NAME}, with their base levels) and one scalar equation per element (\cmd{UE1},
 \cmd{UE2}, \dots) to the file \cmd{cge_user.inc}, which the GAMS model includes
 before its model statement, and the results of the user variables to
 \cmd{cge_user_write.inc}. GAMS then differentiates the same equations itself.

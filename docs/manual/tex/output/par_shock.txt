@@ -1,0 +1,31 @@
+. cge_shock hgoal, value(1.2)
+User parameter hgoal changed for 1 element(s)
+
+. cge_solve, name(goal12)
+Simulation goal12 solved in 7 iteration(s) (newton)
+Largest scaled residual  1.62e-12; WALRAS =  4.06e-11
+
+. cge_report, sims(goal goal12) tables(macro)
+
+Macroeconomic aggregates
+------------------------------------------------------------
+                                  base       goal     goal12
+gdp_nominal                        300     -0.078     -0.155
+gdp_real                           300     -0.087     -0.174
+gdp_deflator                         1      0.009      0.019
+consumption_real                   222      0.005      0.010
+government_real                     45     10.000     20.000
+investment_real                     50     -9.550    -19.106
+insurance_fund_real                  8      0.051      0.103
+exports_real                        75     -1.210     -2.419
+imports_real                       100     -0.907     -1.814
+value_added_real                   262     -0.000     -0.001
+cpi                                  1      0.000      0.000
+dpi                                  1      0.027      0.054
+exchange_rate                        1     -0.077     -0.155
+real_exchange_rate                   1     -0.103     -0.208
+private_savings                     34      0.005      0.010
+investment_value                    50     -9.563    -19.129
+foreign_savings                     14      0.000      0.000
+------------------------------------------------------------
+Percentage changes from the base (rates: changes in points)

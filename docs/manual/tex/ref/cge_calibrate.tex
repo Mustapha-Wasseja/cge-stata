@@ -331,14 +331,18 @@ composite supply equals the demand for each commodity, and stops with error
 savings, flexible government savings, savings-driven investment, the consumer
 price index as numeraire, and mobile, fully employed factors
 (\manref{cge_closure});
-\item checks benchmark replication: every equation must hold at the base, with
-a largest scaled residual of at most $10^{-9}$, or the command stops with
-error 9.
+\item checks benchmark replication: every equation of the model must hold at
+the base, with a largest scaled residual of at most $10^{-9}$, or the command
+stops with error 9. User equations need not hold at the base, where they act
+as shocks; from version 0.7.1 replication leaves them out, and a note says
+when they do not hold.
 \end{enumerate}
 Calibrating again replaces the calibration: stored simulations, shocks,
 constraints and closure swaps are discarded and the default closure is set.
 User variables and equations (\manref{cge_variable}, \manref{cge_equation}) are
-kept and compiled again from the new base.
+kept and compiled again from the new base, and user sets and parameters
+(\manref{cge_set}, \manref{cge_parameter}) are kept, the parameters at their
+base values.
 
 Each elasticity option takes one value for every activity or commodity, or one
 value per activity (\cmd{sigmava()}, \cmd{sigmaa()}) or commodity

@@ -41,8 +41,10 @@ Remove every shock
 \cmdb{cge_shock}\texttt{,} \opt{}{reset}
 \end{stsyntax}
 \argu{name} is a parameter, in lower case, from the table under
-\emph{Remarks and examples}, or a model variable, in upper case, that the
-current closure fixes.
+\emph{Remarks and examples}, a user parameter (\manref{cge_parameter}), or a
+model variable, in upper case, that the current closure fixes. The elements
+of a user parameter are those of its first index, each with every element of
+the second, or pairs \argu{e1}\cmd{.}\argu{e2}.
 
 \begin{opttable}
 \optgroup{Main}

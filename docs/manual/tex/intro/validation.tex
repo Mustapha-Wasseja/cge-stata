@@ -44,15 +44,17 @@ Activities & Accounts & Equations & Solved (reduced) & Stata 13.1/IC (s) & Stata
 \end{cgetable}
 
 The GAMS time is the whole run: GAMS calibrates the model from the SAM, solves
-the base and then the scenario. Times vary from run to run with other work on
-the machine, by as much as 40 per cent; they show orders of magnitude.
+the base and then the scenario (version 0.6.3; with version 0.7.0 the GAMS
+solutions agree with Stata's to $3 \times 10^{-9}$ or better). Times vary from
+run to run with other work on the machine, by as much as a factor of two;
+they show orders of magnitude.
 
 Until version 0.7.0 most of Stata's time went into evaluating the model's
 equations to build the Jacobian by finite differences, about four fifths of
 the solve of the 200-activity model. The exact Jacobian and Broyden's updates
-of version 0.7.0 cut the solve of the 250-activity model from 96 to 27
-seconds in Stata 13.1/IC and from 72 to 29 in StataNow/MP 19.5 (the GAMS times
-are those of version 0.6.3, for the same models). The dense LU factorisation
+of version 0.7.0 cut the solve of the 250-activity model from 96 seconds to
+27--32 in Stata 13.1/IC, and from 72 to 27--29 in StataNow/MP 19.5 (the GAMS
+times are those of version 0.6.3, for the same models). The dense LU factorisation
 of the Jacobian is now most of a large solve: in Stata 13.1/IC, 11.4 of the
 seconds for the 250-activity model, against 3.6 for building four exact
 Jacobians. GAMS uses a sparse solver, and its time barely grows over this

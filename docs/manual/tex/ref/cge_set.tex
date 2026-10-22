@@ -1,0 +1,121 @@
+\cgeentry{cge_set}{User sets of elements, for indexes and sums}
+
+\cgesec{Description}
+
+\cmd{cge_set} defines a set of elements of the calibrated model, such as the
+goods that are traded, the health commodities or the rural households. Its
+name then serves as an index wherever the letter of a model set does: in the
+definitions of user variables (\manref{cge_variable}), in user equations
+(\manref{cge_equation}), in sums, and in the indexes of user parameters
+(\manref{cge_parameter}).
+
+\cgesec{Quick start}
+
+The commodities other than services and health
+\begin{stcode}
+cge_set goods = c, except(com_ser com_hlt)
+\end{stcode}
+Government spending on them, as a user variable
+\begin{stcode}
+cge_variable GGOODS = sum(goods, PQ(goods) * QG(goods)), nominal
+\end{stcode}
+Display the user sets
+\begin{stcode}
+cge_set, list
+\end{stcode}
+
+\cgesec{Syntax}
+
+Define a set
+\begin{stsyntax}
+\cmdb{cge_set} \argu{name} \cmd{=} \argu{elements} [\texttt{,} \optarg{}{except}{elements}]
+\end{stsyntax}
+Display or remove the user sets
+\begin{stsyntax}
+\cmdb{cge_set} \texttt{,} \opt{}{list}\\
+\cmdb{cge_set} \texttt{,} \opt{}{clear}
+\end{stsyntax}
+\argu{elements} are labels of elements of the model (accounts, such as
+\cmd{com_hlt}, or nests), letters of model sets (\cmd{a} activities, \cmd{c}
+commodities, \cmd{f} factors, \cmd{h} households, \cmd{d} households and
+enterprises, \cmd{i} institutions receiving factor income, \cmd{n} nests of
+value added), and names of user sets, separated by spaces. \argu{name} has at
+most 24 characters, letters, digits and underscores; it may not be the name
+of a variable, a parameter, an element, a user equation or another user set,
+nor an index letter of a model set.
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{except}{elements} & elements left out\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{except}{elements}] leaves out the elements listed, given as
+for the set.
+
+\item[\opt{}{list}] displays the user sets and their elements.
+
+\item[\opt{}{clear}] removes every user set. A set that a user variable,
+equation or parameter uses cannot be removed until they are.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The SAM with a health sector is mapped and calibrated:
+\stlog{set_setup}
+
+\cgesubsec{Example 1: sets of commodities}
+
+The elements of a set are written out in the order given, each once, without
+those in \opt{}{except()}; a model set letter stands for all its elements:
+\stlog{set_define}
+
+\cgesubsec{Example 2: sums and variables over a set}
+
+A user set's name is an index, in sums and in the definitions of variables
+and equations. Government purchases of goods at market prices, and the prices
+of services relative to the consumer price index, after a tariff removal:
+\stlog{set_use}
+A second index over the same set adds digits to its name, as in
+\cmd{sum(goods, sum(goods2, \dots))}.
+
+\cgesubsec{Example 3: listing the sets}
+
+\stlog{set_list}
+User sets are saved with the model (\manref{cge_save}) and kept when it is
+calibrated again.
+
+An index that is neither a model set letter nor a user set is an error:
+\stlog{set_err}
+
+\cgesec{Stored results}
+
+\cmd{cge_set} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_elements)} & number of elements of the set defined\\
+\res{r(N_sets)} & number of user sets (\opt{}{list})\\
+\resgroup{Macros}
+\res{r(name)} & name of the set defined\\
+\res{r(elements)} & its elements\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+A user set is an ordered list of labels. An expression is written out for
+each element of the set of its index, and each sum over the elements of its
+set (\chapref{chap:user}), so a user set changes only which elements are
+written out; it adds no variables or equations of its own. In the GAMS
+program the equations are written out element by element, so user sets need
+no declaration there.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_parameter}{User parameters for user variables and equations}
+\seeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+\seeentry{cge_equation}{User equations: new relations among the model's variables}
+\seechapter{chap:user}{User variables and equations}
+\end{alsosee}

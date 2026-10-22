@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.7.1  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -22,7 +22,9 @@
 {cmd:cge_variable} (from version 0.6.1) adds a variable to the calibrated
 model: with an expression, the variable and the equation that defines it;
 with {opt value()}, a free variable that user equations determine. See
-{helpb cge_equation} for the expressions, the options and examples.
+{helpb cge_equation} for the expressions, the options and examples. The
+index may be that of a user set ({helpb cge_set}), and expressions may use
+user parameters ({helpb cge_parameter}).
 
 {pstd}
 A variable added with {opt value()} needs an equation added with

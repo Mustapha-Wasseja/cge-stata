@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.7.1  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -99,6 +99,11 @@ at least 0 and below 1. Doubling {cmd:sick} doubles the share of working time
 lost at base health services per head. A higher death rate changes no
 result within a period; in a dynamic run it slows population and labour
 growth from the next period.
+
+{pstd}
+or a user parameter defined by {helpb cge_parameter} (from version 0.7.1),
+whose elements are those of its first index, every element of the second
+with them, or pairs {it:e1}{cmd:.}{it:e2};
 
 {pstd}
 or a model variable that is fixed under the current closure, such as {cmd:QFS}

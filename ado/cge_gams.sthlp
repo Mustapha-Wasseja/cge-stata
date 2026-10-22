@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.7.1  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -50,7 +50,7 @@ Files written:
 {p2col:{cmd:cge_shock_par.inc}}parameter changes and the closure{p_end}
 {p2col:{cmd:cge_shock_var.inc}}changes to fixed variables{p_end}
 {p2col:{cmd:cge_constraints.inc}}constraints, as complementarity pairs (from version 0.4.4){p_end}
-{p2col:{cmd:cge_user.inc}, {cmd:cge_user_write.inc}}user variables and equations, and their results (from version 0.6.1){p_end}
+{p2col:{cmd:cge_user.inc}, {cmd:cge_user_write.inc}}user parameters (as {cmd:UP_}{it:name}, from version 0.7.1), variables and equations, and their results (from version 0.6.1){p_end}
 {p2colreset}{...}
 
 {pstd}

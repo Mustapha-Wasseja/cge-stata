@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user
+    nests nestvat outces user usersets
 local ncase : word count `cases'
 
 tempname post
@@ -283,6 +283,26 @@ foreach case of local cases {
         cge_equation lam: QINV(com_man) = LAM * base(QINV(com_man)) * exp(0 * ln(CPI))
         quietly cge_closure, swap(RGSAV TINSADJ GEXP GADJ)
         cge_shock pwm, scale(1.1)
+        cge_shock tm, value(0)
+    }
+    * User sets and parameters (version 0.7.1): a target for government
+    * health purchases set by a user parameter, shocked, and a price index
+    * with weights of the user's own over a user set
+    else if "`case'" == "usersets" {
+        quietly cge_synthetic, clear health
+        quietly cge_sam, labels(account)
+        quietly cge_map, `hltmap'
+        quietly cge_calibrate, `sigmas'
+        cge_set goods = c, except(com_ser com_hlt)
+        cge_parameter hgoal = 1.1
+        cge_parameter wg(goods), values(com_agr:2) default(1)
+        cge_parameter sh(c,h), values(com_hlt.hhd:0.5) default(0.1)
+        cge_variable PIDX = sum(goods, wg(goods) * PQ(goods)) + sh(com_hlt, hhd) * PQ(com_hlt)
+        cge_variable LAM, value(1)
+        cge_equation lam: QG(com_hlt) = LAM * hgoal * base(QG(com_hlt))
+        quietly cge_closure, swap(LAM GADJ)
+        cge_shock hgoal, value(1.2)
+        cge_shock wg, elements(com_man) scale(2)
         cge_shock tm, value(0)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers

@@ -51,6 +51,10 @@ f ado/cge_variable.ado
 f ado/cge_variable.sthlp
 f ado/cge_equation.ado
 f ado/cge_equation.sthlp
+f ado/cge_set.ado
+f ado/cge_set.sthlp
+f ado/cge_parameter.ado
+f ado/cge_parameter.sthlp
 f ado/cge_solve.ado
 f ado/cge_solve.sthlp
 f ado/cge_optimize.ado

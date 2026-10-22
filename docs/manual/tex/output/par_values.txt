@@ -1,0 +1,6 @@
+. cge_parameter w(c), values(com_agr:0.4 com_man:0.3 com_ser:0.2 com_hlt:0.1)
+User parameter w(c): 4 value(s), from .1 to .4
+
+. cge_variable PIDX = sum(c, w(c) * PQ(c))
+User variable PIDX: 1 element(s), base value 1
+and its definition, equation PIDX

@@ -1,6 +1,6 @@
 . cge
 
-cge-stata 0.7.0
+cge-stata 0.7.1
 Computable general equilibrium modelling in Stata
 
 Preparing a SAM

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.1.15  16oct2026}{...}
+{* *! version 0.7.1  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 23 25 2}{...}
@@ -23,7 +23,9 @@ of the Reference Manual ({it:Notation and the social accounting matrix}), as the
 example {cmd:ica} (intermediate input coefficients), {cmd:dva} and {cmd:ad}
 (value-added shares and efficiency), {cmd:beta} and {cmd:gamma} (household
 demand), {cmd:shif} (factor income shares) and {cmd:tm}, {cmd:te}, {cmd:tq},
-{cmd:ta} (tax rates). Use it to inspect or document a calibration.
+{cmd:ta} (tax rates). User parameters ({helpb cge_parameter}, from version
+0.7.1) follow, under their own names. Use it to inspect or document a
+calibration.
 
 
 {title:Options}

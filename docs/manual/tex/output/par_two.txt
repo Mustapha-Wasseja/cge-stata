@@ -1,0 +1,8 @@
+. cge_parameter sh(c,h), values(com_hlt.hhd:0.5) default(0.1)
+User parameter sh(c,h): 4 value(s), from .1 to .5
+
+. cge_parameter, list
+parameter hgoal: 1 value(s), current from 1.2 to 1.2 (base from 1.1 to 1.1)
+parameter w(c): 4 value(s), current from .1 to .4 (base from .1 to .4)
+parameter sw(c): 4 value(s), current from 0 to .6 (base from 0 to .6)
+parameter sh(c,h): 4 value(s), current from .1 to .5 (base from .1 to .5)

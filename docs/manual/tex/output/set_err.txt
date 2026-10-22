@@ -1,0 +1,4 @@
+. cge_variable X = sum(goodz, PQ(goodz))
+index goodz is neither a model set (a, c, f, h, d, i, n) nor a user set
+
+r(198);

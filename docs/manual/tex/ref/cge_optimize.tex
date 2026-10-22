@@ -76,7 +76,9 @@ spaces. An instrument is
 \argu{parameter}\cmd{(}\argu{element}\cmd{)}, such as \cmd{tm(com_man)} or
 \cmd{qg(com_hlt)}; the element may be left out when the parameter has only
 one;
-\item a scalar parameter, such as \cmd{trgr}; or
+\item a scalar parameter, such as \cmd{trgr};
+\item one element of a user parameter (\manref{cge_parameter}), such as
+\cmd{w(com_agr)} or \cmd{sh(com_hlt,hhd)}, or a scalar one; or
 \item one element of a variable that the closure fixes, such as \cmd{GADJ},
 \cmd{TINSADJ} or \cmd{QFS(lab)}. A variable that the closure does not fix is
 an error; it can be fixed by a swap (\manref{cge_closure}, \cmd{swap()}).

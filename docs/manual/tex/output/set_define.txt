@@ -1,0 +1,14 @@
+. cge_set goods = c, except(com_ser com_hlt)
+User set goods: 2 element(s): com_agr com_man
+
+. cge_set services = com_ser com_hlt
+User set services: 2 element(s): com_ser com_hlt
+
+. return list
+
+scalars:
+         r(N_elements) =  2
+
+macros:
+           r(elements) : "com_ser com_hlt"
+               r(name) : "services"

@@ -202,3 +202,179 @@ assert _rc == 459
 capture noisily cge_shock UI, elements(nosuch) value(2)
 assert _rc == 111
 cge_equation, clear
+
+* ---------------------------------------------------------------------
+* 5. User sets and parameters (version 0.7.1)
+* ---------------------------------------------------------------------
+* The largest relative difference between two simulations, leaving out the
+* variables named after them
+capture program drop _usdiff
+program define _usdiff, rclass
+    gettoken a 0 : 0
+    gettoken b skip : 0
+    tempfile ta
+    quietly cge_results, sim(`a') clear nodisplay
+    quietly rename value va
+    quietly save `ta'
+    quietly cge_results, sim(`b') clear nodisplay
+    quietly merge 1:1 variable element1 element2 using `ta', keepusing(va)
+    quietly generate double d = abs(va - value) / max(1, abs(value))
+    foreach s of local skip {
+        quietly replace d = 0 if variable == "`s'"
+    }
+    quietly summarize d
+    return scalar maxdiff = r(max)
+end
+local hltmap activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)                            ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)
+quietly cge_synthetic, clear health
+quietly cge_sam, labels(account)
+quietly cge_map, `hltmap'
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_set goods = c, except(com_ser com_hlt)
+assert r(N_elements) == 2 & "`r(elements)'" == "com_agr com_man"
+cge_set gh = goods com_hlt com_agr
+assert r(N_elements) == 3 & "`r(elements)'" == "com_agr com_man com_hlt"
+* sums over a user set equal the sums written out; a variable over a user set
+cge_variable GG1 = sum(goods, PQ(goods) * QG(goods)), nominal
+cge_variable GG2 = PQ(com_agr) * QG(com_agr) + PQ(com_man) * QG(com_man), nominal
+cge_variable PG(goods) = PQ(goods) / CPI
+assert r(N_elements) == 2
+cge_variable PGH = sum(gh, sum(gh2, PQ(gh) * PQ(gh2)))
+* user parameters: a scalar, by commodity, over a user set, with two indexes
+cge_parameter hgoal = 1.1
+assert r(N_elements) == 1
+cge_parameter w(c), values(com_agr:0.4 com_man:0.3 com_ser:0.2 com_hlt:0.1)
+assert r(N_elements) == 4
+cge_parameter wg(goods), values(com_agr:2) default(1)
+cge_parameter sh(c,h), values(com_hlt.hhd:0.5) default(0.1)
+assert r(N_elements) == 4
+cge_variable PIDX = sum(c, w(c) * PQ(c))
+cge_variable PIDX2 = sum(goods, wg(goods) * PQ(goods)) + sh(com_hlt, hhd) ^ 2 * PQ(com_hlt)
+* the exact Jacobian with user sets and parameters
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+cge_shock tm, value(0)
+quietly cge_solve, name(us1) tolerance(1e-12)
+mata: _cge_jexcheck(0, "us1")
+assert r(maxdiff) < 1e-6
+quietly cge_results, sim(us1) clear nodisplay
+foreach v in GG1 GG2 PIDX PIDX2 PGH CPI {
+    quietly summarize value if variable == "`v'"
+    local `v' = r(mean)
+}
+foreach c in com_agr com_man com_ser com_hlt {
+    quietly summarize value if variable == "PQ" & element1 == "`c'"
+    local pq_`c' = r(mean)
+}
+assert reldif(`GG1', `GG2') < 1e-12
+assert reldif(`PIDX', 0.4 * `pq_com_agr' + 0.3 * `pq_com_man' + 0.2 * `pq_com_ser' + 0.1 * `pq_com_hlt') < 1e-12
+assert reldif(`PIDX2', 2 * `pq_com_agr' + `pq_com_man' + 0.25 * `pq_com_hlt') < 1e-12
+assert reldif(`PGH', (`pq_com_agr' + `pq_com_man' + `pq_com_hlt') ^ 2) < 1e-12
+quietly summarize value if variable == "PG" & element1 == "com_man"
+assert reldif(r(mean), `pq_com_man' / `CPI') < 1e-12
+* the parameters as data
+preserve
+quietly cge_parameters, clear
+quietly count if parameter == "w"
+assert r(N) == 4
+quietly summarize value if parameter == "sh" & element1 == "com_hlt" & element2 == "hhd"
+assert r(mean) == 0.5
+restore
+
+* A target that a user parameter sets, and a shock to it: with LAM fixed and
+* government consumption adjusting, QG(com_hlt) = hgoal * base; hgoal 1.2 is
+* the same as a 20 per cent rise in every government purchase
+quietly cge_shock, reset
+cge_variable LAM, value(1)
+cge_equation lam: QG(com_hlt) = LAM * hgoal * base(QG(com_hlt))
+quietly cge_closure, swap(LAM GADJ)
+cge_shock hgoal, value(1.2)
+quietly cge_solve, name(goal12) tolerance(1e-12)
+* the same shock applied by continuation
+quietly cge_solve, name(goal12s) tolerance(1e-12) steps(4)
+assert r(steps) == 4
+_usdiff goal12 goal12s
+assert r(maxdiff) < 1e-9
+tempfile su
+quietly cge_save using "`su'", replace
+quietly cge_closure, swap(none)
+quietly cge_shock, reset
+cge_shock qg, scale(1.2)
+quietly cge_solve, name(qg12) tolerance(1e-12)
+_usdiff goal12 qg12 LAM GADJ
+assert r(maxdiff) < 1e-9
+* saved and loaded with the model; the shock is part of the saved state
+quietly cge_use using "`su'"
+cge_parameter, list
+assert r(N_parameters) == 4
+cge_set, list
+assert r(N_sets) == 2
+quietly cge_solve, name(goal12u) tolerance(1e-12)
+_usdiff goal12 goal12u
+assert r(maxdiff) < 1e-12
+* an element of a user parameter as an instrument: government savings at
+* their base value, 1 in this SAM, need hgoal at its base level 1
+quietly cge_shock, reset
+cge_optimize, instruments(hgoal) targets(government savings = 1) name(opthg)
+assert r(converged) == 1
+assert abs(el(r(instruments), 1, 1) - 1) < 1e-8
+* calibration again keeps the sets and the base values of the parameters
+cge_shock hgoal, value(1.5)
+quietly cge_closure, swap(none)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_parameter, list
+assert r(N_parameters) == 4
+preserve
+quietly cge_parameters, clear current
+quietly summarize value if parameter == "hgoal"
+assert r(mean) == 1.1
+restore
+* the GAMS program declares the parameters and the scenario changes them
+quietly cge_closure, swap(LAM GADJ)
+cge_shock hgoal, value(1.2)
+quietly cge_solve, name(goal12g) tolerance(1e-12)
+tempfile gd
+cge_gams using "`gd'_p", sim(goal12g) replace
+mata:
+u = cat(st_local("gd") + "_p/cge_user.inc")
+s = cat(st_local("gd") + "_p/cge_shock_par.inc")
+st_numscalar("okp", sum(u :== "parameter UP_hgoal;") + sum(u :== "UP_hgoal = 1.1;") +
+             sum(u :== "parameter UP_sh(*, *);") + sum(u :== "UP_sh('com_hlt', 'hhd') = 0.5;") +
+             sum(strpos(u, "U_PIDX =e= ( ( UP_w('com_agr') * PQ('com_agr') ) +") :> 0) +
+             sum(strpos(s, "UP_hgoal = ") :== 1))
+end
+assert scalar(okp) == 6
+* errors
+capture noisily cge_set goods = com_agr
+assert _rc == 110
+capture noisily cge_set c2 = com_agr
+assert _rc == 198
+capture noisily cge_set xx = nosuch
+assert _rc == 111
+capture noisily cge_parameter com_agr = 1
+assert _rc == 110
+capture noisily cge_parameter zz(c), values(nosuch:1)
+assert _rc == 111
+capture noisily cge_parameter zz(q), values(com_agr:1)
+assert _rc == 198
+capture noisily cge_parameter zz(c) = abc
+assert _rc == 198
+capture noisily cge_variable YY = w(com_agr, hhd)
+assert _rc == 198
+capture noisily cge_variable YY = sum(gods, PQ(gods))
+assert _rc == 198
+capture noisily cge_shock w, elements(nosuch) value(1)
+assert _rc == 111
+capture noisily cge_parameter, clear
+assert _rc == 459
+capture noisily cge_set, clear
+assert _rc == 459
+quietly cge_closure, swap(none)
+cge_equation, clear
+cge_parameter, clear
+cge_set, clear
+cge_parameter, list
+assert r(N_parameters) == 0
+program drop _usdiff

@@ -1,0 +1,24 @@
+. cge_parameter hgoal = 1.1
+User parameter hgoal: 1 value(s), from 1.1 to 1.1
+
+. cge_variable LAM, value(1)
+User variable LAM: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation lam: QG(com_hlt) = LAM * hgoal * base(QG(com_hlt))
+User equation lam: 1 element(s)
+Note: the base does not satisfy it (largest relative gap  9.09e-02); it acts as a shock
+
+. cge_closure, swap(LAM GADJ)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+  swap                 LAM fixed, GADJ free
+
+. cge_solve, name(goal)
+Simulation goal solved in 5 iteration(s) (newton)
+Largest scaled residual  4.60e-14; WALRAS =  2.03e-13

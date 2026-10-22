@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.7.1  22oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -25,13 +25,17 @@
 {pstd}
 {cmd:cge_calibrate} computes the base values of all variables and the model
 parameters from the mapped SAM (Reference Manual, {it:Calibration}), sets the
-default closure and checks that the base solves every equation (benchmark
-replication). It stops with an error if replication fails.
+default closure and checks that the base solves every equation of the model
+(benchmark replication). It stops with an error if replication fails. User
+equations ({helpb cge_equation}) need not hold at the base, where they act as
+shocks; from version 0.7.1 replication leaves them out, and a note says when
+they do not hold.
 
 {pstd}
 Calibrating again starts the model afresh from the mapped SAM: shocks, swaps,
 constraints and stored simulations are removed, and user variables and
-equations are compiled again.
+equations are compiled again. User sets ({helpb cge_set}) are kept, and so are
+user parameters ({helpb cge_parameter}), at their base values.
 
 {pstd}
 Elasticities have no defaults; they are part of the model specification and

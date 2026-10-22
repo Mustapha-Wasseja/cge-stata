@@ -1574,12 +1574,14 @@ calibrated model, written in a small language:
   `sqrt()`;
 - model and user variables, `VAR` or `VAR(e)` or `VAR(e1, e2)`, at an element
   or at the index of the equation or of a sum;
-- parameters that `cge_shock` changes, `par(e)`, at their current values;
+- parameters that `cge_shock` changes, `par(e)`, and user parameters,
+  `upar`, `upar(e)` or `upar(e1, e2)` (from version 0.7.1), at their current
+  values;
 - `base(VAR(e))`, the base value of a variable;
 - `sum(i, expression)`, over the set of index `i`: `a` activities, `c`
   commodities, `f` factors, `h` households, `d` households and enterprises,
-  `i` institutions receiving factor income, `n` nests, with digits allowed,
-  as in `c2`.
+  `i` institutions receiving factor income, `n` nests, or a user set by its
+  name (from version 0.7.1), with digits allowed, as in `c2` or `goods2`.
 
 `cge_variable NAME(i) = expression` adds the variable $U_i$ and the equation
 $U_i = e_i(x)$ for every element; its base value is $e_i(x^0)$.
@@ -1592,6 +1594,22 @@ with the direct tax rate adjusting, which under the CPI numeraire is the
 closure `fixgsav` (the test suites check that the solutions agree to
 $10^{-9}$).
 
+**User sets and parameters (from version 0.7.1).** `cge_set name =
+elements [, except()]` stores an ordered list of labels (`M.usdef`); model
+set letters and other user sets in the list are written out. Its code in the
+set fields of variables and parameters is `~name` (`_cge_nidx()`,
+`_cge_setsize()`, `_cge_setlab()` and `_cge_dims()` read it). `cge_parameter
+NAME[(i[,j])] = #` or with `values()` or `from() labels()` stores the
+definition in `M.updef` (name, set codes) and the values, row by row, in
+`p.upval`, after those of the parameters defined before; stored simulations
+get the base values. A reference compiles to a postfix row of type 7 with
+the position in `p.upval` (derivative 0). `cge_shock` changes elements
+(labels of the first index, or `e1.e2`); `_cge_par_interp` moves them in
+continuation; `cge_optimize` takes an element as an instrument of kind 3;
+`cge_parameters` lists them; calibration keeps the base values. Benchmark
+replication covers the model's own equations only (`_cge_maxres_part`):
+user equations need not hold at the base, where they act as shocks.
+
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
 numbers, variables (positions in the stacked vector), parameters, operators
@@ -1602,8 +1620,10 @@ element uses. The equations are a block `U`
 of the system; they are saved with the model and compiled again when it is
 calibrated again.
 
-**GAMS.** `cge_gams` writes the user variables (`U_NAME`, with their base
-levels) and one scalar equation per element (`UE1`, `UE2`, ...) to
+**GAMS.** `cge_gams` writes the user parameters (`UP_NAME`, declared over `*`
+with their base values, changed by ratio in the scenario file), the user
+variables (`U_NAME`, with their base levels) and one scalar equation per
+element (`UE1`, `UE2`, ...) to
 `cge_user.inc`, which `cge_model.gms` includes before the model statement,
 and the results of the user variables to `cge_user_write.inc`. GAMS then
 differentiates the same equations itself: the export check compares the

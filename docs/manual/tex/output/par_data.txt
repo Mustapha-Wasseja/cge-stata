@@ -1,0 +1,21 @@
+. cge_parameters, clear
+
+. list if inlist(parameter, "hgoal", "w", "sw", "sh"), noobs sep(0)
+
+  +----------------------------------------+
+  | parame~r   element1   element2   value |
+  |----------------------------------------|
+  |    hgoal                           1.1 |
+  |        w    com_agr                 .4 |
+  |        w    com_man                 .3 |
+  |        w    com_ser                 .2 |
+  |        w    com_hlt                 .1 |
+  |       sw    com_agr                 .6 |
+  |       sw    com_man                 .4 |
+  |       sw    com_ser                  0 |
+  |       sw    com_hlt                  0 |
+  |       sh    com_agr        hhd      .1 |
+  |       sh    com_man        hhd      .1 |
+  |       sh    com_ser        hhd      .1 |
+  |       sh    com_hlt        hhd      .5 |
+  +----------------------------------------+

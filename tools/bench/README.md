@@ -17,38 +17,47 @@ python tools/bench/run_bench.py [--sizes 40x5,80x10,120x10,160x20,200x20,250x20]
 ## Result with the exact Jacobian and Broyden's updates (version 0.7.0, 22 October 2026; Windows laptop)
 
 ```
-python tools/bench/run_bench.py --stata "C:/Program Files (x86)/Stata13/Stata-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20 --full-up-to 0 --out tools/bench/bench_results_070.csv
-python tools/bench/run_bench.py --stata "C:/Program Files/StataNow19/StataMP-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20 --full-up-to 0 --out tools/bench/bench_results_070_statanow19.csv
+python tools/bench/run_bench.py --stata "C:/Program Files (x86)/Stata13/Stata-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20 --full-up-to 0 --gams C:/GAMS/54/gams.exe --out tools/bench/bench_results_070.csv
+python tools/bench/run_bench.py --stata "C:/Program Files/StataNow19/StataMP-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20 --full-up-to 0 --gams C:/GAMS/54/gams.exe --out tools/bench/bench_results_070_statanow19.csv
 ```
 
 From version 0.7.0 the Jacobian is exact, and after each Newton step, full
 or shortened by the line search, Newton's method continues with Broyden's
 updates of the inverse Jacobian (Reference Manual, *The solution method*).
 `bench_results_070.csv` (Stata 13.1/IC) and `bench_results_070_statanow19.csv`
-(StataNow/MP 19.5) hold the results; the 0.6.3 columns are those of the table
-below. GAMS was not run again: it solves the same exported models, and its
-times in the tables below still apply.
+(StataNow/MP 19.5) hold the runs with GAMS. Each 0.7.0 column gives two runs
+of the same models, an earlier one without GAMS and the one with GAMS, to
+show how much times vary; the 0.6.3 columns are those of the table below.
 
-| Activities | Equations | Solved (reduced) | Jacobians, 0.6.3 | Jacobians, 0.7.0 | Stata 13.1/IC, 0.6.3 (s) | Stata 13.1/IC, 0.7.0 (s) | StataNow/MP 19.5, 0.6.3 (s) | StataNow/MP 19.5, 0.7.0 (s) |
-|---|---|---|---|---|---|---|---|---|
-| 40 | 1,814 | 711 | 3 | 2 | 0.4 | 0.5 | 0.5 | 0.5 |
-| 80 | 5,446 | 1,407 | 4 | 3 | 2.7 | 2.6 | 2.7 | 1.8 |
-| 120 | 10,555 | 2,045 | 3 | 3 | 5.0 | 3.2 | 3.5 | 3.3 |
-| 160 | 18,483 | 2,757 | 1 | 2 | 6.0 | 3.9 | 5.6 | 6.0 |
-| 200 | 26,858 | 3,418 | 4 | 3 | 37.8 | 14.5 | 32.3 | 14.0 |
-| 250 | 40,190 | 4,254 | 6 | 4 | 95.8 | 27.0 | 71.7 | 29.0 |
+| Activities | Equations | Solved (reduced) | Jacobians, 0.6.3 | Jacobians, 0.7.0 | Stata 13.1/IC, 0.6.3 (s) | Stata 13.1/IC, 0.7.0 (s) | StataNow/MP 19.5, 0.6.3 (s) | StataNow/MP 19.5, 0.7.0 (s) | Stata vs GAMS |
+|---|---|---|---|---|---|---|---|---|---|
+| 40 | 1,814 | 711 | 3 | 2 | 0.4 | 0.5, 0.4 | 0.5 | 0.5, 0.5 | 1e-13 |
+| 80 | 5,446 | 1,407 | 4 | 3 | 2.7 | 2.6, 1.7 | 2.7 | 1.8, 2.3 | 2e-12 |
+| 120 | 10,555 | 2,045 | 3 | 3 | 5.0 | 3.2, 3.2 | 3.5 | 3.3, 4.9 | 5e-13 |
+| 160 | 18,483 | 2,757 | 1 | 2 | 6.0 | 3.9, 5.2 | 5.6 | 6.0, 4.4 | 3e-13 |
+| 200 | 26,858 | 3,418 | 4 | 3 | 37.8 | 14.5, 11.8 | 32.3 | 14.0, 11.1 | 6e-13 |
+| 250 | 40,190 | 4,254 | 6 | 4 | 95.8 | 27.0, 54.4 | 71.7 | 29.0, 26.6 | 3e-9 |
 
-The 250-activity model solves 3.5 times faster in Stata 13.1/IC and 2.5 times
-faster in StataNow/MP 19.5; GAMS with PATH took 4.7 seconds for the whole run.
-Building the exact Jacobian takes about 0.9 seconds for that model in Stata
-13.1/IC, against an evaluation of the equations for each of dozens of groups
-of columns before. Timed in Stata 13.1/IC, the solve spent 11.4 seconds in four
-LU factorisations of the 4,254-equation Jacobian, 3.6 in the four Jacobians
-and 6.3 in 30 evaluations of the equations: the dense LU factorisation is now
-most of a large solve. A first form of the updates, taken only after full
-Newton steps, needed six Jacobians for that model; the first Newton steps of
-a large tariff removal are shortened by the line search, and with updates
-after them four suffice. Times vary by as much as 40 per cent from run to run.
+The 250-activity model took 54.4 seconds in the run with GAMS, but 30.2 and
+32.3 in two further runs straight after it: other work on the machine can
+double a time. Taking the typical times, it solves about three times faster
+in Stata 13.1/IC and two and a half times faster in StataNow/MP 19.5. Every
+GAMS solution (model status 16, solved) satisfies the model's equations in
+Stata to $2 \times 10^{-9}$ or better and agrees with Stata's solution to
+$3 \times 10^{-9}$ or better. GAMS took 10 to 22 seconds for the whole run of
+each model that day, against 1.8 to 4.7 seconds the day before (table below):
+starting GAMS took 9 to 14 seconds then, even for a program with one scalar,
+so the earlier times are the better measure of solving.
+
+Building the exact Jacobian takes about 0.9 seconds for the 250-activity
+model in Stata 13.1/IC, against an evaluation of the equations for each of
+dozens of groups of columns before. Timed in Stata 13.1/IC, its solve spent
+11.4 seconds in four LU factorisations of the 4,254-equation Jacobian, 3.6
+in the four Jacobians and 6.3 in 30 evaluations of the equations: the dense
+LU factorisation is now most of a large solve. A first form of the updates,
+taken only after full Newton steps, needed six Jacobians for that model; the
+first Newton steps of a large tariff removal are shortened by the line
+search, and with updates after them four suffice.
 
 ## Result with one-sided differences (version 0.6.3, 21 October 2026; Windows laptop)
 
