@@ -304,6 +304,16 @@ parameters and fixed values that the model had before it are restored. A
 period that does not converge stops the run with error 430; the periods
 solved before it remain stored.
 
+\cgesubsec{Lags in user equations}
+
+From version 0.9.2, user equations (\manref{cge_equation}) may refer to the
+values of variables in the periods before, \cmd{lag(GL)} or
+\cmd{lag(QA(act_man), 2)}, for up to four periods; before the first period
+they are the base values. Stocks and partial adjustment that the run does not
+update itself, such as a fund that accumulates or spending that follows
+revenue with a delay, can so be written in the model's own terms. Each period
+stores the lagged values it used.
+
 \cgesubsec{Results}
 
 \manref{cge_report} with \cmd{run()} reports every period of a run, and

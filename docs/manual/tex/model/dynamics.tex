@@ -91,3 +91,11 @@ results are then compared with the baseline period by period
 investment changes the capital stock of later periods: a policy that raises
 consumption at the expense of investment can lower output in later periods,
 which a static run does not show.
+
+\section{Lags in user equations}
+
+From version 0.9.2, user equations may refer to the values of variables in
+earlier periods, \cmd{lag(VAR)} for $\V{VAR}_{t-1}$ and \cmd{lag(VAR, k)} for
+$\V{VAR}_{t-k}$, $k \le 4$ (section~\ref{sec:userlags}). Before the first
+period, the lagged values are those of the base. They extend the updates
+between periods above with stocks and adjustment rules of the user's own.

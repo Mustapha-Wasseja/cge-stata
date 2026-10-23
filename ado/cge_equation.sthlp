@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.1  23oct2026}{...}
+{* *! version 0.9.2  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -90,6 +90,7 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, and:
 {p2col:{cmd:sum((}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over every pair of elements of the sets of {it:i} and {it:j} (from version 0.9.1){p_end}
 {p2col:{cmd:sum(}{it:map}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over the pairs of a set of pairs defined by {helpb cge_set} (from version 0.9.1){p_end}
 {p2col:{cmd:ord(}{it:i}{cmd:)}}the position of the element of index {it:i} in its set, from 1 (from version 0.7.2){p_end}
+{p2col:{cmd:lag(}{it:VAR}[{cmd:(}{it:e}{cmd:)}][{cmd:,} {it:k}]{cmd:)}}the value of a variable {it:k} periods before, 1 to 4, 1 if omitted; the base outside dynamic runs (from version 0.9.2){p_end}
 {p2colreset}{...}
 
 
@@ -194,6 +195,31 @@ its value, which {helpb cge_shock} can change; {cmd:cge_variable}
 bound, from which an inequality paired with it may move it.
 
 
+{title:Lags}
+
+{pstd}
+From version 0.9.2, {cmd:lag(}{it:VAR}{cmd:)} is the value of a variable in the
+period before, and {cmd:lag(}{it:VAR}{cmd:(}{it:e}{cmd:),} {it:k}{cmd:)} its
+value {it:k} periods before, for {it:k} from 1 to 4, as {it:VAR}{cmd:(t-1)}
+and {it:VAR}{cmd:(t-}{it:k}{cmd:)} in a GAMS model with a time index. In a
+period of a dynamic run ({helpb cge_dynamic}), the values are those of the
+periods solved before it, and of the base before the first period; within
+the period they are given, as the capital stock is. In a static simulation,
+the period before is the base, so {cmd:lag(}{it:VAR}{cmd:)} is the base value
+of {it:VAR}. Lags let user equations carry stocks and partial adjustment from
+one period to the next, for example government purchases that move halfway
+towards revenue each period:
+
+{phang2}{cmd:. cge_variable GL, value(1)}{p_end}
+{phang2}{cmd:. cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)}{p_end}
+
+{pstd}
+A defined variable may not refer to its own lag, whose base value would
+depend on itself; give it {opt value()} and an equation instead. The lagged
+values are stored with each period, and {helpb cge_gams} writes them as
+parameters, {cmd:LAG1_}{it:VAR}, that each period of a dynamic run sets.
+
+
 {title:Options}
 
 {phang}
@@ -259,6 +285,17 @@ all.
 {phang2}{cmd:. cge_set map(a,c) = act_agr.com_agr act_man.com_man}{p_end}
 {phang2}{cmd:. cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal}{p_end}
 {phang2}{cmd:. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)}{p_end}
+
+{pstd}Government purchases that move halfway towards revenue each period of a dynamic run, and the change in output from the period before (from version 0.9.2); the earlier user equations are removed first{p_end}
+{phang2}{cmd:. cge_closure, swap(none)}{p_end}
+{phang2}{cmd:. cge_equation, clear}{p_end}
+{phang2}{cmd:. cge_variable GL, value(1)}{p_end}
+{phang2}{cmd:. cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)}{p_end}
+{phang2}{cmd:. cge_variable LAMG, value(1)}{p_end}
+{phang2}{cmd:. cge_equation lamg: GADJ = LAMG * GL}{p_end}
+{phang2}{cmd:. cge_closure, swap(LAMG GADJ)}{p_end}
+{phang2}{cmd:. cge_variable DQA(a) = QA(a) - lag(QA(a))}{p_end}
+{phang2}{cmd:. cge_dynamic, name(lagged) periods(0/3) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02)}{p_end}
 
 
 {title:Remarks}

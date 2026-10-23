@@ -96,3 +96,26 @@ quietly cge_results, sim(pairs) clear nodisplay
 list variable element1 element2 base value if inlist(variable, "XH", "XS", "VMAP", "PR"), ///
     noobs sepby(variable)
 *<<
+
+*>> eq_lag
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_variable GL, value(1)
+cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)
+cge_variable LAMG, value(1)
+cge_equation lamg: GADJ = LAMG * GL
+quietly cge_closure, swap(LAMG GADJ)
+cge_variable DQA = QA(act_man) - lag(QA(act_man))
+cge_dynamic, name(lagged) periods(0/4) capital(cap) depreciation(0.05) rental(0.15) ///
+    growth(lab:0.02) tfp(0.01)
+quietly cge_dynresults, run(lagged) clear
+quietly keep if inlist(variable, "YG", "GL", "GADJ", "DQA")
+keep period variable value
+quietly reshape wide value, i(period) j(variable) string
+rename value* *
+list period YG GL GADJ DQA, noobs
+*<<

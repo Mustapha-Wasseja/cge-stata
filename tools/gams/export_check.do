@@ -408,7 +408,12 @@ program define _debt_relief
     args t
     if `t' == 2 cge_shock fdebt, scale(0.5)
 end
-foreach case in dyninst dynhealth dyndebt {
+capture program drop _tariff_cut
+program define _tariff_cut
+    args t
+    if `t' == 2 cge_shock tm, value(0)
+end
+foreach case in dyninst dynhealth dyndebt dynlag {
     display as text _n "{hline 60}" _n "Case " as result "`case'"
     if "`case'" == "dyninst" {
         * LES demand, whose subsistence quantities grow with population
@@ -440,6 +445,24 @@ foreach case in dyninst dynhealth dyndebt {
         quietly cge_closure, factors(cap:specific)
         quietly cge_dynamic, name(dyndebt) periods(0/3) `dyncommon' tfp(0.01) shocks(_debt_relief)
     }
+    else if "`case'" == "dynlag" {
+        * lags in user equations (version 0.9.2): government purchases that
+        * adjust halfway to revenue each period, and changes in output from one
+        * and two periods before
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_variable GL, value(1)
+        cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)
+        cge_variable LAMG, value(1)
+        cge_equation lamg: GADJ = LAMG * GL
+        quietly cge_closure, swap(LAMG GADJ)
+        cge_variable DQA(a) = QA(a) - lag(QA(a))
+        cge_variable D2 = QA(act_man) - lag(QA(act_man), 2)
+        quietly cge_dynamic, name(dynlag) periods(0/4) capital(cap) depreciation(0.05) rental(0.15) ///
+            growth(lab:0.02) tfp(0.01) shocks(_tariff_cut)
+    }
     if "`phase'" == "export" {
         cge_gams using `"`dir'/`case'"', dynamic(`case') replace
     }
@@ -451,7 +474,7 @@ foreach case in dyninst dynhealth dyndebt {
             (r(walras)) (r(N_compared))
     }
 }
-program drop _donor_exit _debt_relief
+program drop _donor_exit _debt_relief _tariff_cut
 
 if "`phase'" == "compare" {
     postclose `post'

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.9.2  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -70,6 +70,14 @@ target.{p_end}
 {pstd}
 Rates are per period. Each step between listed periods is one period. No rate
 has a default other than zero, and none is estimated by the package.
+
+{pstd}
+From version 0.9.2, user equations ({helpb cge_equation}) may refer to the
+values of variables in the periods before, {cmd:lag(}{it:VAR}{cmd:)} or
+{cmd:lag(}{it:VAR}{cmd:(}{it:e}{cmd:),} {it:k}{cmd:)} for up to four periods;
+before the first period they are the base values. Stocks and partial
+adjustment that the model does not update itself can so be written in the
+model's own terms.
 
 
 {title:Options}

@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.9.1 implements the standard single-country model described in
+Version 0.9.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,11 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.9.2 adds lags to user equations: in a dynamic run,
+`lag(GL)` is the value of `GL` in the period before and `lag(QA(act_man), 2)`
+the value two periods before, so stocks and partial adjustment, such as
+`GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)`, can be written in the model's own
+terms; GAMS receives the lagged values period by period.
 Version 0.9.1 gives user variables and equations two indexes, as in
 `cge_variable X(c,h) = PQ(c) * QH(c, h)`, with sums over two indexes,
 `sum((c,h), X(c,h))`, and sets of pairs, `cge_set map(a,c) = act_agr.com_agr

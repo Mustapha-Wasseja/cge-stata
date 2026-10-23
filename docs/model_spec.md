@@ -1765,6 +1765,19 @@ constant 1 or 0. Shocks give elements as `e1.e2`, results as `element1` and
 `element2`, and `cge_gams` declares the variables over `(AC, AC)`, with the
 pairs outside the domain fixed at 0.
 
+**Lags (from version 0.9.2).** `lag(V[(e)][, k])`, $k$ from 1 to 4, compiles
+to a postfix row of type 9 with the position of the element and the order
+(`_cge_u_lag()`); its value is `p.xlag[pos, k]` (`_cge_u_lagval()`), with
+derivative 0, and the base value `M.x0[pos]` when `p.xlag` has no such column,
+as in a static simulation. `cge_dynamic` keeps the solutions of the last four
+periods (`D.prevs`, the base before the first period) and sets
+`M.p.xlag = D.prevs` before each period when a user equation has a lag
+(`_cge_u_haslag()`), so each period's parameters store the values it used. At
+the base (`_cge_u_build()`) a lagged value is the base value; a defined
+variable that refers to its own lag is an error. `cge_gams` declares a
+parameter `LAGk_V` for each lagged element at its base value, and each period
+sets those that differ from the period before (`_cge_u_lags()`).
+
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
 numbers, variables (positions in the stacked vector), parameters, operators

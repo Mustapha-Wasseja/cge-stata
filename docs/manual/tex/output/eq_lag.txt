@@ -1,0 +1,60 @@
+. quietly cge_synthetic, clear
+
+. quietly cge_sam, labels(account)
+
+. quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+>     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+
+. quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+
+. cge_variable GL, value(1)
+User variable GL: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)
+User equation gl: 1 element(s)
+
+. cge_variable LAMG, value(1)
+User variable LAMG: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation lamg: GADJ = LAMG * GL
+User equation lamg: 1 element(s)
+
+. quietly cge_closure, swap(LAMG GADJ)
+
+. cge_variable DQA = QA(act_man) - lag(QA(act_man))
+User variable DQA: 1 element(s), base value 0
+and its definition, equation DQA
+
+. cge_dynamic, name(lagged) periods(0/4) capital(cap) depreciation(0.05) rental(0.15) ///
+>     growth(lab:0.02) tfp(0.01)
+Period 0: solved in 0 iteration(s)
+Period 1: solved in 6 iteration(s)
+Period 2: solved in 7 iteration(s)
+Period 3: solved in 7 iteration(s)
+Period 4: solved in 7 iteration(s)
+Dynamic run lagged stored as simulations: lagged0 lagged1 lagged2 lagged3 lagged4
+
+. quietly cge_dynresults, run(lagged) clear
+
+. quietly keep if inlist(variable, "YG", "GL", "GADJ", "DQA")
+
+. keep period variable value
+
+. quietly reshape wide value, i(period) j(variable) string
+
+. rename value* *
+
+. list period YG GL GADJ DQA, noobs
+
+  +--------------------------------------------------------+
+  | period          YG          GL        GADJ         DQA |
+  |--------------------------------------------------------|
+  |      0          63           1           1           0 |
+  |      1   64.470947   1.0116742   1.0116742   3.8830865 |
+  |      2   66.007748   1.0297081   1.0297081   3.9296494 |
+  |      3   67.610613   1.0514462   1.0514462   4.0380824 |
+  |      4   69.280843   1.0755711   1.0755711   4.1807903 |
+  +--------------------------------------------------------+

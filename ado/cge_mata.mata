@@ -83,6 +83,10 @@ struct cge_par {
     // user parameters (from version 0.7.1): their values, row by row, in the
     // order of M.updef
     real colvector upval
+    // lagged values (from version 0.9.2): in a period of a dynamic run, the
+    // values of the variables one to four periods before, one column each;
+    // none in a static simulation, where the period before is the base
+    real matrix    xlag
 }
 
 struct cge_model {
@@ -200,7 +204,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.1")
+    return("0.9.2")
 }
 
 // =====================================================================
@@ -5948,6 +5952,12 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
             st[sp] = p.upval[tok[i, 2]]
             G[sp, .] = J(1, nv, 0)
         }
+        // a lagged value (from version 0.9.2), given within the period
+        else if (c == 9) {
+            sp = sp + 1
+            st[sp] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
+            G[sp, .] = J(1, nv, 0)
+        }
         else if (c == 4) {
             b = st[sp]
             gb = G[sp, .]
@@ -7839,6 +7849,9 @@ struct cge_dyn {
     real scalar           dshare, wage
     struct cge_par scalar psave
     real colvector        xsave
+    // the solutions of the last four periods, the latest first, for lags
+    // (from version 0.9.2)
+    real matrix           prevs
 }
 
 struct cge_dyn scalar _cge_dyn_load()
@@ -7994,6 +8007,7 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
     _cge_cons_carry(M.p, D.psave)
     M.xcur = M.x0
     D.prev = M.x0
+    D.prevs = J(1, _cge_maxlag(), M.x0)
     _cge_store(M)
     _cge_dyn_store(D)
 }
@@ -8096,6 +8110,9 @@ void _cge_dyn_solve(real scalar period, real scalar first)
     M = _cge_load()
     D = _cge_dyn_load()
     lam = .
+    // the values of the periods before, for the lags of user equations (from
+    // version 0.9.2); the first period follows the base
+    if (_cge_u_haslag(M)) M.p.xlag = D.prevs
     if (first) {
         x = _cge_solve_point(M, M.p, M.xcur, M.x0, D.tol, D.maxit, 0, conv, iter, err, method)
     }
@@ -8147,6 +8164,7 @@ void _cge_dyn_solve(real scalar period, real scalar first)
     M.simper[kk] = period
     M.simlam[kk] = lam
     D.prev = x
+    D.prevs = (x, D.prevs[|1, 1 \ ., cols(D.prevs) - 1|])
     _cge_store(M)
     _cge_dyn_store(D)
     printf("{txt}Period {res}%f{txt}: solved in {res}%f{txt} iteration(s)", period, iter)
@@ -11447,7 +11465,8 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
     string colvector lab, e1, e2
     string scalar target, g, mode, gov, idx
     real colvector v0, v1, pos, fx, fr
-    real matrix G0, G1
+    real matrix G0, G1, LG
+    real scalar lv
     string colvector rl, cl2
     real scalar fh, k, i, j, n, code, m
 
@@ -11482,6 +11501,16 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
             fput(fh, target + " = " + (p0.upval[pos[i]] != 0 ? _cge_gnum(p.upval[pos[i]] / p0.upval[pos[i]]) + " * " + target : _cge_gnum(p.upval[pos[i]])) + ";")
             n++
         }
+    }
+    // lagged values (from version 0.9.2): those of the period, where they
+    // differ from those of the period before
+    LG = _cge_u_lags(M)
+    for (i = 1; i <= rows(LG); i++) {
+        lv = _cge_u_lagval(M, p, LG[i, 1], LG[i, 2])
+        if (lv == _cge_u_lagval(M, p0, LG[i, 1], LG[i, 2])) continue
+        _cge_gams_ref(M, LG[i, 1], g, idx)
+        fput(fh, "LAG" + strofreal(LG[i, 2]) + "_" + g + idx + " = " + _cge_gnum(lv) + ";")
+        n++
     }
     // Parameters by pair of elements: taxes on factor use (from version 0.5.0),
     // and subsistence quantities, which grow with population in dynamic runs
@@ -12096,7 +12125,7 @@ void _cge_u_newname(struct cge_model scalar M, string scalar name, string scalar
     if (!regexm(name, "^[A-Za-z_][A-Za-z_0-9]*$") | strlen(name) > 24) {
         _cge_fail(what + " " + name + ": a name has letters, digits and underscores, at most 24 characters, and starts with a letter", 198)
     }
-    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all", "ord", "sameas"), name)) _cge_fail(name + " is a reserved word", 198)
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all", "ord", "sameas", "lag"), name)) _cge_fail(name + " is a reserved word", 198)
     if (regexm(name, "^[acfhdin][0-9]*$")) _cge_fail(name + " is the index of a model set", 198)
     if (_cge_vidx(M, name)) _cge_fail(name + " is the name of a variable", 110)
     if (_cge_find(_cge_gams_params()[., 1], name) | anyof(("mort", "tf"), name)) _cge_fail(name + " is the name of a model parameter", 110)
@@ -13010,7 +13039,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     string colvector lab
     string scalar tk, nm, g
     real matrix out, opst
-    real scalar k, e, prev, pos, pi, el, j, pr, code, n
+    real scalar k, e, prev, pos, pi, el, j, pr, code, n, lk
     if (args() < 5) condmode = 0
     P = _cge_gams_params()
     out = J(0, 3, .)
@@ -13090,6 +13119,16 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                         continue
                     }
                     e = _cge_u_close(t, k + 1)
+                    // lag(reference[, k]): the value k periods before, given
+                    // within a period (from version 0.9.2)
+                    if (nm == "lag") {
+                        _cge_u_lag(M, (e > k + 2 ? t[|k + 2 \ e - 1|] : J(1, 0, "")), pos, lk, g)
+                        out = out \ (9, pos, lk)
+                        gtok = gtok, g
+                        prev = 1
+                        k = e + 1
+                        continue
+                    }
                     if (nm == "base") {
                         // base(reference): the base value, a number
                         if (e < k + 3) _cge_fail("base(): give a variable, as base(GSAV) or base(QG(com_hlt))", 198)
@@ -13270,6 +13309,71 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     return(out)
 }
 
+// The longest lag (from version 0.9.2)
+real scalar _cge_maxlag()
+{
+    return(4)
+}
+
+// lag(reference[, k]) in an expression (from version 0.9.2): the position of
+// the element of the variable referred to, the order k, from 1 to 4, and the
+// GAMS parameter that holds its lagged value
+void _cge_u_lag(struct cge_model scalar M, string rowvector a, real scalar pos, real scalar k, string scalar g)
+{
+    string rowvector args
+    string scalar nm
+    real scalar e, c
+    if (cols(a) == 0) _cge_fail("lag(): give a variable, as lag(GL) or lag(QA(act_agr), 2)", 198)
+    nm = a[1]
+    if (!regexm(nm, "^[A-Za-z_]")) _cge_fail("lag(): give a variable, as lag(GL) or lag(QA(act_agr), 2)", 198)
+    if (!_cge_vidx(M, nm)) _cge_fail("lag(): " + nm + " is not a variable; lags are of variables, as lag(GL) or lag(QA(act_agr), 2)", 198)
+    c = 2
+    args = J(1, 0, "")
+    if (cols(a) >= 2) {
+        if (a[2] == "(") {
+            e = _cge_u_close(a, 2)
+            args = (e > 3 ? a[|3 \ e - 1|] : J(1, 0, ""))
+            args = select(args, args :!= ",")
+            c = e + 1
+        }
+    }
+    k = 1
+    if (c <= cols(a)) {
+        if (a[c] != "," | c + 1 != cols(a)) _cge_fail("lag(): write lag(VAR), lag(VAR(e)) or lag(VAR(e), k)", 198)
+        k = strtoreal(a[c + 1])
+        if (k >= . | k != floor(k) | k < 1 | k > _cge_maxlag()) {
+            _cge_fail("lag(): the order is a whole number from 1 to " + strofreal(_cge_maxlag()), 198)
+        }
+    }
+    pos = _cge_u_varpos(M, nm, args)
+    if (!pos) _cge_fail("lag(): " + nm + (cols(args) ? "(" + invtokens(args, ",") + ")" : "") + " is not an element of a variable", 111)
+    g = "LAG" + strofreal(k) + "_" + _cge_u_gname(M, _cge_vidx(M, nm)) + (cols(args) ? "('" + invtokens(args, "', '") + "')" : "")
+}
+
+// The value k periods before of the variable at pos (from version 0.9.2): in
+// a period of a dynamic run, from the solutions before it; otherwise, and
+// before the first period, the base
+real scalar _cge_u_lagval(struct cge_model scalar M, struct cge_par scalar p, real scalar pos, real scalar k)
+{
+    if (k <= cols(p.xlag) & pos <= rows(p.xlag)) return(p.xlag[pos, k])
+    return(M.x0[pos])
+}
+
+// 1 if a user equation refers to a lagged value (from version 0.9.2)
+real scalar _cge_u_haslag(struct cge_model scalar M)
+{
+    if (!rows(M.utok)) return(0)
+    return(any(M.utok[., 1] :== 9))
+}
+
+// The lagged values that user equations refer to, as rows of the position
+// of the variable and the order (from version 0.9.2)
+real matrix _cge_u_lags(struct cge_model scalar M)
+{
+    if (!_cge_u_haslag(M)) return(J(0, 2, .))
+    return(uniqrows(select(M.utok[., 2..3], M.utok[., 1] :== 9)))
+}
+
 real scalar _cge_u_prec(real scalar code)
 {
     // + - 1, * / 2, ^ 4; in conditions (from version 0.7.2) comparisons 0.6,
@@ -13327,6 +13431,10 @@ real scalar _cge_u_value(struct cge_model scalar M, struct cge_par scalar p, rea
         else if (c == 7) {
             sp = sp + 1
             st[sp] = p.upval[tok[i, 2]]
+        }
+        else if (c == 9) {
+            sp = sp + 1
+            st[sp] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
         }
         else if (c == 4) {
             b = st[sp]
@@ -13430,9 +13538,13 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     string scalar name, idx, set, gtl, gtr
     real matrix tok, L, R
     real colvector pos, st, ln1, ln2, dom
-    real scalar k, j, kv, v
+    real scalar k, j, kv, v, r
+    struct cge_par scalar pb
     _cge_u_widen(M)
     M.upar = J(0, 1, "")
+    // at the base, a lagged value is the base value (from version 0.9.2)
+    pb = p
+    pb.xlag = J(1, _cge_maxlag(), x0)
     // user variables: base values from their expressions
     for (k = 1; k <= rows(M.uvdef); k++) {
         kv = rows(M.vname) - M.nuv + k
@@ -13440,20 +13552,28 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
         idx = M.uvdef[k, 4]
         _cge_u_els(M, M.uvdef[k, 2], e1, e2, o1, o2)
         // the elements in its domain exist (from version 0.7.2)
-        dom = (idx == "" ? 1 : _cge_u_domain(M, p, x0, idx, M.uvdef[k, 2], M.uvdef[k, 7]))
+        dom = (idx == "" ? 1 : _cge_u_domain(M, pb, x0, idx, M.uvdef[k, 2], M.uvdef[k, 7]))
         M.exists[pos] = dom
         for (j = 1; j <= rows(pos); j++) {
             if (!dom[j]) {
                 x0[pos[j]] = 0
+                pb.xlag[pos[j], .] = J(1, _cge_maxlag(), 0)
                 continue
             }
             tl = _cge_u_tokens(M.uvdef[k, 3])
             if (idx != "") tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
-            tl = _cge_u_written(M, p, x0, tl)
+            tl = _cge_u_written(M, pb, x0, tl)
             tok = _cge_u_compile(M, tl, x0, gtl)
-            v = _cge_u_value(M, p, x0, tok)
+            // a definition cannot give the base value from its own lag
+            for (r = 1; r <= rows(tok); r++) {
+                if (tok[r, 1] == 9 & anyof(pos, tok[r, 2])) {
+                    _cge_fail("user variable " + M.uvdef[k, 1] + " refers to its own lag: give it a value() and an equation (cge_equation)", 198)
+                }
+            }
+            v = _cge_u_value(M, pb, x0, tok)
             if (v >= .) _cge_fail("user variable " + M.uvdef[k, 1] + ": its base value is missing", 459)
             x0[pos[j]] = v
+            pb.xlag[pos[j], .] = J(1, _cge_maxlag(), v)
         }
     }
     // equations, one element per member of the set they are written over
@@ -13469,7 +13589,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
         idx = M.uedef[k, 2]
         set = M.uedef[k, 3]
         _cge_u_els(M, set, e1, e2, o1, o2)
-        dom = (idx == "" ? 1 : _cge_u_domain(M, p, x0, idx, set, M.uedef[k, 6]))
+        dom = (idx == "" ? 1 : _cge_u_domain(M, pb, x0, idx, set, M.uedef[k, 6]))
         for (j = 1; j <= rows(e1); j++) {
             if (!dom[j]) continue
             tl = _cge_u_tokens(M.uedef[k, 4])
@@ -13478,8 +13598,8 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
                 tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
                 tr = _cge_u_subst2(("(", tr, ")"), idx, e1[j], e2[j], o1[j], o2[j])
             }
-            L = _cge_u_compile(M, _cge_u_written(M, p, x0, tl), x0, gtl)
-            R = _cge_u_compile(M, _cge_u_written(M, p, x0, tr), x0, gtr)
+            L = _cge_u_compile(M, _cge_u_written(M, pb, x0, tl), x0, gtl)
+            R = _cge_u_compile(M, _cge_u_written(M, pb, x0, tr), x0, gtr)
             st = st \ (rows(tok) + 1)
             ln1 = ln1 \ rows(L)
             ln2 = ln2 \ rows(R)
@@ -13608,7 +13728,7 @@ void _cge_u_addvar(string scalar spec)
         if (strtoreal(lo) > strtoreal(up)) _cge_fail("cge_variable: lower() cannot exceed upper()", 198)
     }
     if (_cge_vidx(M, name)) _cge_fail(name + " is already a variable of the model", 110)
-    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas"), name)) _cge_fail(name + " is a reserved word", 198)
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas", "lag"), name)) _cge_fail(name + " is a reserved word", 198)
     if (_cge_find(_cge_gams_params()[., 1], name)) _cge_fail(name + " is the name of a parameter", 110)
     if (_cge_up_find(M, name) | _cge_us_find(M, name)) _cge_fail(name + " is the name of a user parameter or set", 110)
     if (rows(M.uedef) & expr != "") {
@@ -14059,10 +14179,11 @@ void _cge_u_clear()
 // that write the user variables' results (cge_user_write.inc)
 void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar fw)
 {
-    string colvector e1, e2
+    string colvector e1, e2, decl
     real colvector pos, ul, ur
+    real matrix LG
     real scalar fh, fh2, k, kv, i, gap
-    string scalar g, dom
+    string scalar g, dom, ix
     fh = _cge_gopen(fn)
     fh2 = _cge_gopen(fw)
     fput(fh, "* User variables and equations (model_spec.md, Section 19), written by cge_gams")
@@ -14076,6 +14197,19 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
         _cge_up_labels(M, k, e1, e2)
         pos = _cge_up_pos(M, k)
         for (i = 1; i <= rows(pos); i++) fput(fh, g + _cge_gams_elem(e1[i], e2[i]) + " = " + _cge_gnum(M.p0.upval[pos[i]]) + ";")
+    }
+    // lagged values (from version 0.9.2) at the base; each period of a
+    // dynamic run sets those of the periods before it in its parameter changes
+    LG = _cge_u_lags(M)
+    decl = J(0, 1, "")
+    for (i = 1; i <= rows(LG); i++) {
+        _cge_gams_ref(M, LG[i, 1], g, ix)
+        g = "LAG" + strofreal(LG[i, 2]) + "_" + g
+        if (!anyof(decl, g)) {
+            decl = decl \ g
+            fput(fh, "parameter " + g + (ix == "" ? "" : (strpos(ix, ",") ? "(*, *)" : "(*)")) + ";")
+        }
+        fput(fh, g + ix + " = " + _cge_gnum(M.x0[LG[i, 1]]) + ";")
     }
     for (k = 1; k <= M.nuv; k++) {
         kv = rows(M.vname) - M.nuv + k
@@ -14870,6 +15004,7 @@ void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefi
     _cge_io_put(fh, prefix + "aac", p.aac)
     _cge_io_put(fh, prefix + "dac", p.dac)
     _cge_io_put(fh, prefix + "upval", p.upval)
+    _cge_io_put(fh, prefix + "xlag", p.xlag)
 }
 
 real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
@@ -14984,6 +15119,7 @@ real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmo
     else if (name == "aac") p.aac = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "dac") p.dac = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "upval") p.upval = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "xlag") p.xlag = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else return(0)
     return(1)
 }

@@ -860,3 +860,143 @@ assert _rc == 459
 quietly cge_closure, swap(none)
 cge_equation, clear
 cge_set, clear
+
+* ---------------------------------------------------------------------
+* 11. Lags (version 0.9.2)
+* ---------------------------------------------------------------------
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+* changes from the period before, one and two periods back, and government
+* purchases that adjust halfway to revenue each period
+cge_variable DQA(a) = QA(a) - lag(QA(a))
+cge_variable D2 = QA(act_man) - lag(QA(act_man), 2)
+cge_variable GL, value(1)
+cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)
+cge_variable LAMG, value(1)
+cge_equation lamg: GADJ = LAMG * GL
+quietly cge_closure, swap(LAMG GADJ)
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+* a static simulation: the period before is the base
+cge_shock tm, value(0)
+quietly cge_solve, name(lst) tolerance(1e-12)
+quietly cge_results, sim(lst) clear nodisplay
+foreach a in act_agr act_man act_ser {
+    quietly summarize value if variable == "QA" & element1 == "`a'"
+    local qa = r(mean)
+    quietly summarize base if variable == "QA" & element1 == "`a'"
+    local qa0 = r(mean)
+    quietly summarize value if variable == "DQA" & element1 == "`a'"
+    assert abs(r(mean) - (`qa' - `qa0')) < 1e-10
+    if "`a'" == "act_man" {
+        quietly summarize value if variable == "D2"
+        assert abs(r(mean) - (`qa' - `qa0')) < 1e-10
+    }
+}
+quietly summarize value if variable == "YG"
+local yg = r(mean)
+quietly summarize base if variable == "YG"
+local yg0 = r(mean)
+quietly summarize value if variable == "GL"
+assert reldif(r(mean), 0.5 + 0.5 * `yg' / `yg0') < 1e-12
+local gl = r(mean)
+quietly summarize value if variable == "GADJ"
+assert reldif(r(mean), `gl') < 1e-12
+cge_shock, reset
+* a dynamic run: the values of the periods before, the base before the first
+quietly cge_dynamic, name(lg) periods(0/4) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02) tfp(0.01)
+quietly cge_dynresults, run(lg) clear
+keep if inlist(variable, "QA", "DQA", "D2", "GL", "GADJ", "YG")
+keep period variable element1 base value
+quietly reshape wide value, i(variable element1) j(period)
+forvalues t = 0/4 {
+    local t1 = `t' - 1
+    local t2 = `t' - 2
+    local l1 = cond(`t' >= 1, "value`t1'", "base")
+    local l2 = cond(`t' >= 2, "value`t2'", "base")
+    foreach a in act_agr act_man act_ser {
+        quietly summarize value`t' if variable == "QA" & element1 == "`a'"
+        local qa = r(mean)
+        quietly summarize `l1' if variable == "QA" & element1 == "`a'"
+        local qa1 = r(mean)
+        quietly summarize `l2' if variable == "QA" & element1 == "`a'"
+        local qa2 = r(mean)
+        quietly summarize value`t' if variable == "DQA" & element1 == "`a'"
+        assert abs(r(mean) - (`qa' - `qa1')) < 1e-9
+        if "`a'" == "act_man" {
+            quietly summarize value`t' if variable == "D2"
+            assert abs(r(mean) - (`qa' - `qa2')) < 1e-9
+        }
+    }
+    quietly summarize value`t' if variable == "YG"
+    local yg = r(mean)
+    quietly summarize `l1' if variable == "GL"
+    local gl1 = r(mean)
+    quietly summarize value`t' if variable == "GL"
+    assert reldif(r(mean), 0.5 * `gl1' + 0.5 * `yg' / `yg0') < 1e-12
+    local gl = r(mean)
+    quietly summarize value`t' if variable == "GADJ"
+    assert reldif(r(mean), `gl') < 1e-12
+}
+* the lags change the path: government purchases follow revenue with a delay
+quietly summarize value4 if variable == "GL"
+local gl4 = r(mean)
+quietly summarize value4 if variable == "YG"
+assert abs(`gl4' - r(mean) / `yg0') > 1e-4
+* saved and loaded with the run; the lagged values stay with each period
+tempfile s3
+quietly cge_save using "`s3'", replace
+quietly cge_use using "`s3'"
+capture mata: mata drop _cge_test_xlag()
+mata:
+real matrix _cge_test_xlag(string scalar sim)
+{
+    struct cge_model scalar M
+    M = _cge_load()
+    // the lagged values less the base
+    return(M.simp[_cge_sim_index(M, sim)].xlag :- M.x0)
+}
+end
+mata: st_numscalar("nl", cols(_cge_test_xlag("lg3")) + all(_cge_test_xlag("lg0") :== 0) + any(_cge_test_xlag("lg3") :!= 0))
+assert scalar(nl) == 6
+quietly cge_dynresults, run(lg) clear
+quietly summarize value if variable == "GL" & period == 4
+assert reldif(r(mean), `gl4') < 1e-14
+* the GAMS program holds each period's lagged values as parameters
+tempfile g3
+cge_gams using "`g3'_d", dynamic(lg) replace
+mata:
+u = cat(st_local("g3") + "_d/cge_user.inc")
+u2 = cat(st_local("g3") + "_d/cge_lg2_par.inc")
+// the value two periods before changes from period 3, the first after period 0
+u3 = cat(st_local("g3") + "_d/cge_lg3_par.inc")
+st_numscalar("ok3", sum(u :== "parameter LAG1_U_GL;") + sum(u :== "parameter LAG2_QA(*);") + sum(u :== "LAG1_U_GL = 1;") +
+             (sum(strpos(u, "LAG1_U_GL") :> 0) == 3) + (sum(strpos(u2, "LAG1_U_GL = ") :== 1) == 1) +
+             (sum(strpos(u2, "LAG2_QA('act_man') = ") :== 1) == 0) + (sum(strpos(u3, "LAG2_QA('act_man') = ") :== 1) == 1))
+end
+assert scalar(ok3) == 7
+* the model is calibrated again with its lags
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_equation, list
+assert r(N_equations) == 6
+* errors
+capture noisily cge_variable XL = lag(tm(com_agr))
+assert _rc == 198
+capture noisily cge_variable XL = lag(QA(act_agr), 5)
+assert _rc == 198
+capture noisily cge_variable XL = lag(QA(act_agr), 0)
+assert _rc == 198
+capture noisily cge_variable XL = lag(QA(act_xx))
+assert _rc == 111
+capture noisily cge_variable XL = lag()
+assert _rc == 198
+capture noisily cge_variable XL = 1 + 0 * lag(XL)
+assert _rc == 198
+capture noisily cge_variable lag, value(1)
+assert _rc == 198
+quietly cge_closure, swap(none)
+cge_equation, clear

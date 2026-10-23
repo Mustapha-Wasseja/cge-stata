@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.1  23oct2026}{...}
+{* *! version 0.9.2  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -32,7 +32,9 @@ user parameters ({helpb cge_parameter}). From version 0.7.2, a condition,
 only for the elements that meet it; see {it:Conditions} in
 {helpb cge_equation}. From version 0.9.1, a variable may have two indexes,
 {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}, as in {cmd:X(c,h)}; see
-{it:Two indexes and sets of pairs} in {helpb cge_equation}.
+{it:Two indexes and sets of pairs} in {helpb cge_equation}. From version
+0.9.2, an expression may use the values of earlier periods of a dynamic run,
+{cmd:lag(}{it:VAR}{cmd:)}; see {it:Lags} in {helpb cge_equation}.
 
 {pstd}
 From version 0.9.0, {opt lower(#)} and {opt upper(#)} hold a defined variable

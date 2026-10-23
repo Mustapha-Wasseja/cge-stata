@@ -1,4 +1,4 @@
-*! cge_equation.ado  v0.9.1  2026-10-23
+*! cge_equation.ado  v0.9.2  2026-10-23
 *! cge-stata: add a user equation to the model, or list or remove the user
 *! variables and equations (docs/model_spec.md, Section 19)
 *!
