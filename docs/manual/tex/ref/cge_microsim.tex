@@ -123,6 +123,13 @@ cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) siz
 \opt{}{clear} & replace the survey in memory with the results\\
 \optarg{sav}{ing}{filename[\texttt{, replace}]} & save the results as a dataset\\
 \opt{nod}{isplay} & suppress the tables of results\\
+\optgroup{Graphs}
+\optarg{}{graph}{graphs} & draw graphs of the results\\
+\optarg{}{gname}{stub} & names of the graphs; default \cmd{microsim}\\
+\optarg{}{gexport}{filename} & save the graphs as files\\
+\optarg{glab}{els}{labels} & labels of the simulations in the legends\\
+\opt{}{gcolor} & series in colour rather than grey\\
+\optarg{}{gopts}{options} & further graph options\\
 \end{opttable}
 
 \cmd{pweight}s, \cmd{aweight}s, \cmd{fweight}s and \cmd{iweight}s are
@@ -275,6 +282,31 @@ dataset in \argu{filename} and leaves the survey in memory; \cmd{replace}
 allows an existing file to be replaced.
 
 \item[\opt{nod}{isplay}] suppresses the tables of results.
+
+\item[\optarg{}{graph}{graphs}] (from version 0.9.6) draws graphs of the
+results, one or more of \cmd{gic}, \cmd{incidence}, \cmd{poverty},
+\cmd{groups}, \cmd{shapley}, \cmd{fiscal} and \cmd{bands}, or \cmd{all} for
+every graph the other options allow; see \emph{Graphs} below.
+
+\item[\optarg{}{gname}{stub}] names the graphs \argu{stub}\cmd{_}\argu{graph},
+such as \cmd{microsim_gic}; the default stub is \cmd{microsim}.
+
+\item[\optarg{}{gexport}{filename}] saves each graph as a file named after
+the graph: with \cmd{gexport(fig.pdf)}, the growth incidence curve is saved
+as \cmd{fig_gic.pdf}, and so on. The extension gives the format: \cmd{.pdf}
+or \cmd{.eps} for a journal, \cmd{.png} (the default, 2,000 pixels wide) for
+slides and documents.
+
+\item[\optarg{glab}{els}{labels}] gives the simulations, in the order of
+\cmd{sim()}, the labels shown in the legends, such as
+\cmd{glabels("Tariffs removed" "Tariffs doubled")}; by default they are the
+names of the simulations.
+
+\item[\opt{}{gcolor}] draws the series in the colours of \citet{okabe2008},
+which readers with colour blindness can tell apart, instead of shades of grey.
+
+\item[\optarg{}{gopts}{options}] adds graph options to every graph, such as
+\cmd{gopts(title("Tariff reform"))} or \cmd{gopts(xsize(5) ysize(3.5))}.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -428,6 +460,54 @@ hardly depend on the elasticities, while the equivalent variation per person
 ranges from $-0.81$ to $-0.63$ between the 5th and 95th percentiles:
 \stlog[\scriptsize]{ms_bands}
 
+\cgesubsec{Example 9: graphs for a paper}
+
+From version 0.9.6, \cmd{graph()} draws the results in the style of figures in
+economics journals, and \cmd{gexport()} saves them as files. Both simulations,
+with labels for the legends, as PDF files:
+\stlog{ms_graph}
+Figure~\ref{fig:ms} shows four of them. The graphs have a white background,
+axes on the left and below, light horizontal grid lines, a line at zero and
+the legend below, without a frame; they have no title, which a journal sets in
+the caption. Shades of grey and line patterns tell the series apart, so the
+graphs print in black and white; \cmd{gcolor} uses colours instead.
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}[t]{0.49\linewidth}\centering
+\includegraphics[width=\linewidth]{figures/fig_ms_gic.pdf}\\[-2pt]
+{\small (a) \cmd{gic}: growth incidence curve}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\linewidth}\centering
+\includegraphics[width=\linewidth]{figures/fig_ms_incidence.pdf}\\[-2pt]
+{\small (b) \cmd{incidence}: by decile}
+\end{minipage}\\[8pt]
+\begin{minipage}[t]{0.49\linewidth}\centering
+\includegraphics[width=\linewidth]{figures/fig_ms_poverty.pdf}\\[-2pt]
+{\small (c) \cmd{poverty}: headcount at each line}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\linewidth}\centering
+\includegraphics[width=\linewidth]{figures/fig_ms_shapley.pdf}\\[-2pt]
+{\small (d) \cmd{shapley}: channels of the change in the headcount}
+\end{minipage}
+\caption{Graphs of \cmd{cge_microsim}: removing the tariffs and doubling them,
+for the SYNTHETIC survey}\label{fig:ms}
+\end{figure}
+
+\begin{cgetable}{p{0.16\linewidth}p{0.78\linewidth}}
+\toprule
+Graph & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+\cmd{gic} & the per cent change of each percentile of consumption per person, one line for each simulation\\
+\cmd{incidence} & the per cent change in mean consumption per person of each quantile group of base consumption\\
+\cmd{poverty} & the change in the poverty headcount, in percentage points, at each line; needs \cmd{line()}\\
+\cmd{groups} & the per cent change in mean consumption per person of each household group\\
+\cmd{shapley} & the contribution of each channel to the change in the headcount at the first line, in percentage points, or to the change in mean consumption without a line; needs \cmd{decompose}\\
+\cmd{fiscal} & the Gini coefficient of each income concept, market to final, in the base and each simulation; needs \cmd{market()}\\
+\cmd{bands} & the median and the 5th to 95th percentiles across the draws of the per cent change in mean consumption, the headcount at each line and the Gini coefficient; needs \cmd{bands()}\\
+\end{cgetable}
+
 \cgesubsec{Results as a dataset}
 
 With \cmd{clear} or \cmd{saving()}, the results form a dataset with one
@@ -498,6 +578,7 @@ proportions; \cmd{pct} is the per cent change of the measure itself.
 \res{r(lines)} & the poverty lines\\
 \res{r(channels)} & the channels of \cmd{decompose}\\
 \res{r(instlist)} & the fiscal instruments\\
+\res{r(graphs)} & with \cmd{graph()}: the names of the graphs drawn\\
 \resgroup{Matrices}
 \res{r(table)} & one row for all households (\cmd{all}) and one for each group in the survey; columns \cmd{mean_base}, \cmd{mean_sim}, \cmd{mean_pct}, \cmd{fgt0_base}, \cmd{fgt0_sim}, \cmd{fgt1_base}, \cmd{fgt1_sim}, \cmd{fgt2_base}, \cmd{fgt2_sim} (first line), \cmd{gini_base} and \cmd{gini_sim}\\
 \res{r(poverty)} & for each line (equations \cmd{line1}, \cmd{line2}, \ldots) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated\\

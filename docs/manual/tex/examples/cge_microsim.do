@@ -143,3 +143,30 @@ set linesize 100
 list sim q base value pct if table == "gic" & inlist(q, 10, 50, 90), noobs sepby(sim)
 list sim q base value pct if table == "quantile" & measure == "mean" & q <= 3, noobs sepby(sim)
 *<<
+
+* The survey again, for the graphs
+quietly {
+    clear
+    set seed 2026
+    set obs 1000
+    generate str3 group = "hhd"
+    generate double hhsize = 1 + floor(6 * runiform())
+    generate double weight = 100 + 50 * runiform()
+    generate double wage = exp(rnormal(5, 0.7)) * hhsize
+    generate double profit = cond(runiform() < 0.3, exp(rnormal(5, 1)), 0)
+    generate double transfer = cond(runiform() < 0.2, 50 * runiform(), 0)
+    generate double cons = 0.9 * (wage + profit + transfer)
+    generate double food = cons * (0.6 - 0.3 * runiform())
+    generate double services = (cons - food) / 2
+    generate double goods = cons - food - services
+    generate double zreg = cond(runiform() < 0.5, 90, 110)
+}
+
+*>> ms_graph
+cge_microsim [pweight = weight], sim(notariff tariff2) group(group)        ///
+    consumption(cons) size(hhsize) income(wage:lab profit:cap transfer:gov) ///
+    budget(food:com_agr goods:com_man services:com_ser) line(100 zreg)       ///
+    decompose graph(gic incidence poverty shapley)                           ///
+    glabels("Tariffs removed" "Tariffs doubled") gexport(fig_ms.pdf) nodisplay
+display "`r(graphs)'"
+*<<

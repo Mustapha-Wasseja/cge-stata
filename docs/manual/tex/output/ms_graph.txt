@@ -1,0 +1,8 @@
+. cge_microsim [pweight = weight], sim(notariff tariff2) group(group)        ///
+>     consumption(cons) size(hhsize) income(wage:lab profit:cap transfer:gov) ///
+>     budget(food:com_agr goods:com_man services:com_ser) line(100 zreg)       ///
+>     decompose graph(gic incidence poverty shapley)                           ///
+>     glabels("Tariffs removed" "Tariffs doubled") gexport(fig_ms.pdf) nodisplay
+
+. display "`r(graphs)'"
+microsim_gic microsim_incidence microsim_poverty microsim_shapley

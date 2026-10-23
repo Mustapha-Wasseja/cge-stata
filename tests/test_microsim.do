@@ -927,3 +927,66 @@ cge_microsim `mm' line(30) bands(dr)
 capture noisily cge_microsim `mm' bands(nosuch) nodisplay
 assert _rc == 111
 program drop _scen_nt
+
+* ---------------------------------------------------------------------
+* 9. Version 0.9.6: graphs of the results
+* ---------------------------------------------------------------------
+* the graphs are named and drawn from the results; the survey stays as it was
+datasignature
+local sig `r(datasignature)'
+cge_microsim `mm' line(30) graph(gic incidence poverty groups) nodisplay
+assert "`r(graphs)'" == "microsim_gic microsim_incidence microsim_poverty microsim_groups"
+datasignature
+assert "`r(datasignature)'" == "`sig'"
+* without a line, decompose, market() or bands(), all is the graphs of consumption
+cge_microsim `mm' graph(all) gname(g9) nodisplay
+assert "`r(graphs)'" == "g9_gic g9_incidence g9_groups"
+* the growth incidence curve plots the percentiles of the results
+cge_microsim `mm' line(30) graph(gic) gname(t9) nodisplay
+preserve
+quietly serset use, clear
+quietly count
+assert r(N) == 99
+quietly summarize pct, meanonly
+local gsum = r(sum)
+restore
+preserve
+quietly cge_microsim `mm' line(30) clear nodisplay
+quietly summarize pct if table == "gic" & group == "all", meanonly
+assert r(N) == 99 & reldif(r(sum), `gsum') < 1e-12
+restore
+* the graphs as files, the type of graph before the extension
+tempfile gf
+cge_microsim `mm' line(30) graph(gic poverty) gname(f9) gexport("`gf'.png") nodisplay
+confirm file "`gf'_gic.png"
+confirm file "`gf'_poverty.png"
+* in colour, with a label for the simulation, as a vector file
+cge_microsim `mm' line(30) graph(incidence) gname(v9) gcolor glabels("Tariffs removed") gexport("`gf'.pdf") nodisplay
+confirm file "`gf'_incidence.pdf"
+* the bands across the draws of the elasticities, with the other graphs
+capture program drop _scen_nt
+program define _scen_nt
+    cge_shock tm, value(0)
+end
+quietly cge_sensitivity, scenario(_scen_nt) draws(3) seed(7) keep(dg) nodisplay
+cge_microsim `mm' line(30) bands(dg) decompose graph(all) gname(b9) gopts(xsize(5)) nodisplay
+assert "`r(graphs)'" == "b9_gic b9_incidence b9_groups b9_poverty b9_shapley b9_bands"
+program drop _scen_nt
+* errors, before the results are computed
+capture noisily cge_microsim `mm' graph(nosuch) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `mm' graph(poverty) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `mm' line(30) graph(shapley) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `mm' line(30) graph(fiscal) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `mm' line(30) graph(bands) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `mm' line(30) gname(x9) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `mm' line(30) graph(gic) gname(a23456789012345678901234) nodisplay
+assert _rc == 198
+capture noisily cge_microsim `mm' line(30) graph(gic) glabels("One" "Two") nodisplay
+assert _rc == 198
+graph drop _all

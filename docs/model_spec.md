@@ -1043,6 +1043,14 @@ stratum), for the base, the simulation ($w^1$) and the change ($u^1 - u^0$).
 measure for all households for draws $1, 2, \dots$ and reports their 5th,
 50th and 95th percentiles (as `_pctile`) and standard deviation.
 
+**Graphs (from version 0.9.6).** `cge_microsim, graph()` posts the results
+dataset in a preserved copy of the data and draws each graph from it
+(`_cge_ms_graphs` in cge_microsim.ado): `gic` from the table gic, `incidence`
+from quantile/mean, `groups` from summary/mean by group, `poverty` from
+summary/fgt0 (100 times the change), `shapley` from shapley (fgt0 at the first
+line, or mean), `fiscal` from fiscal/gini by concept, `bands` from the p5, p50
+and p95 rows of bands.
+
 ## 12. Fiscal instruments (from version 0.3.1)
 
 ### 12.1 Revenue-neutral tax replacement

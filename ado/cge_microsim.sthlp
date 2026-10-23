@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.8.3  23oct2026}{...}
+{* *! version 0.9.6  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -17,7 +17,8 @@
 {opt sub:sidies(varlist)} {opt ink:ind(var:target ...)} {opt rew:eight(var:target ...)} {opt svy}
 {opt band:s(name)}
 {opt gen:erate(prefix)} {opt replace} {opt det:ail} {opt dec:ompose} {opt clear}
-{opt sav:ing(filename[, replace])} {opt nod:isplay}]
+{opt sav:ing(filename[, replace])} {opt nod:isplay}
+{opt graph(graphs)} {opt gname(stub)} {opt gexport(filename)} {opt glab:els(labels)} {opt gcolor} {opt gopts(options)}]
 
 {pstd}
 {cmd:pweight}s, {cmd:aweight}s, {cmd:fweight}s and {cmd:iweight}s are allowed;
@@ -197,6 +198,35 @@ survey in memory.
 {phang}
 {opt nodisplay} suppresses the tables.
 
+{phang}
+{opt graph(graphs)} (from version 0.9.6) draws graphs of the results: one or
+more of {cmd:gic}, {cmd:incidence}, {cmd:poverty}, {cmd:groups},
+{cmd:shapley}, {cmd:fiscal} and {cmd:bands}, or {cmd:all} for every graph that
+the other options allow; see {it:Graphs} below.
+
+{phang}
+{opt gname(stub)} names the graphs {it:stub}{cmd:_}{it:graph}, such as
+{cmd:microsim_gic}, the default stub being {cmd:microsim}.
+
+{phang}
+{opt gexport(filename)} saves each graph as a file, with the graph's name
+before the extension: {cmd:gexport(fig.pdf)} writes {cmd:fig_gic.pdf} and so
+on. The extension gives the format: {cmd:.pdf} or {cmd:.eps} for a journal,
+{cmd:.png} (the default, 2,000 pixels wide) for slides and documents.
+
+{phang}
+{opt glabels(labels)} gives the simulations, in the order of {opt sim()},
+the labels of the legends, such as {cmd:glabels("Tariffs removed" "Tariffs doubled")};
+by default they are the names of the simulations.
+
+{phang}
+{opt gcolor} draws the series in the colours of Okabe and Ito, which readers
+with colour blindness can tell apart, instead of shades of grey.
+
+{phang}
+{opt gopts(options)} adds graph options to every graph, such as
+{cmd:gopts(title("Tariff reform"))} or {cmd:gopts(xsize(5) ysize(3.5))}.
+
 
 {title:Welfare}
 
@@ -250,6 +280,28 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {p2col:{cmd:fiscalq}}with {opt market()}: by quantile of market income per person, each instrument's {cmd:share} and its {cmd:pct_market} of the quantile's market income{p_end}
 {p2col:{cmd:reweight}}with {opt reweight()}: each characteristic's weighted total, base and reweighted{p_end}
 {p2col:{cmd:bands}}with {opt bands()}: for every measure for all households, its percentiles {cmd:p5}, {cmd:p50} and {cmd:p95} and its standard deviation {cmd:sd} across the draws, in {cmd:value}{p_end}
+{p2colreset}{...}
+
+
+{title:Graphs}
+
+{pstd}
+From version 0.9.6, {opt graph()} draws the results in the style of figures
+in economics journals: a white background, axes on the left and below, light
+horizontal grid lines, a line at zero, the legend below without a frame, and
+no title, which a journal sets in the caption ({opt gopts(title())} adds
+one). Series are told apart by shades of grey and line patterns, so that the
+graphs print in black and white, or, with {opt gcolor}, by colour. The graphs
+are 5 by 3.5 inches. The survey in memory is left as it was.
+
+{p2colset 9 22 24 2}{...}
+{p2col:{cmd:gic}}the growth incidence curve: the per cent change of each percentile of consumption per person, one line for each simulation{p_end}
+{p2col:{cmd:incidence}}the per cent change in mean consumption per person of each quantile group of base consumption{p_end}
+{p2col:{cmd:poverty}}the change in the poverty headcount, in percentage points, at each line; needs {opt line()}{p_end}
+{p2col:{cmd:groups}}the per cent change in mean consumption per person of each household group{p_end}
+{p2col:{cmd:shapley}}the contribution of each channel to the change in the headcount at the first line, in percentage points, or to the change in mean consumption without a line; needs {opt decompose}{p_end}
+{p2col:{cmd:fiscal}}the Gini coefficient of each income concept, market to final, in the base and each simulation; needs {opt market()}{p_end}
+{p2col:{cmd:bands}}the median and the 5th to 95th percentiles across the draws of the per cent change in mean consumption, the headcount at each line and the Gini coefficient; needs {opt bands()}{p_end}
 {p2colreset}{...}
 
 
@@ -309,6 +361,12 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {phang2}{cmd:. cge_sensitivity, scenario(scen_nt) draws(20) keep(dr) nodisplay}{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) bands(dr)}{p_end}
 
+{pstd}Graphs of both simulations, with labels, saved as PDF files for a journal (from version 0.9.6){p_end}
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) budget(food:com_agr goods:com_man) line(100 zreg) decompose graph(gic incidence poverty shapley) glabels("Tariffs removed" "Tariffs doubled") gexport(tariffs.pdf) nodisplay}{p_end}
+
+{pstd}The same graphs in colour, as PNG files{p_end}
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) graph(all) gcolor glabels("Tariffs removed" "Tariffs doubled") gexport(tariffs.png) nodisplay}{p_end}
+
 {pstd}The results as a dataset, and the growth incidence curve{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) clear nodisplay}{p_end}
 {phang2}{cmd:. list q pct if sim == "notariff" & table == "gic" & inlist(q, 10, 50, 90), noobs}{p_end}
@@ -335,6 +393,7 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {synopt:{cmd:r(lines)}}the poverty lines{p_end}
 {synopt:{cmd:r(channels)}}the channels of {opt decompose}{p_end}
 {synopt:{cmd:r(instlist)}}the fiscal instruments{p_end}
+{synopt:{cmd:r(graphs)}}with {opt graph()}: the names of the graphs drawn{p_end}
 {p2col 5 20 24 2: Matrices}{p_end}
 {synopt:{cmd:r(table)}}for all households and each group: mean real consumption per person, base and simulated, and its per cent change; FGT0, FGT1 and FGT2 at the first line, base and simulated; the Gini coefficient, base and simulated{p_end}
 {synopt:{cmd:r(poverty)}}for each line ({cmd:line1}, {cmd:line2}, ...) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated{p_end}

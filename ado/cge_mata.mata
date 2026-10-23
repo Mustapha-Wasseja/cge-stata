@@ -208,7 +208,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.5")
+    return("0.9.6")
 }
 
 // =====================================================================

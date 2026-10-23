@@ -165,6 +165,14 @@ def run_examples(names: list[str], stata: str) -> None:
                 print(f"  {tag}: {len(wide)} line(s) longer than 110 characters, too wide for the page")
             (TEX / "output" / f"{tag}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
         print(f"{do.name}: {len(tags)} piece(s) of output: {', '.join(tags)}")
+        # Graphs that an example exports as fig_*.pdf or fig_*.png are the
+        # manual's figures (from version 0.9.6)
+        figs = sorted(work.glob("fig_*.pdf")) + sorted(work.glob("fig_*.png"))
+        if figs:
+            (TEX / "figures").mkdir(exist_ok=True)
+            for f in figs:
+                shutil.copyfile(f, TEX / "figures" / f.name)
+            print(f"  {len(figs)} figure(s): {', '.join(f.name for f in figs)}")
         shutil.rmtree(work, ignore_errors=True)
 
 
