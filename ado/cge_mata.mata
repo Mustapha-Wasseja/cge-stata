@@ -134,6 +134,10 @@ struct cge_model {
     // equation blocks
     string colvector ename
     real colvector   elen, escale, emask
+    // built-in equation elements that user equations replace (from version
+    // 0.9.3): block and element labels, and their rows in the equations
+    string matrix    urep
+    real colvector   erep
     real scalar      neq
     // closure
     string scalar    c_ext, c_gov, c_si, c_num
@@ -204,7 +208,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.2")
+    return("0.9.3")
 }
 
 // =====================================================================
@@ -2553,6 +2557,147 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     // User equations (Section 19)
     _cge_u_eval(M, p, x, ul, ur)
     _cge_put(M, L, R, K, record, "U", ul, ur, J(rows(ul), 1, 1))
+    // built-in equation elements that user equations replace leave the
+    // system (from version 0.9.3)
+    if (record) M.erep = _cge_u_reprows(M, K)
+    if (rows(M.erep)) K[M.erep] = J(rows(M.erep), 1, 0)
+}
+
+// The domain of a built-in equation block that a user equation may replace
+// (from version 0.9.3), as set codes: "" for a block without an index, "-"
+// for a block that cannot be replaced. Blocks with exact derivatives of their
+// own (P7, P8, P9, I1, I8, I9, S1, S2, S3, S5), the constraints and the user
+// equations cannot be replaced.
+string scalar _cge_blockdom(string scalar b)
+{
+    string matrix T
+    real scalar k
+    T = ("P1", "C") \ ("P2", "C") \ ("P3", "C") \ ("P4", "C") \ ("P5", "A") \ ("P6", "A") \
+        ("Q1", "A") \ ("Q2", "A") \ ("Q1C", "A") \ ("Q2C", "A") \ ("Q3", "A") \ ("Q4", "F|A") \
+        ("N1", "N|A") \ ("N2", "N|A") \ ("N3", "C|A") \ ("H1", "") \ ("H2", "F") \ ("H3", "F") \
+        ("Q5", "C|A") \ ("Q6", "C") \ ("Q6A", "C") \ ("Q6B", "A|C") \ ("P5A", "A|C") \
+        ("T1", "C") \ ("T2", "C") \ ("T3", "C") \ ("T3E", "C") \ ("T4", "C") \ ("T5", "C") \
+        ("T6", "C") \ ("T7", "C") \ ("T8", "C") \ ("T9", "C") \ ("T10", "C") \
+        ("I2", "I|F") \ ("I3", "D") \ ("I4", "H") \ ("I5", "C|H") \ ("I5H", "A|H") \ ("I6", "C") \
+        ("I7", "C") \ ("I10", "D") \ ("I11", "D") \ ("I12", "") \ ("I13", "C") \ ("I14", "") \
+        ("L1", "F") \ ("L2", "F") \ ("S4", "")
+    k = _cge_find(T[., 1], b)
+    return(k ? T[k, 2] : "-")
+}
+
+// replace(BLOCK) or replace(BLOCK(e1[,e2])) of cge_equation (from version
+// 0.9.3), checked against the domain of the equation: an equation with an
+// index replaces the elements of the block with the labels of its own; one
+// without, the block without an index or the element given. Returns the
+// block, with the element when given.
+string scalar _cge_u_repcheck(struct cge_model scalar M, string scalar rep, string scalar idx, string scalar set)
+{
+    string scalar b, dom, s1, s2, u1, u2, els
+    string rowvector el
+    string colvector lb, lu
+    real scalar nb, nu, k
+    if (!regexm(strtrim(rep), "^([A-Za-z][A-Za-z0-9]*)[ ]*(\((.*)\))?$")) {
+        _cge_fail("replace(): give an equation block, as replace(I7) or replace(I7(com_ser))", 198)
+    }
+    b = strupper(regexs(1))
+    els = (strpos(rep, "(") ? strtrim(regexs(3)) : "")
+    dom = _cge_blockdom(b)
+    if (dom == "-") {
+        if (anyof(M.ename, b)) {
+            _cge_fail("replace(): equation block " + b + " cannot be replaced: it has exact derivatives of its own, or is a constraint or a user equation", 198)
+        }
+        _cge_fail("replace(): " + b + " is not an equation block of the model (model_spec.md, Section 5)", 198)
+    }
+    _cge_setparts(dom, s1, s2)
+    nb = (s1 != "") + (s2 != "")
+    if (els != "") {
+        if (idx != "") _cge_fail("replace(): an equation with an index replaces the elements of its domain; write replace(" + b + ")", 198)
+        el = tokens(els, ",")
+        el = strtrim(select(el, el :!= ","))
+        if (cols(el) != nb) _cge_fail("replace(): block " + b + " has " + strofreal(nb) + " index(es); " + strofreal(cols(el)) + " given", 198)
+        if (nb >= 1) {
+            if (!anyof(_cge_setlab(M, s1), el[1])) _cge_fail("replace(): " + el[1] + " is not an element of block " + b, 111)
+        }
+        if (nb == 2) {
+            if (!anyof(_cge_setlab(M, s2), el[2])) _cge_fail("replace(): " + el[2] + " is not an element of block " + b, 111)
+        }
+        return(b + "(" + invtokens(el, ",") + ")")
+    }
+    _cge_setparts(set, u1, u2)
+    nu = (u1 != "") + (u2 != "")
+    if (nu != nb) {
+        if (nu == 0) _cge_fail("replace(): block " + b + " has " + strofreal(nb) + " index(es): give the element, as replace(" + b + "(label)), or an index to the equation", 198)
+        _cge_fail("replace(): block " + b + " has " + strofreal(nb) + " index(es); the equation has " + strofreal(nu), 198)
+    }
+    // the sets of the equation's indexes are within those of the block
+    if (nu >= 1) {
+        lb = _cge_setlab(M, s1)
+        lu = _cge_setlab(M, u1)
+        for (k = 1; k <= rows(lu); k++) {
+            if (!anyof(lb, lu[k])) _cge_fail("replace(): " + lu[k] + " is not an element of block " + b + "; the indexes of the equation must run over its sets", 198)
+        }
+    }
+    if (nu == 2) {
+        lb = _cge_setlab(M, s2)
+        lu = _cge_setlab(M, u2)
+        for (k = 1; k <= rows(lu); k++) {
+            if (!anyof(lb, lu[k])) _cge_fail("replace(): " + lu[k] + " is not an element of block " + b + "; the indexes of the equation must run over its sets", 198)
+        }
+    }
+    return(b)
+}
+
+// The built-in element that element (e1, e2) of a user equation replaces
+// (from version 0.9.3): block and labels
+string rowvector _cge_u_repel(string scalar spec, string scalar e1, string scalar e2)
+{
+    string rowvector el
+    real scalar c
+    c = strpos(spec, "(")
+    if (!c) return((spec, e1, e2))
+    el = tokens(substr(spec, c + 1, strlen(spec) - c - 1), ",")
+    el = select(el, el :!= ",")
+    return((substr(spec, 1, c - 1), (cols(el) >= 1 ? el[1] : ""), (cols(el) >= 2 ? el[2] : "")))
+}
+
+// Rows of the built-in equation elements that user equations replace (from
+// version 0.9.3), from the blocks just recorded; each must be in the model
+// (K) and be replaced once
+real colvector _cge_u_reprows(struct cge_model scalar M, real colvector K)
+{
+    real colvector r, bo
+    real scalar k, g, i, j, n1, n2
+    string scalar dom, s1, s2
+    string colvector l1, l2
+    if (rows(M.urep) == 0 | cols(M.urep) < 3) return(J(0, 1, .))
+    bo = runningsum(M.elen) - M.elen
+    r = J(rows(M.urep), 1, .)
+    for (k = 1; k <= rows(M.urep); k++) {
+        g = _cge_find(M.ename, M.urep[k, 1])
+        dom = _cge_blockdom(M.urep[k, 1])
+        if (!g | dom == "-") _cge_fail("cge internal error: block " + M.urep[k, 1] + " cannot be replaced", 3498)
+        _cge_setparts(dom, s1, s2)
+        i = j = n1 = n2 = 1
+        if (s1 != "") {
+            l1 = _cge_setlab(M, s1)
+            n1 = rows(l1)
+            i = _cge_find(l1, M.urep[k, 2])
+        }
+        if (s2 != "") {
+            l2 = _cge_setlab(M, s2)
+            n2 = rows(l2)
+            j = _cge_find(l2, M.urep[k, 3])
+        }
+        if (M.elen[g] != n1 * n2) _cge_fail("cge internal error: block " + M.urep[k, 1] + " does not have the domain " + dom, 3498)
+        if (!i | !j) _cge_fail("replace(): " + M.urep[k, 1] + "(" + M.urep[k, 2] + (M.urep[k, 3] != "" ? "," + M.urep[k, 3] : "") + ") is not an element of the block", 111)
+        r[k] = bo[g] + (i - 1) * n2 + j
+        if (!K[r[k]]) {
+            _cge_fail("replace(): " + M.urep[k, 1] + (M.urep[k, 2] != "" ? "(" + M.urep[k, 2] + (M.urep[k, 3] != "" ? "," + M.urep[k, 3] : "") + ")" : "") +
+                      " is not an equation of the model, so it cannot be replaced", 459)
+        }
+    }
+    if (rows(uniqrows(r)) != rows(r)) _cge_fail("replace(): an equation element is replaced by two user equations", 459)
+    return(r)
 }
 
 // Rents by recipient (Section 16.1): factors, households and enterprises,
@@ -13583,6 +13728,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     st = J(0, 1, .)
     ln1 = J(0, 1, .)
     ln2 = J(0, 1, .)
+    M.urep = J(0, 3, "")
     for (k = 1; k <= rows(M.uedef); k++) {
         // an inequality is the bound of its slack variable (from version 0.9.0)
         if (M.uedef[k, 7] == "<=" | M.uedef[k, 7] == ">=") continue
@@ -13606,6 +13752,10 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
             tok = tok \ L \ R
             lab = lab \ (M.uedef[k, 1] + (idx != "" ? "(" + e1[j] + (e2[j] != "" ? "," + e2[j] : "") + ")" : ""))
             gl = gl \ (gtl, gtr)
+            // the built-in element it replaces (from version 0.9.3)
+            if (substr(M.uedef[k, 8], 1, 8) == "replace:") {
+                M.urep = M.urep \ _cge_u_repel(substr(M.uedef[k, 8], 9, .), (idx != "" ? e1[j] : ""), (idx != "" ? e2[j] : ""))
+            }
         }
     }
     M.utok = tok
@@ -13993,10 +14143,27 @@ string scalar _cge_u_perptext(string scalar spec)
 {
     string rowvector pr
     if (spec == "") return("")
+    // an equation that replaces built-in elements (from version 0.9.3)
+    if (substr(spec, 1, 8) == "replace:") return(", replace(" + substr(spec, 9, .) + ")")
     pr = tokens(spec, "|")
     pr = select(pr, pr :!= "|")
     return(", perp(" + pr[1] + (cols(pr) >= 2 & pr[2] != "-" ? "(" + pr[2] + ")" : "") +
            (cols(pr) >= 3 & pr[3] == "down" ? ", down" : "") + ")")
+}
+
+// The built-in elements that the last n elements of the user equations
+// replace, as BLOCK(e1,e2): those of the equation just added (from version
+// 0.9.3)
+string scalar _cge_u_reptext(struct cge_model scalar M, real scalar n)
+{
+    string rowvector out
+    real scalar k
+    out = J(1, 0, "")
+    for (k = max((1, rows(M.urep) - n + 1)); k <= rows(M.urep); k++) {
+        out = out, M.urep[k, 1] + (M.urep[k, 2] != "" ? "(" + M.urep[k, 2] + (M.urep[k, 3] != "" ? "," + M.urep[k, 3] : "") + ")" : "")
+    }
+    if (cols(out) > 4) return(invtokens(out[|1 \ 4|]) + " and " + strofreal(cols(out) - 4) + " more")
+    return(invtokens(out))
 }
 
 // The rows of column v that keep selects, as a column (0 x 1 when none)
@@ -14044,7 +14211,8 @@ void _cge_u_addineq(struct cge_model scalar M, string scalar name, string scalar
 void _cge_u_addeq(string scalar spec)
 {
     struct cge_model scalar M
-    string scalar head, rest, name, idx, set, lhs, rhs, opts, cond, rel
+    string scalar head, rest, name, idx, set, lhs, rhs, opts, cond, rel, rep
+    string rowvector ro
     real colvector L, R
     real scalar k, c, n0, worst
     M = _cge_load()
@@ -14064,13 +14232,20 @@ void _cge_u_addeq(string scalar spec)
     if (lhs == "" | rhs == "") _cge_fail("cge_equation: write NAME: expression = expression", 198)
     // an inequality, paired with a variable (from version 0.9.0)
     if (rel == "<=" | rel == ">=") {
+        if (regexm(opts, "(^|[ ])rep[a-z]*[ ]*\(")) _cge_fail("cge_equation: replace() takes an equation, not an inequality", 198)
         _cge_u_addineq(M, name, idx, set, cond, lhs, rhs, rel, opts)
         return
     }
-    if (opts != "") _cge_fail("cge_equation: perp() pairs an inequality, =l= or =g=, with a variable", 198)
+    // an equation that replaces built-in equation elements (from version 0.9.3)
+    rep = ""
+    if (opts != "") {
+        ro = _cge_u_opts(opts, ("replace", "perp"), (3, 4), "cge_equation")
+        if (ro[2] != "") _cge_fail("cge_equation: perp() pairs an inequality, =l= or =g=, with a variable", 198)
+        rep = "replace:" + _cge_u_repcheck(M, ro[1], idx, set)
+    }
     n0 = rows(M.uelab)
     _cge_u_widen(M)
-    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, "=", "")
+    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, "=", rep)
     _cge_u_build(M, M.p0, M.x0)
     if (rows(M.uelab) == n0) _cge_fail("user equation " + name + ": no element meets the condition", 459)
     _cge_u_refresh(M)
@@ -14079,7 +14254,8 @@ void _cge_u_addeq(string scalar spec)
     worst = 0
     for (k = n0 + 1; k <= rows(L); k++) worst = max((worst, abs(L[k] - R[k]) / max((1, abs(L[k]), abs(R[k])))))
     _cge_store(M)
-    printf("{txt}User equation {res}%s{txt}: %f element(s)\n", name, rows(L) - n0)
+    printf("{txt}User equation {res}%s{txt}: %f element(s)%s\n", name, rows(L) - n0,
+           (rep != "" ? ", replacing " + _cge_u_reptext(M, rows(L) - n0) : ""))
     if (worst > 1e-9) printf("{txt}Note: the base does not satisfy it (largest relative gap {res}%9.2e{txt}); it acts as a shock\n", worst)
     st_global("r(name)", name)
     st_numscalar("r(N_elements)", rows(L) - n0)
@@ -14153,6 +14329,7 @@ void _cge_u_clear()
     }
     M.uvdef = J(0, 9, "")
     M.uedef = J(0, 8, "")
+    M.urep = J(0, 3, "")
     M.utok = J(0, 3, .)
     M.uelab = J(0, 1, "")
     M.uegams = J(0, 2, "")
@@ -14210,6 +14387,12 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
             fput(fh, "parameter " + g + (ix == "" ? "" : (strpos(ix, ",") ? "(*, *)" : "(*)")) + ";")
         }
         fput(fh, g + ix + " = " + _cge_gnum(M.x0[LG[i, 1]]) + ";")
+    }
+    // built-in equation elements that user equations replace (from version
+    // 0.9.3): the equations of cge_model.gms leave out the elements of XRP
+    for (i = 1; i <= rows(M.urep); i++) {
+        fput(fh, "XRP('" + M.urep[i, 1] + "', '" + (M.urep[i, 2] == "" ? "0" : M.urep[i, 2]) + "', '" +
+             (M.urep[i, 3] == "" ? "0" : M.urep[i, 3]) + "') = 1;")
     }
     for (k = 1; k <= M.nuv; k++) {
         kv = rows(M.vname) - M.nuv + k
@@ -15212,6 +15395,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "elen", M.elen)
     _cge_io_put(fh, "escale", M.escale)
     _cge_io_put(fh, "emask", M.emask)
+    _cge_io_put(fh, "urep", M.urep)
     _cge_io_put(fh, "neq", M.neq)
     _cge_io_put(fh, "c_ext", M.c_ext)
     _cge_io_put(fh, "c_gov", M.c_gov)
@@ -15350,6 +15534,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "elen") M.elen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "escale") M.escale = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "emask") M.emask = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "urep") M.urep = (rows(v) * cols(v) == 0 ? J(0, 3, "") : v)
     else if (name == "neq") M.neq = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "c_ext") M.c_ext = (rows(v) * cols(v) == 0 ? "" : v)
     else if (name == "c_gov") M.c_gov = (rows(v) * cols(v) == 0 ? "" : v)

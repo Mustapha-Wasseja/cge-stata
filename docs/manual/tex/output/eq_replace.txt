@@ -1,0 +1,45 @@
+. quietly cge_synthetic, clear
+
+. quietly cge_sam, labels(account)
+
+. quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+>     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+
+. quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+
+. cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))
+User equation qe: 1 element(s), replacing T2(com_agr)
+
+. cge_equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))
+User equation gs: 1 element(s), replacing I7(com_ser)
+Note: the base does not satisfy it (largest relative gap  9.09e-02); it acts as a shock
+
+. cge_equation, list
+equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))
+equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(replaced)
+Simulation replaced solved in 8 iteration(s) (newton)
+Largest scaled residual  1.02e-15; WALRAS =  7.71e-14
+
+. quietly cge_results, sim(replaced) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "QE", "QG", "WALRAS"), noobs sepby(variable)
+
+  +----------------------------------------+
+  | variable   element1   base       value |
+  |----------------------------------------|
+  |       QE    com_agr     20          20 |
+  |       QE    com_man     40   41.561651 |
+  |       QE    com_ser     15   16.398136 |
+  |----------------------------------------|
+  |       QG    com_agr      0           0 |
+  |       QG    com_man      5           5 |
+  |       QG    com_ser     40          44 |
+  |----------------------------------------|
+  |   WALRAS                 0   7.707e-14 |
+  +----------------------------------------+

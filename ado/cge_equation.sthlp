@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.2  23oct2026}{...}
+{* *! version 0.9.3  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_equation} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=} {it:expression}
+{cmd:cge_equation} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=} {it:expression} [{cmd:,} {opt replace(block)}]
 
 {p 8 12 2}
 {cmd:cge_equation} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=l=}|{cmd:=g=} {it:expression}{cmd:,}
@@ -220,6 +220,34 @@ values are stored with each period, and {helpb cge_gams} writes them as
 parameters, {cmd:LAG1_}{it:VAR}, that each period of a dynamic run sets.
 
 
+{title:Replacing built-in equations}
+
+{pstd}
+From version 0.9.3, {opt replace(block)} makes an equation take the place of
+elements of a built-in equation block, named as in Section 5 of the model's
+specification ({cmd:T2} for the export supply of a commodity, {cmd:I7} for
+government purchases, and so on): a change to the model's own equations, as a
+GAMS modeller would edit them. An equation with an index replaces the
+elements of the block with the labels of its own, over the same sets or user
+sets within them; one without an index replaces the block without an index,
+or the element given, {opt replace(block(e))}. For example, exports of
+agricultural goods held at the base, and government purchases of goods 10 per
+cent above the rule of {cmd:I7}:
+
+{phang2}{cmd:. cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))}{p_end}
+{phang2}{cmd:. cge_equation g7(c)$(goods(c)): QG(c) = 1.1 * qg(c) * GADJ, replace(I7)}{p_end}
+
+{pstd}
+The replaced elements leave the system, which stays square: the closure does
+not change. {cmd:cge_equation, list} shows {opt replace()}; the replacements
+are kept when the model is saved or calibrated again, and {helpb cge_gams}
+leaves the elements out of the GAMS equations. The blocks with derivatives
+coded in the package, {cmd:P7}, {cmd:P8}, {cmd:P9}, {cmd:I1}, {cmd:I8},
+{cmd:I9}, {cmd:S1}, {cmd:S2}, {cmd:S3} and {cmd:S5}, cannot be replaced. A
+replacement must keep the accounting of the model consistent; Walras's law,
+whose residual {cmd:WALRAS} every simulation reports, shows when it does not.
+
+
 {title:Options}
 
 {phang}
@@ -239,6 +267,10 @@ numeraire.
 {phang}
 {opt perp(variable[, up|down])} pairs an inequality with a variable fixed under
 the closure, which moves up (the default) or down when it binds.
+
+{phang}
+{opt replace(block)} replaces the elements of a built-in equation block, or
+{opt replace(block(e))} one element (see {it:Replacing built-in equations}).
 
 {phang}
 {opt list} lists the user variables and equations; {opt clear} removes them
@@ -296,6 +328,14 @@ all.
 {phang2}{cmd:. cge_closure, swap(LAMG GADJ)}{p_end}
 {phang2}{cmd:. cge_variable DQA(a) = QA(a) - lag(QA(a))}{p_end}
 {phang2}{cmd:. cge_dynamic, name(lagged) periods(0/3) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02)}{p_end}
+
+{pstd}Exports of agricultural goods held at the base, in place of their export supply, and government purchases of services 10 per cent above the base (from version 0.9.3); the earlier user equations are removed first{p_end}
+{phang2}{cmd:. cge_closure, swap(none)}{p_end}
+{phang2}{cmd:. cge_equation, clear}{p_end}
+{phang2}{cmd:. cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))}{p_end}
+{phang2}{cmd:. cge_equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))}{p_end}
+{phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+{phang2}{cmd:. cge_solve}{p_end}
 
 
 {title:Remarks}

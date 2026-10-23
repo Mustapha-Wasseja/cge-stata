@@ -12,7 +12,7 @@ specification, calibrates the model from the SAM and the user's settings alone,
 and is solved with PATH; it reproduces the 186 scenarios of the Python
 reference, including scenarios with constraints solved as complementarity
 problems, to $2.9 \times 10^{-11}$ or better. \manref{cge_gams} writes any model
-for that GAMS program: 36 exported cases, solved with PATH (17 of them also
+for that GAMS program: 37 exported cases, solved with PATH (17 of them also
 with CONOPT, KNITRO and IPOPT), reproduce the solutions of Stata to
 $4 \times 10^{-9}$ or better
 (\secref{sec:gams-import}). The test suite also runs every example do-file.
@@ -37,7 +37,10 @@ variables and equations with two indexes and sets of pairs (case
 \cmd{pairs}). Sums over two indexes and over sets of pairs equal the nested
 sums and the terms they stand for to $10^{-12}$. Lags take the values of the
 periods before in every period of a dynamic run, to $10^{-12}$, and GAMS
-reproduces a run with lags period by period (case \cmd{dynlag}).
+reproduces a run with lags period by period (case \cmd{dynlag}). A built-in
+equation written again in the user's language, in place of the original, leaves
+the solution unchanged to $10^{-10}$, and GAMS leaves out the elements that user
+equations replace (case \cmd{replace}).
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed

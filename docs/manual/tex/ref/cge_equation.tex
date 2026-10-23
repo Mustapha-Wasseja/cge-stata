@@ -45,7 +45,7 @@ cge_equation, clear
 Add an equation
 \begin{stsyntax}
 \cmdb{cge_equation} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\cmd{:}
-\argu{expression} \cmd{=} \argu{expression}
+\argu{expression} \cmd{=} \argu{expression} [\texttt{,} \optarg{}{replace}{block}]
 \end{stsyntax}
 Add an inequality paired with a variable (from version 0.9.0)
 \begin{stsyntax}
@@ -78,6 +78,13 @@ moves, up (the default) or down, when it binds. \argu{variable} is a variable
 element, such as \cmd{RA(act_man)} or \cmd{GADJ}, or, for an equation with an
 index, the variable at that index, as in \cmd{RA(a)}. See
 \emph{Inequalities} below.
+
+\item[\optarg{}{replace}{block}] (from version 0.9.3) makes the equation
+take the place of the elements of the built-in equation block \argu{block},
+named as in chapter~\ref{chap:equations}: the elements with the labels of its
+own, or, for an equation without an index, the block without an index or the
+element given, as in \cmd{replace(T2(com_agr))}. See \emph{Replacing built-in
+equations} below.
 
 \item[\opt{}{list}] lists the user variables, with their definitions or
 values, and the user equations. It is the default when only a comma is given.
@@ -215,6 +222,23 @@ to the next (Example 8). A defined variable may not refer to its own lag,
 since its base value would depend on itself: it is given \opt{}{value()} and an
 equation instead.
 
+\cgesubsec{Replacing built-in equations}
+
+From version 0.9.3, \cmd{replace(}\argu{block}\cmd{)} makes an equation take
+the place of elements of a built-in equation block, as a GAMS modeller would
+edit an equation of the model. An equation with an index replaces the elements
+of the block with the labels of its own; its indexes run over the sets of the
+block, or over user sets within them, in the same order. An equation without an
+index replaces a block without an index, or the element given,
+\cmd{replace(}\argu{block}\cmd{(}\argu{e}\cmd{))}. The replaced elements leave the
+system, which therefore stays square, and the closure is unchanged.
+Section~\ref{sec:userreplace} lists the blocks that may be replaced. Those
+with derivatives coded in the package cannot be: equations \eqref{eq:P7},
+\eqref{eq:P8}, \eqref{eq:P9}, \eqref{eq:I1}, \eqref{eq:I8}, \eqref{eq:I9},
+\eqref{eq:S1}, \eqref{eq:S2}, \eqref{eq:S3} and \eqref{eq:S5}. A replacement must keep the accounting of
+the model consistent: Walras's law, whose residual \cmd{WALRAS} every
+simulation reports, shows when it does not (Example 9).
+
 \cgesubsec{Equations and the closure}
 
 Each equation element needs a free variable, so that the closure stays square:
@@ -307,6 +331,20 @@ later period half its value before plus half the revenue index; government
 purchases therefore lag behind revenue. Before period 0, the lagged values are
 those of the base, so \cmd{DQA} is 0 in period 0.
 
+\cgesubsec{Example 9: replacing built-in equations}
+
+From version 0.9.3, exports of agricultural goods held at the base, in place
+of the export supply of \eqref{eq:T2}, and government purchases of services 10
+per cent above the base, in place of \eqref{eq:I7}; the tariffs are removed:
+\stlog{eq_replace}
+Exports of agricultural goods stay at the base while those of manufactures
+respond to the tariff cut, and Walras's law holds. Replacing the demand for
+one intermediate input of \eqref{eq:Q5} alone, by contrast, would leave the cost
+of intermediates in \eqref{eq:P6} and \eqref{eq:P7} at the old coefficients, and
+\cmd{WALRAS} would show the gap. Written in the user's language, the equation of
+a block itself leaves the solution as it was:
+\stlog{eq_replace_same}
+
 \cgesec{Stored results}
 
 \cmd{cge_equation} stores the following in \cmd{r()}:
@@ -378,6 +416,11 @@ A lagged value $\texttt{lag(}v\texttt{,}\ k\texttt{)}$ (from version 0.9.2) is a
 number within a period: $v_{t-k}$, the solution of the period $k$ before in a
 dynamic run, with $v_{t-k} = v^0$ for $t - k$ before the first period, and $v^0$
 in a static simulation. Its derivative is zero.
+
+An equation that replaces the element $e$ of a block $B$ (from version 0.9.3)
+removes the row $B_e$ from the system, $\ell_B(x)_e - r_B(x)_e = 0$, and adds its
+own; in the GAMS program, the parameter \cmd{XRP(}$B$\cmd{, }$e$\cmd{)} is 1, and
+the equations of block $B$ leave out the element.
 
 \Chapref{chap:user} describes the compilation and the GAMS program, in which
 GAMS differentiates the same equations itself.

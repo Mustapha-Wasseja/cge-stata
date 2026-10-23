@@ -1778,6 +1778,21 @@ variable that refers to its own lag is an error. `cge_gams` declares a
 parameter `LAGk_V` for each lagged element at its base value, and each period
 sets those that differ from the period before (`_cge_u_lags()`).
 
+**Replacing built-in equations (from version 0.9.3).** `cge_equation NAME[(i[,j])]:
+lhs = rhs, replace(B)` (or `replace(B(e1[,e2]))` without an index) stores
+`replace:B` in column 8 of `M.uedef`. `_cge_u_repcheck()` checks the block
+against `_cge_blockdom()`, the domain of each block that may be replaced
+(those with exact derivatives of their own, P7, P8, P9, I1, I8, I9, S1, S2,
+S3 and S5, the constraints and the user equations may not), and the sets of
+the equation's indexes against it. `_cge_u_build()` records the replaced
+elements, block and labels, in `M.urep`; when the equation blocks are
+recorded, `_cge_eq()` finds their rows (`_cge_u_reprows()`: row-major within a
+block), checks that each is in the model and replaced once, and sets their
+mask to 0 in every evaluation, so they leave the system, the pattern and the
+reduced system. `cge_model.gms` declares `XRP(*, *, *)`, and every equation
+that may be replaced leaves out the elements with `XRP(block, e1, e2) = 1`
+(`'0'` for an index the block does not have), which `cge_user.inc` sets.
+
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
 numbers, variables (positions in the stacked vector), parameters, operators

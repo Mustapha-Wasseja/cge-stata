@@ -1000,3 +1000,135 @@ capture noisily cge_variable lag, value(1)
 assert _rc == 198
 quietly cge_closure, swap(none)
 cge_equation, clear
+
+* ---------------------------------------------------------------------
+* 12. Replacing built-in equations (version 0.9.3)
+* ---------------------------------------------------------------------
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+quietly cge_solve, name(ref) tolerance(1e-12)
+cge_shock, reset
+capture mata: mata drop _cge_test_simdiff()
+mata:
+// The largest relative difference between two simulations in the model's
+// own variables
+real scalar _cge_test_simdiff(string scalar a, string scalar b)
+{
+    struct cge_model scalar M
+    real colvector x, y
+    real scalar n
+    M = _cge_load()
+    n = (M.nuv ? M.voff[rows(M.vname) - M.nuv + 1] : rows(M.x0))
+    x = M.simx[|1, _cge_sim_index(M, a) \ n, _cge_sim_index(M, a)|]
+    y = M.simx[|1, _cge_sim_index(M, b) \ n, _cge_sim_index(M, b)|]
+    return(max(abs(x - y) :/ rowmax((J(n, 1, 1), abs(y)))))
+}
+end
+* the same equations written by the user, for every element of a block and
+* for the cells of one activity in a block with two indexes: the solution is
+* unchanged, which also checks which elements are replaced
+cge_equation g7(c): QG(c) = qg(c) * GADJ, replace(I7)
+assert r(N_elements) == 3
+cge_equation q5(c,a)$(sameas(a, act_man) & base(QINT(c, a)) > 0): QINT(c, a) = base(QINT(c, a)) / base(QINTA(a)) * QINTA(a), replace(Q5)
+assert r(N_elements) == 3
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+cge_shock tm, value(0)
+quietly cge_solve, name(same) tolerance(1e-12)
+mata: st_numscalar("d", _cge_test_simdiff("same", "ref"))
+assert scalar(d) < 1e-10
+* transposed indexes do not match the block's domain
+cge_shock, reset
+cge_equation, clear
+capture noisily cge_equation q5t(a,c): QINT(c, a) = QINT(c, a), replace(Q5)
+assert _rc == 198
+* other rules: government purchases of services 10 per cent above the base,
+* the others scaled by GADJ, and exports of agricultural goods at the base
+cge_equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))
+cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))
+cge_equation, list
+assert r(N_equations) == 2
+cge_shock tm, value(0)
+quietly cge_solve, name(rep) tolerance(1e-12)
+quietly cge_results, sim(rep) clear nodisplay
+quietly summarize value if variable == "GADJ"
+* GADJ is fixed in the default closure
+local gadj = r(mean)
+foreach c in com_agr com_man com_ser {
+    quietly summarize value if variable == "QG" & element1 == "`c'"
+    local qg = r(mean)
+    quietly summarize base if variable == "QG" & element1 == "`c'"
+    if "`c'" == "com_ser" assert reldif(`qg', 1.1 * r(mean)) < 1e-12
+    else assert reldif(`qg', `gadj' * r(mean)) < 1e-12
+}
+quietly summarize value if variable == "QE" & element1 == "com_agr"
+local qe = r(mean)
+quietly summarize base if variable == "QE" & element1 == "com_agr"
+assert reldif(`qe', r(mean)) < 1e-12
+quietly summarize value if variable == "QE" & element1 == "com_man"
+local qe = r(mean)
+quietly summarize base if variable == "QE" & element1 == "com_man"
+assert reldif(`qe', r(mean)) > 1e-4
+quietly summarize value if variable == "WALRAS"
+assert abs(r(mean)) < 1e-8
+* the replaced elements are left out of the system; it stays square
+quietly cge_check, sim(rep)
+* saved, loaded and calibrated again, the replacements stay
+tempfile s4
+quietly cge_save using "`s4'", replace
+quietly cge_use using "`s4'"
+quietly cge_solve, name(rep2) tolerance(1e-12)
+mata: st_numscalar("d", _cge_test_simdiff("rep2", "rep"))
+assert scalar(d) < 1e-10
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+quietly cge_solve, name(rep3) tolerance(1e-12)
+quietly cge_results, sim(rep3) clear nodisplay
+quietly summarize value if variable == "QG" & element1 == "com_ser"
+local qg = r(mean)
+quietly summarize base if variable == "QG" & element1 == "com_ser"
+assert reldif(`qg', 1.1 * r(mean)) < 1e-12
+* a dynamic run with the replacements
+cge_shock, reset
+quietly cge_dynamic, name(rd) periods(0/2) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02)
+quietly cge_dynresults, run(rd) clear
+quietly summarize value if variable == "QE" & element1 == "com_agr" & period == 2
+local qe = r(mean)
+quietly summarize base if variable == "QE" & element1 == "com_agr" & period == 2
+assert reldif(`qe', r(mean)) < 1e-12
+* the GAMS program leaves the replaced elements out of cge_model.gms
+tempfile g4
+cge_shock tm, value(0)
+quietly cge_solve, name(rep4) tolerance(1e-12)
+cge_gams using "`g4'_r", sim(rep4) replace
+mata:
+u = cat(st_local("g4") + "_r/cge_user.inc")
+g = cat(st_local("g4") + "_r/cge_model.gms")
+st_numscalar("ok4", sum(u :== "XRP('I7', 'com_ser', '0') = 1;") + sum(u :== "XRP('T2', 'com_agr', '0') = 1;") +
+             (sum(strpos(g, "not XRP('I7', C, '0')") :> 0) == 1))
+end
+assert scalar(ok4) == 3
+cge_shock, reset
+* errors
+capture noisily cge_equation e1: QQ(com_ser) = 1, replace(S2(com_ser))
+assert _rc == 198
+capture noisily cge_equation e1: QG(com_ser) = 1, replace(XX)
+assert _rc == 198
+capture noisily cge_equation e1(f): QF(f, act_agr) = 1, replace(I7)
+assert _rc == 198
+capture noisily cge_equation e1: QG(com_ser) = 1, replace(I7)
+assert _rc == 198
+capture noisily cge_equation e1: QG(com_ser) = 1, replace(I7(com_xx))
+assert _rc == 111
+capture noisily cge_equation e1: QG(com_ser) = 2, replace(I7(com_ser))
+assert _rc == 459
+capture noisily cge_equation e1: QQ(com_man) = 1, replace(T6(com_man))
+assert _rc == 459
+capture noisily cge_equation e1: QG(com_man) <= 1, perp(GADJ) replace(I7(com_man))
+assert _rc == 198
+cge_equation, clear

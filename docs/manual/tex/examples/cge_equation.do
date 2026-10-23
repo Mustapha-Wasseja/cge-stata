@@ -119,3 +119,34 @@ quietly reshape wide value, i(period) j(variable) string
 rename value* *
 list period YG GL GADJ DQA, noobs
 *<<
+
+*>> eq_replace
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))
+cge_equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))
+cge_equation, list
+cge_shock tm, value(0)
+cge_solve, name(replaced)
+quietly cge_results, sim(replaced) clear nodisplay
+list variable element1 base value if inlist(variable, "QE", "QG", "WALRAS"), noobs sepby(variable)
+*<<
+
+*>> eq_replace_same
+cge_shock, reset
+cge_equation, clear
+cge_shock tm, value(0)
+quietly cge_solve, name(original)
+cge_equation q5(c,a)$(sameas(a, act_man) & base(QINT(c, a)) > 0): ///
+    QINT(c, a) = base(QINT(c, a)) / base(QINTA(a)) * QINTA(a), replace(Q5)
+quietly cge_solve, name(rewritten)
+foreach s in original rewritten {
+    quietly cge_results, sim(`s') clear nodisplay
+    quietly summarize value if variable == "QA" & element1 == "act_man"
+    display "`s'" _col(12) "QA(act_man) = " %14.10f r(mean)
+}
+*<<

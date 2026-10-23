@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions inequalities pairs
+    nests nestvat outces user usersets conditions inequalities pairs replace
 local ncase : word count `cases'
 
 tempname post
@@ -370,6 +370,19 @@ foreach case of local cases {
         quietly cge_closure, swap(LAM GADJ)
         cge_shock LAM, value(1.1)
         cge_shock FX, elements(com_man.hhd) value(1.05)
+        cge_shock tm, value(0)
+    }
+    * built-in equations replaced (version 0.9.3): government purchases of
+    * services fixed above the base, exports of agricultural goods at the base,
+    * and the intermediate demand of manufacturing, written by the user
+    else if "`case'" == "replace" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))
+        cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))
+        cge_equation q5(c,a)$(sameas(a, act_man) & base(QINT(c, a)) > 0): QINT(c, a) = base(QINT(c, a)) / base(QINTA(a)) * QINTA(a), replace(Q5)
         cge_shock tm, value(0)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers

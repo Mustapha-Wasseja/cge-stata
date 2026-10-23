@@ -1,0 +1,25 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_equation, clear
+User variables and equations removed
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. quietly cge_solve, name(original)
+
+. cge_equation q5(c,a)$(sameas(a, act_man) & base(QINT(c, a)) > 0): ///
+>     QINT(c, a) = base(QINT(c, a)) / base(QINTA(a)) * QINTA(a), replace(Q5)
+User equation q5: 3 element(s), replacing Q5(com_agr,act_man) Q5(com_man,act_man) Q5(com_ser,act_man
+> )
+
+. quietly cge_solve, name(rewritten)
+
+. foreach s in original rewritten {
+  2.     quietly cge_results, sim(`s') clear nodisplay
+  3.     quietly summarize value if variable == "QA" & element1 == "act_man"
+  4.     display "`s'" _col(12) "QA(act_man) = " %14.10f r(mean)
+  5. }
+original   QA(act_man) = 138.0414156631
+rewritten  QA(act_man) = 138.0414156631
