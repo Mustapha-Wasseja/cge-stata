@@ -4,7 +4,10 @@
 
 \cmd{cge_optimize} chooses the values of a few policy instruments to maximise
 or minimise a report measure, or to reach targets for report measures,
-solving the model at every trial value. An instrument is one element of a
+solving the model at every trial value. From version 0.9.4, the objective and
+the targets may also be expressions of the user language
+(\manref{cge_equation}), and inequality constraints may be added, as in a
+GAMS model solved by an NLP solver. An instrument is one element of a
 parameter that \manref{cge_shock} changes, such as a tariff rate, or one
 element of a variable that the closure fixes, such as a tax adjustment
 factor. The optimisation starts from the instruments' current values, with
@@ -36,21 +39,28 @@ targets for real GDP and government savings
 \begin{stcode}
 cge_optimize, instruments(qg(com_hlt) TINSADJ) targets(macro gdp_real = 310, government savings = 3)
 \end{stcode}
+The tariff that maximises government revenue while imports of manufactures
+stay within 2 per cent of the base, written as expressions (from version 0.9.4)
+\begin{stcode}
+cge_optimize, instruments(tm(com_man)) maximize(YG) ///
+    constraints(QM(com_man) >= 0.98 * base(QM(com_man))) lower(tm(com_man):0)
+\end{stcode}
 
 \cgesec{Syntax}
 
 \begin{stsyntax}
 \cmdb{cge_optimize}\texttt{,} \optarg{inst}{ruments}{list}
-\{\optarg{max}{imize}{measure} $|$ \optarg{min}{imize}{measure} $|$
+\{\optarg{max}{imize}{objective} $|$ \optarg{min}{imize}{objective} $|$
 \optarg{targ}{ets}{spec}\} [\argu{options}]
 \end{stsyntax}
 
 \begin{opttable}
 \optgroup{Main}
 \optarg{inst}{ruments}{list} & the instruments; required\\
-\optarg{max}{imize}{measure} & report measure to maximise\\
-\optarg{min}{imize}{measure} & report measure to minimise\\
-\optarg{targ}{ets}{spec} & targets for report measures\\
+\optarg{max}{imize}{objective} & report measure or expression to maximise\\
+\optarg{min}{imize}{objective} & report measure or expression to minimise\\
+\optarg{targ}{ets}{spec} & targets for report measures or expressions\\
+\optarg{cons}{traints}{spec} & inequality constraints\\
 \optarg{low}{er}{spec} & lower bounds of instruments\\
 \optarg{up}{per}{spec} & upper bounds of instruments\\
 \optarg{}{name}{name} & name of the simulation that holds the optimum; default \cmd{optimum}\\
@@ -62,7 +72,10 @@ cge_optimize, instruments(qg(com_hlt) TINSADJ) targets(macro gdp_real = 310, gov
 
 A \argu{measure} is a measure of \manref{cge_report}, written
 \argu{table measure} [\argu{element}], for example
-\cmd{welfare equivalent_variation hhd} or \cmd{macro gdp_real}. An objective,
+\cmd{welfare equivalent_variation hhd} or \cmd{macro gdp_real}. From version
+0.9.4, an objective, a target or a constraint may instead be an expression of
+the user language (\manref{cge_equation}), such as \cmd{YG - EG} or
+\cmd{sum(c, PQ(c) * QG(c))}. An objective,
 targets or both must be given; \cmd{maximize()} and \cmd{minimize()} may not
 be combined.
 
@@ -85,15 +98,25 @@ an error; it can be fixed by a swap (\manref{cge_closure}, \cmd{swap()}).
 \end{itemize}
 An instrument may be given only once.
 
-\item[\optarg{max}{imize}{measure}] gives the measure to maximise.
+\item[\optarg{max}{imize}{objective}] gives the measure or expression to
+maximise.
 
-\item[\optarg{min}{imize}{measure}] gives the measure to minimise.
+\item[\optarg{min}{imize}{objective}] gives the measure or expression to
+minimise.
 
 \item[\optarg{targ}{ets}{spec}] gives targets, separated by commas, as
 \argu{table measure} [\argu{element}] \cmd{=} \argu{value}, for example
 \cmd{targets(government savings = 3, macro investment_real = 50)}. Without an
 objective there must be one target for each instrument. With an objective,
-the targets are equality constraints.
+the targets are equality constraints. From version 0.9.4, either side may be
+an expression, as in \cmd{targets(sum(c, PQ(c) * QG(c)) = 50)}.
+
+\item[\optarg{cons}{traints}{spec}] (from version 0.9.4) gives inequality
+constraints, separated by commas, as a measure or an expression \cmd{<=} or
+\cmd{>=} (or \cmd{=l=}, \cmd{=g=}) a value or an expression, for example
+\cmd{constraints(QM(com_man) >= 0.98 * base(QM(com_man)), government tax_import <= 9)}.
+Constraints need an objective. The display marks those that bind at the
+optimum.
 
 \item[\optarg{low}{er}{spec}] and \optarg{up}{per}{spec} give bounds, as
 \argu{instrument}\cmd{:}\argu{value} pairs with the instrument written as in
@@ -175,6 +198,17 @@ the closure \cmd{fixgsav} does. Solving the same shock under that closure
 gives the same factor:
 \stlog{opt_fixgsav}
 
+\cgesubsec{Example 4: expressions and constraints}
+
+From version 0.9.4, the objective, targets and constraints may be written in
+the user language. The tariff on manufactures that maximises government
+revenue, \cmd{YG}, while imports of manufactures fall by no more than 2 per
+cent:
+\stlog{opt_expr}
+The constraint binds: the tariff is the one at which imports are 2 per cent
+below the base, the value a target \cmd{QM(com_man) = 0.98 * base(QM(com_man))}
+would give. Without it, the revenue-maximising tariff is far higher.
+
 \cgesubsec{Bounds, failures and local optima}
 
 An instrument at a bound whose gradient points outwards is held there, and
@@ -196,13 +230,15 @@ be local: other starting values, set with \manref{cge_shock}, can be tried.
 \res{r(N_evaluations)} & number of solves of the model\\
 \res{r(N_failed)} & number of trial values at which the model did not solve\\
 \res{r(iterations)} & number of iterations of the optimiser\\
+\res{r(N_binding)} & number of constraints that bind at the optimum, with constraints\\
 \resgroup{Macros}
 \res{r(name)} & name of the simulation that holds the optimum\\
 \res{r(instruments_list)} & the instruments\\
 \resgroup{Matrices}
 \res{r(instruments)} & the instruments at the optimum\\
 \res{r(start)} & their starting values\\
-\res{r(targets)} & the target measures at the optimum, with targets\\
+\res{r(targets)} & the target measures or expressions at the optimum, with targets\\
+\res{r(constraints)} & the constrained measures or expressions at the optimum, with constraints\\
 \end{storedres}
 
 \cgesec{Methods and formulas}
@@ -251,6 +287,24 @@ then sets $\lambda \leftarrow \lambda + \rho\,r$; $\rho$ is multiplied by 10
 when $\max_j |r_j|$ has fallen by less than three quarters since the round
 before. The rounds stop, converged, when $\max_j |r_j| < 10^{-10}$, and after
 at most 40 rounds.
+
+\textit{Constraints} (from version 0.9.4). A constraint $h_k \le \bar h_k$ or
+$h_k \ge \bar h_k$, with $\bar h_k$ a number or an expression, has the scaled
+slack $s_k = (\bar h_k - h_k)/\sigma_k$ or $(h_k - \bar h_k)/\sigma_k$, which is
+not negative where it holds, with $\sigma_k$ the scale of $\bar h_k$ at the base
+(1 when it is near 0). By the method of Powell, Hestenes and Rockafellar the
+maximiser takes
+\begin{equation*}
+F(z) - \frac{1}{2\rho} \sum_k \Bigl(\max(0, \mu_k - \rho\, s_k)^2 - \mu_k^2\Bigr),
+\end{equation*}
+and after each round $\mu_k \leftarrow \max(0, \mu_k - \rho\, s_k)$, starting
+from $\mu = 0$, with $\rho$ raised as for the targets. The rounds stop,
+converged, when the gaps in the targets and $\max_k |\min(s_k, \mu_k/\rho)|$,
+which measures both the violation of the constraints and of complementarity,
+are below $10^{-10}$. A constraint binds when $|h_k - \bar h_k| \le 10^{-6}
+\sigma_k$. An expression, as an objective, a target or a constraint, is
+compiled as a user equation is (chapter~\ref{chap:user}) and evaluated at the
+solution of each trial.
 
 \Chapref{chap:optimize} gives the details.
 

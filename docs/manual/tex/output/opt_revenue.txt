@@ -12,4 +12,4 @@ tm(com_agr)                                  .1     -.0335061325
 tm(com_man)                                  .1      .1577235277
 ----------------------------------------------------------------
 Maximised welfare equivalent_variation hhd:      .3775370166
-Target government tax_import  = 8:                8
+Target government tax_import = 8:                8

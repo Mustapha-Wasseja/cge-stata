@@ -126,4 +126,87 @@ capture noisily cge_optimize, instruments(tm(com_man) tm(com_man)) maximize(`ev'
 assert _rc == 198
 capture noisily cge_optimize, instruments(tm(com_man)) maximize(`ev') minimize(`ev')
 assert _rc == 198
+* ---------------------------------------------------------------------
+* 4. Expressions as objectives and targets, and constraints (version 0.9.4)
+* ---------------------------------------------------------------------
+* the standard model, calibrated again under the default closure
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, `stdmap'
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+* an expression and the report measure that it equals give the same optimum
+cge_optimize, instruments(tm(com_man)) maximize(government revenue) lower(tm(com_man):0) upper(tm(com_man):2) name(oe1)
+assert r(converged) == 1
+local t1 = el(r(instruments), 1, 1)
+local f1 = r(objective)
+quietly cge_shock, reset
+cge_optimize, instruments(tm(com_man)) maximize(YG) lower(tm(com_man):0) upper(tm(com_man):2) name(oe2)
+assert r(converged) == 1
+assert reldif(el(r(instruments), 1, 1), `t1') < 1e-10 & reldif(r(objective), `f1') < 1e-12
+* a closed form: government purchases of services 20 per cent above the base
+quietly cge_shock, reset
+cge_optimize, instruments(qg(com_ser)) minimize((QG(com_ser) - 1.2 * base(QG(com_ser)))^2) name(oe3)
+assert r(converged) == 1
+assert reldif(el(r(instruments), 1, 1), 1.2 * el(r(start), 1, 1)) < 1e-8
+* a target written as an expression with a sum
+quietly cge_shock, reset
+cge_optimize, instruments(qg(com_ser)) targets(sum(c, PQ(c) * QG(c)) = 50) name(oe4)
+assert r(converged) == 1 & reldif(el(r(targets), 1, 1), 50) < 1e-10
+quietly cge_results, sim(oe4) clear nodisplay
+quietly generate double pq = value if variable == "PQ"
+quietly generate double qg = value if variable == "QG"
+quietly bysort element1 (pq): replace pq = pq[1]
+quietly bysort element1 (qg): replace qg = qg[1]
+quietly egen byte one = tag(element1) if !missing(pq) & !missing(qg)
+quietly summarize pq if one
+quietly generate double sp = pq * qg if one
+quietly summarize sp
+assert reldif(r(sum), 50) < 1e-10
+* a constraint that binds: the optimum is the tariff that meets it as a target
+quietly cge_shock, reset
+cge_optimize, instruments(tm(com_man)) targets(QM(com_man) = 0.98 * base(QM(com_man))) name(oe5)
+assert r(converged) == 1
+local t5 = el(r(instruments), 1, 1)
+local q5 = el(r(targets), 1, 1)
+quietly cge_shock, reset
+cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= 0.98 * base(QM(com_man))) ///
+    lower(tm(com_man):0) upper(tm(com_man):2) name(oe6)
+assert r(converged) == 1 & r(N_binding) == 1
+assert reldif(el(r(instruments), 1, 1), `t5') < 1e-6
+assert reldif(el(r(constraints), 1, 1), `q5') < 1e-8
+quietly cge_results, sim(oe6) clear nodisplay
+quietly summarize base if variable == "QM" & element1 == "com_man"
+assert reldif(`q5', 0.98 * r(mean)) < 1e-10
+* a constraint at most, on a report measure, that binds on the side of the
+* tariff that the target reaches from the start
+quietly cge_shock, reset
+cge_optimize, instruments(tm(com_man)) targets(government tax_import = 9) name(oe7)
+assert r(converged) == 1
+local t7 = el(r(instruments), 1, 1)
+quietly cge_shock, reset
+cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(government tax_import <= 9) ///
+    lower(tm(com_man):0) upper(tm(com_man):2) name(oe8)
+assert r(converged) == 1 & r(N_binding) == 1
+assert reldif(el(r(instruments), 1, 1), `t7') < 1e-6
+* constraints that do not bind leave the optimum as it was
+quietly cge_shock, reset
+cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= 10, government spending <= 1000) ///
+    lower(tm(com_man):0) upper(tm(com_man):2) name(oe9)
+assert r(converged) == 1 & r(N_binding) == 0
+assert reldif(el(r(instruments), 1, 1), `t1') < 1e-8
+* errors
+quietly cge_shock, reset
+capture noisily cge_optimize, instruments(tm(com_man)) targets(QM(com_man) = 58) constraints(QM(com_man) >= 10)
+assert _rc == 198
+capture noisily cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) = 10)
+assert _rc == 198
+capture noisily cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >=)
+assert _rc == 198
+capture noisily cge_optimize, instruments(tm(com_man)) targets(QM(com_man) 58)
+assert _rc == 198
+capture noisily cge_optimize, instruments(tm(com_man)) maximize(QXX(com_man))
+assert _rc == 111
+capture noisily cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= government revenue)
+assert _rc == 111
+quietly cge_shock, reset
 program drop _compare_optimum _compare_solution

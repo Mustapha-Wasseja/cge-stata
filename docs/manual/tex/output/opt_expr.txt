@@ -1,0 +1,27 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_closure, government(flexgsav)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_optimize, instruments(tm(com_man)) maximize(YG)        ///
+>     constraints(QM(com_man) >= 0.98 * base(QM(com_man)))   ///
+>     lower(tm(com_man):0) upper(tm(com_man):2) name(revenue)
+
+Optimisation revenue: converged after 234 solve(s) of the model
+----------------------------------------------------------------
+Instrument                                start          optimum
+----------------------------------------------------------------
+tm(com_man)                                  .1      .1296864671
+----------------------------------------------------------------
+Maximised YG:      64.46989099
+Constraint QM(com_man) >= 0.98 * base(QM(com_man)):             58.8 (binding)
+
+. display r(N_binding)
+1

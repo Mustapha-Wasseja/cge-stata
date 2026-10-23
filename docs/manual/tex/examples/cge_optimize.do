@@ -45,3 +45,12 @@ cge_solve, name(fixgsav)
 cge_results, sim(fixgsav) clear nodisplay
 list variable value if variable == "TINSADJ", noobs
 *<<
+
+*>> opt_expr
+cge_shock, reset
+cge_closure, government(flexgsav)
+cge_optimize, instruments(tm(com_man)) maximize(YG)        ///
+    constraints(QM(com_man) >= 0.98 * base(QM(com_man)))   ///
+    lower(tm(com_man):0) upper(tm(com_man):2) name(revenue)
+display r(N_binding)
+*<<

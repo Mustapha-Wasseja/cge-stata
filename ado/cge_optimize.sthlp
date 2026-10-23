@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.9.4  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -11,14 +11,18 @@
 
 {p 8 12 2}
 {cmd:cge_optimize}{cmd:,} {opt inst:ruments(list)}
-{opt max:imize(measure)}|{opt min:imize(measure)}|{opt targ:ets(spec)}
-[{opt targ:ets(spec)} {opt low:er(spec)} {opt up:per(spec)} {opt name(name)}
+{opt max:imize(objective)}|{opt min:imize(objective)}|{opt targ:ets(spec)}
+[{opt targ:ets(spec)} {opt cons:traints(spec)} {opt low:er(spec)} {opt up:per(spec)} {opt name(name)}
 {opt tol:erance(#)} {opt iter:ate(#)} {opt trace}]
 
 {p 4 4 2}
 A {it:measure} is a measure of {helpb cge_report}: {it:table measure}
 [{it:element}], for example {cmd:welfare equivalent_variation hhd} or
-{cmd:macro gdp_real}.
+{cmd:macro gdp_real}. From version 0.9.4, an objective, a target or a
+constraint may also be an expression of the user language of
+{helpb cge_equation}, such as {cmd:YG - EG} or {cmd:sum(c, PQ(c) * QG(c))},
+evaluated at the solution of each trial; the right side of a target or a
+constraint is a number or such an expression.
 
 
 {title:Description}
@@ -57,12 +61,22 @@ it.
 {opt instruments(list)} lists the instruments, separated by spaces.
 
 {phang}
-{opt maximize(measure)} or {opt minimize(measure)} gives the objective.
+{opt maximize(objective)} or {opt minimize(objective)} gives the objective: a
+report measure or an expression.
 
 {phang}
 {opt targets(spec)} gives targets, separated by commas, as {it:table measure}
 [{it:element}] {cmd:=} {it:value}, for example
-{cmd:targets(government savings = 3, macro investment_real = 50)}.
+{cmd:targets(government savings = 3, macro investment_real = 50)}, or with
+expressions on either side, as {cmd:targets(sum(c, PQ(c) * QG(c)) = 50)}.
+
+{phang}
+{opt constraints(spec)} (from version 0.9.4) gives inequality constraints,
+separated by commas, as a measure or an expression {cmd:<=} or {cmd:>=} a
+value or an expression, for example
+{cmd:constraints(QM(com_man) >= 0.98 * base(QM(com_man)), government tax_import <= 9)}.
+They need an objective, and are met by the augmented Lagrangian method, with
+the targets; the display marks those that bind.
 
 {phang}
 {opt lower(spec)} and {opt upper(spec)} give bounds as
@@ -98,6 +112,10 @@ each solve (default 100). {opt trace} shows the optimiser's iterations.
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
 {phang2}{cmd:. cge_optimize, instruments(TINSADJ) targets(government savings = 3)}{p_end}
 
+{pstd}The tariff that maximises government revenue while imports of manufactures stay within 2 per cent of the base, with the objective and the constraint written as expressions (from version 0.9.4){p_end}
+{phang2}{cmd:. cge_shock, reset}{p_end}
+{phang2}{cmd:. cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= 0.98 * base(QM(com_man))) lower(tm(com_man):0) upper(tm(com_man):2) name(revenue)}{p_end}
+
 
 {title:Stored results}
 
@@ -108,13 +126,15 @@ each solve (default 100). {opt trace} shows the optimiser's iterations.
 {synopt:{cmd:r(N_evaluations)}}solves of the model{p_end}
 {synopt:{cmd:r(N_failed)}}trial values at which the model did not solve{p_end}
 {synopt:{cmd:r(iterations)}}iterations of the optimiser{p_end}
+{synopt:{cmd:r(N_binding)}}constraints that bind at the optimum, with constraints{p_end}
 {p2col 5 22 26 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}the simulation that holds the optimum{p_end}
 {synopt:{cmd:r(instruments_list)}}the instruments{p_end}
 {p2col 5 22 26 2: Matrices}{p_end}
 {synopt:{cmd:r(instruments)}}the instruments at the optimum{p_end}
 {synopt:{cmd:r(start)}}their starting values{p_end}
-{synopt:{cmd:r(targets)}}the target measures at the optimum{p_end}
+{synopt:{cmd:r(targets)}}the target measures or expressions at the optimum{p_end}
+{synopt:{cmd:r(constraints)}}the constrained measures or expressions at the optimum{p_end}
 
 
 {title:Remarks}

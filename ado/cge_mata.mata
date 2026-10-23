@@ -208,7 +208,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.3")
+    return("0.9.4")
 }
 
 // =====================================================================
@@ -14462,6 +14462,21 @@ struct cge_opt {
     real scalar      rho
     real colvector   xlast
     real scalar      nevals, nfail, tol, maxit
+    // expressions of the user language as the objective, targets and
+    // constraints (from version 0.9.4): the index of each expression, 0 for a
+    // report measure; their postfix rows, stacked, and their text
+    real scalar      oex
+    real colvector   tex, estart, elen
+    real matrix      etok
+    string colvector etext
+    // inequality constraints (from version 0.9.4): measure or expression,
+    // relation (1 at most, -1 at least), value, scale and multiplier
+    string matrix    ckeys
+    real colvector   cex, ctype, cval, cscale, mu
+    // right sides of targets and constraints that are expressions, 0 for a
+    // number, and the text of each, as given (from version 0.9.4)
+    real colvector   trex, crex
+    string colvector ttext, ctext
 }
 
 struct cge_opt scalar _cge_opt_load()
@@ -14492,6 +14507,133 @@ void _cge_opt_rows(struct cge_model scalar M, struct cge_par scalar p, real colv
         keys = keys \ ("welfare", "equivalent_variation", M.H[h]) \ ("welfare", "compensating_variation", M.H[h])
         val = val \ ev[h] \ cv[h]
     }
+}
+
+// An objective, target or constraint (from version 0.9.4): a report measure,
+// table measure [element], or an expression of the user language, compiled
+// into the postfix rows of O. Returns the index of the expression, 0 for a
+// measure, whose key is then in key.
+real scalar _cge_opt_parse(struct cge_model scalar M, struct cge_opt scalar O, string scalar spec, string scalar what,
+                           string rowvector key, string colvector tables)
+{
+    string rowvector t
+    real matrix tok
+    string scalar g
+    t = tokens(strtrim(spec))
+    if (!cols(t)) _cge_fail(what + "(): give a report measure, as table measure [element], or an expression", 198)
+    if (cols(t) >= 2 & cols(t) <= 3 & !regexm(spec, "[()+*/^]") & anyof(tables, t[1])) {
+        key = (cols(t) == 2 ? (t, "") : t)
+        return(0)
+    }
+    key = J(1, 3, "")
+    tok = _cge_u_compile(M, _cge_u_written(M, M.p0, M.x0, _cge_u_tokens(strtrim(spec))), M.x0, g)
+    if (rows(O.etok) == 0) O.etok = J(0, 3, .)
+    O.estart = O.estart \ (rows(O.etok) + 1)
+    O.elen = O.elen \ rows(tok)
+    O.etok = O.etok \ tok
+    O.etext = O.etext \ strtrim(spec)
+    return(rows(O.estart))
+}
+
+// The value of an objective, target or constraint at a point (from version
+// 0.9.4): its expression, or its report measure
+real scalar _cge_opt_item(struct cge_model scalar M, struct cge_opt scalar O, struct cge_par scalar p,
+                          real colvector x, string matrix keys, real colvector val, string rowvector key,
+                          real scalar ex, real scalar fail)
+{
+    if (ex) return(_cge_u_value(M, p, x, O.etok[|O.estart[ex], 1 \ O.estart[ex] + O.elen[ex] - 1, 3|]))
+    return(_cge_opt_lookup(keys, val, key, fail))
+}
+
+// The text of an objective (from version 0.9.4)
+string scalar _cge_opt_text(struct cge_opt scalar O, string rowvector key, real scalar ex)
+{
+    return(ex ? O.etext[ex] : strtrim(invtokens(key)))
+}
+
+// The right side of a target or constraint at a point (from version 0.9.4):
+// its value v, or its expression rx
+real scalar _cge_opt_bound(struct cge_model scalar M, struct cge_opt scalar O, struct cge_par scalar p,
+                           real colvector x, real scalar v, real scalar rx)
+{
+    if (rx) return(_cge_u_value(M, p, x, O.etok[|O.estart[rx], 1 \ O.estart[rx] + O.elen[rx] - 1, 3|]))
+    return(v)
+}
+
+// The right side of a target or constraint (from version 0.9.4): a number,
+// or an expression evaluated at each point. Returns the number (missing for
+// an expression), the index of the expression (0 for a number) and the scale
+// of the gap, from the number or from the expression at the base.
+void _cge_opt_rhs(struct cge_model scalar M, struct cge_opt scalar O, string scalar rhs, string scalar what,
+                  string colvector tables, string matrix keys, real colvector val, real scalar f, real scalar rx,
+                  real scalar sc)
+{
+    string rowvector key
+    f = strtoreal(rhs)
+    rx = 0
+    if (f < .) {
+        sc = abs(f) * (abs(f) > 1e-12) + (abs(f) <= 1e-12)
+        return
+    }
+    // in parentheses, so that it is read as an expression
+    rx = _cge_opt_parse(M, O, "(" + rhs + ")", what, key, tables)
+    sc = max((1, abs(_cge_opt_bound(M, O, M.p0, M.x0, ., rx))))
+}
+
+// The parts of a list separated by commas outside parentheses (from version
+// 0.9.4)
+string rowvector _cge_opt_parts(string scalar s)
+{
+    string rowvector out
+    real scalar k, d, st
+    out = J(1, 0, "")
+    d = 0
+    st = 1
+    for (k = 1; k <= strlen(s); k++) {
+        if (substr(s, k, 1) == "(") d++
+        else if (substr(s, k, 1) == ")") d--
+        else if (substr(s, k, 1) == "," & d == 0) {
+            if (strtrim(substr(s, st, k - st)) != "") out = out, strtrim(substr(s, st, k - st))
+            st = k + 1
+        }
+    }
+    if (strtrim(substr(s, st, .)) != "") out = out, strtrim(substr(s, st, .))
+    return(out)
+}
+
+// The relation of a target or constraint outside parentheses (from version
+// 0.9.4): "=", "<=" or ">=" (=l= and =g= as in GAMS), with its two sides
+string scalar _cge_opt_rel(string scalar s, string scalar lhs, string scalar rhs)
+{
+    real scalar k, d, w
+    string scalar r
+    d = 0
+    for (k = 1; k <= strlen(s); k++) {
+        if (substr(s, k, 1) == "(") d++
+        else if (substr(s, k, 1) == ")") d--
+        if (d) continue
+        r = ""
+        if (substr(s, k, 3) == "=l=" | substr(s, k, 3) == "=g=") {
+            r = (substr(s, k, 3) == "=l=" ? "<=" : ">=")
+            w = 3
+        }
+        else if (substr(s, k, 2) == "<=" | substr(s, k, 2) == ">=") {
+            r = substr(s, k, 2)
+            w = 2
+        }
+        else if (substr(s, k, 1) == "=" & substr(s, k + 1, 1) != "=" & !(k > 1 & strpos("=<>!", substr(s, k - 1, 1)))) {
+            r = "="
+            w = 1
+        }
+        if (r != "") {
+            lhs = strtrim(substr(s, 1, k - 1))
+            rhs = strtrim(substr(s, k + w, .))
+            return(r)
+        }
+    }
+    lhs = strtrim(s)
+    rhs = ""
+    return("")
 }
 
 // The value of report measure key (table, measure, element)
@@ -14580,9 +14722,18 @@ real scalar _cge_opt_solve(real colvector v, real colvector r, real colvector x)
     O.xlast = x
     _cge_opt_store(O)
     _cge_opt_rows(*q, p, x, keys, val)
-    r = J(rows(O.tval), 1, .)
-    for (k = 1; k <= rows(O.tval); k++) r[k] = (_cge_opt_lookup(keys, val, O.tkeys[k, .], 0) - O.tval[k]) / O.tscale[k]
-    f = (O.hasobj ? O.sense * _cge_opt_lookup(keys, val, O.okey, 0) / O.oscale : .)
+    // target residuals, then the slacks of the constraints (from version
+    // 0.9.4), each scaled; a slack is not negative where its constraint holds
+    r = J(rows(O.tval) + rows(O.cval), 1, .)
+    for (k = 1; k <= rows(O.tval); k++) {
+        r[k] = (_cge_opt_item(*q, O, p, x, keys, val, O.tkeys[k, .], O.tex[k], 0) -
+                _cge_opt_bound(*q, O, p, x, O.tval[k], O.trex[k])) / O.tscale[k]
+    }
+    for (k = 1; k <= rows(O.cval); k++) {
+        r[rows(O.tval) + k] = -O.ctype[k] * (_cge_opt_item(*q, O, p, x, keys, val, O.ckeys[k, .], O.cex[k], 0) -
+                                             _cge_opt_bound(*q, O, p, x, O.cval[k], O.crex[k])) / O.cscale[k]
+    }
+    f = (O.hasobj ? O.sense * _cge_opt_item(*q, O, p, x, keys, val, O.okey, O.oex, 0) / O.oscale : .)
     return(f)
 }
 
@@ -14643,12 +14794,23 @@ real colvector _cge_opt_newton(struct cge_opt scalar O, real colvector z0, real 
 real scalar _cge_opt_aug(struct cge_opt scalar O, real colvector z)
 {
     struct cge_opt scalar Q
-    real colvector r, x
-    real scalar f
+    real colvector r, x, re, s
+    real scalar f, nt
     f = _cge_opt_solve(O.start + O.scale :* z, r, x)
     if (f >= . | hasmissing(r)) return(.)
     Q = _cge_opt_load()
-    return(f - (rows(r) ? Q.lam' * r + 0.5 * Q.rho * (r' * r) : 0))
+    nt = rows(Q.tval)
+    if (nt) {
+        re = r[|1 \ nt|]
+        f = f - (Q.lam' * re + 0.5 * Q.rho * (re' * re))
+    }
+    // constraints (from version 0.9.4): the term of Powell, Hestenes and
+    // Rockafellar for each slack s >= 0, with multiplier mu
+    if (rows(Q.cval)) {
+        s = r[|nt + 1 \ rows(r)|]
+        f = f - sum(rowmax((J(rows(s), 1, 0), Q.mu - Q.rho :* s)) :^ 2 - Q.mu :^ 2) / (2 * Q.rho)
+    }
+    return(f)
 }
 
 // Maximises the augmented objective within the bounds by Newton's method:
@@ -14818,16 +14980,19 @@ string rowvector _cge_opt_key(string scalar spec, string scalar what)
 
 void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min, string scalar s_tar,
                    string scalar s_lo, string scalar s_up, string scalar name, real scalar tol, real scalar maxit,
-                   real scalar trace)
+                   real scalar trace, | string scalar s_con)
 {
     struct cge_model scalar M
     struct cge_opt scalar O
-    string rowvector ins, parts, tok
+    string rowvector ins, parts, tok, key
+    string colvector tables
     string matrix keys
-    string scalar spec
-    real colvector z, v, r, x, val, v0, r0
-    real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2
+    string scalar spec, rel, lhs, rhs
+    real colvector z, v, r, x, val, v0, r0, re, s, cv
+    real colvector tsc, csc, tv, cb
+    real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2, nt, nc, viol, ex, rx, sc
     string scalar pn
+    if (args() < 11) s_con = ""
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -14871,28 +15036,70 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     if (any(((O.lo :< .) :& (O.start :<= O.lo)) :| ((O.hi :< .) :& (O.start :>= O.hi)))) {
         _cge_fail("the starting value of each instrument, its current value, must lie strictly within its bounds", 459)
     }
-    // Objective and targets
+    // Objective, targets and constraints: report measures or, from version
+    // 0.9.4, expressions of the user language
     if (s_max != "" & s_min != "") _cge_fail("give maximize() or minimize(), not both", 198)
+    _cge_opt_rows(M, M.p, M.x0, keys, val)
+    tables = uniqrows(keys[., 1])
+    O.estart = O.elen = J(0, 1, .)
+    O.etok = J(0, 3, .)
+    O.etext = J(0, 1, "")
     O.hasobj = (s_max != "" | s_min != "")
     O.sense = (s_min != "" ? -1 : 1)
-    O.okey = (O.hasobj ? _cge_opt_key((s_max != "" ? s_max : s_min), (s_max != "" ? "maximize" : "minimize")) : J(1, 3, ""))
-    O.tkeys = J(0, 3, "")
-    O.tval = J(0, 1, .)
-    parts = (strtrim(s_tar) == "" ? J(1, 0, "") : _cge_split(s_tar, ",", ""))
-    for (k = 1; k <= cols(parts); k++) {
-        if (strtrim(parts[k]) == "") continue
-        j = strpos(parts[k], "=")
-        if (!j) _cge_fail("targets(): give table measure [element] = value, separated by commas", 198)
-        f = strtoreal(substr(parts[k], j + 1, .))
-        if (f >= .) _cge_fail("targets(): " + strtrim(parts[k]) + " has no value", 198)
-        O.tkeys = O.tkeys \ _cge_opt_key(substr(parts[k], 1, j - 1), "targets")
-        O.tval = O.tval \ f
+    O.okey = J(1, 3, "")
+    O.oex = 0
+    if (O.hasobj) {
+        O.oex = _cge_opt_parse(M, O, (s_max != "" ? s_max : s_min), (s_max != "" ? "maximize" : "minimize"), key, tables)
+        O.okey = key
     }
+    // a target or constraint: a measure or an expression, related to a
+    // number or an expression
+    O.tkeys = J(0, 3, "")
+    O.tval = O.tex = O.trex = tsc = J(0, 1, .)
+    O.ttext = J(0, 1, "")
+    parts = _cge_opt_parts(s_tar)
+    for (k = 1; k <= cols(parts); k++) {
+        rel = _cge_opt_rel(parts[k], lhs, rhs)
+        if (rel != "=" | lhs == "" | rhs == "") _cge_fail("targets(): give a measure or an expression = a value, separated by commas", 198)
+        ex = _cge_opt_parse(M, O, lhs, "targets", key, tables)
+        _cge_opt_rhs(M, O, rhs, "targets", tables, keys, val, f, rx, sc)
+        O.tkeys = O.tkeys \ key
+        O.tex = O.tex \ ex
+        O.tval = O.tval \ f
+        O.trex = O.trex \ rx
+        O.ttext = O.ttext \ (lhs + " = " + rhs)
+        tsc = tsc \ sc
+    }
+    O.ckeys = J(0, 3, "")
+    O.cval = O.cex = O.ctype = O.crex = csc = J(0, 1, .)
+    O.ctext = J(0, 1, "")
+    parts = _cge_opt_parts(s_con)
+    for (k = 1; k <= cols(parts); k++) {
+        rel = _cge_opt_rel(parts[k], lhs, rhs)
+        if ((rel != "<=" & rel != ">=") | lhs == "" | rhs == "") {
+            _cge_fail("constraints(): give a measure or an expression <= or >= a value, separated by commas", 198)
+        }
+        ex = _cge_opt_parse(M, O, lhs, "constraints", key, tables)
+        _cge_opt_rhs(M, O, rhs, "constraints", tables, keys, val, f, rx, sc)
+        O.ckeys = O.ckeys \ key
+        O.cex = O.cex \ ex
+        O.ctype = O.ctype \ (rel == "<=" ? 1 : -1)
+        O.cval = O.cval \ f
+        O.crex = O.crex \ rx
+        O.ctext = O.ctext \ (lhs + " " + rel + " " + rhs)
+        csc = csc \ sc
+    }
+    if (rows(O.cval) & !O.hasobj) _cge_fail("constraints() need an objective, maximize() or minimize()", 198)
     if (!O.hasobj & rows(O.tval) != n) _cge_fail("without an objective, give one target for each instrument", 198)
     if (!O.hasobj & rows(O.tval) == 0) _cge_fail("give maximize(), minimize() or targets()", 198)
-    O.tscale = abs(O.tval) :* (abs(O.tval) :> 1e-12) + (abs(O.tval) :<= 1e-12)
+    O.tscale = tsc
+    O.cscale = csc
     O.lam = J(rows(O.tval), 1, 0)
+    O.mu = J(rows(O.cval), 1, 0)
     O.rho = 0
+    // expressions may add parameters to the model's list (M.upar), which the
+    // solves use
+    _cge_store(M)
     O.tol = tol
     O.maxit = maxit
     O.nevals = 0
@@ -14905,8 +15112,9 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     O = _cge_opt_load()
     if (O.nfail) _cge_fail("the model does not solve at the instruments' current values", 430)
     _cge_opt_rows(M, M.p, x, keys, val)
-    if (O.hasobj) O.oscale = max((1, abs(_cge_opt_lookup(keys, val, O.okey, 1))))
-    for (k = 1; k <= rows(O.tval); k++) (void) _cge_opt_lookup(keys, val, O.tkeys[k, .], 1)
+    if (O.hasobj) O.oscale = max((1, abs(_cge_opt_item(M, O, M.p, x, keys, val, O.okey, O.oex, 1))))
+    for (k = 1; k <= rows(O.tval); k++) (void) _cge_opt_item(M, O, M.p, x, keys, val, O.tkeys[k, .], O.tex[k], 1)
+    for (k = 1; k <= rows(O.cval); k++) (void) _cge_opt_item(M, O, M.p, x, keys, val, O.ckeys[k, .], O.cex[k], 1)
     _cge_opt_store(O)
 
     z = _cge_opt_z(O, O.start)
@@ -14922,28 +15130,38 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
         // An objective, with any targets as equality constraints by the
         // augmented Lagrangian method: the maximiser takes the objective less
         // lam'r + rho/2 r'r, and lam moves by rho r after each round
+        // Constraints (from version 0.9.4) enter in the same way: mu moves to
+        // max(0, mu - rho s) for each slack s
         O = _cge_opt_load()
-        O.rho = (rows(O.tval) ? 100 : 0)
+        nt = rows(O.tval)
+        nc = rows(O.cval)
+        O.rho = (nt | nc ? 100 : 0)
         _cge_opt_store(O)
         rprev = .
-        for (outer = 1; outer <= (rows(O.tval) ? 40 : 1); outer++) {
+        for (outer = 1; outer <= (nt | nc ? 40 : 1); outer++) {
             O = _cge_opt_load()
             z = _cge_opt_max(O, z, trace, conv2, it2)
             iter = iter + it2
             O = _cge_opt_load()
             f = _cge_opt_solve(_cge_opt_values(O, z), r, x)
-            if (!rows(O.tval)) {
+            if (!(nt | nc)) {
                 conv = conv2
                 break
             }
             if (hasmissing(r)) break
-            if (max(abs(r)) < 1e-10) {
+            re = (nt ? r[|1 \ nt|] : J(0, 1, .))
+            s = (nc ? r[|nt + 1 \ nt + nc|] : J(0, 1, .))
+            // gaps in the targets, violations of the constraints and of
+            // complementarity
+            viol = max((0, (nt ? max(abs(re)) : 0), (nc ? max(abs(rowmin((s, O.mu :/ O.rho)))) : 0)))
+            if (viol < 1e-10) {
                 conv = conv2
                 break
             }
-            O.lam = O.lam + O.rho * r
-            if (rprev < . & max(abs(r)) > 0.25 * rprev) O.rho = 10 * O.rho
-            rprev = max(abs(r))
+            if (nt) O.lam = O.lam + O.rho * re
+            if (nc) O.mu = rowmax((J(nc, 1, 0), O.mu - O.rho :* s))
+            if (rprev < . & viol > 0.25 * rprev) O.rho = 10 * O.rho
+            rprev = viol
             _cge_opt_store(O)
         }
     }
@@ -14965,21 +15183,38 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
                 " (at its bound)" : ""))
     }
     printf("{txt}{hline 64}\n")
-    if (O.hasobj) printf("{txt}%s %s: {res}%16.10g\n", (O.sense == 1 ? "Maximised" : "Minimised"), invtokens(O.okey),
-                         _cge_opt_lookup(keys, val, O.okey, 1))
+    if (O.hasobj) printf("{txt}%s %s: {res}%16.10g\n", (O.sense == 1 ? "Maximised" : "Minimised"), _cge_opt_text(O, O.okey, O.oex),
+                         _cge_opt_item(M, O, M.p, x, keys, val, O.okey, O.oex, 1))
     for (k = 1; k <= rows(O.tval); k++) {
-        printf("{txt}Target %s = %g: {res}%16.10g\n", invtokens(O.tkeys[k, .]), O.tval[k], _cge_opt_lookup(keys, val, O.tkeys[k, .], 1))
+        printf("{txt}Target %s: {res}%16.10g\n", O.ttext[k], _cge_opt_item(M, O, M.p, x, keys, val, O.tkeys[k, .], O.tex[k], 1))
+    }
+    // constraints (from version 0.9.4), and whether they bind
+    cv = cb = J(rows(O.cval), 1, .)
+    for (k = 1; k <= rows(O.cval); k++) {
+        cv[k] = _cge_opt_item(M, O, M.p, x, keys, val, O.ckeys[k, .], O.cex[k], 1)
+        cb[k] = _cge_opt_bound(M, O, M.p, x, O.cval[k], O.crex[k])
+        printf("{txt}Constraint %s: {res}%16.10g{txt}%s\n", O.ctext[k], cv[k],
+               (abs(cv[k] - cb[k]) <= 1e-6 * O.cscale[k] ? " (binding)" : ""))
     }
     st_numscalar("r(converged)", conv)
     st_numscalar("r(N_evaluations)", O.nevals)
     st_numscalar("r(N_failed)", O.nfail)
     st_numscalar("r(iterations)", iter)
-    if (O.hasobj) st_numscalar("r(objective)", _cge_opt_lookup(keys, val, O.okey, 1))
+    if (O.hasobj) st_numscalar("r(objective)", _cge_opt_item(M, O, M.p, x, keys, val, O.okey, O.oex, 1))
+    if (rows(O.cval)) {
+        st_matrix("r(constraints)", cv')
+        st_numscalar("r(N_binding)", sum(abs(cv - cb) :<= 1e-6 :* O.cscale))
+    }
     st_matrix("r(instruments)", v')
     st_matrixcolstripe("r(instruments)", (J(n, 1, ""), strtoname(subinstr(O.label, ")", ""))))
     st_matrix("r(start)", v0')
     st_matrixcolstripe("r(start)", (J(n, 1, ""), strtoname(subinstr(O.label, ")", ""))))
-    if (rows(O.tval)) st_matrix("r(targets)", r' :* O.tscale' + O.tval')
+    // the values of the targets' measures or expressions (from version 0.9.4)
+    if (rows(O.tval)) {
+        tv = J(rows(O.tval), 1, .)
+        for (k = 1; k <= rows(O.tval); k++) tv[k] = _cge_opt_item(M, O, M.p, x, keys, val, O.tkeys[k, .], O.tex[k], 1)
+        st_matrix("r(targets)", tv')
+    }
     st_global("r(name)", name)
     st_global("r(instruments_list)", invtokens(O.label'))
     rmexternal("cge__opt")
@@ -15396,6 +15631,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "escale", M.escale)
     _cge_io_put(fh, "emask", M.emask)
     _cge_io_put(fh, "urep", M.urep)
+    _cge_io_put(fh, "erep", M.erep)
     _cge_io_put(fh, "neq", M.neq)
     _cge_io_put(fh, "c_ext", M.c_ext)
     _cge_io_put(fh, "c_gov", M.c_gov)
@@ -15534,7 +15770,8 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "elen") M.elen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "escale") M.escale = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "emask") M.emask = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
-    else if (name == "urep") M.urep = (rows(v) * cols(v) == 0 ? J(0, 3, "") : v)
+    else if (name == "urep") M.urep = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "erep") M.erep = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "neq") M.neq = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "c_ext") M.c_ext = (rows(v) * cols(v) == 0 ? "" : v)
     else if (name == "c_gov") M.c_gov = (rows(v) * cols(v) == 0 ? "" : v)

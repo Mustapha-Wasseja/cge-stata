@@ -40,7 +40,10 @@ periods before in every period of a dynamic run, to $10^{-12}$, and GAMS
 reproduces a run with lags period by period (case \cmd{dynlag}). A built-in
 equation written again in the user's language, in place of the original, leaves
 the solution unchanged to $10^{-10}$, and GAMS leaves out the elements that user
-equations replace (case \cmd{replace}).
+equations replace (case \cmd{replace}). An objective written as an
+expression gives the optimum of the report measure that it equals (to
+$10^{-10}$), and a binding constraint of \manref{cge_optimize} gives the
+instruments that reach it as a target (to $10^{-6}$).
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed

@@ -1660,6 +1660,18 @@ objective are equality constraints, met by the augmented Lagrangian method:
 the maximiser takes $f - \lambda' r - \tfrac{\rho}{2} r'r$, and $\lambda$
 moves by $\rho\, r$ after each round, until $\max |r_j| < 10^{-10}$.
 
+**Expressions and constraints (from version 0.9.4).** The objective and the
+targets may be expressions of the user language (Section 19), compiled once
+(`_cge_opt_parse()`: an argument of two or three words whose first is a report
+table is a measure) and evaluated at each trial's solution
+(`_cge_opt_item()`); the right side of a target or a constraint is a number or
+an expression (`_cge_opt_rhs()`). Constraints $h_k \le \bar h_k$ or $\ge \bar
+h_k$ have scaled slacks $s_k \ge 0$, appended to the target residuals, and enter
+the maximiser as $-\frac{1}{2\rho}\sum_k(\max(0, \mu_k - \rho s_k)^2 - \mu_k^2)$
+(Powell, Hestenes and Rockafellar), with $\mu_k \leftarrow \max(0, \mu_k - \rho
+s_k)$ after each round, until the target gaps and $\max_k |\min(s_k,
+\mu_k/\rho)|$ are below $10^{-10}$.
+
 **Results.** The optimum is stored as a simulation and left as the current
 shocks. The Python reference solves the same problems with scipy's SLSQP and
 least squares; the test suites compare the instruments (to $10^{-5}$), the

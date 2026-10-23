@@ -10,7 +10,11 @@ g_j\bigl(x(u), u\bigr) = \bar g_j, \qquad \underline u \le u \le \overline u,
 \end{equation*}
 where $x(u)$ solves the model under the current closure. An instrument is one
 element of a parameter that \manref{cge_shock} changes, or of a variable that
-the closure fixes.
+the closure fixes. From version 0.9.4, $f$ and $g_j$ may also be expressions of
+the user language (chapter~\ref{chap:user}), and inequality constraints
+$h_k\bigl(x(u), u\bigr) \le \bar h_k$ or $\ge \bar h_k$ may be added, with
+$\bar g_j$ and $\bar h_k$ numbers or expressions: the problem a GAMS modeller
+would give to an NLP solver, with the model as its equality constraints.
 
 \section{Algorithm}
 
@@ -36,6 +40,15 @@ f - \lambda' r - \tfrac{\rho}{2}\,r'r,
 \end{equation*}
 and the multipliers move by $\rho\,r$ after each round, $\lambda \leftarrow
 \lambda + \rho\,r$, until $\max_j |r_j| < 10^{-10}$.
+
+\textbf{Inequality constraints} (from version 0.9.4) enter by the method of
+Powell, Hestenes and Rockafellar: with the scaled slack $s_k \ge 0$ of each, the
+maximiser subtracts $\frac{1}{2\rho}\sum_k \bigl(\max(0, \mu_k - \rho s_k)^2 -
+\mu_k^2\bigr)$, and $\mu_k \leftarrow \max(0, \mu_k - \rho s_k)$ after each round,
+until the targets are met and $\max_k |\min(s_k, \mu_k/\rho)| < 10^{-10}$. A
+constraint that binds at the optimum gives the instruments that the same
+condition, as a target, would give; one that does not bind leaves the optimum
+as it is without it. The test suites check both.
 
 \section{Results}
 
