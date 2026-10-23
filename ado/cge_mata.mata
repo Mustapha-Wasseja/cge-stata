@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.8.3  2026-10-23
+*! cge_mata.mata  v0.9.0  2026-10-23
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -200,7 +200,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.8.3")
+    return("0.9.0")
 }
 
 // =====================================================================
@@ -3199,10 +3199,12 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
         errprintf("benchmark replication failed: largest scaled residual %9.3e\n", maxres)
         exit(9)
     }
-    _cge_store(M)
     if (rows(M.uelab)) {
         if (_cge_maxres_part(M, p, x0, 1) > 1e-9) printf("{txt}Note: user equations do not hold at the base (largest scaled residual {res}%9.3e{txt}); they act as shocks\n", _cge_maxres_part(M, p, x0, 1))
     }
+    // the inequalities and bounds of user variables, made again (from version 0.9.0)
+    if (_cge_u_cons_sync(M, 0)) _cge_closure_apply(M, "flexexr", "flexgsav", "savings", "cpi", M.c_fac)
+    _cge_store(M)
 
     printf("{txt}Calibrated: {res}%f{txt} equations, {res}%f{txt} free variables\n", M.neq, M.neq)
     printf("{txt}Benchmark replication: largest scaled residual {res}%9.3e\n", maxres)
@@ -3787,6 +3789,8 @@ void _cge_closure_apply(struct cge_model scalar M, string scalar ext, string sca
         }
         else _cge_fail("factor closure must be mobile, specific, unemployed, wagecurve or minwage", 198)
     }
+    // Exogenous user variables (from version 0.9.0)
+    _cge_u_fixed(M, fixed)
     // Rents are fixed, at zero in the base, unless a constraint frees them;
     // each constraint needs its adjusting variable fixed and its limited
     // variable free (Section 16.2)
@@ -3943,7 +3947,15 @@ void _cge_closure(string scalar ext, string scalar gov, string scalar si, string
         M.swfix = fx
         M.swfree = fr
     }
+    // the inequalities of user equations are made again under the new closure
+    // (from version 0.9.0)
+    if (M.nuv) {
+        _cge_u_cons_drop(M)
+        _cge_cons_rebuild(M)
+    }
     _cge_closure_apply(M, ext, gov, si, num, fac)
+    // the inequalities of user equations, under the new closure (from version 0.9.0)
+    if (_cge_u_cons_sync(M, 0)) _cge_closure_apply(M, ext, gov, si, num, fac)
     _cge_store(M)
     _cge_closure_show(M)
 }
@@ -10693,11 +10705,18 @@ real scalar _cge_rentcode(struct cge_model scalar M, struct cge_par scalar p, re
 // regime
 string scalar _cge_cons_one(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real scalar k)
 {
-    string scalar s
+    string scalar s, ly, lx
     string colvector rec
     real scalar code
     s = _cge_poslabel(M, M.bY[k]) + (M.btype[k] == 1 ? " <= " : " >= ") + strtrim(sprintf("%12.0g", p.bval[k])) +
         ", " + _cge_poslabel(M, M.bX[k]) + (M.bdir[k] == 1 ? " up" : " down")
+    // user inequalities and bounds of user variables (from version 0.9.0)
+    ly = _cge_poslabel(M, M.bY[k])
+    lx = _cge_poslabel(M, M.bX[k])
+    if (substr(ly, 1, 3) == "_S_") s = "inequality " + substr(ly, 4, .) + ", " + lx + (M.bdir[k] == 1 ? " up" : " down")
+    else if (substr(lx, 1, 3) == "_L_" | substr(lx, 1, 3) == "_U_") {
+        s = ly + (M.btype[k] == 1 ? " <= " : " >= ") + strtrim(sprintf("%12.0g", p.bval[k])) + ", bound of a user variable"
+    }
     code = _cge_rentcode(M, p, M.bX[k])
     rec = _cge_recipients(M)
     if (code) s = s + ", rents to " + rec[code]
@@ -10907,11 +10926,13 @@ void _cge_cons_clear()
     M.p.rrm = M.p0.rrm
     M.p.rre = M.p0.rre
     M.p.rra = M.p0.rra
+    // the inequalities and bounds of user variables stay (from version 0.9.0)
+    (void) _cge_u_cons_sync(M, 0)
     _cge_cons_rebuild(M)
     _cge_closure_apply(M, M.c_ext, M.c_gov, M.c_si, M.c_num, M.c_fac)
     _cge_store(M)
-    printf("{txt}All constraints removed\n")
-    st_numscalar("r(N_constraints)", 0)
+    printf("{txt}All constraints removed%s\n", (rows(M.bY) ? " (the inequalities of user equations stay)" : ""))
+    st_numscalar("r(N_constraints)", rows(M.bY))
 }
 
 // =====================================================================
@@ -12705,10 +12726,14 @@ real colvector _cge_u_domain(struct cge_model scalar M, struct cge_par scalar p,
 // conditions (from version 0.7.2): files saved before have one column fewer
 void _cge_u_widen(struct cge_model scalar M)
 {
-    if (rows(M.uvdef) == 0 & cols(M.uvdef) != 7) M.uvdef = J(0, 7, "")
-    if (rows(M.uedef) == 0 & cols(M.uedef) != 6) M.uedef = J(0, 6, "")
+    if (rows(M.uvdef) == 0 & cols(M.uvdef) != 9) M.uvdef = J(0, 9, "")
+    if (rows(M.uedef) == 0 & cols(M.uedef) != 8) M.uedef = J(0, 8, "")
     if (cols(M.uvdef) == 6) M.uvdef = M.uvdef, J(rows(M.uvdef), 1, "")
     if (cols(M.uedef) == 5) M.uedef = M.uedef, J(rows(M.uedef), 1, "")
+    // bounds of user variables, and the relation and paired variable of user
+    // equations (from version 0.9.0)
+    if (cols(M.uvdef) == 7) M.uvdef = M.uvdef, J(rows(M.uvdef), 2, "")
+    if (cols(M.uedef) == 6) M.uedef = M.uedef, J(rows(M.uedef), 1, "="), J(rows(M.uedef), 1, "")
 }
 
 // Tokens written out: an index left over was not the index of a sum or of
@@ -13192,6 +13217,8 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     ln1 = J(0, 1, .)
     ln2 = J(0, 1, .)
     for (k = 1; k <= rows(M.uedef); k++) {
+        // an inequality is the bound of its slack variable (from version 0.9.0)
+        if (M.uedef[k, 7] == "<=" | M.uedef[k, 7] == ">=") continue
         idx = M.uedef[k, 2]
         set = M.uedef[k, 3]
         els = (set == "" ? "" : _cge_setlab(M, set)')
@@ -13239,28 +13266,48 @@ real scalar _cge_u_colon(string scalar s)
 
 // Splits "head = expression , options" at the first "=" and the last comma
 // outside parentheses
-void _cge_u_split(string scalar s, string scalar head, string scalar expr, string scalar opts)
+void _cge_u_split(string scalar s, string scalar head, string scalar expr, string scalar opts,
+                  | string scalar rel)
 {
-    real scalar k, d, eq, cm
+    real scalar k, d, eq, cm, wl
     string scalar ch, t
     t = s
     d = 0
     eq = 0
     cm = 0
+    wl = 1
+    rel = ""
     for (k = 1; k <= strlen(t); k++) {
         ch = substr(t, k, 1)
         if (ch == "(") d++
         else if (ch == ")") d--
+        else if (d == 0 & !eq & (substr(t, k, 3) == "=l=" | substr(t, k, 3) == "=g=" | substr(t, k, 3) == "=e=")) {
+            // the relations of GAMS (from version 0.9.0)
+            eq = k
+            wl = 3
+            rel = (substr(t, k, 3) == "=l=" ? "<=" : (substr(t, k, 3) == "=g=" ? ">=" : "="))
+            k = k + 2
+        }
+        else if (d == 0 & !eq & (substr(t, k, 2) == "<=" | substr(t, k, 2) == ">=")) {
+            // an inequality (from version 0.9.0)
+            eq = k
+            wl = 2
+            rel = substr(t, k, 2)
+            k++
+        }
         else if (ch == "=" & d == 0 & !eq) {
             // a single = (from version 0.7.2, conditions use == >= <= !=)
-            if (!(k > 1 & strpos("=<>!", substr(t, k - 1, 1))) & substr(t, k + 1, 1) != "=") eq = k
+            if (!(k > 1 & strpos("=<>!", substr(t, k - 1, 1))) & substr(t, k + 1, 1) != "=") {
+                eq = k
+                rel = "="
+            }
         }
         else if (ch == "," & d == 0) cm = k
     }
     opts = (cm ? strtrim(substr(t, cm + 1, .)) : "")
     if (cm) t = substr(t, 1, cm - 1)
     head = strtrim(eq ? substr(t, 1, eq - 1) : t)
-    expr = strtrim(eq ? substr(t, eq + 1, .) : "")
+    expr = strtrim(eq ? substr(t, eq + wl, .) : "")
 }
 
 // cge_variable NAME[(i)] = expression [, nominal]: a variable and the
@@ -13269,29 +13316,50 @@ void _cge_u_split(string scalar s, string scalar head, string scalar expr, strin
 void _cge_u_addvar(string scalar spec)
 {
     struct cge_model scalar M
-    string scalar head, expr, opts, name, idx, set, value, cond
+    string scalar head, expr, opts, name, idx, set, value, cond, lo, up, status, rel, dexpr, ix
     string rowvector ot
     real colvector x0, pos
-    real scalar k, len, nom
+    real scalar k, len, nom, fx, nb
     M = _cge_load()
     _cge_need(M, "calibrated")
-    _cge_u_split(spec, head, expr, opts)
+    _cge_u_split(spec, head, expr, opts, rel)
+    if (rel != "" & rel != "=") _cge_fail("cge_variable: write NAME = expression; inequalities are user equations (cge_equation)", 198)
     _cge_u_head(M, head, name, idx, set, cond)
+    if (substr(name, 1, 1) == "_") _cge_fail(name + ": names that begin with _ are kept for the package", 198)
     nom = 0
+    fx = 0
     value = ""
+    lo = ""
+    up = ""
     ot = tokens(subinstr(subinstr(opts, "(", " ( "), ")", " ) "))
     for (k = 1; k <= cols(ot); k++) {
         if (ot[k] == "nominal") nom = 1
-        else if (ot[k] == "value" & k + 3 <= cols(ot)) {
-            if (ot[k + 1] != "(" | ot[k + 3] != ")") _cge_fail("cge_variable: write value(#)", 198)
-            value = ot[k + 2]
+        else if (ot[k] == "fixed") fx = 1
+        else if (anyof(("value", "lower", "upper"), ot[k]) & k + 3 <= cols(ot)) {
+            if (ot[k + 1] != "(" | ot[k + 3] != ")") _cge_fail("cge_variable: write " + ot[k] + "(#)", 198)
+            if (strtoreal(ot[k + 2]) >= .) _cge_fail("cge_variable: " + ot[k] + "() must be a number", 198)
+            if (ot[k] == "value") value = ot[k + 2]
+            else if (ot[k] == "lower") lo = ot[k + 2]
+            else up = ot[k + 2]
             k = k + 3
         }
-        else _cge_fail("cge_variable: unknown option " + ot[k] + "; the options are nominal and value(#)", 198)
+        else _cge_fail("cge_variable: unknown option " + ot[k] + "; the options are nominal, value(#), fixed, lower(#) and upper(#)", 198)
+    }
+    // a variable without a definition at a bound is exogenous there, and may
+    // move away from it as the paired variable of an inequality (from
+    // version 0.9.0)
+    if (expr == "" & lo != "" & up != "") _cge_fail("cge_variable: a variable without a definition takes lower() or upper(), not both", 198)
+    if (expr == "" & (lo != "" | up != "")) {
+        if (value != "" & strtoreal(value) != strtoreal(lo + up)) _cge_fail("cge_variable: value() must equal the bound", 198)
+        value = lo + up
+        fx = 1
     }
     if (expr == "" & value == "") _cge_fail("cge_variable: give the definition, NAME = expression, or a base value, value(#)", 198)
     if (expr != "" & value != "") _cge_fail("cge_variable: give a definition or value(#), not both", 198)
-    if (value != "" & strtoreal(value) >= .) _cge_fail("cge_variable: value() must be a number", 198)
+    if (expr != "" & fx) _cge_fail("cge_variable: a defined variable cannot be fixed; swap it with cge_closure, swap()", 198)
+    if (lo != "" & up != "") {
+        if (strtoreal(lo) > strtoreal(up)) _cge_fail("cge_variable: lower() cannot exceed upper()", 198)
+    }
     if (_cge_vidx(M, name)) _cge_fail(name + " is already a variable of the model", 110)
     if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas"), name)) _cge_fail(name + " is a reserved word", 198)
     if (_cge_find(_cge_gams_params()[., 1], name)) _cge_fail(name + " is the name of a parameter", 110)
@@ -13300,15 +13368,59 @@ void _cge_u_addvar(string scalar spec)
         if (anyof(M.uedef[., 1], name)) _cge_fail("an equation is already named " + name, 110)
     }
     _cge_u_widen(M)
-    M.uvdef = M.uvdef \ (name, set, (expr != "" ? expr : value), idx, (nom ? "nominal" : ""), (expr != "" ? "defined" : "value"), cond)
-    if (expr != "") M.uedef = M.uedef \ (name, idx, set, name + (idx != "" ? "(" + idx + ")" : ""), expr, cond)
+    status = (expr != "" ? "defined" : (fx ? "fixed" : "value"))
+    ix = (idx != "" ? "(" + idx + ")" : "")
+    // a defined variable with bounds: its definition gains adjusters fixed at
+    // zero, which the bounds free (from version 0.9.0), so that it is the
+    // expression held within the bounds
+    dexpr = expr
+    nb = 0
+    if (expr != "" & lo != "") {
+        (void) _cge_u_newrow(M, ("_L_" + name, set, "0", idx, "", "fixed", cond, "0", ""), nom)
+        dexpr = "(" + dexpr + ") + _L_" + name + ix
+        nb++
+    }
+    if (expr != "" & up != "") {
+        (void) _cge_u_newrow(M, ("_U_" + name, set, "0", idx, "", "fixed", cond, "0", ""), nom)
+        dexpr = (nb ? dexpr : "(" + dexpr + ")") + " - _U_" + name + ix
+    }
+    if (expr != "") M.uedef = M.uedef \ (name, idx, set, name + ix, dexpr, cond, "=", "")
+    pos = _cge_u_newrow(M, (name, set, (expr != "" ? expr : value), idx, (nom ? "nominal" : ""), status, cond, lo, up), nom)
+    x0 = M.x0
+    // the elements in the domain (from version 0.7.2)
+    pos = select(pos, M.exists[pos])
+    len = rows(pos)
+    if (!len) _cge_fail("user variable " + name + ": no element meets the condition", 459)
+    _cge_u_refresh(M)
+    if (expr != "" & (lo != "" | up != "")) (void) _cge_u_cons_sync(M, 1)
+    _cge_store(M)
+    printf("{txt}User variable {res}%s%s{txt}: %f element(s), base value%s {res}%s\n", name,
+           (idx != "" ? "(" + idx + ")" + (cond != "" ? "$" + cond : "") : ""), len, (len > 1 ? "s" : ""),
+           invtokens(strtrim(strofreal(x0[pos[|1 \ min((len, 5))|]]', "%12.6g"))) + (len > 5 ? " ..." : ""))
+    if (expr != "") printf("{txt}and its definition, equation {res}%s%s\n", name,
+                           (lo + up != "" ? ", held within its bounds" : ""))
+    else if (status == "fixed") printf("{txt}It is exogenous%s\n", (lo + up != "" ? ": the paired variable of an inequality may move it from its bound" : ""))
+    else printf("{txt}Add the equations that determine it with cge_equation\n")
+    st_global("r(name)", name)
+    st_numscalar("r(N_elements)", len)
+}
+
+// A row of the user variables: definition r (name, set, expression or value,
+// index, nominal, status, condition, lower, upper), its variable added to the
+// model with its base value; returns its positions (from version 0.9.0)
+real colvector _cge_u_newrow(struct cge_model scalar M, string rowvector r, real scalar nom)
+{
+    real colvector x0, pos
+    real scalar len
+    _cge_u_widen(M)
+    M.uvdef = M.uvdef \ r
     _cge_layout(M)
     len = rows(_cge_vpos(M, rows(M.vname)))
     M.x0 = M.x0 \ J(len, 1, 0)
     M.xcur = M.xcur \ J(len, 1, 0)
     M.xscale = M.xscale \ J(len, 1, 1)
     M.exists = M.exists \ J(len, 1, 1)
-    M.fixed = M.fixed \ J(len, 1, 0)
+    M.fixed = M.fixed \ J(len, 1, (r[6] == "fixed"))
     M.nominal = M.nominal \ J(len, 1, nom)
     M.simx = M.simx \ J(len, cols(M.simx), 0)
     x0 = M.x0
@@ -13318,26 +13430,253 @@ void _cge_u_addvar(string scalar spec)
     M.xcur[pos] = x0[pos]
     M.xscale[pos] = abs(x0[pos]) :* (abs(x0[pos]) :> 1e-12) + (abs(x0[pos]) :<= 1e-12)
     if (cols(M.simx)) M.simx[pos, .] = J(1, cols(M.simx), x0[pos])
-    // the elements in the domain (from version 0.7.2)
+    // exogenous elements outside the domain stay fixed at zero
+    M.fixed[pos] = J(len, 1, (r[6] == "fixed"))
+    return(pos)
+}
+
+// The exogenous user variables in the closure (from version 0.9.0)
+void _cge_u_fixed(struct cge_model scalar M, real colvector fixed)
+{
+    real colvector pos
+    real scalar k, kv
+    if (!M.nuv) return
+    _cge_u_widen(M)
+    for (k = 1; k <= rows(M.uvdef); k++) {
+        if (M.uvdef[k, 6] != "fixed") continue
+        kv = rows(M.vname) - M.nuv + k
+        pos = _cge_vpos(M, kv)
+        fixed[pos] = J(rows(pos), 1, 1)
+    }
+}
+
+// The position of user variable name, element el ("" without an index), or 0
+real scalar _cge_u_vpos(struct cge_model scalar M, string scalar name, string scalar el)
+{
+    string colvector e1, e2
+    real colvector pos
+    real scalar k, i
+    k = _cge_vidx(M, name)
+    if (!k) return(0)
+    pos = _cge_vpos(M, k)
+    if (el == "") return(rows(pos) == 1 ? pos[1] : 0)
+    _cge_vlabels(M, k, e1, e2)
+    i = _cge_find(e1, el)
+    return(i ? pos[i] : 0)
+}
+
+// The variable paired with an inequality, perp(VAR[(e)][, up|down]): its
+// name, its element (the equation's index, a label or none) and direction
+void _cge_u_perp(struct cge_model scalar M, string scalar opts, string scalar idx, string scalar vname,
+                 string scalar vel, real scalar dir)
+{
+    string scalar s, d
+    real scalar k, c, kv
+    s = strtrim(opts)
+    if (!regexm(s, "^perp[ ]*\((.*)\)$")) _cge_fail("cge_equation: an inequality needs perp(VAR), the variable paired with it", 198)
+    s = strtrim(regexs(1))
+    // the direction, after a comma outside parentheses
+    d = ""
+    c = 0
+    k = 0
+    for (c = 1; c <= strlen(s); c++) {
+        if (substr(s, c, 1) == "(") k++
+        else if (substr(s, c, 1) == ")") k--
+        else if (substr(s, c, 1) == "," & k == 0) break
+    }
+    if (c <= strlen(s)) {
+        d = strtrim(substr(s, c + 1, .))
+        s = strtrim(substr(s, 1, c - 1))
+    }
+    if (d != "" & d != "up" & d != "down") _cge_fail("perp(): the direction is up or down", 198)
+    dir = (d == "down" ? -1 : 1)
+    vel = ""
+    if (regexm(s, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*\((.*)\)$")) {
+        vname = regexs(1)
+        vel = strtrim(regexs(2))
+    }
+    else if (regexm(s, "^[A-Za-z_][A-Za-z_0-9]*$")) vname = s
+    else _cge_fail("perp(): give a variable, as perp(RA(a)) or perp(GADJ)", 198)
+    kv = _cge_vidx(M, vname)
+    if (!kv) _cge_fail("perp(): " + vname + " is not a variable of the model", 111)
+    if (vel == "" & M.vset[kv] != "") _cge_fail("perp(): give the element of " + vname + ", or the index of the equation", 198)
+    if (vel != "" & M.vset[kv] == "") _cge_fail("perp(): " + vname + " has no elements", 198)
+    if (vel != "" & strpos(vel, ",")) _cge_fail("perp(): the paired variable takes one element", 198)
+    if (vel != "" & vel != idx & idx != "") {
+        if (_cge_u_isindex(M, vel)) _cge_fail("perp(): the index of " + vname + " must be that of the equation, " + idx, 198)
+    }
+}
+
+// The constraints of the user inequalities and of the bounds of defined user
+// variables, made again from their definitions (from version 0.9.0): each
+// element of an inequality bounds its slack variable _S_name from below at
+// zero, adjusted by its paired variable; a bound of a defined variable is
+// adjusted by _L_name or _U_name. With strict, a paired variable that is not
+// fixed under the closure is an error; otherwise the inequality is left out
+// with a note. Returns 1 if there are any.
+real scalar _cge_u_cons_sync(struct cge_model scalar M, real scalar strict)
+{
+    string colvector e1, e2
+    string rowvector pr
+    string scalar vname, vel, el, lab
+    real colvector ypos, xs
+    real scalar k, i, ky, kx, n, dir, xp, any
+    _cge_u_widen(M)
+    _cge_u_cons_drop(M)
+    any = 0
+    for (k = 1; k <= rows(M.uedef); k++) {
+        if (M.uedef[k, 7] != "<=" & M.uedef[k, 7] != ">=") continue
+        any = 1
+        pr = tokens(M.uedef[k, 8], "|")
+        pr = select(pr, pr :!= "|")
+        vname = pr[1]
+        vel = (cols(pr) >= 2 ? pr[2] : "")
+        dir = (cols(pr) >= 3 ? (pr[3] == "down" ? -1 : 1) : 1)
+        if (vel == "-") vel = ""
+        ky = _cge_vidx(M, "_S_" + M.uedef[k, 1])
+        ypos = _cge_vpos(M, ky)
+        _cge_vlabels(M, ky, e1, e2)
+        for (i = 1; i <= rows(ypos); i++) {
+            if (!M.exists[ypos[i]]) continue
+            el = (vel == M.uedef[k, 2] & vel != "" ? e1[i] : vel)
+            kx = _cge_vidx(M, vname)
+            xp = _cge_cons_pos(M, kx, el)
+            if (rows(xp) != 1) _cge_fail("perp(): " + vname + (el != "" ? "(" + el + ")" : "") + " is not one element", 198)
+            xp = xp[1]
+            lab = M.uedef[k, 1] + (e1[i] != "" ? "(" + e1[i] + ")" : "")
+            if (!M.exists[xp]) _cge_fail("inequality " + lab + ": " + _cge_poslabel(M, xp) + " does not exist in this model", 459)
+            if (!M.fixed[xp]) {
+                if (strict) _cge_fail("inequality " + lab + ": " + _cge_poslabel(M, xp) + " is not fixed under the closure, so it cannot be paired with it", 459)
+                printf("{txt}Note: inequality %s is left out: %s is not fixed under this closure\n", lab, _cge_poslabel(M, xp))
+                continue
+            }
+            _cge_u_cons_add(M, ypos[i], xp, -1, 0, dir)
+        }
+    }
+    for (k = 1; k <= rows(M.uvdef); k++) {
+        if (M.uvdef[k, 6] != "defined" | M.uvdef[k, 8] + M.uvdef[k, 9] == "") continue
+        any = 1
+        ky = _cge_vidx(M, M.uvdef[k, 1])
+        ypos = _cge_vpos(M, ky)
+        if (M.uvdef[k, 8] != "") {
+            xs = _cge_vpos(M, _cge_vidx(M, "_L_" + M.uvdef[k, 1]))
+            for (i = 1; i <= rows(ypos); i++) if (M.exists[ypos[i]]) _cge_u_cons_add(M, ypos[i], xs[i], -1, strtoreal(M.uvdef[k, 8]), 1)
+        }
+        if (M.uvdef[k, 9] != "") {
+            xs = _cge_vpos(M, _cge_vidx(M, "_U_" + M.uvdef[k, 1]))
+            for (i = 1; i <= rows(ypos); i++) if (M.exists[ypos[i]]) _cge_u_cons_add(M, ypos[i], xs[i], 1, strtoreal(M.uvdef[k, 9]), 1)
+        }
+    }
+    _cge_cons_rebuild(M)
+    return(any)
+}
+
+// One constraint: variable at position y bounded (typ 1 from above, -1 from
+// below) at b, adjusted by the variable at x in direction d
+void _cge_u_cons_add(struct cge_model scalar M, real scalar y, real scalar x, real scalar typ, real scalar b,
+                     real scalar d)
+{
+    M.bY = M.bY \ y
+    M.bX = M.bX \ x
+    M.btype = M.btype \ typ
+    M.bdir = M.bdir \ d
+    M.p.bmode = M.p.bmode \ 1
+    M.p.bval = M.p.bval \ b
+    M.p.bxbar = M.p.bxbar \ M.xcur[x]
+    M.p0.bmode = M.p0.bmode \ 0
+    M.p0.bval = M.p0.bval \ b
+    M.p0.bxbar = M.p0.bxbar \ M.x0[x]
+}
+
+// The constraints of user inequalities and bounds removed: those whose bounded
+// or adjusting variable is one of the package's slack variables or adjusters,
+// or whose bounded variable has bounds of its own (from version 0.9.0)
+void _cge_u_cons_drop(struct cge_model scalar M)
+{
+    real colvector keep, own
+    real scalar k, kv, j
+    if (!rows(M.bY) | !M.nuv) return
+    own = J(rows(M.x0), 1, 0)
+    _cge_u_widen(M)
+    for (k = 1; k <= rows(M.uvdef); k++) {
+        kv = rows(M.vname) - M.nuv + k
+        if (substr(M.uvdef[k, 1], 1, 1) == "_") own[_cge_vpos(M, kv)] = J(rows(_cge_vpos(M, kv)), 1, 1)
+    }
+    keep = J(rows(M.bY), 1, 1)
+    for (j = 1; j <= rows(M.bY); j++) {
+        if (M.bY[j] <= rows(own)) if (own[M.bY[j]]) keep[j] = 0
+        if (M.bX[j] <= rows(own)) if (own[M.bX[j]]) keep[j] = 0
+    }
+    if (all(keep)) return
+    M.bY = _cge_selcol(M.bY, keep)
+    M.bX = _cge_selcol(M.bX, keep)
+    M.btype = _cge_selcol(M.btype, keep)
+    M.bdir = _cge_selcol(M.bdir, keep)
+    M.p.bmode = _cge_selcol(M.p.bmode, keep)
+    M.p.bval = _cge_selcol(M.p.bval, keep)
+    M.p.bxbar = _cge_selcol(M.p.bxbar, keep)
+    M.p0.bmode = _cge_selcol(M.p0.bmode, keep)
+    M.p0.bval = _cge_selcol(M.p0.bval, keep)
+    M.p0.bxbar = _cge_selcol(M.p0.bxbar, keep)
+}
+
+// The paired variable of an inequality as written: ", perp(VAR(e), down)"
+string scalar _cge_u_perptext(string scalar spec)
+{
+    string rowvector pr
+    if (spec == "") return("")
+    pr = tokens(spec, "|")
+    pr = select(pr, pr :!= "|")
+    return(", perp(" + pr[1] + (cols(pr) >= 2 & pr[2] != "-" ? "(" + pr[2] + ")" : "") +
+           (cols(pr) >= 3 & pr[3] == "down" ? ", down" : "") + ")")
+}
+
+// The rows of column v that keep selects, as a column (0 x 1 when none)
+real colvector _cge_selcol(real colvector v, real colvector keep)
+{
+    if (!any(keep)) return(J(0, 1, .))
+    return(select(v, keep))
+}
+
+// cge_equation NAME[(i)]: lhs =l= rhs, perp(VAR) or lhs =g= rhs, perp(VAR):
+// the slack, rhs - lhs or lhs - rhs, is a user variable _S_NAME, bounded from
+// below at zero and paired with VAR, which stays at its level while the
+// slack is positive and moves, up or down, when it is zero (from version
+// 0.9.0)
+void _cge_u_addineq(struct cge_model scalar M, string scalar name, string scalar idx, string scalar set,
+                    string scalar cond, string scalar lhs, string scalar rhs, string scalar rel, string scalar opts)
+{
+    string scalar vname, vel, sexpr
+    real colvector pos
+    real scalar dir, len, n0
+    _cge_u_perp(M, opts, idx, vname, vel, dir)
+    if (rows(M.uedef)) {
+        if (anyof(M.uedef[., 1], name) | anyof(M.uedef[., 1], "_S_" + name)) _cge_fail("equation " + name + " is already defined", 110)
+    }
+    n0 = rows(M.bY)
+    sexpr = (rel == "<=" ? "(" + rhs + ") - (" + lhs + ")" : "(" + lhs + ") - (" + rhs + ")")
+    _cge_u_widen(M)
+    M.uedef = M.uedef \ ("_S_" + name, idx, set, "_S_" + name + (idx != "" ? "(" + idx + ")" : ""), sexpr, cond, "=", "")
+    pos = _cge_u_newrow(M, ("_S_" + name, set, sexpr, idx, "", "defined", cond, "", ""), 0)
     pos = select(pos, M.exists[pos])
     len = rows(pos)
-    if (!len) _cge_fail("user variable " + name + ": no element meets the condition", 459)
+    if (!len) _cge_fail("user equation " + name + ": no element meets the condition", 459)
+    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, rel, vname + "|" + (vel == "" ? "-" : vel) + "|" + (dir == 1 ? "up" : "down"))
     _cge_u_refresh(M)
+    (void) _cge_u_cons_sync(M, 1)
     _cge_store(M)
-    printf("{txt}User variable {res}%s%s{txt}: %f element(s), base value%s {res}%s\n", name,
-           (idx != "" ? "(" + idx + ")" + (cond != "" ? "$" + cond : "") : ""), len, (len > 1 ? "s" : ""),
-           invtokens(strtrim(strofreal(x0[pos[|1 \ min((len, 5))|]]', "%12.6g"))) + (len > 5 ? " ..." : ""))
-    if (expr != "") printf("{txt}and its definition, equation {res}%s\n", name)
-    else printf("{txt}Add the equations that determine it with cge_equation\n")
+    printf("{txt}User inequality {res}%s{txt}: %f element(s), %s %s %s, paired with {res}%s%s{txt}, which may move %s\n",
+           name, len, lhs, rel, rhs, vname, (vel != "" ? "(" + vel + ")" : ""), (dir == 1 ? "up" : "down"))
     st_global("r(name)", name)
     st_numscalar("r(N_elements)", len)
+    st_numscalar("r(N_constraints)", rows(M.bY))
 }
 
 // cge_equation NAME[(i)]: expression = expression
 void _cge_u_addeq(string scalar spec)
 {
     struct cge_model scalar M
-    string scalar head, rest, name, idx, set, lhs, rhs, opts, cond
+    string scalar head, rest, name, idx, set, lhs, rhs, opts, cond, rel
     real colvector L, R
     real scalar k, c, n0, worst
     M = _cge_load()
@@ -13352,11 +13691,18 @@ void _cge_u_addeq(string scalar spec)
     if (rows(M.uedef)) {
         if (anyof(M.uedef[., 1], name)) _cge_fail("equation " + name + " is already defined", 110)
     }
-    _cge_u_split(rest, lhs, rhs, opts)
-    if (opts != "" | lhs == "" | rhs == "") _cge_fail("cge_equation: write NAME: expression = expression", 198)
+    if (substr(name, 1, 1) == "_") _cge_fail(name + ": names that begin with _ are kept for the package", 198)
+    _cge_u_split(rest, lhs, rhs, opts, rel)
+    if (lhs == "" | rhs == "") _cge_fail("cge_equation: write NAME: expression = expression", 198)
+    // an inequality, paired with a variable (from version 0.9.0)
+    if (rel == "<=" | rel == ">=") {
+        _cge_u_addineq(M, name, idx, set, cond, lhs, rhs, rel, opts)
+        return
+    }
+    if (opts != "") _cge_fail("cge_equation: perp() pairs an inequality, =l= or =g=, with a variable", 198)
     n0 = rows(M.uelab)
     _cge_u_widen(M)
-    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond)
+    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, "=", "")
     _cge_u_build(M, M.p0, M.x0)
     if (rows(M.uelab) == n0) _cge_fail("user equation " + name + ": no element meets the condition", 459)
     _cge_u_refresh(M)
@@ -13387,7 +13733,8 @@ void _cge_u_refresh(struct cge_model scalar M)
 void _cge_u_list()
 {
     struct cge_model scalar M
-    real scalar k
+    real scalar k, j
+    string scalar rhs
     M = _cge_load()
     st_numscalar("r(N_variables)", rows(M.uvdef))
     st_numscalar("r(N_equations)", rows(M.uelab))
@@ -13395,15 +13742,27 @@ void _cge_u_list()
         printf("{txt}No user variables or equations\n")
         return
     }
+    _cge_u_widen(M)
     for (k = 1; k <= rows(M.uvdef); k++) {
-        printf("{txt}variable {res}%s%s{txt}: %s%s\n", M.uvdef[k, 1], (M.uvdef[k, 4] != "" ? "(" + M.uvdef[k, 4] + ")" +
-               (cols(M.uvdef) >= 7 ? (M.uvdef[k, 7] != "" ? "$" + M.uvdef[k, 7] : "") : "") : ""),
-               (M.uvdef[k, 6] == "value" ? "value " : "= "), M.uvdef[k, 3] + (M.uvdef[k, 5] != "" ? ", nominal" : ""))
+        // the package's own slack variables and adjusters (from version 0.9.0)
+        if (substr(M.uvdef[k, 1], 1, 1) == "_") continue
+        printf("{txt}variable {res}%s%s{txt}: %s%s%s%s%s\n", M.uvdef[k, 1], (M.uvdef[k, 4] != "" ? "(" + M.uvdef[k, 4] + ")" +
+               (M.uvdef[k, 7] != "" ? "$" + M.uvdef[k, 7] : "") : ""),
+               (M.uvdef[k, 6] == "defined" ? "= " : "value "), M.uvdef[k, 3], (M.uvdef[k, 5] != "" ? ", nominal" : ""),
+               (M.uvdef[k, 6] == "fixed" ? ", fixed" : ""),
+               (M.uvdef[k, 8] != "" ? ", lower(" + M.uvdef[k, 8] + ")" : "") + (M.uvdef[k, 9] != "" ? ", upper(" + M.uvdef[k, 9] + ")" : ""))
     }
     for (k = 1; k <= rows(M.uedef); k++) {
-        printf("{txt}equation {res}%s%s{txt}: %s = %s\n", M.uedef[k, 1], (M.uedef[k, 2] != "" ? "(" + M.uedef[k, 2] + ")" +
-               (cols(M.uedef) >= 6 ? (M.uedef[k, 6] != "" ? "$" + M.uedef[k, 6] : "") : "") : ""),
-               M.uedef[k, 4], M.uedef[k, 5])
+        if (substr(M.uedef[k, 1], 1, 1) == "_") continue
+        // a bounded variable's definition, as the user wrote it
+        j = _cge_find(M.uvdef[., 1], M.uedef[k, 1])
+        rhs = M.uedef[k, 5]
+        if (j) {
+            if (M.uvdef[j, 6] == "defined" & M.uvdef[j, 8] + M.uvdef[j, 9] != "") rhs = M.uvdef[j, 3] + ", within its bounds"
+        }
+        printf("{txt}equation {res}%s%s{txt}: %s %s %s%s\n", M.uedef[k, 1], (M.uedef[k, 2] != "" ? "(" + M.uedef[k, 2] + ")" +
+               (M.uedef[k, 6] != "" ? "$" + M.uedef[k, 6] : "") : ""), M.uedef[k, 4], M.uedef[k, 7], rhs,
+               _cge_u_perptext(M.uedef[k, 8]))
     }
 }
 
@@ -13419,11 +13778,13 @@ void _cge_u_clear()
     if (rows(M.swfix)) {
         if (any(M.swfix :> nkeep) | any(M.swfree :> nkeep)) _cge_fail("swaps involve user variables: remove them first with cge_closure, swap(none)", 459)
     }
+    // the constraints of user inequalities and bounds go with them (from version 0.9.0)
+    _cge_u_cons_drop(M)
     if (rows(M.bY)) {
         if (any(M.bY :> nkeep) | any(M.bX :> nkeep)) _cge_fail("constraints involve user variables: remove them first with cge_constraint, clear", 459)
     }
-    M.uvdef = J(0, 7, "")
-    M.uedef = J(0, 6, "")
+    M.uvdef = J(0, 9, "")
+    M.uedef = J(0, 8, "")
     M.utok = J(0, 3, .)
     M.uelab = J(0, 1, "")
     M.uegams = J(0, 2, "")
@@ -13441,6 +13802,7 @@ void _cge_u_clear()
     if (cols(M.simx)) M.simx = M.simx[|1, 1 \ nkeep, cols(M.simx)|]
     else M.simx = J(nkeep, 0, .)
     _cge_u_refresh(M)
+    _cge_cons_rebuild(M)
     _cge_store(M)
     printf("{txt}User variables and equations removed\n")
 }
@@ -13481,6 +13843,8 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
                 fput(fh, g + ".fx" + _cge_gams_elem(e1[i], "") + " = 0;")
                 continue
             }
+            // an exogenous user variable (from version 0.9.0)
+            if (M.uvdef[k, 6] == "fixed") fput(fh, g + ".fx" + _cge_gams_elem(e1[i], "") + " = " + _cge_gnum(M.x0[pos[i]]) + ";")
             fput(fh, g + ".l" + _cge_gams_elem(e1[i], "") + " = " + _cge_gnum(M.x0[pos[i]]) + ";")
             fput(fh2, "put '%2', '" + M.vname[kv] + "', '" + e1[i] + "', '', " + g + ".l" + _cge_gams_elem(e1[i], "") + " /;")
         }

@@ -1734,6 +1734,23 @@ system or the results, a reference to one is the constant 0, and `cge_gams`
 fixes them at 0. Comparisons, membership and `sameas()` are errors outside
 conditions; a domain that no element meets is error 459.
 
+**Inequalities and bounds (from version 0.9.0).** `cge_equation NAME[(i)]:
+lhs =l= rhs, perp(V[(i)][, down])` (or `<=`, and `=g=`, `>=`) adds a defined
+user variable `_S_NAME`, $s = rhs - lhs$ (or $lhs - rhs$), and for each element
+a constraint of Section 16 with $s$ bounded below at zero and $V$, which must
+be fixed under the closure, as its adjusting variable, moving up (or down). The
+definitions are kept in `M.uedef` (relation in column 7; the paired variable,
+element and direction in column 8) and the constraints are made again from
+them (`_cge_u_cons_sync`) when the model is calibrated, the closure changes or
+`cge_constraint, clear` runs; one whose paired variable is free is left out
+with a note. `cge_variable NAME, value(#) fixed` is exogenous (column 6
+`fixed`, fixed by `_cge_u_fixed` in the closure); `lower(#)` or `upper(#)`
+without a definition fixes it at that bound. A defined variable with bounds
+(columns 8 and 9) has adjusters `_L_NAME` and `_U_NAME`, fixed at zero, added
+to and subtracted from its definition, each paired with a bound on the
+variable. The GAMS program fixes exogenous user variables (`.fx`) and writes
+the constraints as in Section 16.
+
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
 numbers, variables (positions in the stacked vector), parameters, operators

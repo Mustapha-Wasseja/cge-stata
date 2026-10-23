@@ -47,6 +47,12 @@ Add an equation
 \cmdb{cge_equation} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\cmd{:}
 \argu{expression} \cmd{=} \argu{expression}
 \end{stsyntax}
+Add an inequality paired with a variable (from version 0.9.0)
+\begin{stsyntax}
+\cmdb{cge_equation} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\cmd{:}
+\argu{expression} \cmd{=l=}|\cmd{=g=} \argu{expression}\texttt{,}
+\optarg{}{perp}{variable\textup{[}\texttt{, up}|\texttt{down}\textup{]}}
+\end{stsyntax}
 List the user variables and equations
 \begin{stsyntax}
 \cmdb{cge_equation}\texttt{,} \opt{}{list}
@@ -65,6 +71,14 @@ the equation to the elements that meet it (from version 0.7.2).
 \cgesec{Options}
 
 \begin{optdesc}
+\item[\optarg{}{perp}{variable\textup{[}\texttt{, up}|\texttt{down}\textup{]}}]
+(from version 0.9.0) pairs an inequality with a variable fixed under the
+closure, which stays at its level while the inequality has room to spare and
+moves, up (the default) or down, when it binds. \argu{variable} is a variable
+element, such as \cmd{RA(act_man)} or \cmd{GADJ}, or, for an equation with an
+index, the variable at that index, as in \cmd{RA(a)}. See
+\emph{Inequalities} below.
+
 \item[\opt{}{list}] lists the user variables, with their definitions or
 values, and the user equations. It is the default when only a comma is given.
 
@@ -153,6 +167,31 @@ where a tariff is 0, and a domain that no element meets are errors. Stata
 reads \cmd{$}\argu{name} on a command line as a global macro, so the
 condition is always written in parentheses.
 
+\cgesubsec{Inequalities}
+
+From version 0.9.0, a user equation may be an inequality, written as in GAMS:
+\argu{lhs} \cmd{=l=} \argu{rhs}, or \cmd{<=}, for at most, and \argu{lhs}
+\cmd{=g=} \argu{rhs}, or \cmd{>=}, for at least. An inequality is paired with
+a variable, \cmd{perp(}\argu{variable}\cmd{)}, as an equation is paired with a
+variable in a mixed complementarity problem: the variable stays at its level
+while the inequality holds with room to spare, and moves, in the direction
+given, when it binds, by as much as keeps it binding. The paired variable must
+be fixed under the closure: a premium or rent of \manref{cge_constraint}
+(\cmd{RM}, \cmd{RE}, \cmd{RA}, which go to the government), a scaling factor
+such as \cmd{GADJ}, a tax adjuster that the closure fixes, or an exogenous user
+variable of \manref{cge_variable}. Each element of an inequality needs its own
+paired element.
+
+Inequalities extend \manref{cge_constraint}, which bounds one model variable,
+to any expression of the user language, with sets, parameters and conditions.
+They are solved in the same way, in a smoothed form and then exactly in the
+regimes found; \cmd{cge_constraint, list} shows them, and \manref{cge_gams}
+writes them into a mixed complementarity problem. They are kept when the
+model is saved, calibrated again or given another closure; one whose paired
+variable a new closure frees is left out, with a note, until a closure fixes
+it again. \cmd{cge_constraint, clear} keeps them; \cmd{cge_equation, clear}
+removes them with the other user equations.
+
 \cgesubsec{Equations and the closure}
 
 Each equation element needs a free variable, so that the closure stays square:
@@ -209,12 +248,24 @@ base. A condition that cannot be evaluated at the base, or that no element
 meets, is an error:
 \stlog{eq_cond_err}
 
+\cgesubsec{Example 6: inequalities}
+
+An import quota on manufactures, paired with its premium; government revenue
+at least at its base, with the sales tax rates adjusting; and a relative price
+held within narrow bounds. The tariffs are removed:
+\stlog[\scriptsize]{eq_ineq}
+Imports of manufactures stop at the quota, with a premium that keeps them
+there. The revenue lost with the tariffs is made up by higher sales tax rates.
+The relative price of agricultural goods would fall below its lower bound, and
+is held at it.
+
 \cgesec{Stored results}
 
 \cmd{cge_equation} stores the following in \cmd{r()}:
 \begin{storedres}
 \resgroup{Scalars}
 \res{r(N_elements)} & number of elements of the equation, those that meet its condition\\
+\res{r(N_constraints)} & with an inequality: number of constraints of the model\\
 \res{r(N_variables)} & number of user variables (\opt{}{list})\\
 \res{r(N_equations)} & number of equation elements (\opt{}{list})\\
 \resgroup{Macros}
@@ -254,6 +305,19 @@ a row of the block \cmd{U} of the system. Its derivatives are exact, from
 version 0.7.0: the postfix form of each side is differentiated in forward
 mode, with respect to the variables that the equation element contains
 (section~\ref{sec:jacobian}).
+An inequality $\ell(x) \le r(x)$ paired with $v$, fixed at $\bar v$ and moving
+up, adds a slack variable $s = r(x) - \ell(x)$, defined by a user equation and
+named \cmd{_S_}\argu{name}, and the constraint
+\begin{equation*}
+s \ge 0, \qquad v - \bar v \ge 0, \qquad s\,(v - \bar v) = 0,
+\end{equation*}
+solved as the constraints of \manref{cge_constraint} are
+(chapter~\ref{chap:constraints}); with \cmd{=g=}, $s = \ell(x) - r(x)$, and
+moving down, $\bar v - v \ge 0$. A defined user variable $u = e(x)$ with a
+lower bound $b$ becomes $u = e(x) + a$, with an adjuster $a$ fixed at zero
+paired with the constraint $u \ge b$, so that $u = \max(b, e(x))$; an upper
+bound subtracts a second adjuster.
+
 \Chapref{chap:user} describes the compilation and the GAMS program, in which
 GAMS differentiates the same equations itself.
 

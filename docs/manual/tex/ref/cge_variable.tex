@@ -33,11 +33,16 @@ cge_variable LAM, value(1)
 A variable and its definition
 \begin{stsyntax}
 \cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]] \cmd{=} \argu{expression}
-[\texttt{,} \opt{}{nominal}]
+[\texttt{,} \opt{}{nominal} \optarg{}{lower}{\#} \optarg{}{upper}{\#}]
 \end{stsyntax}
 A variable that user equations determine
 \begin{stsyntax}
 \cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{value}{\#}
+[\opt{}{fixed} \opt{}{nominal}]
+\end{stsyntax}
+An exogenous variable at a bound, which an inequality may move (from version 0.9.0)
+\begin{stsyntax}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{lower}{\#}|\optarg{}{upper}{\#}
 [\opt{}{nominal}]
 \end{stsyntax}
 \argu{name} has at most 24 characters, letters, digits and underscores; it
@@ -50,6 +55,8 @@ described in \manref{cge_equation}.
 \begin{opttable}
 \optgroup{Main}
 \optarg{}{value}{\#} & base value of a variable that user equations determine\\
+\opt{}{fixed} & the variable is exogenous, at its value\\
+\optarg{}{lower}{\#}, \optarg{}{upper}{\#} & bounds; without a definition, the exogenous level\\
 \opt{}{nominal} & the variable is measured in local currency\\
 \end{opttable}
 
@@ -59,6 +66,18 @@ described in \manref{cge_equation}.
 \item[\optarg{}{value}{\#}] gives the base value of a variable that user
 equations determine, and adds no equation. A variable has either a definition
 or a value, not both.
+
+\item[\opt{}{fixed}] (from version 0.9.0) makes a variable given a value
+exogenous, as the closure makes the model's exogenous variables: it adds no
+unknown, \manref{cge_shock} can change it, and an inequality of
+\manref{cge_equation} can be paired with it.
+
+\item[\optarg{}{lower}{\#}, \optarg{}{upper}{\#}] (from version 0.9.0) bound a
+variable. A defined variable is held within its bounds: it equals its
+expression, or the bound the expression would cross. A variable without a
+definition takes one of them and is then exogenous at that bound, from which
+an inequality paired with it may move it: away from a lower bound, up, and
+from an upper bound, down.
 
 \item[\opt{}{nominal}] marks a variable measured in local currency, so that
 the homogeneity check of \manref{cge_check} expects it to scale with the

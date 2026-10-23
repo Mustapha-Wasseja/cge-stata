@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions
+    nests nestvat outces user usersets conditions inequalities
 local ncase : word count `cases'
 
 tempname post
@@ -325,6 +325,24 @@ foreach case of local cases {
         quietly cge_closure, swap(LAM GADJ)
         cge_shock LAM, value(1.1)
         cge_shock tm, value(0)
+    }
+    * inequalities paired with variables (version 0.9.0): an import quota with
+    * its premium, a floor on government purchases with GADJ, a floor on a
+    * relative price with an exogenous user variable, and an upper bound on a
+    * defined user variable; every bound holds in the base
+    else if "`case'" == "inequalities" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_equation quota: QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))
+        cge_equation gmin: QG(com_ser) >= 0.95 * base(QG(com_ser)), perp(GADJ)
+        cge_variable FLOOR, lower(0)
+        cge_variable PRF = PQ(com_agr) / CPI + FLOOR
+        cge_equation pf: PRF >= 0.9999, perp(FLOOR)
+        cge_variable PRU = PQ(com_agr) / CPI, upper(1.0001)
+        cge_shock tm, value(0)
+        cge_shock qg, elements(com_ser) scale(0.9)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers
     else if "`case'" == "nestvat" {

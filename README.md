@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.8.3 implements the standard single-country model described in
+Version 0.9.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,12 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.9.0 brings GAMS's complementarity to user equations: an inequality,
+`QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))`, is paired with
+a variable that the closure fixes and that moves only when the inequality
+binds, as in a mixed complementarity problem. Quotas, capacity limits, floors
+on spending and minimum prices can so be written in the model's own terms.
+User variables can also be exogenous or bounded.
 Version 0.8.3 completes the survey link with three tools. Survey weights can
 be adjusted, by minimum relative entropy, so that totals such as employment
 by sector follow the model, as in reweighting approaches to macro-micro

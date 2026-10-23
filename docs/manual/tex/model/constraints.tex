@@ -111,3 +111,14 @@ calibration.
 with the simulation. The rent variables appear in the results like other
 variables. Constraints are kept when the shocks are reset, in dynamic runs and
 sensitivity analysis, and when the model is saved.
+
+\section{User inequalities}
+
+From version 0.9.0, \manref{cge_equation} writes inequalities among any
+expressions of the user language, each paired with a variable fixed under the
+closure (\secref{sec:userineq}). Each element is a constraint of this chapter
+on a slack variable, the difference between the two sides, bounded at zero
+and adjusted by the paired variable, and the bounds of user variables are
+constraints on the variables themselves. They are listed and solved with the
+constraints of \manref{cge_constraint}.
+

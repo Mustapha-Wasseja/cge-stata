@@ -1,0 +1,50 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_equation quota: QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))
+User inequality quota: 1 element(s), QM(com_man) <= 1.02 * base(QM(com_man)), paired with RM(com_man), which may move up
+
+. cge_equation rev: YG >= base(YG), perp(TQADJ)
+User inequality rev: 1 element(s), YG >= base(YG), paired with TQADJ, which may move up
+
+. cge_variable PRA = PQ(com_agr) / CPI, lower(0.9995) upper(1.0005)
+User variable PRA: 1 element(s), base value 1
+and its definition, equation PRA, held within its bounds
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(ineq)
+Simulation ineq solved in 17 iteration(s) (newton)
+Largest scaled residual  9.47e-16; WALRAS =  4.44e-14
+Constraints
+  inequality quota, RM(com_man) up, rents to gov: binding
+      _S_quota =            0;  RM(com_man) =  .0557255432
+  inequality rev, TQADJ up: binding
+      _S_rev =            0;  TQADJ =  1.147889005
+  PRA >= .9995, bound of a user variable: binding
+      PRA =        .9995;  _L_PRA =  .0087603288
+  PRA <= 1.0005, bound of a user variable: not binding
+      PRA =        .9995;  _U_PRA =            0
+
+. quietly cge_results, sim(ineq) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "QM", "RM", "YG", "TQADJ", "PRA"), noobs sepby(variable)
+
+  +----------------------------------------+
+  | variable   element1   base       value |
+  |----------------------------------------|
+  |       QM    com_agr     20   22.512137 |
+  |       QM    com_man     60        61.2 |
+  |       QM    com_ser     20   19.256339 |
+  |----------------------------------------|
+  |       YG                63          63 |
+  |----------------------------------------|
+  |    TQADJ                 1    1.147889 |
+  |----------------------------------------|
+  |       RM    com_agr      0           0 |
+  |       RM    com_man      0   .05572554 |
+  |       RM    com_ser      0           0 |
+  |----------------------------------------|
+  |      PRA                 1       .9995 |
+  +----------------------------------------+

@@ -56,6 +56,19 @@ quietly cge_results, sim(notariff) clear nodisplay
 list variable element1 base value if inlist(variable, "MT", "TMV", "LQM", "GGOODS"), noobs
 *<<
 
+*>> eq_ineq
+set linesize 120
+cge_shock, reset
+cge_equation quota: QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))
+cge_equation rev: YG >= base(YG), perp(TQADJ)
+cge_variable PRA = PQ(com_agr) / CPI, lower(0.9995) upper(1.0005)
+cge_shock tm, value(0)
+cge_solve, name(ineq)
+quietly cge_results, sim(ineq) clear nodisplay
+list variable element1 base value if inlist(variable, "QM", "RM", "YG", "TQADJ", "PRA"), noobs sepby(variable)
+*<<
+set linesize 100
+
 *>> eq_cond_err
 capture noisily cge_variable X1 = sum(c$(1 / tm(c) > 0), PQ(c))
 di as err "r(" _rc ");"

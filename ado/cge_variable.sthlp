@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.2  22oct2026}{...}
+{* *! version 0.9.0  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -10,10 +10,13 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal} {opt lower(#)} {opt upper(#)}]
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt fixed} {opt nominal}]
+
+{p 8 12 2}
+{cmd:cge_variable} {it:name}[...]{cmd:,} {opt lower(#)}|{opt upper(#)} [{opt nominal}]
 
 
 {title:Description}
@@ -28,6 +31,13 @@ user parameters ({helpb cge_parameter}). From version 0.7.2, a condition,
 {it:name}{cmd:(}{it:i}{cmd:)$(}{it:condition}{cmd:)}, defines the variable
 only for the elements that meet it; see {it:Conditions} in
 {helpb cge_equation}.
+
+{pstd}
+From version 0.9.0, {opt lower(#)} and {opt upper(#)} hold a defined variable
+within bounds; {opt fixed} makes a variable given a value exogenous, as in the
+closure, and {opt lower(#)} or {opt upper(#)} without a definition makes it
+exogenous at that bound, from which an inequality paired with it may move it.
+See {it:Inequalities} in {helpb cge_equation}.
 
 {pstd}
 A variable added with {opt value()} needs an equation added with

@@ -82,6 +82,30 @@ out of the results, it is 0 where an expression refers to it, and GAMS fixes
 it at 0. Because \cmd{$}\argu{name} is a global macro on a Stata command
 line, the condition is always written in parentheses after \cmd{$}.
 
+\section{Inequalities and bounds}\label{sec:userineq}
+
+From version 0.9.0, a user equation may be an inequality, $\ell(x) \le r(x)$
+or $\ell(x) \ge r(x)$, written with \cmd{=l=} and \cmd{=g=} as in GAMS and paired
+with a variable, as in a mixed complementarity problem:
+\begin{stcode}
+cge_equation quota: QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))
+\end{stcode}
+The paired variable, fixed under the closure, stays at its level while the
+inequality has room to spare and moves when it binds. Regime switches that a
+GAMS model writes as complementarity conditions, such as quotas with their
+premiums, capacity limits with their rents, floors on spending with an
+adjusting instrument, or a minimum price, can so be written in the model's own
+terms, with sets, parameters and conditions. Each inequality becomes a
+constraint of chapter~\ref{chap:constraints} on its slack variable, and is
+solved, reported and exported to GAMS in the same way.
+
+A user variable may be exogenous, \cmd{cge_variable TAU, value(0) fixed}, or
+exogenous at a bound from which a paired inequality may move it,
+\cmd{cge_variable TAU, lower(0)}: the analogue of a positive variable in
+GAMS. A defined variable may be held within bounds,
+\cmd{cge_variable PR = PQ(com_agr) / CPI, lower(0.95)}, which makes it the
+larger of its expression and the bound.
+
 \section{Variables and equations}
 
 \cmd{cge_variable NAME(i) = expression} adds the variable $U_i$ and the

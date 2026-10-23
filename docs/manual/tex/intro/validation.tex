@@ -12,7 +12,7 @@ specification, calibrates the model from the SAM and the user's settings alone,
 and is solved with PATH; it reproduces the 186 scenarios of the Python
 reference, including scenarios with constraints solved as complementarity
 problems, to $2.9 \times 10^{-11}$ or better. \manref{cge_gams} writes any model
-for that GAMS program: 33 exported cases, solved with PATH (17 of them also
+for that GAMS program: 34 exported cases, solved with PATH (17 of them also
 with CONOPT, KNITRO and IPOPT), reproduce the solutions of Stata to
 $4 \times 10^{-9}$ or better
 (\secref{sec:gams-import}). The test suite also runs every example do-file.
@@ -30,7 +30,9 @@ the Shapley decomposition add up to the change in every measure, and
 reweighting meets its targets to $10^{-10}$. User equations with sets,
 parameters and conditions are written into the GAMS program like the model's
 own and agree with Stata's solutions (export check cases \cmd{user},
-\cmd{usersets} and \cmd{conditions}).
+\cmd{usersets} and \cmd{conditions}); user inequalities, solved by GAMS as a
+mixed complementarity problem, agree too (case \cmd{inequalities}), and
+reproduce the constraints of \manref{cge_constraint} that they restate.
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.2  22oct2026}{...}
+{* *! version 0.9.0  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -13,6 +13,10 @@
 {cmd:cge_equation} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=} {it:expression}
 
 {p 8 12 2}
+{cmd:cge_equation} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=l=}|{cmd:=g=} {it:expression}{cmd:,}
+{opt perp(variable[, up|down])}
+
+{p 8 12 2}
 {cmd:cge_equation}{cmd:,} {opt list}
 
 {p 8 12 2}
@@ -22,7 +26,14 @@
 {cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal}]
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt fixed} {opt nominal}]
+
+{p 8 12 2}
+{cmd:cge_variable} {it:name}[...]{cmd:,} {opt lower(#)}|{opt upper(#)} [{opt nominal}]
+
+{pstd}
+{cmd:<=} and {cmd:>=} may be written for {cmd:=l=} and {cmd:=g=}; a defined
+variable takes {opt lower(#)} and {opt upper(#)} after its expression.
 
 
 {title:Description}
@@ -117,6 +128,40 @@ reads {cmd:$}{it:name} as a global macro. A condition that is missing at the
 base, or a domain that no element meets, stops the command with error 459.
 
 
+{title:Inequalities}
+
+{pstd}
+From version 0.9.0, a user equation may be an inequality, as in GAMS:
+{it:lhs} {cmd:=l=} {it:rhs} (at most) or {it:lhs} {cmd:=g=} {it:rhs} (at
+least). It is paired with a variable, {opt perp(variable)}, as in a mixed
+complementarity problem: the variable stays at its level while the inequality
+holds with room to spare, and moves, up or, with {opt perp(variable, down)},
+down, when it binds, by as much as keeps it binding. The paired variable must
+be fixed under the closure: a premium or rent ({cmd:RM}, {cmd:RE},
+{cmd:RA}), a scaling factor such as {cmd:GADJ}, a tax adjuster that the
+closure fixes, or an exogenous user variable. With an index, {cmd:perp(RA(a))}
+pairs each element with the element of the same label; {cmd:perp(RA(act_man))}
+names one element.
+
+{pstd}
+Inequalities are solved like the constraints of {helpb cge_constraint}: in a
+smoothed form, then exactly in the regimes found. {cmd:cge_constraint, list}
+shows them and whether they bind, and {helpb cge_gams} writes them into a
+mixed complementarity problem for PATH. They are kept when the model is
+saved, calibrated again or given another closure; an inequality whose paired
+variable the new closure frees is left out, with a note, until a closure fixes
+it again.
+
+{pstd}
+A user variable may be bounded. {cmd:cge_variable} {it:name} {cmd:=}
+{it:expression}{cmd:, lower(}{it:#}{cmd:) upper(}{it:#}{cmd:)} holds the variable
+within its bounds, at the expression or at the bound it would cross.
+{cmd:cge_variable} {it:name}{cmd:, value(}{it:#}{cmd:) fixed} is exogenous, at
+its value, which {helpb cge_shock} can change; {cmd:cge_variable}
+{it:name}{cmd:, lower(}{it:#}{cmd:)} (or {opt upper(#)}) is exogenous at the
+bound, from which an inequality paired with it may move it.
+
+
 {title:Options}
 
 {phang}
@@ -126,6 +171,16 @@ numeraire.
 
 {phang}
 {opt value(#)} gives the base value of a variable that equations determine.
+
+{phang}
+{opt fixed} makes a variable given a value exogenous, as in the closure.
+
+{phang}
+{opt lower(#)} and {opt upper(#)} bound a variable (see {it:Inequalities}).
+
+{phang}
+{opt perp(variable[, up|down])} pairs an inequality with a variable fixed under
+the closure, which moves up (the default) or down when it binds.
 
 {phang}
 {opt list} lists the user variables and equations; {opt clear} removes them
@@ -150,6 +205,13 @@ all.
 {phang2}{cmd:. cge_shock LAM, value(1.1)}{p_end}
 {phang2}{cmd:. cge_solve}{p_end}
 
+{pstd}An import quota on manufactures, with its premium; government revenue at least its base level, sales tax rates adjusting; and a relative price held within bounds (from version 0.9.0){p_end}
+{phang2}{cmd:. cge_equation quota: QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))}{p_end}
+{phang2}{cmd:. cge_equation rev: YG >= base(YG), perp(TQADJ)}{p_end}
+{phang2}{cmd:. cge_variable PRA = PQ(com_agr) / CPI, lower(0.999) upper(1.001)}{p_end}
+{phang2}{cmd:. cge_solve}{p_end}
+{phang2}{cmd:. cge_constraint, list}{p_end}
+
 {pstd}Spending on the imports that carry a tariff, and the tariff revenue by commodity, defined only for them{p_end}
 {phang2}{cmd:. cge_variable MT = sum(c$(tm(c) > 0), PM(c) * QM(c)), nominal}{p_end}
 {phang2}{cmd:. cge_variable TMV(c)$(tm(c) > 0) = tm(c) * PM(c) * QM(c)}{p_end}
@@ -173,7 +235,8 @@ simulation, dynamic run and sensitivity draw. Their derivatives are exact
 
 {pstd}
 {cmd:cge_variable} and {cmd:cge_equation} store {cmd:r(name)} and
-{cmd:r(N_elements)}, the number of elements in the domain; {cmd:cge_equation, list} stores {cmd:r(N_variables)} and
+{cmd:r(N_elements)}, the number of elements in the domain; an inequality also
+{cmd:r(N_constraints)}, the number of constraints of the model; {cmd:cge_equation, list} stores {cmd:r(N_variables)} and
 {cmd:r(N_equations)} (equation elements).
 
 

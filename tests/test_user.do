@@ -532,3 +532,220 @@ cge_equation, clear
 cge_parameter, clear
 cge_set, clear
 program drop _usdiff
+
+* ---------------------------------------------------------------------
+* 9. Inequalities paired with variables, exogenous user variables and bounds
+*    of user variables (version 0.9.0)
+* ---------------------------------------------------------------------
+* The largest relative difference between two simulations over the model's
+* own variables (user variables, named from U_ or _, left out)
+capture program drop _ineqdiff
+program define _ineqdiff, rclass
+    args a b
+    tempfile ta
+    quietly cge_results, sim(`a') clear nodisplay
+    quietly rename value va
+    quietly save `ta'
+    quietly cge_results, sim(`b') clear nodisplay
+    quietly merge 1:1 variable element1 element2 using `ta', keep(match) nogenerate
+    quietly generate double d = abs(va - value) / max(1, abs(value))
+    quietly replace d = 0 if substr(variable, 1, 1) == "_" | inlist(variable, "PRF", "PRF2", "PRU", "FLOOR", "XF")
+    quietly summarize d
+    return scalar maxdiff = r(max)
+end
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, `stdmap'
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+
+* An import quota as a user inequality, paired with the import premium, is the
+* constraint of cge_constraint
+cge_constraint QM, elements(com_man) upper(1.02) scale
+cge_shock tm, value(0)
+quietly cge_solve, name(qa) tolerance(1e-12)
+cge_constraint, clear
+cge_equation quota: QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))
+assert r(N_elements) == 1 & r(N_constraints) == 1
+quietly cge_solve, name(qb) tolerance(1e-12)
+_ineqdiff qa qb
+assert r(maxdiff) < 1e-9
+quietly cge_results, sim(qb) clear nodisplay
+quietly summarize value if variable == "RM" & element1 == "com_man"
+assert r(mean) > 0.01
+quietly summarize value if variable == "_S_quota"
+assert abs(r(mean)) < 1e-9
+* not binding when the tariffs double: the premium stays at zero
+cge_shock, reset
+cge_shock tm, scale(2)
+quietly cge_solve, name(qc) tolerance(1e-12)
+quietly cge_results, sim(qc) clear nodisplay
+quietly summarize value if variable == "RM" & element1 == "com_man"
+assert r(mean) == 0
+quietly summarize value if variable == "_S_quota"
+assert r(mean) > 0
+cge_shock, reset
+* the exact Jacobian with the inequality
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+* cge_constraint, clear keeps it; the listing shows it as written
+cge_constraint, clear
+assert r(N_constraints) == 1
+cge_equation, list
+cge_equation, clear
+
+* A capacity limit over a conditional domain, with an index, is the
+* constraint of cge_constraint on the same element
+cge_constraint QA, elements(act_man) upper(1.01) scale
+cge_shock tm, value(0)
+quietly cge_solve, name(ca) tolerance(1e-12)
+cge_constraint, clear
+cge_equation cap(a)$(sameas(a, act_man)): QA(a) <= 1.01 * base(QA(a)), perp(RA(a))
+quietly cge_solve, name(cb) tolerance(1e-12)
+_ineqdiff ca cb
+assert r(maxdiff) < 1e-9
+cge_shock, reset
+cge_equation, clear
+
+* A floor on government purchases of services, with GADJ adjusting: binding,
+* GADJ = 1.1 / 0.9; not binding at 0.8, GADJ = 1
+cge_equation gmin: QG(com_ser) >= 1.1 * base(QG(com_ser)), perp(GADJ)
+cge_shock qg, elements(com_ser) scale(0.9)
+quietly cge_solve, name(gm) tolerance(1e-12)
+quietly cge_results, sim(gm) clear nodisplay
+quietly summarize value if variable == "GADJ"
+assert reldif(r(mean), 1.1 / 0.9) < 1e-10
+quietly summarize value if variable == "QG" & element1 == "com_ser"
+local qg1 = r(mean)
+quietly summarize base if variable == "QG" & element1 == "com_ser"
+assert reldif(`qg1', 1.1 * r(mean)) < 1e-10
+cge_equation, clear
+cge_equation gmin: QG(com_ser) >= 0.8 * base(QG(com_ser)), perp(GADJ)
+quietly cge_solve, name(gm2) tolerance(1e-12)
+quietly cge_results, sim(gm2) clear nodisplay
+quietly summarize value if variable == "GADJ"
+assert r(mean) == 1
+cge_shock, reset
+cge_equation, clear
+
+* max and min through a paired exogenous variable and through bounds
+cge_variable FLOOR, lower(0)
+assert r(N_elements) == 1
+cge_variable PRF = PQ(com_agr) / CPI + FLOOR
+cge_equation pf: PRF >= 1.001, perp(FLOOR)
+cge_variable PRF2 = PQ(com_agr) / CPI, lower(1.001)
+cge_variable PRU = PQ(com_agr) / CPI, upper(0.999)
+cge_shock tm, value(0)
+quietly cge_solve, name(fl) tolerance(1e-12)
+quietly cge_results, sim(fl) clear nodisplay
+quietly summarize value if variable == "PQ" & element1 == "com_agr"
+local pa = r(mean)
+quietly summarize value if variable == "CPI"
+local ra = `pa' / r(mean)
+foreach v in FLOOR PRF PRF2 PRU {
+    quietly summarize value if variable == "`v'"
+    local `v' = r(mean)
+}
+assert reldif(`PRF', max(1.001, `ra')) < 1e-10 & reldif(`PRF2', max(1.001, `ra')) < 1e-10
+assert reldif(`PRU', min(0.999, `ra')) < 1e-10
+assert reldif(`FLOOR', max(0, 1.001 - `ra')) < 1e-9
+* with the tariffs doubled the price is above the floor and below the ceiling
+cge_shock, reset
+cge_shock tm, scale(2)
+quietly cge_solve, name(fl2) tolerance(1e-12)
+quietly cge_results, sim(fl2) clear nodisplay
+quietly summarize value if variable == "PQ" & element1 == "com_agr"
+local pa = r(mean)
+quietly summarize value if variable == "CPI"
+local ra = `pa' / r(mean)
+foreach v in FLOOR PRF2 PRU {
+    quietly summarize value if variable == "`v'"
+    local `v' = r(mean)
+}
+assert reldif(`PRF2', max(1.001, `ra')) < 1e-10 & reldif(`PRU', min(0.999, `ra')) < 1e-10
+assert `FLOOR' == 0 | reldif(`FLOOR', max(0, 1.001 - `ra')) < 1e-9
+cge_shock, reset
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+
+* An exogenous user variable takes its value, and a shock changes it
+cge_variable XF, value(2) fixed
+cge_variable XG = 3 * XF
+cge_shock XF, value(4)
+quietly cge_solve, name(xf) tolerance(1e-12)
+quietly cge_results, sim(xf) clear nodisplay
+quietly summarize value if variable == "XG"
+assert reldif(r(mean), 12) < 1e-12
+cge_shock, reset
+
+* Saved and loaded, calibrated again, under another closure, and in a dynamic
+* run, the inequalities and bounds are kept
+cge_equation gmin: QG(com_ser) >= 1.1 * base(QG(com_ser)), perp(GADJ)
+cge_shock qg, elements(com_ser) scale(0.9)
+quietly cge_solve, name(k1) tolerance(1e-12)
+tempfile sv
+quietly cge_save using "`sv'", replace
+quietly cge_use using "`sv'"
+quietly cge_solve, name(k2) tolerance(1e-12)
+_ineqdiff k1 k2
+assert r(maxdiff) < 1e-12
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_constraint, list
+assert r(N_constraints) == 4
+cge_shock qg, elements(com_ser) scale(0.9)
+quietly cge_solve, name(k3) tolerance(1e-12)
+quietly cge_results, sim(k3) clear nodisplay
+quietly summarize value if variable == "GADJ"
+assert reldif(r(mean), 1.1 / 0.9) < 1e-10
+quietly cge_closure, government(fixgsav direct)
+cge_constraint, list
+assert r(N_constraints) == 4
+quietly cge_solve, name(k4) tolerance(1e-12)
+quietly cge_results, sim(k4) clear nodisplay
+quietly summarize value if variable == "GADJ"
+assert reldif(r(mean), 1.1 / 0.9) < 1e-10
+quietly cge_dynamic, name(kd) periods(0/2) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02)
+assert "`r(sims)'" == "kd0 kd1 kd2"
+quietly cge_results, sim(kd2) clear nodisplay
+quietly summarize value if variable == "QG" & element1 == "com_ser"
+local q2 = r(mean)
+quietly summarize base if variable == "QG" & element1 == "com_ser"
+assert `q2' >= 1.1 * r(mean) * (1 - 1e-9)
+
+* The GAMS program: the exogenous user variable fixed, the inequality's slack
+* defined and paired with GADJ
+tempfile gi
+cge_gams using "`gi'_i", sim(k4) replace
+mata:
+u = cat(st_local("gi") + "_i/cge_user.inc")
+c = cat(st_local("gi") + "_i/cge_constraints.inc")
+st_numscalar("oki", sum(u :== "U_FLOOR.fx = 0;") + sum(u :== "variable U__S_gmin;") +
+             (sum(strpos(c, "U__S_gmin") :> 0) >= 1) + (sum(strpos(c, "GADJ") :> 0) >= 1))
+end
+assert scalar(oki) == 4
+cge_shock, reset
+quietly cge_closure, government(flexgsav)
+
+* Errors
+capture noisily cge_equation bad: QG(com_ser) >= 1
+assert _rc == 198
+capture noisily cge_equation bad: QG(com_ser) >= 1, perp(PQ(com_agr))
+assert _rc == 459
+capture noisily cge_equation bad: QG(com_ser) >= 1, perp(NOSUCH)
+assert _rc == 111
+capture noisily cge_equation bad(c): QM(c) <= base(QM(c)), perp(RA(a))
+assert _rc == 198
+capture noisily cge_equation bad: QG(com_ser) = 1, perp(GADJ)
+assert _rc == 198
+capture noisily cge_variable XX, lower(0) upper(1)
+assert _rc == 198
+capture noisily cge_variable XX = PQ(com_agr), fixed
+assert _rc == 198
+capture noisily cge_variable _XX = 1
+assert _rc == 198
+capture noisily cge_variable XX <= 1
+assert _rc == 198
+quietly cge_closure, swap(none)
+cge_equation, clear
+cge_constraint, list
+assert r(N_constraints) == 0
+program drop _ineqdiff

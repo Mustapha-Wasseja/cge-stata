@@ -31,7 +31,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 # Cases of export_check.do with constraints
-MCP_CASES = ("quota", "capacity", "peglimit", "nodeficit", "wagefloor")
+MCP_CASES = ("quota", "capacity", "peglimit", "nodeficit", "wagefloor", "inequalities")
 REPO = HERE.parents[1]
 
 

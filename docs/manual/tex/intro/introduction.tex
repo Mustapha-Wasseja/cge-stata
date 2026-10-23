@@ -35,7 +35,7 @@ errors from the survey design and ranges across draws of the elasticities.
 The sensitivity of results to the elasticities can be measured; policy
 instruments can be chosen to maximise an outcome or reach targets; and users
 can add their own variables, equations, sets and parameters, with conditions
-as in GAMS. Tools read, aggregate, balance and
+and inequalities paired with variables as in GAMS. Tools read, aggregate, balance and
 analyse the SAM, and a library gives published elasticities with their
 sources. The model can also be written as a GAMS program, solved there and
 brought back.
@@ -60,7 +60,7 @@ folder:
 \cmd{help cge} lists the commands, and \cmd{cge} displays the version. The
 Mata library is compiled the first time a command runs in a session.
 
-\section{New in versions 0.7 and 0.8}
+\section{Recent additions}
 
 \begin{cgetable}{p{0.08\linewidth}>{\raggedright\arraybackslash}p{0.60\linewidth}>{\raggedright\arraybackslash}p{0.26\linewidth}}
 \toprule
@@ -74,6 +74,7 @@ Version & Additions & Where\\
 0.8.1 & Each household's equivalent and compensating variations; the Shapley decomposition of every change by channel; growth and redistribution & \manref{cge_microsim}\\
 0.8.2 & Fiscal incidence: market to final income, concentration and Kakwani indexes, coverage, marginal contributions, the Reynolds--Smolensky index and fiscal impoverishment; in-kind health benefits that follow the model's health spending & \manref{cge_microsim}\\
 0.8.3 & Survey weights that follow the model's employment; standard errors from the survey design; the draws of a sensitivity analysis kept as simulations, and bands across them & \manref{cge_microsim}, \manref{cge_sensitivity}\\
+0.9.0 & Inequalities paired with variables, as in GAMS's mixed complementarity problems; exogenous user variables; bounds on user variables & \manref{cge_equation}, \secref{sec:userineq}\\
 \end{cgetable}
 
 \section{This manual}

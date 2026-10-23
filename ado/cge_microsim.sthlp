@@ -262,6 +262,7 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+{phang2}{cmd:. cge_shock, reset}{p_end}
 {phang2}{cmd:. cge_shock tm, scale(2)}{p_end}
 {phang2}{cmd:. cge_solve, name(tariff2)}{p_end}
 
