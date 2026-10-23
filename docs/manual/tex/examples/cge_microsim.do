@@ -96,6 +96,38 @@ cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) si
 *<<
 set linesize 100
 
+*>> ms_reweight
+generate double agri = runiform() < 0.4
+set linesize 110
+cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap transfer:gov) line(100) reweight(agri:lab.act_agr) generate(rw)
+matrix list r(reweight)
+*<<
+set linesize 100
+
+*>> ms_svy
+generate long psu = ceil(_n / 10)
+generate long stratum = mod(psu, 4)
+svyset psu [pweight = weight], strata(stratum)
+cge_microsim, sim(notariff) group(group) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap transfer:gov) line(100) svy nodisplay
+matrix list r(se), format(%9.5f)
+svyset, clear
+*<<
+
+*>> ms_bands
+capture program drop notariff_scen
+program define notariff_scen
+    cge_shock tm, value(0)
+end
+cge_shock, reset
+cge_sensitivity, scenario(notariff_scen) draws(20) seed(2026) keep(dr) nodisplay
+set linesize 110
+cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) ///
+    income(wage:lab profit:cap transfer:gov) line(100) bands(dr)
+*<<
+set linesize 100
+
 *>> ms_data
 set linesize 110
 cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) ///

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.8.3  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 24 26 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_sensitivity}{cmd:,} {opt scen:ario(program)} {opt draw:s(#)} [{opt seed(#)} {opt spr:ead(#)}
 {opt dist:ribution(uniform|triangular)} {opt common} {opt var:y(list)} {opt tab:les(list)}
-{opt clear} {opt sav:ing(filename[, replace])} {opt nod:isplay}]
+{opt keep(name)} {opt clear} {opt sav:ing(filename[, replace])} {opt nod:isplay}]
 
 
 {title:Description}
@@ -77,6 +77,15 @@ by default each sector's elasticity is drawn separately.
 {phang}
 {opt tables(list)} lists the report tables to display (see
 {helpb cge_report}), or {cmd:all}; the default is {cmd:macro welfare}.
+
+{phang}
+{opt keep(name)} (from version 0.8.3) keeps the solution of every draw that
+converged as a simulation of the model, {it:name}{cmd:0} (the central
+elasticities), {it:name}{cmd:1}, {it:name}{cmd:2}, ..., each with the
+parameters of its draw. {helpb cge_microsim:cge_microsim, bands({it:name})}
+then gives the range of poverty and inequality across the draws, and any
+command that takes a simulation can use them. Simulations of the same names
+are replaced.
 
 {phang}
 {opt clear} replaces the data in memory with the results: the report measures

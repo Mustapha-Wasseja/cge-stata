@@ -1,0 +1,26 @@
+. generate long psu = ceil(_n / 10)
+
+. generate long stratum = mod(psu, 4)
+
+. svyset psu [pweight = weight], strata(stratum)
+
+      pweight: weight
+          VCE: linearized
+  Single unit: missing
+     Strata 1: stratum
+         SU 1: psu
+        FPC 1: <zero>
+
+. cge_microsim, sim(notariff) group(group) consumption(cons) size(hhsize) ///
+>     income(wage:lab profit:cap transfer:gov) line(100) svy nodisplay
+
+. matrix list r(se), format(%9.5f)
+
+r(se)[4,3]
+              se_base     se_sim  se_change
+      mean    4.59262    4.57479    0.01800
+line1:fgt0    0.01366    0.01381    0.00164
+line1:fgt1    0.00554    0.00556    0.00004
+line1:fgt2    0.00320    0.00322    0.00002
+
+. svyset, clear

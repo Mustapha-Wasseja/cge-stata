@@ -1,4 +1,4 @@
-*! cge_sensitivity.ado  v0.6.4  2026-10-22
+*! cge_sensitivity.ado  v0.8.3  2026-10-23
 *! cge-stata: sensitivity of a scenario's results to the elasticities
 *! Monte Carlo draws of the elasticities; the model is recalibrated for each
 *!
@@ -8,7 +8,7 @@
 program define cge_sensitivity, rclass
     version 13.0
     syntax , SCENario(name) DRAWs(integer) [SEED(integer 12345) SPRead(real 0.5)  ///
-        DISTribution(string) COMMON VARy(string) TABles(string) CLEAR SAVing(string) NODisplay]
+        DISTribution(string) COMMON VARy(string) TABles(string) KEEP(name) CLEAR SAVing(string) NODisplay]
 
     if `draws' < 1 {
         display as error "draws() must be at least 1"
@@ -34,7 +34,7 @@ program define cge_sensitivity, rclass
     tempfile model
     local model "`model'.cgem"
     quietly cge_save using "`model'", replace
-    mata: _cge_sens_init(`draws', `seed', `spread', "`distribution'", "`vary'", ("`common'" != ""))
+    mata: _cge_sens_init(`draws', `seed', `spread', "`distribution'", "`vary'", ("`common'" != ""), "`keep'")
     display as text "Sensitivity analysis: " as result `draws' as text " draws of the elasticities (" ///
         as result "`distribution'" as text " within +/-" as result `spread' * 100 as text " per cent)"
     forvalues d = 0/`draws' {
@@ -57,6 +57,8 @@ program define cge_sensitivity, rclass
         if mod(`d', 10) == 0 & `d' > 0 display as text "  " as result `d' as text " draws done"
     }
     quietly cge_use using "`model'"
+    * The draws kept as simulations keep0, keep1, ... (from version 0.8.3)
+    if "`keep'" != "" mata: _cge_sens_keep("`keep'")
     * The results of restoring the model are not results of this command
     mata: st_rclear()
 

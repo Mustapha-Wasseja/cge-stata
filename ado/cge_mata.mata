@@ -1,4 +1,4 @@
-*! cge_mata.mata  v0.8.2  2026-10-23
+*! cge_mata.mata  v0.8.3  2026-10-23
 *! cge-stata: Mata library (model structure, calibration, equations, solver)
 *! Equation labels and calibration steps follow docs/model_spec.md
 *!
@@ -200,7 +200,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.8.2")
+    return("0.8.3")
 }
 
 // =====================================================================
@@ -8279,6 +8279,19 @@ struct cge_sens {
     real colvector   conv
     string matrix    keys
     real colvector   base
+    // the draws kept as simulations (from version 0.8.3)
+    string scalar    keep
+    real matrix      kx
+    real colvector   kd
+    pointer(struct cge_par scalar) rowvector kp
+}
+
+// A pointer to a copy of a parameter structure
+pointer(struct cge_par scalar) scalar _cge_par_ptr(struct cge_par scalar q)
+{
+    struct cge_par scalar c
+    c = q
+    return(&c)
 }
 
 struct cge_sens scalar _cge_sens_load()
@@ -8313,7 +8326,7 @@ real matrix _cge_sens_factors(real scalar n, real scalar draws, real scalar s, s
 }
 
 void _cge_sens_init(real scalar draws, real scalar seed, real scalar spread, string scalar dist,
-                    string scalar vary, real scalar common)
+                    string scalar vary, real scalar common, | string scalar keep)
 {
     struct cge_model scalar M
     struct cge_sens scalar G
@@ -8353,6 +8366,10 @@ void _cge_sens_init(real scalar draws, real scalar seed, real scalar spread, str
     if (!anyof(v, "a")) G.da = J(M.n, draws, 1)
     G.conv = J(draws + 1, 1, 0)
     G.keys = J(0, 3, "")
+    G.keep = (args() < 7 ? "" : keep)
+    G.kx = J(rows(M.x0), 0, .)
+    G.kd = J(0, 1, .)
+    G.kp = J(1, 0, NULL)
     _cge_sens_store(G)
 }
 
@@ -8447,6 +8464,11 @@ void _cge_sens_collect(real scalar d, real scalar conv)
         }
         G.pct[., d + 1] = pct
         G.val[., d + 1] = vals
+        if (G.keep != "") {
+            G.kx = G.kx, M.simx[., s]
+            G.kd = G.kd \ d
+            G.kp = G.kp, _cge_par_ptr(M.simp[s])
+        }
     }
     _cge_sens_store(G)
 }
@@ -8942,6 +8964,132 @@ void _cge_ms_showfisc(string rowvector inst, real rowvector ty, real matrix CB, 
     printf("{txt}Kakwani: positive when progressive. MC: Gini of final income without the instrument less with it, base\n")
 }
 
+// =====================================================================
+// Reweighting, survey-design variances and bands in cge_microsim (from
+// version 0.8.3)
+// =====================================================================
+
+// Weights w1 = w0 exp(X lambda) closest to w0 in relative entropy (the
+// Kullback-Leibler divergence of w1 from w0) such that X' w1 = T: Newton's
+// method on lambda, with the step halved while it does not reduce the
+// largest relative deviation. Returns w1; it and dev give the iterations and
+// the largest relative deviation from the targets.
+real colvector _cge_ms_rwsolve(real matrix X, real colvector w0, real colvector T, real scalar it,
+                               real scalar dev)
+{
+    real colvector lam, w1, g, step, lnew, wn
+    real matrix H
+    real scalar k, dn, h
+    lam = J(cols(X), 1, 0)
+    w1 = w0
+    g = X' * w1 - T
+    dev = max(abs(g) :/ abs(T))
+    for (it = 0; it < 100 & dev > 1e-12; it++) {
+        H = X' * (w1 :* X)
+        step = lusolve(H, g)
+        if (hasmissing(step)) break
+        h = 1
+        for (k = 1; k <= 30; k++) {
+            lnew = lam - h :* step
+            wn = w0 :* exp(X * lnew)
+            dn = max(abs(X' * wn - T) :/ abs(T))
+            if (dn < dev) break
+            h = h / 2
+        }
+        if (!(dn < dev)) break
+        lam = lnew
+        w1 = wn
+        g = X' * w1 - T
+        dev = dn
+    }
+    return(w1)
+}
+
+// Linearised variance of totals of the columns of Z (weighted linearised
+// values) in a stratified cluster sample, with replacement at the first
+// stage: sum over strata h of n_h / (n_h - 1) times the sum of squared
+// deviations of the cluster totals from their mean; missing when a stratum
+// has a single cluster (from version 0.8.3)
+real rowvector _cge_ms_svyvar(real matrix Z, real colvector st, real colvector su)
+{
+    real colvector o, gid, hs, sst, ssu
+    real matrix info, zc, hinfo, zh
+    real rowvector v
+    real scalar n, h, nh
+    n = rows(Z)
+    o = order((st, su), (1, 2))
+    sst = st[o]
+    ssu = su[o]
+    // cluster totals, in strata order
+    gid = runningsum(1 \ ((sst[|2 \ n|] :!= sst[|1 \ n - 1|]) :| (ssu[|2 \ n|] :!= ssu[|1 \ n - 1|])))
+    info = panelsetup(gid, 1)
+    zc = panelsum(Z[o, .], info)
+    hs = sst[info[., 1]]
+    hinfo = panelsetup(hs, 1)
+    v = J(1, cols(Z), 0)
+    for (h = 1; h <= rows(hinfo); h++) {
+        zh = panelsubmatrix(zc, h, hinfo)
+        nh = rows(zh)
+        if (nh < 2) return(J(1, cols(Z), .))
+        v = v + (nh / (nh - 1)) :* colsum((zh :- mean(zh)) :^ 2)
+    }
+    return(v)
+}
+
+// The weighted linearised values of the ratio sum(w y d) / sum(w x d) over
+// the observations with d = 1, a domain (0 elsewhere)
+real colvector _cge_ms_ratioz(real colvector y, real colvector x, real colvector d, real colvector w)
+{
+    real scalar X, R
+    X = sum(w :* x :* d)
+    R = sum(w :* y :* d) / X
+    return(w :* d :* (y - R :* x) :/ X)
+}
+
+// The draws of a sensitivity analysis kept as simulations name0, name1, ...
+// (from version 0.8.3): each with its own solution and parameters, those of
+// the scenario at the draw's elasticities
+void _cge_sens_keep(string scalar name)
+{
+    struct cge_model scalar M
+    struct cge_sens scalar G
+    struct cge_par rowvector sp
+    real colvector keep
+    real scalar j, k, n0
+    string scalar nm
+    M = _cge_load()
+    G = _cge_sens_load()
+    if (!rows(G.kd)) return
+    // simulations of the same names are replaced
+    keep = J(rows(M.simname), 1, 1)
+    for (j = 1; j <= rows(M.simname); j++) {
+        if (regexm(M.simname[j], "^" + name + "[0-9]+$")) keep[j] = 0
+    }
+    _cge_sims_keep(M, select((1::rows(M.simname)), keep))
+    n0 = rows(M.simname)
+    sp = cge_par(1, n0 + rows(G.kd))
+    for (j = 1; j <= n0; j++) sp[j] = M.simp[j]
+    for (k = 1; k <= rows(G.kd); k++) {
+        nm = name + strofreal(G.kd[k])
+        sp[n0 + k] = *(G.kp[k])
+        M.simname = M.simname \ nm
+        M.simclosure = M.simclosure \ _cge_closure_text(M)
+        M.simmethod = M.simmethod \ "sensitivity"
+        M.simconv = M.simconv \ 1
+        M.simiter = M.simiter \ .
+        M.simres = M.simres \ .
+        M.simrun = M.simrun \ ""
+        M.simper = M.simper \ .
+        M.simlam = M.simlam \ .
+        M.simcons = M.simcons \ ""
+    }
+    M.simx = M.simx, G.kx
+    M.simp = sp
+    _cge_store(M)
+    printf("{txt}Kept {res}%f{txt} draws as simulations {res}%s%f{txt} to {res}%s%f\n", rows(G.kd), name, G.kd[1],
+           name, G.kd[rows(G.kd)])
+}
+
 // The measures of a distribution r over persons v, as decomposed: the mean;
 // FGT0, FGT1, FGT2 and the number of poor for each line; the nine inequality
 // measures (from version 0.8.1)
@@ -9046,23 +9194,29 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
                    string scalar wvar, string scalar svar, string scalar income, string scalar budget,
                    string scalar lines, real scalar nq, string scalar gen, real scalar show,
                    real scalar detail, real scalar decomp, string scalar market, string scalar dtax,
-                   string scalar transfers, string scalar itax, string scalar subsidies, string scalar inkind)
+                   string scalar transfers, string scalar itax, string scalar subsidies, string scalar inkind,
+                   string scalar reweight, real scalar svy, string scalar stvar, string scalar suvar,
+                   string scalar bands)
 {
     struct cge_model scalar M
     struct cge_par scalar p
     string colvector g, ug, rlab, cn
     string rowvector ivars, isrc, bvars, bcom, simv, ltok, ineqn, povn, nm, chn, alln
     string colvector alll, req
-    string rowvector inst, tgt, iv, itg, fcl, fin
+    string rowvector inst, tgt, iv, itg, fcl, fin, rwv, rwt, allv, bn
     string scalar sfx, sname, zl1
     string matrix S
     real colvector x, C0, w, nsz, hi, EH, EH0, MPS, TINS, MPS0, TINS0, kappa, grp, ratio, C1, PQ, PQ0
     real colvector pr, Pg, P, R, r0, r1, pw, Y0, Y1, tot, ci, sel, present, qg, pv, q0, q1
     real colvector ev, cv, rS, fn, Ys, kap, gi, ym0, ym1, qf, mr, YI, YI0, yig, FRB, FRS
+    real colvector ws, pws, pS, rwT0, rwr, st, su, dd, y0, y1, z0, z1
     real rowvector a, b, cc, mm, P00, P11, P10, P01, ty, tl
     real matrix Y, rho, QH0, wg, B, T, Z, V, IB, IS, PT, QT, GT, RH, IM, PH, GR, WT
     real matrix XF, XS, RT, FCB, FCS, FIB, FIS, FQSB, FQSS, FQPB, FQPS, FYB, FYS
+    real matrix XR, RWT, QF, QF0, SEI, SEA, BM, BT
+    real rowvector CM, BB, vse
     real scalar s, n, k, h, j, nH, row, nz, ns, l, si, hasline, zv, d, nr, K, ktax, kgrp, mk, mu0, mu1, hasf, c
+    real scalar hasrw, kpr, kwt, rwit, rwdev, nb, f, aa
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -9181,6 +9335,46 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
         fin = ("total", "pct_market", "conc", "kakwani", "coverage", "coverage_poor", "mc_gini", "mc_fgt0")
         zl1 = (nz ? ltok[1] : "")
     }
+    // Reweighting (from version 0.8.3): household characteristics whose
+    // weighted totals follow the model, a factor's employment, a factor's
+    // employment in an activity (f.a), or a given ratio
+    hasrw = (reweight != "")
+    if (hasrw) {
+        _cge_ms_pairs(reweight, "reweight", rwv, rwt)
+        for (k = 1; k <= cols(rwt); k++) {
+            if (strtoreal(rwt[k]) < .) {
+                if (strtoreal(rwt[k]) <= 0) _cge_fail("reweight(): a ratio must be positive", 198)
+            }
+            else if (regexm(rwt[k], "^(.+)[.](.+)$")) {
+                if (!_cge_find(M.F, regexs(1)) | !_cge_find(M.A, regexs(2))) {
+                    _cge_fail("reweight(): " + rwt[k] + " is not factor.activity of the model", 111)
+                }
+            }
+            else if (!_cge_find(M.F, rwt[k])) _cge_fail("reweight(): " + rwt[k] + " is not a factor of the model, factor.activity or a ratio", 111)
+        }
+        XR = st_data(., rwv, touse)
+        if (min(XR) < 0) _cge_fail("reweight(): the characteristics must not be negative", 459)
+        rwT0 = (XR' * w)
+        if (min(rwT0) <= 0) _cge_fail("reweight(): every characteristic needs a positive weighted total", 459)
+    }
+    // Survey design (from version 0.8.3): strata and clusters, as svyset
+    if (svy) {
+        st = (stvar == "" ? J(n, 1, 1) : st_data(., stvar, touse))
+        su = (suvar == "" ? (1::n) : st_data(., suvar, touse))
+    }
+    SEI = J(0, 4, .)
+    // Bands across the draws of a sensitivity analysis (from version 0.8.3)
+    bn = J(1, 0, "")
+    if (bands != "") {
+        for (k = 1; k <= rows(M.simname); k++) {
+            if (regexm(M.simname[k], "^" + bands + "([0-9]+)$")) {
+                if (strtoreal(regexs(1)) >= 1) bn = bn, M.simname[k]
+            }
+        }
+        if (!cols(bn)) _cge_fail("bands(): no simulations " + bands + "1, " + bands + "2, ...; keep the draws with cge_sensitivity, keep()", 111)
+    }
+    nb = cols(bn)
+    allv = simv, bn
     // the measures of the decomposition, and their lines
     alln = "mean"
     alll = ""
@@ -9212,6 +9406,13 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
     }
     else chn = "income"
     chn = chn, "prices"
+    kpr = cols(chn)
+    // with reweighting, the weights are a channel
+    kwt = 0
+    if (hasrw) {
+        chn = chn, "weights"
+        kwt = cols(chn)
+    }
     K = cols(chn)
     if (decomp & K > 12) _cge_fail("decompose: at most 12 channels; map fewer sources of income", 198)
     // the results dataset: sim, table, group, measure, line, channel; q,
@@ -9219,8 +9420,8 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
     S = J(0, 6, "")
     V = J(0, 4, .)
 
-    for (si = 1; si <= ns; si++) {
-        sname = simv[si]
+    for (si = 1; si <= ns + nb; si++) {
+        sname = allv[si]
         s = _cge_sim_index(M, sname)
         x = M.simx[., s]
         p = M.simp[s]
@@ -9258,8 +9459,42 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
         R = C1 :/ P
         r1 = R :/ nsz
 
+        // Weights of the simulation (from version 0.8.3): the survey's, or
+        // reweighted to the model's targets
+        ws = w
+        if (hasrw) {
+            QF = _cge_vn(M, x, "QF")
+            QF0 = _cge_vn(M, M.x0, "QF")
+            rwr = J(cols(rwt), 1, .)
+            for (k = 1; k <= cols(rwt); k++) {
+                if (strtoreal(rwt[k]) < .) rwr[k] = strtoreal(rwt[k])
+                else if (regexm(rwt[k], "^(.+)[.](.+)$")) {
+                    f = _cge_find(M.F, regexs(1))
+                    aa = _cge_find(M.A, regexs(2))
+                    rwr[k] = QF[f, aa] / QF0[f, aa]
+                }
+                else {
+                    f = _cge_find(M.F, rwt[k])
+                    rwr[k] = sum(QF[f, .]) / sum(QF0[f, .])
+                }
+            }
+            if (hasmissing(rwr) | min(rwr) <= 0) _cge_fail("reweight(): a target of simulation " + sname + " is not positive", 459)
+            ws = _cge_ms_rwsolve(XR, w, rwT0 :* rwr, rwit, rwdev)
+            if (rwdev > 1e-9) _cge_fail("reweight(): the targets of simulation " + sname + " cannot be met with positive weights", 430)
+            RWT = (rwT0, rwT0 :* rwr, XR' * ws, rwr)
+        }
+        pws = ws :* nsz
+
         // Equivalent and compensating variations (from version 0.8.1)
         _cge_ms_evcv(M, p, x, hi, C0, C1, pr, B, ci, tot, ev, cv)
+
+        // A draw for the bands: its measures for all households only
+        if (si > ns) {
+            if (si == ns + 1) BM = J(nb, cols(alln) + 2, .)
+            BM[si - ns, .] = (_cge_ms_all(r1, pws, Z), sum(ws :* ev) / sum(pws), sum(ws :* cv) / sum(pws))
+            continue
+        }
+        if (si == 1 & nb) CM = (_cge_ms_all(r1, pws, Z), sum(ws :* ev) / sum(pws), sum(ws :* cv) / sum(pws))
 
         // Fiscal incidence, base and simulated (from version 0.8.2): market
         // income with the household's income components (or its group's
@@ -9275,7 +9510,7 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             ym1 = ym0 :* mr :/ P
             XS = XF :* RT :/ P
             _cge_ms_fisc(ym0, XF, ty, nsz, pw, Z, qf, nq, FCB, FIB, FRB, FQSB, FQPB, FYB)
-            _cge_ms_fisc(ym1, XS, ty, nsz, pw, Z, qf, nq, FCS, FIS, FRS, FQSS, FQPS, FYS)
+            _cge_ms_fisc(ym1, XS, ty, nsz, pws, Z, qf, nq, FCS, FIS, FRS, FQSS, FQPS, FYS)
             for (k = 1; k <= 5; k++) {
                 S = S \ (J(3, 1, (sname, "fiscal", "all")), ("mean" \ "gini" \ "conc"), J(3, 1, ("", fcl[k])))
                 V = V \ _cge_ms_rows(J(3, 1, .), FCB[k, (1..3)]', FCS[k, (1..3)]')
@@ -9296,6 +9531,11 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             V = V \ _cge_ms_rows(J(4, 1, .), FRB, FRS)
         }
 
+        if (hasrw) {
+            S = S \ (J(rows(RWT), 1, (sname, "reweight", "all", "total", "")), rwv')
+            V = V \ _cge_ms_rows(J(rows(RWT), 1, .), RWT[., 1], RWT[., 3])
+        }
+
         // Means, poverty and inequality: all households, then each group present
         T = J(nr, 11, .)
         IB = J(nr, 9, .)
@@ -9305,24 +9545,42 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             if (row == 1) sel = (1::n)
             else sel = select((1::n), hi :== present[row - 1])
             T[row, 1] = sum(pw[sel] :* r0[sel]) / sum(pw[sel])
-            T[row, 2] = sum(pw[sel] :* r1[sel]) / sum(pw[sel])
+            T[row, 2] = sum(pws[sel] :* r1[sel]) / sum(pws[sel])
             T[row, 3] = 100 * (T[row, 2] / T[row, 1] - 1)
             S = S \ (sname, "summary", rlab[row], "mean", "", "")
             V = V \ _cge_ms_rows(., T[row, 1], T[row, 2])
+            // standard errors of the mean and of poverty, the group as a
+            // subpopulation (from version 0.8.3)
+            if (svy) {
+                dd = J(n, 1, 0)
+                dd[sel] = J(rows(sel), 1, 1)
+                z0 = _cge_ms_ratioz(nsz :* r0, nsz, dd, w)
+                z1 = _cge_ms_ratioz(nsz :* r1, nsz, dd, ws)
+                SEI = SEI \ (rows(V), sqrt(_cge_ms_svyvar((z0, z1, z1 - z0), st, su)))
+            }
             // welfare per person, and as per cent of base consumption
             S = S \ (sname, "summary", rlab[row], "ev", "", "") \ (sname, "summary", rlab[row], "cv", "", "")
-            V = V \ (., 0, sum(w[sel] :* ev[sel]) / sum(pw[sel]), 100 * sum(w[sel] :* ev[sel]) / sum(w[sel] :* C0[sel])) \
-                    (., 0, sum(w[sel] :* cv[sel]) / sum(pw[sel]), 100 * sum(w[sel] :* cv[sel]) / sum(w[sel] :* C0[sel]))
+            V = V \ (., 0, sum(ws[sel] :* ev[sel]) / sum(pws[sel]), 100 * sum(ws[sel] :* ev[sel]) / sum(ws[sel] :* C0[sel])) \
+                    (., 0, sum(ws[sel] :* cv[sel]) / sum(pws[sel]), 100 * sum(ws[sel] :* cv[sel]) / sum(ws[sel] :* C0[sel]))
             for (l = 1; l <= nz; l++) {
                 a = _cge_ms_pov(r0[sel], pw[sel], Z[sel, l])
-                b = _cge_ms_pov(r1[sel], pw[sel], Z[sel, l])
+                b = _cge_ms_pov(r1[sel], pws[sel], Z[sel, l])
                 PT[(l - 1) * nr + row, .] = (a[1], b[1], a[2], b[2], a[3], b[3], a[4], b[4])
                 if (l == 1) T[row, (4..9)] = (a[1], b[1], a[2], b[2], a[3], b[3])
                 S = S \ (J(4, 1, (sname, "summary", rlab[row])), povn', J(4, 1, (ltok[l], "")))
                 V = V \ _cge_ms_rows(J(4, 1, .), a', b')
+                if (svy) {
+                    for (j = 0; j <= 2; j++) {
+                        y0 = (r0 :< Z[., l]) :* (j == 0 ? J(n, 1, 1) : (((Z[., l] - r0) :/ Z[., l]) :^ j))
+                        y1 = (r1 :< Z[., l]) :* (j == 0 ? J(n, 1, 1) : (((Z[., l] - r1) :/ Z[., l]) :^ j))
+                        z0 = _cge_ms_ratioz(nsz :* y0, nsz, dd, w)
+                        z1 = _cge_ms_ratioz(nsz :* y1, nsz, dd, ws)
+                        SEI = SEI \ (rows(V) - 3 + j, sqrt(_cge_ms_svyvar((z0, z1, z1 - z0), st, su)))
+                    }
+                }
             }
             IB[row, .] = _cge_ms_ineq(r0[sel], pw[sel])
-            IS[row, .] = _cge_ms_ineq(r1[sel], pw[sel])
+            IS[row, .] = _cge_ms_ineq(r1[sel], pws[sel])
             T[row, 10] = IB[row, 1]
             T[row, 11] = IS[row, 1]
             S = S \ (J(9, 1, (sname, "summary", rlab[row])), ineqn', J(9, 2, ""))
@@ -9331,32 +9589,33 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
 
         // Incidence by quantile group of base consumption per person: the
         // same persons before and after (from version 0.8.0)
-        QT = J(nq, 9, .)
-        d = sum(pw :* (r1 - r0))
+        QT = J(nq, 10, .)
+        d = sum(pws :* r1 - pw :* r0)
         for (k = 1; k <= nq; k++) {
             sel = select((1::n), qg :== k)
             QT[k, 1] = (rows(sel) ? sum(pw[sel]) : 0) / sum(pw)
+            QT[k, 10] = (rows(sel) ? sum(pws[sel]) : 0) / sum(pws)
             if (!rows(sel)) continue
             QT[k, 2] = sum(pw[sel] :* r0[sel]) / sum(pw[sel])
-            QT[k, 3] = sum(pw[sel] :* r1[sel]) / sum(pw[sel])
+            QT[k, 3] = sum(pws[sel] :* r1[sel]) / sum(pws[sel])
             QT[k, 4] = 100 * (QT[k, 3] / QT[k, 2] - 1)
             QT[k, 5] = sum(pw[sel] :* r0[sel]) / sum(pw :* r0)
-            QT[k, 6] = sum(pw[sel] :* r1[sel]) / sum(pw :* r1)
-            if (d != 0) QT[k, 7] = sum(pw[sel] :* (r1[sel] - r0[sel])) / d
+            QT[k, 6] = sum(pws[sel] :* r1[sel]) / sum(pws :* r1)
+            if (d != 0) QT[k, 7] = sum(pws[sel] :* r1[sel] - pw[sel] :* r0[sel]) / d
             // the equivalent variation per person, and as per cent of base consumption
-            QT[k, 8] = sum(w[sel] :* ev[sel]) / sum(pw[sel])
-            QT[k, 9] = 100 * sum(w[sel] :* ev[sel]) / sum(w[sel] :* C0[sel])
+            QT[k, 8] = sum(ws[sel] :* ev[sel]) / sum(pws[sel])
+            QT[k, 9] = 100 * sum(ws[sel] :* ev[sel]) / sum(ws[sel] :* C0[sel])
         }
         for (k = 1; k <= nq; k++) {
             S = S \ (J(5, 1, (sname, "quantile", "all")), ("popshare" \ "mean" \ "share" \ "inc_abs" \ "ev"), J(5, 2, ""))
-            V = V \ _cge_ms_rows(J(4, 1, k), (QT[k, 1] \ QT[k, 2] \ QT[k, 5] \ .), (QT[k, 1] \ QT[k, 3] \ QT[k, 6] \ QT[k, 7])) \
+            V = V \ _cge_ms_rows(J(4, 1, k), (QT[k, 1] \ QT[k, 2] \ QT[k, 5] \ .), (QT[k, 10] \ QT[k, 3] \ QT[k, 6] \ QT[k, 7])) \
                     (k, 0, QT[k, 8], QT[k, 9])
         }
 
         // Growth incidence curve: the growth of each percentile of the
         // distribution of persons, from the base to the simulation
         q0 = _cge_wpct(r0, pw, pv)
-        q1 = _cge_wpct(r1, pw, pv)
+        q1 = _cge_wpct(r1, pws, pv)
         GT = (q0, q1, 100 :* (q1 :/ q0 :- 1))
         S = S \ (J(99, 1, (sname, "gic", "all", "quantile")), J(99, 2, ""))
         V = V \ _cge_ms_rows(pv, q0, q1)
@@ -9371,6 +9630,8 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             gi = grp[hi, 1]
             IM = J(2^K, cols(alln), .)
             for (mk = 0; mk < 2^K; mk++) {
+                pS = pw
+                if (kwt) pS = (_cge_ms_on(mk, kwt) ? pws : pw)
                 if (mk == 0) rS = r0
                 else if (mk == 2^K - 1) rS = r1
                 else {
@@ -9383,9 +9644,9 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
                         if (kgrp) fn = fn + (Y0 :== 0) :* (_cge_ms_on(mk, kgrp) ? gi : J(n, 1, 1))
                         else fn = fn + (Y0 :== 0)
                     }
-                    rS = r0 :* fn :/ (_cge_ms_on(mk, K) ? P : J(n, 1, 1))
+                    rS = r0 :* fn :/ (_cge_ms_on(mk, kpr) ? P : J(n, 1, 1))
                 }
-                IM[mk + 1, .] = _cge_ms_all(rS, pw, Z)
+                IM[mk + 1, .] = _cge_ms_all(rS, pS, Z)
             }
             PH = _cge_ms_shapley(IM, K)
             for (j = 1; j <= cols(alln); j++) {
@@ -9394,12 +9655,12 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             }
             GR = J(4 * nz, 4, .)
             mu0 = sum(pw :* r0) / sum(pw)
-            mu1 = sum(pw :* r1) / sum(pw)
+            mu1 = sum(pws :* r1) / sum(pws)
             for (l = 1; l <= nz; l++) {
                 P00 = _cge_ms_pov(r0, pw, Z[., l])
-                P11 = _cge_ms_pov(r1, pw, Z[., l])
+                P11 = _cge_ms_pov(r1, pws, Z[., l])
                 P10 = _cge_ms_pov(r0 :* (mu1 / mu0), pw, Z[., l])
-                P01 = _cge_ms_pov(r1 :* (mu0 / mu1), pw, Z[., l])
+                P01 = _cge_ms_pov(r1 :* (mu0 / mu1), pws, Z[., l])
                 k = 4 * (l - 1)
                 GR[(k + 1)::(k + 4), .] = (P00', ((P10 - P00) + (P11 - P01))' / 2, ((P01 - P00) + (P11 - P10))' / 2, P11')
                 S = S \ (J(8, 1, (sname, "growthred", "all")), (povn' \ povn'), J(8, 1, ltok[l]), (J(4, 1, "growth") \ J(4, 1, "redistribution")))
@@ -9424,6 +9685,9 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             printf("{txt}{hline 98}\n")
             if (hasline) printf("{txt}Poverty line {res}%s{txt} per person; severity (FGT2) is in r(table)%s\n",
                                 ltok[1], (nz > 1 ? ", the other lines in r(poverty)" : ""))
+            if (hasrw) printf("{txt}Weights reweighted to {res}%f{txt} targets in {res}%f{txt} iterations (largest relative deviation %8.2e)\n",
+                              rows(RWT), rwit, rwdev)
+            if (svy) printf("{txt}Standard errors from the survey design are in r(se)\n")
             if (detail) _cge_ms_detail(rlab, ltok, PT, IB, IS, QT, nq, V, S, sname)
             if (decomp) _cge_ms_showdec(chn, alln, alll, IM, PH, GR, ltok)
             if (hasf) _cge_ms_showfisc(inst, ty, FCB, FCS, FIB, FIS, FRB, FRS, nz, zl1)
@@ -9441,6 +9705,11 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             st_varlabel(nm[4], "Real consumption per person, simulation " + sname)
             st_varlabel(nm[5], "Equivalent variation (base prices), simulation " + sname)
             st_varlabel(nm[6], "Compensating variation, simulation " + sname)
+            if (hasrw) {
+                (void) st_addvar("double", gen + "_w" + sfx)
+                st_store(., gen + "_w" + sfx, touse, ws)
+                st_varlabel(gen + "_w" + sfx, "Household weight reweighted to the targets of simulation " + sname)
+            }
             if (hasf) {
                 nm = (gen + "_ym", gen + "_yn", gen + "_yd", gen + "_yc", gen + "_yf") :+ sfx
                 (void) st_addvar("double", nm)
@@ -9471,7 +9740,19 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             _cge_ms_rmat("r(inequality)", _cge_ms_interleave(IB, IS), J(nr, 1, ""), rlab, cn)
             _cge_ms_rmat("r(quantiles)", QT, J(nq, 1, ""), "q" :+ strofreal(1::nq),
                          ("popshare" \ "mean_base" \ "mean_sim" \ "mean_pct" \ "share_base" \ "share_sim" \ "inc_abs" \
-                          "ev" \ "ev_pct"))
+                          "ev" \ "ev_pct" \ "popshare_sim"))
+            if (hasrw) {
+                _cge_ms_rmat("r(reweight)", RWT, J(rows(RWT), 1, ""), rwv', ("base" \ "target" \ "achieved" \ "ratio"))
+                st_numscalar("r(rw_iterations)", rwit)
+                st_numscalar("r(rw_deviation)", rwdev)
+            }
+            if (svy) {
+                // the rows of all households: the mean and FGT0 to FGT2 for each line
+                SEA = SEI[|1, 2 \ 1 + 3 * nz, 4|]
+                req = "" \ (nz ? ("line" :+ strofreal(ceil((1::(3 * nz)) :/ 3))) : J(0, 1, ""))
+                _cge_ms_rmat("r(se)", SEA, req, ("mean" \ (nz ? J(nz, 1, ("fgt0" \ "fgt1" \ "fgt2")) : J(0, 1, ""))),
+                             ("se_base" \ "se_sim" \ "se_change"))
+            }
             WT = J(nr, 4, .)
             for (row = 1; row <= nr; row++) {
                 if (row == 1) sel = (1::n)
@@ -9512,7 +9793,51 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             st_global("r(lines)", invtokens(ltok))
         }
     }
-    _cge_ms_keep(S, V)
+    // Bands: percentiles 5, 50 and 95 of each measure for all households
+    // across the draws, with their standard deviation (from version 0.8.3)
+    if (nb) {
+        BB = (_cge_ms_all(r0, pw, Z), 0, 0)
+        BT = J(cols(BB), 6, .)
+        for (j = 1; j <= cols(BB); j++) {
+            BT[j, .] = (BB[j], CM[j], _cge_wpct(BM[., j], J(nb, 1, 1), (5 \ 50 \ 95))', (nb > 1 ? sqrt(variance(BM[., j])) : .))
+            S = S \ (J(4, 1, (simv[1], "bands", "all", (alln, "ev", "cv")[j], (alll \ "" \ "")[j])), ("p5" \ "p50" \ "p95" \ "sd"))
+            V = V \ _cge_ms_rows(J(4, 1, .), J(4, 1, BB[j]), BT[j, (3..6)]')
+        }
+        req = J(rows(alll) + 2, 1, "")
+        for (j = 1; j <= rows(alll); j++) if (alll[j] != "") req[j] = "line" + strofreal(_cge_find(ltok', alll[j]))
+        _cge_ms_rmat("r(bands)", BT, req, (alln, "ev", "cv")', ("base" \ "central" \ "p5" \ "p50" \ "p95" \ "sd"))
+        st_numscalar("r(N_draws)", nb)
+        if (show) _cge_ms_showbands(simv[1], nb, alln, alll, BT, ltok)
+    }
+    _cge_ms_keep(S, V, SEI)
+}
+
+// The bands of option bands() (from version 0.8.3)
+void _cge_ms_showbands(string scalar sname, real scalar nb, string rowvector alln, string colvector alll,
+                       real matrix BT, string rowvector ltok)
+{
+    string rowvector lab
+    real colvector k
+    real scalar j, i
+    printf("\n{txt}Bands across {res}%f{txt} draws of the elasticities, simulation {res}%s{txt}, all households\n", nb, sname)
+    printf("{txt}{hline 82}\n")
+    printf("{txt}%-26s %10s %10s %10s %10s %10s\n", "", "base", "central", "5th", "median", "95th")
+    printf("{txt}{hline 82}\n")
+    k = 1
+    lab = "mean consumption"
+    if (cols(ltok)) {
+        k = k \ 2 \ 3
+        lab = lab, "headcount, line " + ltok[1], "poverty gap, line " + ltok[1]
+    }
+    k = k \ _cge_find(alln', "gini") \ _cge_find(alln', "theil") \ cols(alln) + 1
+    lab = lab, "Gini", "Theil", "EV per person"
+    for (i = 1; i <= rows(k); i++) {
+        j = k[i]
+        printf("{txt}%-26s {res}%10.4g %10.4g %10.4g %10.4g %10.4g\n", abbrev(lab[i], 26), BT[j, 1], BT[j, 2], BT[j, 3],
+               BT[j, 4], BT[j, 5])
+    }
+    printf("{txt}{hline 82}\n")
+    printf("{txt}Every measure is in r(bands), with the standard deviation across the draws\n")
 }
 
 // The decomposition of option decompose: the contribution of each channel to
@@ -9621,20 +9946,23 @@ void _cge_ms_detail(string colvector rlab, string rowvector ltok, real matrix PT
 }
 
 // The results of the last call, for option saving() or clear
-void _cge_ms_keep(string matrix S, real matrix V)
+void _cge_ms_keep(string matrix S, real matrix V, real matrix SEI)
 {
     pointer(string matrix) scalar ps
-    pointer(real matrix) scalar pv
+    pointer(real matrix) scalar pv, pe
     if ((ps = findexternal("cge__mss")) == NULL) ps = crexternal("cge__mss")
     if ((pv = findexternal("cge__msv")) == NULL) pv = crexternal("cge__msv")
+    if ((pe = findexternal("cge__mse")) == NULL) pe = crexternal("cge__mse")
     *ps = S
     *pv = V
+    *pe = SEI
 }
 
 void _cge_ms_drop()
 {
     if (findexternal("cge__mss") != NULL) rmexternal("cge__mss")
     if (findexternal("cge__msv") != NULL) rmexternal("cge__msv")
+    if (findexternal("cge__mse") != NULL) rmexternal("cge__mse")
 }
 
 // The results as a dataset, in the empty dataset in memory: one observation
@@ -9642,10 +9970,10 @@ void _cge_ms_drop()
 void _cge_ms_post()
 {
     pointer(string matrix) scalar ps
-    pointer(real matrix) scalar pv
+    pointer(real matrix) scalar pv, pe
     string matrix S
     string rowvector sv
-    real matrix V
+    real matrix V, E
     real colvector ch, pc
     real scalar k, wd
     ps = findexternal("cge__mss")
@@ -9664,8 +9992,21 @@ void _cge_ms_post()
     ch = V[., 3] - V[., 2]
     pc = V[., 4]
     st_store(., ("q", "base", "value", "change", "pct"), (V[., (1..3)], ch, pc))
+    // standard errors, from version 0.8.3: of the base, the simulated value
+    // and the change
+    pe = findexternal("cge__mse")
+    if (pe != NULL) {
+        E = *pe
+        if (rows(E)) {
+            (void) st_addvar("double", ("se_base", "se_value", "se_change"))
+            st_store(E[., 1], ("se_base", "se_value", "se_change"), E[., (2..4)])
+            st_varlabel("se_base", "Standard error of the base value (survey design)")
+            st_varlabel("se_value", "Standard error of the simulated value")
+            st_varlabel("se_change", "Standard error of the change")
+        }
+    }
     st_varlabel("sim", "Simulation")
-    st_varlabel("table", "Table: summary, quantile, gic, shapley, growthred, fiscal or fiscalq")
+    st_varlabel("table", "Table: summary, quantile, gic, shapley, growthred, fiscal, fiscalq, reweight or bands")
     st_varlabel("group", "Household group (all: every household)")
     st_varlabel("measure", "Measure")
     st_varlabel("line", "Poverty line")

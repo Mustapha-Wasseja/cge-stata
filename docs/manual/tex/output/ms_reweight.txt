@@ -1,0 +1,22 @@
+. generate double agri = runiform() < 0.4
+
+
+. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) ///
+>     income(wage:lab profit:cap transfer:gov) line(100) reweight(agri:lab.act_agr) generate(rw)
+
+Household survey results of simulation notariff: 1000 households
+Real consumption per person (base prices); poverty and inequality over persons
+--------------------------------------------------------------------------------------------------
+                      base   simulated    % chg      headcount (%)    poverty gap (%)           Gini (%)
+--------------------------------------------------------------------------------------------------
+all                  184.3       183.5   -0.403    26.75 ->   26.90     8.72 ->    8.79    36.32 ->   36.32
+hhd                  184.3       183.5   -0.403    26.75 ->   26.90     8.72 ->    8.79    36.32 ->   36.32
+--------------------------------------------------------------------------------------------------
+Poverty line 100 per person; severity (FGT2) is in r(table)
+Weights reweighted to 1 targets in 3 iterations (largest relative deviation  2.9e-16)
+
+. matrix list r(reweight)
+
+r(reweight)[1,4]
+           base     target   achieved      ratio
+agri  50289.323  49641.184  49641.184  .98711179

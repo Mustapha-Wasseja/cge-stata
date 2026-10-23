@@ -20,7 +20,9 @@ base consumption and the growth incidence curve, and all results as a
 dataset. From version 0.8.1 it gives each household's equivalent and
 compensating variations, and divides every change among its channels; from
 version 0.8.2, fiscal incidence as the Commitment to Equity method measures
-it, before and after the simulation.
+it, before and after the simulation; from version 0.8.3, it can reweight the
+survey to the model's employment, give standard errors from the survey
+design, and give the range of the results across draws of the elasticities.
 
 \cgesec{Quick start}
 
@@ -67,6 +69,17 @@ cge_microsim [pweight = w], sim(hfund) group(grp) consumption(cons) size(hhsize)
     income(wage:lab profit:cap remit:row grants:gov) line(1200) market(ym)        ///
     dtax(dtx) transfers(grants) itax(itx) inkind(hlt:com_hlt)
 \end{stcode}
+Weights adjusted so that the households' workers in agriculture, \cmd{agri},
+follow the model's employment of labour there; standard errors from the
+survey design; and bands across the draws kept by \manref{cge_sensitivity}
+\begin{stcode}
+cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) ///
+    line(1200) reweight(agri:lab.act_agr)
+svyset psu [pweight = w], strata(region)
+cge_microsim, sim(notariff) group(grp) consumption(cons) size(hhsize) line(1200) svy
+cge_microsim [pweight = w], sim(notariff) group(grp) consumption(cons) size(hhsize) ///
+    line(1200) bands(dr)
+\end{stcode}
 As above, with the results as a dataset, saved to \cmd{incidence.dta}
 \begin{stcode}
 cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) size(hhsize) ///
@@ -103,6 +116,10 @@ cge_microsim [pweight = w], sim(notariff vat18) group(grp) consumption(cons) siz
 \optarg{it}{ax}{varlist} & indirect taxes\\
 \optarg{sub}{sidies}{varlist} & indirect subsidies\\
 \optarg{ink}{ind}{var\texttt{:}target \ldots} & in-kind benefits, with the model's spending they follow\\
+\optgroup{Weights, sampling and uncertainty}
+\optarg{rew}{eight}{var\texttt{:}target \ldots} & reweight the survey to the model's targets\\
+\opt{}{svy} & standard errors from the survey design\\
+\optarg{band}{s}{name} & range of the results across draws of the elasticities\\
 \opt{}{clear} & replace the survey in memory with the results\\
 \optarg{sav}{ing}{filename[\texttt{, replace}]} & save the results as a dataset\\
 \opt{nod}{isplay} & suppress the tables of results\\
@@ -221,6 +238,33 @@ change with nominal spending.
 such as health or education services, valued at cost, each with the model's
 spending it follows: a commodity, whose purchases by the government give the
 change, or \cmd{shi}, the purchases of the health insurance fund.
+
+\item[\optarg{rew}{eight}{var\texttt{:}target \ldots}] (from version 0.8.3)
+adjusts the survey weights in the simulation so that the weighted total of
+each household characteristic \argu{var}, a non-negative variable such as
+the household's number of workers in a sector, changes as its target does: a
+factor of the model, for its employment in all activities;
+\argu{factor}\cmd{.}\argu{activity}, for its employment in that activity; or a
+positive number, a ratio given by the user, such as the growth of the
+population. The new weights are as close to the survey's as the targets
+allow, in relative entropy. The simulated results use them, the base results
+the survey's weights, and \cmd{decompose} has a channel \cmd{weights}.
+
+\item[\opt{}{svy}] (from version 0.8.3) computes linearized standard errors
+of mean consumption per person and of FGT0, FGT1 and FGT2 for each line, in
+the base, the simulation and of the change, for all households and each
+group, as a subpopulation, from the design declared by \cmd{svyset}: one
+stage, with strata and clusters, without a finite population correction. The
+weights are those of \cmd{svyset}, and a weight may not be given as well.
+The standard errors measure the sampling error of the survey, taking the
+model's changes as given.
+
+\item[\optarg{band}{s}{name}] (from version 0.8.3) gives the range of the
+results for all households across the draws of a sensitivity analysis kept
+as the simulations \argu{name}\cmd{1}, \argu{name}\cmd{2}, \ldots\ by
+\manref{cge_sensitivity} with \cmd{keep(}\argu{name}\cmd{)}: for each measure,
+its 5th, 50th and 95th percentiles and standard deviation across the draws,
+beside its value in the first simulation of \cmd{sim()}.
 
 \item[\opt{}{clear}] replaces the survey in memory with the results, as a
 dataset (see \emph{Results as a dataset} below). It cannot be combined with
@@ -363,6 +407,27 @@ instrument with the model: the direct tax rate rises to keep government
 savings fixed, so direct taxes rise from 10.0 to 13.1 per cent of market
 income, and fiscal impoverishment from 29.00 to 29.45 per cent of persons.
 
+\cgesubsec{Example 8: reweighting, standard errors and bands}
+
+Two-fifths of the synthetic households, \cmd{agri}, work in agriculture.
+With the tariffs removed, the model's employment of labour in agriculture
+falls by 1.3 per cent; reweighting the survey so that the agricultural
+households fall in the same proportion lowers their weights by that much and
+leaves the others' unchanged, the closest weights to the survey's that meet
+the target:
+\stlog[\scriptsize]{ms_reweight}
+With the survey design declared, in clusters of ten households in four
+strata, the mean and the poverty measures have standard errors, and so do
+their changes. The standard error of the change in the headcount, 0.0016, is
+much smaller than that of the headcount itself, 0.0137, since the same
+households are compared before and after:
+\stlog{ms_svy}
+A sensitivity analysis with 20 draws of the elasticities, each kept as a
+simulation, gives the range of the results. Here poverty and inequality
+hardly depend on the elasticities, while the equivalent variation per person
+ranges from $-0.81$ to $-0.63$ between the 5th and 95th percentiles:
+\stlog[\scriptsize]{ms_bands}
+
 \cgesubsec{Results as a dataset}
 
 With \cmd{clear} or \cmd{saving()}, the results form a dataset with one
@@ -373,7 +438,7 @@ Variable & Content\\
 \midrule\endhead
 \bottomrule\endlastfoot
 \cmd{sim} & the simulation\\
-\cmd{table} & \cmd{summary}, \cmd{quantile}, \cmd{gic}, \cmd{shapley}, \cmd{growthred}, \cmd{fiscal} or \cmd{fiscalq}\\
+\cmd{table} & \cmd{summary}, \cmd{quantile}, \cmd{gic}, \cmd{shapley}, \cmd{growthred}, \cmd{fiscal}, \cmd{fiscalq}, \cmd{reweight} or \cmd{bands}\\
 \cmd{group} & \cmd{all}, every household, or a household group (\cmd{summary})\\
 \cmd{measure} & the measure, below\\
 \cmd{line} & the poverty line, for \cmd{fgt0}, \cmd{fgt1}, \cmd{fgt2} and \cmd{npoor}\\
@@ -381,6 +446,7 @@ Variable & Content\\
 \cmd{q} & the quantile group (\cmd{quantile}) or the percentile (\cmd{gic})\\
 \cmd{base}, \cmd{value} & the base and simulated values\\
 \cmd{change}, \cmd{pct} & the change and the per cent change\\
+\cmd{se_base}, \cmd{se_value}, \cmd{se_change} & with \cmd{svy}, the standard errors of the base value, the simulated value and the change\\
 \end{cgetable}
 The measures of \cmd{summary} are \cmd{mean} (mean consumption per person);
 \cmd{ev} and \cmd{cv}, the equivalent and compensating variations per person,
@@ -403,7 +469,12 @@ poverty measures; for each instrument, \cmd{total}, \cmd{pct_market},
 \cmd{conc}, \cmd{kakwani}, \cmd{coverage}, \cmd{coverage_poor}, \cmd{mc_gini}
 and \cmd{mc_fgt0}; and \cmd{re}, \cmd{rs}, \cmd{rerank} and \cmd{fi}; the table
 \cmd{fiscalq} has each instrument's \cmd{share} and \cmd{pct_market} by
-quantile of market income per person. Poverty measures and inequality indexes are
+quantile of market income per person. With \cmd{reweight()}, the table
+\cmd{reweight} has each characteristic's weighted total, base and
+reweighted; with \cmd{bands()}, the table \cmd{bands} has, for every measure
+for all households, its percentiles (\cmd{channel} \cmd{p5}, \cmd{p50},
+\cmd{p95}) and standard deviation (\cmd{sd}) across the draws, in
+\cmd{value}. Poverty measures and inequality indexes are
 proportions; \cmd{pct} is the per cent change of the measure itself.
 
 \cgesec{Stored results}
@@ -415,6 +486,9 @@ proportions; \cmd{pct} is the per cent change of the measure itself.
 \res{r(N_sims)} & number of simulations\\
 \res{r(N_lines)} & number of poverty lines\\
 \res{r(N_quantiles)} & number of quantile groups\\
+\res{r(rw_iterations)} & with \cmd{reweight()}: iterations of the reweighting\\
+\res{r(rw_deviation)} & with \cmd{reweight()}: largest relative deviation from the targets\\
+\res{r(N_draws)} & with \cmd{bands()}: number of draws\\
 \res{r(fgt0_base)} & poverty headcount at the first line in the base, all households (missing without \cmd{line()})\\
 \res{r(fgt0_sim)} & poverty headcount in the simulation, all households\\
 \res{r(gini_base)} & Gini coefficient in the base, all households\\
@@ -437,6 +511,9 @@ proportions; \cmd{pct} is the per cent change of the measure itself.
 \res{r(instruments)} & with \cmd{market()}: for each instrument, the measures of the table \cmd{fiscal}, base and simulated\\
 \res{r(redistribution)} & with \cmd{market()}: \cmd{re}, \cmd{rs}, \cmd{rerank} and \cmd{fi}, base and simulated\\
 \res{r(fshare)} & with \cmd{market()}: each instrument's base share by quantile of market income\\
+\res{r(reweight)} & with \cmd{reweight()}: for each characteristic, the base total, the target, the total achieved and the ratio\\
+\res{r(se)} & with \cmd{svy}: for all households, the standard errors of mean consumption and of FGT0 to FGT2 for each line, base, simulated and of the change\\
+\res{r(bands)} & with \cmd{bands()}: for each measure, the base, the value in the first simulation, the 5th, 50th and 95th percentiles and the standard deviation across the draws\\
 \end{storedres}
 The results in \cmd{r()} are those of the first simulation of \cmd{sim()}.
 
@@ -607,6 +684,40 @@ as the model's spending on their target, $\V{PQ}_c\,\V{QG}_c$ for a commodity
 or the health insurance fund's purchases $\sum_c \V{PQ}_c\,\V{QSHI}_c$. All
 are then deflated by the household's price index.
 
+\textbf{Reweighting (from version 0.8.3).} With the household
+characteristics $x_{ik} \ge 0$ and targets $T_k = \rho_k \sum_i w_i x_{ik}$,
+where $\rho_k$ is the model's ratio of employment, $\sum_a \V{QF}_{fa} /
+\sum_a \V{QF}^0_{fa}$ for factor $f$ or $\V{QF}_{fa}/\V{QF}^0_{fa}$ for factor
+$f$ in activity $a$, or a ratio given, the weights of the simulation solve
+\begin{equation*}
+\min_{w^1} \sum_i w^1_i \ln\frac{w^1_i}{w_i} \quad \text{subject to} \quad \sum_i w^1_i x_{ik} = T_k,
+\end{equation*}
+so that $w^1_i = w_i \exp(x_i'\lambda)$, with $\lambda$ found by Newton's
+method until the largest relative deviation from the targets is below
+$10^{-12}$ \citep{wittenberg2010}. This is the reweighting step of the
+macro-micro approach of \citet{corral2022}, with the targets taken from the
+same model as the price and income changes.
+
+\textbf{Standard errors (from version 0.8.3).} A measure
+$\theta = \sum_i w_i d_i y_i / \sum_i w_i d_i n_i$, over the households of a
+domain ($d_i = 1$), with $y_i = n_i r_i$ for the mean and
+$y_i = n_i \mathbf{1}[r_i < z_i]((z_i - r_i)/z_i)^\alpha$ for FGT$_\alpha$, has
+the linearized values $u_i = w_i d_i (y_i - \theta n_i) / \sum_j w_j d_j n_j$
+and the variance
+\begin{equation*}
+\widehat V(\theta) = \sum_h \frac{n_h}{n_h - 1} \sum_{j \in h} (u_{hj} - \bar u_h)^2,
+\end{equation*}
+where $u_{hj}$ is the sum of $u_i$ over cluster $j$ of stratum $h$, $n_h$ the
+number of clusters in the stratum, and $\bar u_h$ their mean: the variance of
+\cmd{svy: ratio}. The change uses $u^1_i - u^0_i$, with the simulation's
+weights in $u^1$. A stratum with a single cluster makes the variance
+missing.
+
+\textbf{Bands (from version 0.8.3).} For each draw $d$ kept by
+\manref{cge_sensitivity}, every measure for all households is computed as for
+a simulation; the bands are the 5th, 50th and 95th percentiles of the draws,
+by the definition of \cmd{_pctile}, and their standard deviation.
+
 \Chapref{chap:microsim} describes the link in full.
 
 \cgesec{References}
@@ -619,6 +730,10 @@ Palgrave Macmillan.
 Datt, G., and M. Ravallion. 1992. Growth and redistribution components of
 changes in poverty measures: A decomposition with applications to Brazil and
 India in the 1980s. \textit{Journal of Development Economics} 38: 275--295.
+
+Corral, P., E. Mu\~noz and I. Osorio-Rodarte. 2022. Modeling the
+distributional impact of macroeconomic shocks: \texttt{ms\_reweight}.
+Presentation at the Stata Conference, Washington, DC.
 
 Higgins, S., and N. Lustig. 2016. Can a poverty-reducing and progressive tax
 and transfer system hurt the poor? \textit{Journal of Development Economics}
@@ -637,6 +752,9 @@ Ravallion, M., and S. Chen. 2003. Measuring pro-poor growth.
 Reynolds, M., and E. Smolensky. 1977. \textit{Public Expenditures, Taxes, and
 the Distribution of Income: The United States, 1950, 1961, 1970}. New York:
 Academic Press.
+
+Wittenberg, M. 2010. An introduction to maximum entropy and minimum
+cross-entropy estimation using Stata. \textit{Stata Journal} 10: 315--330.
 
 Shorrocks, A. F. 2013. Decomposition procedures for distributional analysis:
 A unified framework based on the Shapley value. \textit{Journal of Economic

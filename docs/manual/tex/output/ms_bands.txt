@@ -1,0 +1,41 @@
+. capture program drop notariff_scen
+
+. program define notariff_scen
+  1.     cge_shock tm, value(0)
+  2. end
+
+. cge_shock, reset
+All shocks removed
+
+. cge_sensitivity, scenario(notariff_scen) draws(20) seed(2026) keep(dr) nodisplay
+Sensitivity analysis: 20 draws of the elasticities (uniform within +/-50 per cent)
+  10 draws done
+  20 draws done
+Kept 21 draws as simulations dr0 to dr20
+
+
+. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) ///
+>     income(wage:lab profit:cap transfer:gov) line(100) bands(dr)
+
+Household survey results of simulation notariff: 1000 households
+Real consumption per person (base prices); poverty and inequality over persons
+--------------------------------------------------------------------------------------------------
+                      base   simulated    % chg      headcount (%)    poverty gap (%)           Gini (%)
+--------------------------------------------------------------------------------------------------
+all                  184.3       183.5   -0.401    26.75 ->   26.91     8.72 ->    8.80    36.32 ->   36.33
+hhd                  184.3       183.5   -0.401    26.75 ->   26.91     8.72 ->    8.80    36.32 ->   36.33
+--------------------------------------------------------------------------------------------------
+Poverty line 100 per person; severity (FGT2) is in r(table)
+
+Bands across 20 draws of the elasticities, simulation notariff, all households
+----------------------------------------------------------------------------------
+                                 base    central        5th     median       95th
+----------------------------------------------------------------------------------
+mean consumption                184.3      183.5      183.5      183.6      183.6
+headcount, line 100             .2675      .2691      .2691      .2691      .2694
+poverty gap, line 100          .08725       .088     .08793     .08799      .0881
+Gini                            .3632      .3633      .3633      .3633      .3633
+Theil                           .2253      .2253      .2253      .2253      .2253
+EV per person                       0     -.7107     -.8084     -.6989     -.6329
+----------------------------------------------------------------------------------
+Every measure is in r(bands), with the standard deviation across the draws

@@ -55,6 +55,7 @@ cge_sensitivity, scenario(tariff_cut) draws(200) saving(sens, replace) nodisplay
 \opt{nod}{isplay} & suppress the summary\\
 \opt{}{clear} & replace the data in memory with every draw\\
 \optarg{sav}{ing}{filename\textup{[}\texttt{, replace}\textup{]}} & save every draw to a Stata dataset\\
+\optarg{}{keep}{name} & keep every draw as a simulation\\
 \end{opttable}
 
 \cgesec{Options}
@@ -109,6 +110,15 @@ under Remarks and examples below.
 saves the same dataset as a Stata dataset, leaving the data in memory
 unchanged unless \opt{}{clear} is also given; \cmd{replace} allows an existing
 file to be replaced.
+
+\item[\optarg{}{keep}{name}] (from version 0.8.3) keeps the solution of every
+draw that converged as a simulation of the model: \argu{name}\cmd{0}, with the
+central elasticities, \argu{name}\cmd{1}, \argu{name}\cmd{2}, and so on, each
+with the parameters of its draw. \manref{cge_microsim} with
+\cmd{bands(}\argu{name}\cmd{)} then gives the range of poverty and inequality
+across the draws, and any command that takes a simulation, such as
+\manref{cge_results}, can use them. Simulations of the same names are
+replaced.
 \end{optdesc}
 
 \cgesec{Remarks and examples}

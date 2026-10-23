@@ -131,6 +131,21 @@ then follow the model's health spending: the incidence of a rise in the
 health budget, from the government's purchases to the households that
 benefit, is traced in one step.
 
+\section{Weights, sampling error and the uncertainty of the model}
+
+From version 0.8.3, three tools address what the top-down link leaves out.
+First, a shock that moves workers between sectors changes who works where,
+which the survey's fixed weights cannot show; reweighting the survey, so that
+its totals of workers by sector (or any other characteristic) follow the
+model, gives the households of the expanding sectors more weight
+\citep{corral2022}. The new weights are as close as possible to the
+survey's, in relative entropy. Second, the survey is a sample: with its
+design declared by \cmd{svyset}, the mean and the poverty measures, and
+their changes, have standard errors. Third, the model's elasticities are
+uncertain: \manref{cge_sensitivity} draws them, keeps each draw as a
+simulation, and the survey link gives the range of poverty and inequality
+across the draws.
+
 Survey households keep their own income composition and budget shares, so
 their average change can differ from their group's: a household that lives on
 wages gains more than its group when wages rise relative to other income. The

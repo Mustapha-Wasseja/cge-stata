@@ -17,7 +17,7 @@ macros:
 matrices:
                 r(gic) :  99 x 3
             r(welfare) :  2 x 4
-          r(quantiles) :  10 x 9
+          r(quantiles) :  10 x 10
          r(inequality) :  2 x 18
             r(poverty) :  2 x 8
               r(table) :  2 x 11

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.8.2  23oct2026}{...}
+{* *! version 0.8.3  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -14,7 +14,8 @@
 {opt cons:umption(varname)} [{opt size(varname)} {opt inc:ome(var:source ...)}
 {opt bud:get(var:commodity ...)} {opt line(lines)} {opt quant:iles(#)}
 {opt mark:et(varname)} {opt dt:ax(varlist)} {opt trans:fers(varlist)} {opt it:ax(varlist)}
-{opt sub:sidies(varlist)} {opt ink:ind(var:target ...)}
+{opt sub:sidies(varlist)} {opt ink:ind(var:target ...)} {opt rew:eight(var:target ...)} {opt svy}
+{opt band:s(name)}
 {opt gen:erate(prefix)} {opt replace} {opt det:ail} {opt dec:ompose} {opt clear}
 {opt sav:ing(filename[, replace])} {opt nod:isplay}]
 
@@ -49,7 +50,8 @@ The command then reports, before and after each simulation:
 {phang2}- the growth incidence curve, the growth of each percentile of the distribution;{p_end}
 {phang2}- each household's equivalent and compensating variations (from version 0.8.1);{p_end}
 {phang2}- with {opt decompose}, the contribution of each channel, each source of income, direct taxes and savings, and prices, to every change, and the growth and redistribution components of the change in poverty (from version 0.8.1);{p_end}
-{phang2}- with {opt market()} and the fiscal instruments, fiscal incidence as the Commitment to Equity (CEQ) method measures it: market, net market, disposable, consumable and final income, the concentration, Kakwani index, coverage and marginal contribution of each tax and benefit, the Reynolds-Smolensky index and fiscal impoverishment, in the base and after the simulation, with in-kind health benefits that follow the model's health spending (from version 0.8.2).{p_end}
+{phang2}- with {opt market()} and the fiscal instruments, fiscal incidence as the Commitment to Equity (CEQ) method measures it: market, net market, disposable, consumable and final income, the concentration, Kakwani index, coverage and marginal contribution of each tax and benefit, the Reynolds-Smolensky index and fiscal impoverishment, in the base and after the simulation, with in-kind health benefits that follow the model's health spending (from version 0.8.2);{p_end}
+{phang2}- with {opt reweight()}, the results for survey weights adjusted so that totals such as employment by sector follow the model; with {opt svy}, standard errors from the survey design; with {opt bands()}, the range of the results across draws of the elasticities (from version 0.8.3).{p_end}
 
 {pstd}
 The survey's own income and consumption data drive the results. The CGE
@@ -144,6 +146,37 @@ disposable income adds transfers; consumable income subtracts indirect taxes
 and adds subsidies; final income adds in-kind benefits.
 
 {phang}
+{opt reweight(var:target ...)} (from version 0.8.3) adjusts the survey
+weights in the simulation so that the weighted total of each household
+characteristic {it:var}, such as its number of workers in a sector, changes as
+its target does: a factor of the model (its employment over all activities),
+{it:factor}{cmd:.}{it:activity} (its employment in that activity), or a
+positive number, a ratio given by the user, such as population growth. The
+new weights are those closest to the survey's in relative entropy, w1 = w0
+exp(x'b), so that a characteristic without a target keeps its distribution
+as far as the targets allow. The simulated results use the new weights; the
+base, the survey's.
+
+{phang}
+{opt svy} (from version 0.8.3) computes linearized standard errors of mean
+consumption per person and of FGT0 to FGT2 for each line, in the base, in the
+simulation and of the change, for all households and each group (as a
+subpopulation), from the design declared by {helpb svyset}: one stage, with
+strata and clusters, without a finite population correction. The weights are
+those of {cmd:svyset}. Standard errors are in {cmd:r(se)} and, in the results
+dataset, in {cmd:se_base}, {cmd:se_value} and {cmd:se_change}. They take the
+model's changes as given: they measure the sampling error of the survey, not
+the uncertainty of the model.
+
+{phang}
+{opt bands(name)} (from version 0.8.3) summarizes the results for all
+households across the draws of a sensitivity analysis kept as the
+simulations {it:name}{cmd:1}, {it:name}{cmd:2}, ... by
+{helpb cge_sensitivity:cge_sensitivity, keep({it:name})}: for each measure,
+its 5th, 50th and 95th percentiles and standard deviation across the draws,
+beside its value in the first simulation of {opt sim()}.
+
+{phang}
 {opt decompose} divides the change in every measure for all households among
 its channels by the Shapley method: each source of income in {opt income()},
 direct taxes and savings ({cmd:taxsav}), the households that follow their
@@ -215,6 +248,8 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {p2col:{cmd:growthred}}with {opt decompose}: the growth and redistribution components of each poverty measure{p_end}
 {p2col:{cmd:fiscal}}with {opt market()}: for each income concept ({cmd:channel}: {cmd:market}, {cmd:net_market}, {cmd:disposable}, {cmd:consumable}, {cmd:final}) {cmd:mean}, {cmd:gini}, {cmd:conc} and the poverty measures; for each instrument {cmd:total}, {cmd:pct_market}, {cmd:conc}, {cmd:kakwani}, {cmd:coverage}, {cmd:coverage_poor}, {cmd:mc_gini} and {cmd:mc_fgt0}; and {cmd:re}, {cmd:rs}, {cmd:rerank} and {cmd:fi}{p_end}
 {p2col:{cmd:fiscalq}}with {opt market()}: by quantile of market income per person, each instrument's {cmd:share} and its {cmd:pct_market} of the quantile's market income{p_end}
+{p2col:{cmd:reweight}}with {opt reweight()}: each characteristic's weighted total, base and reweighted{p_end}
+{p2col:{cmd:bands}}with {opt bands()}: for every measure for all households, its percentiles {cmd:p5}, {cmd:p50} and {cmd:p95} and its standard deviation {cmd:sd} across the draws, in {cmd:value}{p_end}
 {p2colreset}{...}
 
 
@@ -260,6 +295,19 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {phang2}{cmd:. generate double school = cond(runiform() < 0.4, 20 * runiform(), 0)}{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) market(market) dtax(dtx) itax(itx) inkind(school:com_ser)}{p_end}
 
+{pstd}Employment in agriculture as the model says, standard errors, and bands across 20 draws of the elasticities{p_end}
+{phang2}{cmd:. generate double agri = runiform() < 0.4}{p_end}
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) reweight(agri:lab.act_agr)}{p_end}
+{phang2}{cmd:. generate long psu = ceil(_n / 10)}{p_end}
+{phang2}{cmd:. svyset psu [pweight = weight]}{p_end}
+{phang2}{cmd:. cge_microsim, sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) svy}{p_end}
+{phang2}{cmd:. svyset, clear}{p_end}
+{phang2}{cmd:. program define scen_nt}{p_end}
+{phang2}{cmd:  1.     cge_shock tm, value(0)}{p_end}
+{phang2}{cmd:  2. end}{p_end}
+{phang2}{cmd:. cge_sensitivity, scenario(scen_nt) draws(20) keep(dr) nodisplay}{p_end}
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) bands(dr)}{p_end}
+
 {pstd}The results as a dataset, and the growth incidence curve{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) clear nodisplay}{p_end}
 {phang2}{cmd:. list q pct if sim == "notariff" & table == "gic" & inlist(q, 10, 50, 90), noobs}{p_end}
@@ -278,6 +326,9 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {synopt:{cmd:r(N_sims)}}number of simulations{p_end}
 {synopt:{cmd:r(N_lines)}}number of poverty lines{p_end}
 {synopt:{cmd:r(N_quantiles)}}number of quantile groups{p_end}
+{synopt:{cmd:r(rw_iterations)}}with {opt reweight()}: iterations of the reweighting{p_end}
+{synopt:{cmd:r(rw_deviation)}}with {opt reweight()}: largest relative deviation from the targets{p_end}
+{synopt:{cmd:r(N_draws)}}with {opt bands()}: number of draws{p_end}
 {p2col 5 20 24 2: Macros}{p_end}
 {synopt:{cmd:r(sims)}}the simulations{p_end}
 {synopt:{cmd:r(lines)}}the poverty lines{p_end}
@@ -296,6 +347,9 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {synopt:{cmd:r(instruments)}}with {opt market()}: for each instrument, the eight measures of the table {cmd:fiscal}, base and simulated{p_end}
 {synopt:{cmd:r(redistribution)}}with {opt market()}: redistributive effect, Reynolds-Smolensky index, reranking and fiscal impoverishment, base and simulated{p_end}
 {synopt:{cmd:r(fshare)}}with {opt market()}: the base share of each instrument by quantile of market income{p_end}
+{synopt:{cmd:r(reweight)}}with {opt reweight()}: for each characteristic, its base total, target, total achieved and ratio{p_end}
+{synopt:{cmd:r(se)}}with {opt svy}: for all households, the standard errors of mean consumption and of FGT0 to FGT2 for each line, base, simulated and of the change{p_end}
+{synopt:{cmd:r(bands)}}with {opt bands()}: for each measure, the base, the value in the first simulation, the 5th, 50th and 95th percentiles and the standard deviation across the draws{p_end}
 
 
 {title:References}
@@ -316,6 +370,11 @@ Higgins, S., and N. Lustig (2016). Can a poverty-reducing and progressive tax
 and transfer system hurt the poor? Journal of Development Economics 122: 63-75.
 
 {phang}
+Corral, P., E. Mu{c n~}oz and I. Osorio-Rodarte (2022). Modeling the
+distributional impact of macroeconomic shocks: ms_reweight. Stata Conference,
+Washington, DC.
+
+{phang}
 Kakwani, N. C. (1977). Measurement of tax progressivity: An international
 comparison. Economic Journal 87: 71-80.
 
@@ -331,6 +390,10 @@ Letters 78: 93-99.
 {phang}
 Reynolds, M., and E. Smolensky (1977). Public Expenditures, Taxes, and the
 Distribution of Income: The United States, 1950, 1961, 1970. Academic Press.
+
+{phang}
+Wittenberg, M. (2010). An introduction to maximum entropy and minimum
+cross-entropy estimation using Stata. Stata Journal 10: 315-330.
 
 {phang}
 Shorrocks, A. F. (2013). Decomposition procedures for distributional analysis:

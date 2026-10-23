@@ -1022,6 +1022,27 @@ contribution of $T$ to $I$ is $I(y^f \pm T) - I(y^f)$; fiscal impoverishment
 is the share of persons with $y^c_i < y^m_i$ and $y^c_i/n_i < z_i$ (Higgins
 and Lustig 2016).
 
+**Reweighting, standard errors and bands (from version 0.8.3).** With
+household characteristics $X$ (non-negative) and targets $T_k = \rho_k \sum_i
+w_i x_{ik}$, where $\rho_k$ is the model's ratio of the employment of a factor,
+$\sum_a QF_{fa}/\sum_a QF^0_{fa}$, or of a factor in an activity,
+$QF_{fa}/QF^0_{fa}$, or a given number, the simulation's weights minimise the
+relative entropy $\sum_i w^1_i \ln(w^1_i/w_i)$ subject to $X'w^1 = T$:
+$w^1_i = w_i \exp(x_i'\lambda)$, with $\lambda$ found by Newton's method (the
+largest relative deviation below $10^{-12}$; above $10^{-9}$ is error 430).
+Simulated measures use $w^1$, base measures $w$; `decompose` has a channel
+`weights`. With `svy`, a measure $\theta = \sum_i w_i d_i y_i / \sum_i w_i
+d_i n_i$ over domain $d$ (mean: $y_i = n_i r_i$; FGT$_\alpha$: $y_i = n_i
+\mathbf{1}[r_i < z_i]((z_i - r_i)/z_i)^\alpha$) has linearised values $u_i =
+w_i d_i (y_i - \theta n_i)/\sum_j w_j d_j n_j$, and variance $\sum_h
+\frac{n_h}{n_h - 1}\sum_j (u_{hj} - \bar u_h)^2$ over strata $h$ and clusters
+$j$ (single stage, with replacement; missing with a single cluster in a
+stratum), for the base, the simulation ($w^1$) and the change ($u^1 - u^0$).
+`cge_sensitivity, keep(name)` stores each converged draw $d$ as simulation
+`name`$d$ with its solution and parameters; `bands(name)` computes every
+measure for all households for draws $1, 2, \dots$ and reports their 5th,
+50th and 95th percentiles (as `_pctile`) and standard deviation.
+
 ## 12. Fiscal instruments (from version 0.3.1)
 
 ### 12.1 Revenue-neutral tax replacement

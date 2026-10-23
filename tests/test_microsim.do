@@ -762,3 +762,168 @@ matrix HI = r(instruments)
 assert abs((h_yf - h_yc) - (hb * (`PQ1' * `QG1') / (`PQ0' * `QG0') + ins * `shi1' / `shi0') / h_price) < 1e-9 * ym
 * benefits per person by decile, and their concentration in market income
 assert HI[1, 1] < . & HI[1, 5] < . & HI[2, 5] < .
+
+* ---------------------------------------------------------------------
+* 8. Version 0.8.3: reweighting to the model's targets, standard errors from
+*    the survey design, and bands across draws of the elasticities
+* ---------------------------------------------------------------------
+cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd npi) enterprises(ent) government(gov)                ///
+    savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+quietly cge_solve, name(nt) tolerance(1e-12)
+cge_shock, reset
+* employment of labour by activity, base and simulated
+preserve
+quietly cge_results, sim(nt) clear nodisplay
+foreach a in act_agr act_man {
+    quietly summarize value if variable == "QF" & element1 == "lab" & element2 == "`a'"
+    local q1 = r(mean)
+    quietly summarize base if variable == "QF" & element1 == "lab" & element2 == "`a'"
+    local rq_`a' = `q1' / r(mean)
+}
+restore
+clear
+set seed 21
+quietly set obs 400
+generate str3 group = cond(_n <= 300, "hhd", "npi")
+generate double w = 50 + 100 * runiform()
+generate double size = 1 + floor(5 * runiform())
+generate double lab = (group == "hhd") * 100 * runiform()
+generate double gov = 20 * runiform()
+generate double cons = 0.9 * (lab + gov) + 5
+generate double wagr = (runiform() < 0.4) * (1 + floor(2 * runiform()))
+generate double wman = runiform() < 0.3
+generate double one = 1
+local mm [pweight = w], sim(nt) group(group) consumption(cons) size(size) income(lab:lab gov:gov)
+cge_microsim `mm' line(30) nodisplay
+matrix T0 = r(table)
+
+* A uniform target scales every weight, and leaves every mean and share
+cge_microsim `mm' line(30) reweight(one:1.05) generate(ra) nodisplay
+assert reldif(ra_w, 1.05 * w) < 1e-12
+assert mreldif(r(table), T0) < 1e-12
+assert r(rw_deviation) < 1e-12
+* A single indicator: its households' weights rise by the ratio, the others'
+* are unchanged
+cge_microsim `mm' reweight(wman:1.2) generate(rb) nodisplay
+assert reldif(rb_w, w * cond(wman, 1.2, 1)) < 1e-12
+* Employment of labour by activity, as the model says
+cge_microsim `mm' line(30) reweight(wagr:lab.act_agr wman:lab.act_man) generate(rc) nodisplay
+matrix RW = r(reweight)
+matrix TC = r(table)
+assert reldif(RW[1, 4], `rq_act_agr') < 1e-12 & reldif(RW[2, 4], `rq_act_man') < 1e-12
+assert reldif(RW[1, 3], RW[1, 2]) < 1e-10 & reldif(RW[2, 3], RW[2, 2]) < 1e-10
+generate double xw = rc_w * wagr
+quietly summarize xw, meanonly
+local s1 = r(sum)
+generate double x0 = w * wagr
+quietly summarize x0, meanonly
+assert reldif(`s1', r(sum) * `rq_act_agr') < 1e-10
+* the simulated measures use the new weights, the base the survey's
+generate double pw1 = rc_w * size
+quietly summarize rc_pc [aweight = pw1]
+assert reldif(r(mean), TC[1, 2]) < 1e-12
+assert reldif(TC[1, 1], T0[1, 1]) < 1e-15
+* a ratio of 1 leaves the weights as they were
+cge_microsim `mm' reweight(one:1) generate(rd) nodisplay
+assert reldif(rd_w, w) < 1e-14
+* the weights are a channel of the decomposition; a uniform change of
+* weights contributes nothing, except to the number of poor, counted in
+* units of the weights (row 5)
+cge_microsim `mm' line(30) reweight(one:1.05) decompose nodisplay
+assert "`r(channels)'" == "lab gov taxsav prices weights"
+matrix SW = r(shapley)
+mata: S_ = st_matrix("SW"); st_numscalar("dmax", max(abs(S_[(1 \ 2 \ 3 \ 4 \ (6::rows(S_))), 6])))
+assert dmax < 1e-12
+assert dmax < 1e-12
+mata: st_numscalar("dmax", max(abs(rowsum(S_[., 1..(cols(S_) - 1)]) - S_[., cols(S_)]) :/ (1 :+ abs(S_[., cols(S_)]))))
+assert dmax < 1e-12
+* errors: an unknown target, no positive total, conflicting targets
+capture noisily cge_microsim `mm' reweight(wman:lab.act_xx) nodisplay
+assert _rc == 111
+generate double zero = 0
+capture noisily cge_microsim `mm' reweight(zero:1.1) nodisplay
+assert _rc == 459
+generate double wman2 = wman
+capture noisily cge_microsim `mm' reweight(wman:1.1 wman2:1.3) nodisplay
+assert _rc == 430
+drop xw x0 pw1 zero wman2
+
+* Standard errors from the survey design, against svy: ratio
+generate long cl = ceil(_n / 4)
+generate long str = mod(cl, 5)
+svyset cl [pweight = w], strata(str)
+cge_microsim, sim(nt) group(group) consumption(cons) size(size) income(lab:lab gov:gov) line(30) ///
+    svy generate(sv) nodisplay
+matrix SE = r(se)
+assert rowsof(SE) == 4 & colsof(SE) == 3
+generate double nr0 = cons
+generate double nr1 = sv_real
+generate double np0 = size * (cons / size < 30)
+generate double np1 = size * (sv_pc < 30)
+generate double ng0 = size * (cons / size < 30) * (30 - cons / size) / 30
+generate double ng1 = size * (sv_pc < 30) * (30 - sv_pc) / 30
+quietly svy: ratio (m0: nr0/size) (m1: nr1/size)
+matrix VV = e(V)
+assert reldif(sqrt(VV[1, 1]), SE[1, 1]) < 1e-10 & reldif(sqrt(VV[2, 2]), SE[1, 2]) < 1e-10
+quietly lincom _b[m1] - _b[m0]
+assert reldif(r(se), SE[1, 3]) < 1e-10
+quietly svy: ratio (h0: np0/size) (h1: np1/size)
+matrix VV = e(V)
+assert reldif(sqrt(VV[1, 1]), SE[2, 1]) < 1e-10 & reldif(sqrt(VV[2, 2]), SE[2, 2]) < 1e-10
+quietly lincom _b[h1] - _b[h0]
+assert reldif(r(se), SE[2, 3]) < 1e-10
+quietly svy: ratio (g0: ng0/size) (g1: ng1/size)
+matrix VV = e(V)
+assert reldif(sqrt(VV[1, 1]), SE[3, 1]) < 1e-10 & reldif(sqrt(VV[2, 2]), SE[3, 2]) < 1e-10
+* a group as a subpopulation, in the results dataset
+preserve
+cge_microsim, sim(nt) group(group) consumption(cons) size(size) income(lab:lab gov:gov) line(30) ///
+    svy clear nodisplay
+quietly summarize se_value if table == "summary" & group == "npi" & measure == "mean"
+local se_npi = r(mean)
+quietly summarize se_change if table == "summary" & group == "all" & measure == "fgt0"
+assert reldif(r(mean), SE[2, 3]) < 1e-12
+restore
+quietly svy, subpop(if group == "npi"): ratio (m1: nr1/size)
+matrix VV = e(V)
+assert reldif(sqrt(VV[1, 1]), `se_npi') < 1e-10
+* errors: weights given with svy, and data not svyset
+capture noisily cge_microsim [pweight = w], sim(nt) group(group) consumption(cons) svy nodisplay
+assert _rc == 198
+svyset, clear
+capture noisily cge_microsim, sim(nt) group(group) consumption(cons) svy nodisplay
+assert _rc == 119
+drop nr0 nr1 np0 np1 ng0 ng1
+
+* Bands across draws of the elasticities: the draws kept as simulations
+capture program drop _scen_nt
+program define _scen_nt
+    cge_shock tm, value(0)
+end
+cge_sensitivity, scenario(_scen_nt) draws(4) seed(7) keep(dr) nodisplay
+cge_microsim `mm' line(30) bands(dr) nodisplay
+matrix BD = r(bands)
+assert r(N_draws) == 4
+* the central value is that of sim(); the bands are the percentiles of the draws
+assert reldif(BD[1, 2], T0[1, 2]) < 1e-15 & reldif(BD[2, 2], T0[1, 5]) < 1e-15
+preserve
+cge_microsim [pweight = w], sim(dr1 dr2 dr3 dr4) group(group) consumption(cons) size(size) income(lab:lab gov:gov) line(30) clear nodisplay
+foreach m in mean fgt0 gini {
+    quietly _pctile value if table == "summary" & group == "all" & measure == "`m'", percentiles(5 50 95)
+    local k = cond("`m'" == "mean", 1, cond("`m'" == "fgt0", 2, 6))
+    assert reldif(r(r1), BD[`k', 3]) < 1e-12 & reldif(r(r2), BD[`k', 4]) < 1e-12 & reldif(r(r3), BD[`k', 5]) < 1e-12
+}
+restore
+* draw 0 is the scenario at the central elasticities
+cge_microsim [pweight = w], sim(dr0) group(group) consumption(cons) size(size) income(lab:lab gov:gov) line(30) nodisplay
+assert mreldif(r(table), T0) < 1e-9
+* the table of the bands
+cge_microsim `mm' line(30) bands(dr)
+capture noisily cge_microsim `mm' bands(nosuch) nodisplay
+assert _rc == 111
+program drop _scen_nt
