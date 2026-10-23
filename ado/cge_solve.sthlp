@@ -101,6 +101,8 @@ does so only after a direct solve fails; {cmd:steps(1)} never does.
 
 {phang}
 {opt diagnose} displays the diagnostics after a solve that converges too.
+{helpb cge_listing} lists every equation element at the solution, or where a
+solve stopped (from version 0.9.5).
 
 
 {title:Stored results}

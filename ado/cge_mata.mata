@@ -208,7 +208,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.4")
+    return("0.9.5")
 }
 
 // =====================================================================
@@ -2570,19 +2570,11 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
 // equations cannot be replaced.
 string scalar _cge_blockdom(string scalar b)
 {
-    string matrix T
-    real scalar k
-    T = ("P1", "C") \ ("P2", "C") \ ("P3", "C") \ ("P4", "C") \ ("P5", "A") \ ("P6", "A") \
-        ("Q1", "A") \ ("Q2", "A") \ ("Q1C", "A") \ ("Q2C", "A") \ ("Q3", "A") \ ("Q4", "F|A") \
-        ("N1", "N|A") \ ("N2", "N|A") \ ("N3", "C|A") \ ("H1", "") \ ("H2", "F") \ ("H3", "F") \
-        ("Q5", "C|A") \ ("Q6", "C") \ ("Q6A", "C") \ ("Q6B", "A|C") \ ("P5A", "A|C") \
-        ("T1", "C") \ ("T2", "C") \ ("T3", "C") \ ("T3E", "C") \ ("T4", "C") \ ("T5", "C") \
-        ("T6", "C") \ ("T7", "C") \ ("T8", "C") \ ("T9", "C") \ ("T10", "C") \
-        ("I2", "I|F") \ ("I3", "D") \ ("I4", "H") \ ("I5", "C|H") \ ("I5H", "A|H") \ ("I6", "C") \
-        ("I7", "C") \ ("I10", "D") \ ("I11", "D") \ ("I12", "") \ ("I13", "C") \ ("I14", "") \
-        ("L1", "F") \ ("L2", "F") \ ("S4", "")
-    k = _cge_find(T[., 1], b)
-    return(k ? T[k, 2] : "-")
+    string scalar set, desc
+    if (anyof(("P7", "P8", "P9", "I1", "I8", "I9", "S1", "S2", "S3", "S5", "B1", "U"), b)) return("-")
+    // the domains of the blocks, as in the equation labels (from version 0.9.5)
+    _cge_eqinfo(b, set, desc)
+    return(set == "?" ? "-" : set)
 }
 
 // replace(BLOCK) or replace(BLOCK(e1[,e2])) of cge_equation (from version
@@ -11203,6 +11195,151 @@ void _cge_eqlabel(struct cge_model scalar M, real scalar g, string scalar blk, s
     }
 }
 
+// The equation listing and infeasibility report (from version 0.9.5): every
+// element of the model's equations at a point, with its block, element,
+// left and right sides, residual and scaled residual, whether it is in the
+// system solved and whether a user equation replaces it. The point is a
+// stored simulation, the base, or the current point (the shocks and fixed
+// values that the next solve starts from); by default the last simulation.
+void _cge_listing(string scalar sim, real scalar base, real scalar current, string scalar blocks, real scalar top,
+                  real scalar tol, real scalar all, real scalar clear)
+{
+    struct cge_model scalar M
+    struct cge_par scalar p
+    real colvector x, L, R, K, res, sc, ins, rp, keep, g, o, inf, lst, nb, mb
+    string colvector bl, el, ds, ub
+    string rowvector want
+    string scalar what, b, e, d, wb, we
+    real scalar k, n, i, j, mx, kb, ninf, nl, idx
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if ((sim != "") + base + current > 1) _cge_fail("give one of sim(), base and current", 198)
+    if (sim == "" & !base & !current) {
+        if (rows(M.simname)) sim = M.simname[rows(M.simname)]
+        else base = 1
+    }
+    if (sim != "") {
+        k = _cge_sim_index(M, sim)
+        p = M.simp[k]
+        x = M.simx[., k]
+        what = "simulation " + sim
+    }
+    else if (base) {
+        p = M.p0
+        x = M.x0
+        what = "the base"
+    }
+    else {
+        p = M.p
+        x = M.xcur
+        what = "the current point, before it is solved"
+    }
+    _cge_eq(M, p, x, L, R, K, 0)
+    n = rows(L)
+    rp = J(n, 1, 0)
+    if (rows(M.erep)) rp[M.erep] = J(rows(M.erep), 1, 1)
+    ins = M.emask :!= 0
+    // the elements of the model: those solved and those that user equations replace
+    g = selectindex(ins :| rp)
+    res = L - R
+    sc = res :/ M.escale
+    bl = el = ds = J(rows(g), 1, "")
+    for (i = 1; i <= rows(g); i++) {
+        _cge_eqlabel(M, g[i], b, e, d)
+        bl[i] = b
+        el[i] = e
+        ds[i] = d
+    }
+    inf = ins[g] :& (editmissing(abs(sc[g]), 1e300) :> tol)
+    ninf = sum(inf)
+    // the blocks to list element by element
+    want = (all ? uniqrows(bl)' : tokens(strupper(blocks)))
+    for (k = 1; k <= cols(want); k++) {
+        if (!anyof(M.ename, want[k])) _cge_fail("blocks(): " + want[k] + " is not an equation block (model_spec.md, Section 5)", 198)
+    }
+    if (clear) {
+        stata("clear")
+        st_addobs(rows(g))
+        (void) st_addvar("str8", "block")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(el))))), "element")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(ds))))), "description")
+        (void) st_addvar(("double", "double", "double", "double", "byte", "byte", "byte"),
+                         ("lhs", "rhs", "residual", "scaled", "insystem", "replaced", "infeasible"))
+        st_sstore(., ("block", "element", "description"), (bl, el, ds))
+        st_store(., ("lhs", "rhs", "residual", "scaled", "insystem", "replaced", "infeasible"),
+                 (L[g], R[g], res[g], sc[g], ins[g], rp[g], inf))
+    }
+    // the block summary
+    ub = J(0, 1, "")
+    for (i = 1; i <= rows(bl); i++) if (!anyof(ub, bl[i])) ub = ub \ bl[i]
+    nb = mb = J(rows(ub), 1, 0)
+    printf("{txt}Equations at %s: {res}%f{txt} in the system", what, sum(ins[g]))
+    if (sum(rp[g])) printf("{txt}, {res}%f{txt} replaced by user equations", sum(rp[g]))
+    printf("\n\n{txt}%-5s %-36s %9s %12s  %-20s %10s\n", "Block", "", "Elements", "Largest", "at", "Infeasible")
+    printf("{txt}{hline 98}\n")
+    mx = 0
+    wb = we = ""
+    for (k = 1; k <= rows(ub); k++) {
+        o = selectindex((bl :== ub[k]) :& ins[g])
+        if (!rows(o)) {
+            printf("{txt}%-5s %-36s %9s %12s  %-20s %10s\n", ub[k], _cge_trunc(ds[selectindex(bl :== ub[k])[1]], 36), "0", "", "(replaced)", "")
+            continue
+        }
+        j = o[order(-editmissing(abs(sc[g[o]]), 1e300), 1)[1]]
+        printf("{txt}%-5s %-36s {res}%9.0f %12.3e{txt}  %-20s {res}%10.0f\n", ub[k], _cge_trunc(ds[j], 36), rows(o),
+               abs(sc[g[j]]), _cge_trunc(el[j], 20), sum(inf[o]))
+        if (editmissing(abs(sc[g[j]]), 1e300) > mx | wb == "") {
+            mx = editmissing(abs(sc[g[j]]), 1e300)
+            wb = ub[k]
+            we = el[j]
+        }
+    }
+    printf("{txt}{hline 98}\n")
+    // the infeasibility report: elements above the tolerance, largest first
+    if (ninf) {
+        o = selectindex(inf)
+        o = o[order(-editmissing(abs(sc[g[o]]), 1e300), 1)]
+        printf("\n{txt}Infeasible equation elements, with a scaled residual above %9.2e: {res}%f{txt}%s\n",
+               tol, ninf, (ninf > top ? sprintf(" (the largest %f shown)", top) : ""))
+        _cge_listing_head()
+        for (i = 1; i <= min((top, rows(o))); i++) _cge_listing_row(bl[o[i]], el[o[i]], L[g[o[i]]], R[g[o[i]]], sc[g[o[i]]], "INFES")
+    }
+    else printf("\n{txt}No equation element is infeasible: every scaled residual is at most %9.2e\n", tol)
+    // the listing of the blocks asked for
+    nl = 0
+    for (k = 1; k <= cols(want); k++) {
+        o = selectindex(bl :== want[k])
+        if (!rows(o)) continue
+        _cge_eqinfo(want[k], b, d)
+        printf("\n{txt}Block {res}%s{txt}: %s\n", want[k], d)
+        _cge_listing_head()
+        for (i = 1; i <= rows(o); i++) {
+            idx = o[i]
+            _cge_listing_row(bl[idx], el[idx], L[g[idx]], R[g[idx]], sc[g[idx]], (rp[g[idx]] ? "replaced" : (inf[idx] ? "INFES" : "")))
+            nl++
+        }
+    }
+    st_numscalar("r(N_equations)", sum(ins[g]))
+    st_numscalar("r(N_replaced)", sum(rp[g]))
+    st_numscalar("r(N_infeasible)", ninf)
+    st_numscalar("r(N_listed)", nl)
+    st_numscalar("r(max_residual)", mx)
+    st_numscalar("r(tolerance)", tol)
+    st_global("r(block)", wb)
+    st_global("r(element)", we)
+    st_global("r(point)", what)
+}
+
+void _cge_listing_head()
+{
+    printf("{txt}  %-5s %-24s %16s %16s %12s\n", "Block", "Element", "Left side", "Right side", "Scaled")
+}
+
+void _cge_listing_row(string scalar b, string scalar e, real scalar l, real scalar r, real scalar s, string scalar flag)
+{
+    printf("{txt}  %-5s %-24s {res}%16.8g %16.8g %12.3e{txt} %s\n", b, _cge_trunc(e, 24), l, r, s, flag)
+}
+
 // Why a solve fails: the largest residuals at point x by equation and
 // element; equations with no free variable and free variables in no
 // equation; and the smallest pivot of the Jacobian of the system solved
@@ -11234,6 +11371,8 @@ void _cge_diagnose(struct cge_model scalar M, struct cge_par scalar p, real colv
         }
         printf("{txt}    %-4s %-38s %-22s {res}%10.3e\n", blk, _cge_trunc(desc, 38), _cge_trunc(el, 22), r[o[k]])
     }
+    // the listing of every element (from version 0.9.5)
+    printf("{txt}  (cge_listing, sim() lists every equation element at this point)\n")
     st_global("r(diag_block)", wb)
     st_global("r(diag_element)", we)
     st_numscalar("r(diag_residual)", r[o[1]])

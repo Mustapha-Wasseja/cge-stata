@@ -639,3 +639,86 @@ capture cge_shock tm, elements(nosuchgood) value(0)
 assert _rc == 111
 capture cge_shock tm, scale(2) value(0)
 assert _rc == 198
+
+* The equation listing and infeasibility report (version 0.9.5)
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)              ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+* at the base every equation holds, and the listing has every element of the
+* system solved
+quietly cge_solve, name(lbase) full tolerance(1e-12)
+local neq = r(N_solved)
+cge_listing, base
+assert r(N_equations) == `neq' & r(N_infeasible) == 0 & r(max_residual) < 1e-12 & r(N_replaced) == 0
+* tariffs removed but not yet solved: only the import prices of the goods with
+* a tariff and government revenue are off, revenue by the tariff revenue
+cge_shock tm, value(0)
+cge_listing, current blocks(P1 I8) clear
+assert r(N_infeasible) == 3 & r(N_listed) == 4 & r(block) == "I8"
+assert _N == `neq'
+quietly count if infeasible
+assert r(N) == 3
+quietly count if infeasible & (block == "I8" | (block == "P1" & inlist(element, "com_agr", "com_man")))
+assert r(N) == 3
+quietly summarize residual if block == "I8"
+assert reldif(abs(r(mean)), 8) < 1e-12
+* each import price at the base includes its tariff: PM = pwm (1 + tm) EXR,
+* with no margins on imports here, so the gap is tm / (1 + tm) of PM
+capture mata: mata drop _cge_test_tm()
+mata:
+real colvector _cge_test_tm()
+{
+    struct cge_model scalar M
+    M = _cge_load()
+    return(M.p0.tm)
+}
+end
+mata: st_matrix("tm0", _cge_test_tm()')
+local k = 0
+foreach c in com_agr com_man com_ser {
+    local ++k
+    quietly summarize lhs if block == "P1" & element == "`c'"
+    local pm = r(mean)
+    quietly summarize residual if block == "P1" & element == "`c'"
+    assert abs(r(mean) - `pm' * el(tm0, 1, `k') / (1 + el(tm0, 1, `k'))) < 1e-12
+}
+* elements with two indexes are labelled by both, in the order of their sets
+quietly count if block == "Q4"
+assert r(N) == 6
+quietly count if block == "Q4" & element == "lab,act_agr"
+assert r(N) == 1
+quietly count if block == "Q5" & element == "com_agr,act_man"
+assert r(N) == 1
+quietly count if block == "I5" & element == "com_man,hhd"
+assert r(N) == 1
+* a failed solve: the listing of the simulation agrees with its residual, and
+* an element replaced by a user equation is shown apart from the system
+cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))
+capture noisily cge_solve, name(lfail) iterate(1) steps(1) tolerance(1e-30)
+local mres = r(max_residual)
+assert r(converged) == 0
+cge_listing, sim(lfail) clear
+assert r(N_replaced) == 1 & r(N_infeasible) > 0
+assert reldif(r(max_residual), `mres') < 1e-12
+quietly count if block == "T2" & element == "com_agr" & replaced & !insystem
+assert r(N) == 1
+quietly count if block == "U" & element == "qe" & insystem
+assert r(N) == 1
+* the last simulation by default, every block with all
+cge_shock, reset
+quietly cge_solve, name(lrep) tolerance(1e-12)
+cge_listing, all tolerance(1e-9)
+assert r(point) == "simulation lrep" & r(N_infeasible) == 0 & r(N_listed) == `neq' + 1
+* errors
+capture noisily cge_listing, sim(nosuch)
+assert _rc == 111
+capture noisily cge_listing, base current
+assert _rc == 198
+capture noisily cge_listing, blocks(XX)
+assert _rc == 198
+capture noisily cge_listing, top(0)
+assert _rc == 198
+cge_equation, clear

@@ -43,6 +43,12 @@ base, to a relative deviation of at most $10^{-7}$.
 In the last two checks a variable whose base value is zero ($\V{WALRAS}$) is
 measured relative to $m$, as in the check of Walras's law.
 
+\manref{cge_listing} (from version 0.9.5) shows every element of the equations
+at a point, with its residual: an equation listing and infeasibility report, as
+GAMS gives after a solve. It finds the equations that a shock moves from the
+base before the model is solved, and, after a solve that fails, where the
+system is furthest from a solution.
+
 \section{Agreement between implementations}
 
 The model is implemented three times: in Stata and Mata, in a Python

@@ -1,0 +1,43 @@
+. cge_listing, base
+Equations at the base: 93 in the system
+
+Block                                       Elements      Largest  at                   Infeasible
+--------------------------------------------------------------------------------------------------
+P1    import price                                 3    0.000e+00  com_agr                       0
+P2    export price                                 3    0.000e+00  com_man                       0
+P3    composite supply price                       3    0.000e+00  com_man                       0
+P4    producer price of output                     3    0.000e+00  com_agr                       0
+P5    activity price                               3    0.000e+00  act_man                       0
+P6    price of intermediate input                  3    0.000e+00  act_agr                       0
+P7    zero profit                                  3    0.000e+00  act_agr                       0
+P8    consumer price index                         1    0.000e+00                                0
+P9    producer price index                         1    0.000e+00                                0
+Q1    value added (Leontief)                       3    1.292e-16  act_ser                       0
+Q2    intermediate input (Leontief)                3    0.000e+00  act_ser                       0
+Q3    value added                                  3    0.000e+00  act_man                       0
+Q4    factor demand                                6    2.220e-16  cap,act_ser                   0
+Q5    intermediate demand                          9    0.000e+00  com_man,act_ser               0
+Q6    commodity output                             3    0.000e+00  com_agr                       0
+T1    CET transformation                           3    0.000e+00  com_man                       0
+T2    export supply                                3    3.553e-16  com_man                       0
+T4    Armington aggregation                        3    1.597e-16  com_man                       0
+T5    import demand                                3    1.776e-16  com_ser                       0
+I1    factor income                                2    0.000e+00  lab                           0
+I2    factor income of institutions                6    0.000e+00  row,cap                       0
+I3    income of households and enterprises         1    0.000e+00  hhd                           0
+I4    consumption spending                         1    1.236e-16  hhd                           0
+I5    household demand                             3    0.000e+00  com_man,hhd                   0
+I6    investment demand                            3    0.000e+00  com_agr                       0
+I7    government demand                            3    0.000e+00  com_man                       0
+I8    government revenue                           1    0.000e+00                                0
+I9    government spending                          1    0.000e+00                                0
+I10   direct tax rate                              1    0.000e+00  hhd                           0
+I11   savings rate                                 1    0.000e+00  hhd                           0
+S1    factor market                                2    0.000e+00  cap                           0
+S2    commodity market                             3    0.000e+00  com_ser                       0
+S3    balance of payments                          1    0.000e+00                                0
+S4    government budget                            1    0.000e+00                                0
+S5    savings-investment balance                   1    0.000e+00                                0
+--------------------------------------------------------------------------------------------------
+
+No equation element is infeasible: every scaled residual is at most  1.00e-08

@@ -1679,6 +1679,15 @@ objective (to $10^{-9}$) and the solution, and check that a target for
 government savings reached by the direct tax rate reproduces the closure
 `fixgsav` (to $10^{-10}$).
 
+**The equation listing (from version 0.9.5).** `cge_listing` evaluates
+`_cge_eq()` at a stored simulation, the base or the current point and lists
+every element of the model, in the system or replaced by a user equation, with
+its block and element (`_cge_eqlabel()`), its left and right sides, its
+residual and its scaled residual, $(\ell - r)/\sigma$ with the scales of
+`cge_solve`; an element in the system is infeasible above the tolerance
+(default $10^{-8}$). `_cge_blockdom()`, the domains of the blocks that may be
+replaced, is drawn from the same table (`_cge_eqinfo()`).
+
 ## 19. User variables and equations (from version 0.6.1)
 
 `cge_variable` and `cge_equation` add variables and equations to the

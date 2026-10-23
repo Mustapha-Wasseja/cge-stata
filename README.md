@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.9.4 implements the standard single-country model described in
+Version 0.9.5 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,10 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.9.5 adds `cge_listing`, the equation listing and infeasibility
+report of a GAMS run: every element of the model's equations at a simulation,
+the base or the current point, with its left and right sides and scaled
+residual, and the elements that are infeasible, largest first.
 Version 0.9.4 lets `cge_optimize` take any expression of the user language
 as its objective or targets, with inequality constraints, as in an NLP model:
 `cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= 0.98 * base(QM(com_man)))`.
@@ -427,7 +431,8 @@ Developer notes:
 
 Every calibration is checked for benchmark replication. `cge_check` tests SAM
 balance, closure consistency, Walras's law, the GDP identity, homogeneity and
-convergence from perturbed starting values. A Python reference implementation
+convergence from perturbed starting values, and `cge_listing` shows the residual
+of every equation element at a point. A Python reference implementation
 of the same equations (`reference/`) runs in continuous integration; the Stata
 test suite compares its results with the reference (every variable of every
 test case, to about 1e-11 or better). From version 0.1.16 an independent

@@ -1,0 +1,148 @@
+\cgeentry{cge_listing}{Equation listing and infeasibility report}
+
+\cgesec{Description}
+
+\cmd{cge_listing} (from version 0.9.5) lists the equations of the model at a
+point, as the equation listing and the infeasibility report of a GAMS run do.
+For every block of equations of chapter~\ref{chap:equations}, and for the user
+equations, it shows the elements in the system, the largest scaled residual and
+where it occurs, and the number of elements that are infeasible there, whose
+scaled residual exceeds the tolerance. It then lists the infeasible elements,
+largest first, with their left and right sides, and, on request, every element
+of the blocks named. The point is a stored simulation, the base, or the
+current point from which the next solve starts.
+
+\cgesec{Quick start}
+
+The equations at the last simulation stored
+\begin{stcode}
+cge_listing
+\end{stcode}
+The equations that a shock moves, before the model is solved, with every
+element of the import prices and of government revenue
+\begin{stcode}
+cge_shock tm, value(0)
+cge_listing, current blocks(P1 I8)
+\end{stcode}
+Every element of every equation at the simulation \cmd{notariff}, as a dataset
+\begin{stcode}
+cge_listing, sim(notariff) clear
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_listing} [\texttt{,} \argu{options}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Point}
+\optarg{}{sim}{name} & a stored simulation; default the last one stored\\
+\opt{}{base} & the base\\
+\opt{cur}{rent} & the current point: base values with the current shocks and fixed values\\
+\optgroup{Listing}
+\optarg{block}{s}{list} & list every element of these blocks\\
+\opt{}{all} & list every element of every block\\
+\optarg{}{top}{\#} & number of infeasible elements listed; default 20\\
+\optarg{tol}{erance}{\#} & scaled residual above which an element is infeasible; default \texttt{1e-8}\\
+\opt{}{clear} & replace the data in memory with every element\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{sim}{name}, \opt{}{base}, \opt{cur}{rent}] choose the point;
+at most one may be given. The default is the last simulation stored, or the
+base if none is. The current point is the base with the shocks and fixed
+values that the next \manref{cge_solve} applies, from which it starts: its
+listing shows the equations that the shocks move away from the base.
+
+\item[\optarg{block}{s}{list}] lists every element of the blocks named, such as
+\cmd{blocks(P1 I8)}, with its left and right sides and its scaled residual.
+\opt{}{all} lists every block.
+
+\item[\optarg{}{top}{\#}] sets how many infeasible elements are listed, largest
+first; the default is 20.
+
+\item[\optarg{tol}{erance}{\#}] sets the scaled residual above which an element
+is infeasible; the default, $10^{-8}$, is the tolerance of the solution check
+of \manref{cge_check}.
+
+\item[\opt{}{clear}] replaces the data in memory with one observation per
+element of the model's equations, with the variables \cmd{block},
+\cmd{element}, \cmd{description}, \cmd{lhs}, \cmd{rhs}, \cmd{residual} (the
+left less the right side), \cmd{scaled}, and the indicators \cmd{insystem},
+\cmd{replaced} (by a user equation) and \cmd{infeasible}.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+The SAM is mapped and calibrated:
+\stlog{list_setup}
+
+\cgesubsec{Example 1: the base}
+
+At the base every equation holds, to rounding:
+\stlog{list_base}
+
+\cgesubsec{Example 2: the equations a shock moves}
+
+With the tariffs removed, the current point is the base under the new
+tariffs. The import prices of the two goods that carry a tariff and
+government revenue are off; revenue, on the left, exceeds the taxes that the
+base point now yields by the base tariff revenue, 8:
+\stlog{list_current}
+
+\cgesubsec{Example 3: a solve that does not converge}
+
+A solve stopped after one iteration, with a tolerance it cannot meet, ends
+with error 430, and its point is stored as a simulation. Its listing shows where the system is furthest from a
+solution; the largest scaled residual is the one \manref{cge_solve} reports:
+\stlog{list_fail}
+
+\cgesubsec{Example 4: the listing as a dataset}
+
+\stlog{list_clear}
+Elements with two indexes are labelled by both, in the order of their sets.
+
+\cgesec{Stored results}
+
+\cmd{cge_listing} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_equations)} & number of elements in the system\\
+\res{r(N_replaced)} & number of elements replaced by user equations\\
+\res{r(N_infeasible)} & number of elements in the system above the tolerance\\
+\res{r(N_listed)} & number of elements listed by \cmd{blocks()} or \cmd{all}\\
+\res{r(max_residual)} & the largest scaled residual in the system\\
+\res{r(tolerance)} & the tolerance\\
+\resgroup{Macros}
+\res{r(block)} & the block of the largest scaled residual\\
+\res{r(element)} & its element\\
+\res{r(point)} & the point listed\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+At a point $(x, \theta)$, each element $e$ of block $B$ has the left and right
+sides $\ell_{B,e}(x, \theta)$ and $r_{B,e}(x, \theta)$ of chapter~\ref{chap:equations},
+the residual $\ell_{B,e} - r_{B,e}$, and the scaled residual
+\begin{equation*}
+\frac{\ell_{B,e}(x, \theta) - r_{B,e}(x, \theta)}{\sigma_{B,e}}, \qquad
+\sigma_{B,e} = \max\bigl(|\ell_{B,e}(x^0, \theta^0)|, |r_{B,e}(x^0, \theta^0)|\bigr),
+\end{equation*}
+or $\sigma_{B,e} = 1$ when that is at most $10^{-9}$: the residual that
+\manref{cge_solve} brings below its tolerance. An element is infeasible when
+it is in the system and its scaled residual exceeds the tolerance in absolute
+value. Elements outside the model, such as the import price of a commodity
+that is not imported, are not listed; elements replaced by user equations are
+listed and counted apart.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_check}{Run model validation checks}
+\seeentry{cge_equation}{User equations: new relations among the model's variables}
+\seechapter{chap:equations}{The equations}
+\end{alsosee}

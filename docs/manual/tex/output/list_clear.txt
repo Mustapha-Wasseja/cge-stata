@@ -1,0 +1,22 @@
+. quietly cge_solve, name(notariff)
+
+. quietly cge_listing, sim(notariff) clear
+
+. describe, simple
+block        description  rhs          scaled       replaced
+element      lhs          residual     insystem     infeasible
+
+. list block element lhs rhs scaled if inlist(block, "Q4", "I8"), noobs
+
+  +----------------------------------------------------------+
+  | block       element         lhs         rhs       scaled |
+  |----------------------------------------------------------|
+  |    Q4   lab,act_agr   1.0281053   1.0281053   -6.661e-16 |
+  |    Q4   lab,act_man   1.0281053   1.0281053   -6.661e-16 |
+  |    Q4   lab,act_ser   1.0281053   1.0281053   -2.220e-16 |
+  |    Q4   cap,act_agr    1.026315    1.026315            0 |
+  |    Q4   cap,act_man    1.026315    1.026315    8.882e-16 |
+  |----------------------------------------------------------|
+  |    Q4   cap,act_ser    1.026315    1.026315    2.220e-16 |
+  |    I8                 55.611776   55.611776            0 |
+  +----------------------------------------------------------+

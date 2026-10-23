@@ -43,7 +43,10 @@ the solution unchanged to $10^{-10}$, and GAMS leaves out the elements that user
 equations replace (case \cmd{replace}). An objective written as an
 expression gives the optimum of the report measure that it equals (to
 $10^{-10}$), and a binding constraint of \manref{cge_optimize} gives the
-instruments that reach it as a target (to $10^{-6}$).
+instruments that reach it as a target (to $10^{-6}$). The equation listing of
+\manref{cge_listing} labels every element as the model's own equations do: with
+the tariffs removed at the base, it finds the import prices and government
+revenue off by the tariffs, element by element.
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed

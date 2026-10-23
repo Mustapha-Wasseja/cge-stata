@@ -14,7 +14,7 @@ d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja
 d
-d Distribution-Date: 20261022
+d Distribution-Date: 20261023
 d
 f ado/cge.ado
 f ado/cge.sthlp
@@ -71,6 +71,8 @@ f ado/cge_results.ado
 f ado/cge_results.sthlp
 f ado/cge_check.ado
 f ado/cge_check.sthlp
+f ado/cge_listing.ado
+f ado/cge_listing.sthlp
 f ado/cge_report.ado
 f ado/cge_report.sthlp
 f ado/cge_parameters.ado
