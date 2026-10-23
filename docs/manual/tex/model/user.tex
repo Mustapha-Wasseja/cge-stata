@@ -23,6 +23,9 @@ activities, \cmd{c} commodities, \cmd{f} factors, \cmd{h} households, \cmd{d}
 households and enterprises, \cmd{i} institutions that receive factor income,
 \cmd{n} nests, or a user set, by its name; digits may follow, as in \cmd{c2}
 or \cmd{goods2};
+\item \cmd{sum((i,j), expression)}, a sum over every pair of elements of two
+sets, and \cmd{sum(map(i,j), expression)}, a sum over the pairs of a set of
+pairs (from version 0.9.1);
 \item \cmd{ord(i)}, the position of the element of index \cmd{i} in its set,
 from 1;
 \item conditions, \cmd{$(condition)}, on sums, terms and domains
@@ -81,6 +84,23 @@ An element of a user variable outside its domain does not exist: it is left
 out of the results, it is 0 where an expression refers to it, and GAMS fixes
 it at 0. Because \cmd{$}\argu{name} is a global macro on a Stata command
 line, the condition is always written in parentheses after \cmd{$}.
+
+\section{Two indexes and sets of pairs}\label{sec:userpairs}
+
+From version 0.9.1, a user variable or equation may have two indexes, as the
+model's household demand $\V{QH}_{c,h}$ does: \cmd{cge_variable X(c,h) = PQ(c)
+* QH(c, h)} adds a variable for every commodity and household, and a
+condition may restrict it to some pairs. A set of pairs, \cmd{cge_set map(a,c)
+= act_agr.com_agr act_man.com_man}, records a mapping between two sets, as a
+GAMS set over two indexes does. A sum runs over its pairs,
+\cmd{sum(map(a,c), PA(a) * QA(a))}, and in a condition, \cmd{map(a,c)}, it
+restricts sums, terms and the domains of variables and equations with two
+indexes to its pairs. Sums over two indexes and over sets of pairs are written
+out one index at a time, so they take conditions as other sums do. In the
+results the second index is the column \cmd{element2}; in \manref{cge_shock}
+an element is written \cmd{e1.e2}; in the GAMS program the variables are
+declared over two sets of accounts, \cmd{(AC, AC)}, with the pairs outside
+their domains fixed at 0.
 
 \section{Inequalities and bounds}\label{sec:userineq}
 

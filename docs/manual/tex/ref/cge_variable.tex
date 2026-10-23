@@ -6,7 +6,8 @@
 it adds the variable and the equation that defines it; with \opt{}{value()}, it
 adds a free variable, with that base value, that user equations added by
 \manref{cge_equation} determine. A variable may be indexed by a set of the
-model, and is then defined for every element of the set.
+model, and is then defined for every element of the set, or, from version
+0.9.1, by two sets, and is then defined for every pair of their elements.
 
 \cgesec{Quick start}
 
@@ -32,24 +33,28 @@ cge_variable LAM, value(1)
 
 A variable and its definition
 \begin{stsyntax}
-\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]] \cmd{=} \argu{expression}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]] \cmd{=} \argu{expression}
 [\texttt{,} \opt{}{nominal} \optarg{}{lower}{\#} \optarg{}{upper}{\#}]
 \end{stsyntax}
 A variable that user equations determine
 \begin{stsyntax}
-\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{value}{\#}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{value}{\#}
 [\opt{}{fixed} \opt{}{nominal}]
 \end{stsyntax}
 An exogenous variable at a bound, which an inequality may move (from version 0.9.0)
 \begin{stsyntax}
-\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{lower}{\#}|\optarg{}{upper}{\#}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{lower}{\#}|\optarg{}{upper}{\#}
 [\opt{}{nominal}]
 \end{stsyntax}
 \argu{name} has at most 24 characters, letters, digits and underscores; it
 may not be the name of a model variable, a user variable or a parameter that
 expressions use, and a defined variable may not take the name of a user
 equation. \argu{i} is an index: the letter of a set, or the name of a user set
-(\manref{cge_set}), possibly followed by digits, as in \cmd{c} or \cmd{c2}. \argu{expression} is written in the language
+(\manref{cge_set}), possibly followed by digits, as in \cmd{c} or \cmd{c2}.
+From version 0.9.1, a variable may have two different indexes, \argu{i} and
+\argu{j}, as in \cmd{X(c,h)}; it is then defined for every pair of elements of
+their sets, or for the pairs that meet its condition, and an element is
+written \argu{e1}\cmd{.}\argu{e2} in \manref{cge_shock}. \argu{expression} is written in the language
 described in \manref{cge_equation}.
 
 \begin{opttable}

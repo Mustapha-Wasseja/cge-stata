@@ -1751,6 +1751,20 @@ to and subtracted from its definition, each paired with a bound on the
 variable. The GAMS program fixes exogenous user variables (`.fx`) and writes
 the constraints as in Section 16.
 
+**Two indexes and sets of pairs (from version 0.9.1).** A user variable or
+equation `NAME(i,j)[$(q)]` has the set code `S1|S2` (`_cge_setparts()`); its
+elements are the pairs of elements of the two sets (`_cge_u_els()`), labelled
+`e1.e2`, and both indexes are replaced in its definition (`_cge_u_subst2()`).
+The two indexes must differ. `cge_set NAME(i,j) = e1.f1 ...` stores a set of
+pairs in `M.usdef`, with the set codes of its indexes in a third column
+(`_cge_us_widen()` pads models saved before); a set of pairs is not an index.
+Before the sums are written out, `_cge_u_sumpairs()` rewrites
+`sum((i,j)$(q), g)` as `sum(i, sum(j$(q), g))` and `sum(map(i,j)$(q), g)` as
+`sum(i, sum(j$(map(i,j) & (q)), g))`; in a condition, `map(e,f)` is the
+constant 1 or 0. Shocks give elements as `e1.e2`, results as `element1` and
+`element2`, and `cge_gams` declares the variables over `(AC, AC)`, with the
+pairs outside the domain fixed at 0.
+
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
 numbers, variables (positions in the stacked vector), parameters, operators

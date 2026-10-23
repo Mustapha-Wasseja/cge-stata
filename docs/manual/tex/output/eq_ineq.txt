@@ -16,7 +16,7 @@ Parameter tm changed for 3 element(s)
 
 . cge_solve, name(ineq)
 Simulation ineq solved in 17 iteration(s) (newton)
-Largest scaled residual  9.47e-16; WALRAS =  4.44e-14
+Largest scaled residual  8.88e-16; WALRAS = -2.43e-14
 Constraints
   inequality quota, RM(com_man) up, rents to gov: binding
       _S_quota =            0;  RM(com_man) =  .0557255432

@@ -749,3 +749,114 @@ cge_equation, clear
 cge_constraint, list
 assert r(N_constraints) == 0
 program drop _ineqdiff
+
+* ---------------------------------------------------------------------
+* 10. Two indexes and sets of pairs (version 0.9.1)
+* ---------------------------------------------------------------------
+quietly cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd npi) enterprises(ent) government(gov)                ///
+    savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+* variables with two indexes, and sums over two indexes and over a set of pairs
+cge_variable X(c,h) = PQ(c) * QH(c, h), nominal
+assert r(N_elements) == 6
+cge_variable XS = sum((c,h), X(c,h)), nominal
+cge_variable XS2 = sum(c, sum(h, PQ(c) * QH(c, h))), nominal
+cge_set map(a,c) = act_agr.com_agr act_man.com_man
+assert r(N_elements) == 2
+cge_variable VM = sum(map(a,c), PA(a) * QA(a) + PQ(c) * QG(c))
+cge_variable VM2 = PA(act_agr) * QA(act_agr) + PQ(com_agr) * QG(com_agr) + PA(act_man) * QA(act_man) + PQ(com_man) * QG(com_man)
+cge_variable VMH = sum(map(a,c)$(sameas(a, act_man)), PA(a) * QA(a))
+* a domain of pairs, and an equation with two indexes over a conditional domain
+cge_variable Y(a,c)$(map(a,c)) = PA(a) / PQ(c)
+assert r(N_elements) == 2
+cge_variable LH(c,h)$(base(QH(c, h)) > 0), value(1)
+cge_equation lh(c,h)$(base(QH(c, h)) > 0): QH(c, h) = LH(c,h) * base(QH(c, h))
+assert r(N_elements) == 4
+* an exogenous variable with two indexes, and an inequality paired with it,
+* element by element: PH2 = max(1, PQ(c))
+cge_variable FX(c,h), value(1) fixed
+cge_variable FY = sum((c,h), FX(c,h))
+cge_variable FL(c,h), lower(0)
+cge_variable PH2(c,h) = PQ(c) + FL(c,h)
+cge_equation fl(c,h): PH2(c,h) >= 1, perp(FL(c,h))
+assert r(N_elements) == 6
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+cge_shock tm, value(0)
+cge_shock FX, elements(com_agr.hhd) value(2)
+quietly cge_solve, name(t2) tolerance(1e-12)
+quietly cge_results, sim(t2) clear nodisplay
+foreach v in XS XS2 VM VM2 VMH FY {
+    quietly summarize value if variable == "`v'"
+    assert r(N) == 1
+    local `v' = r(mean)
+}
+assert reldif(`XS', `XS2') < 1e-12 & reldif(`VM', `VM2') < 1e-12 & `FY' == 7
+quietly summarize value if variable == "PA" & element1 == "act_man"
+local pam = r(mean)
+quietly summarize value if variable == "QA" & element1 == "act_man"
+assert reldif(`VMH', `pam' * r(mean)) < 1e-12
+quietly count if variable == "Y"
+assert r(N) == 2
+quietly count if variable == "LH"
+assert r(N) == 4
+foreach c in com_agr com_man com_ser {
+    quietly summarize value if variable == "PQ" & element1 == "`c'"
+    local pq = r(mean)
+    foreach h in hhd npi {
+        * a household good with no flow is not in the results
+        quietly summarize value if variable == "QH" & element1 == "`c'" & element2 == "`h'"
+        local qh = cond(r(N), r(mean), 0)
+        quietly summarize base if variable == "QH" & element1 == "`c'" & element2 == "`h'"
+        local qh0 = cond(r(N), r(mean), 0)
+        quietly summarize value if variable == "X" & element1 == "`c'" & element2 == "`h'"
+        assert reldif(r(mean), `pq' * `qh') < 1e-12
+        quietly summarize value if variable == "PH2" & element1 == "`c'" & element2 == "`h'"
+        assert reldif(r(mean), max(1, `pq')) < 1e-10
+        if `qh0' > 0 {
+            quietly summarize value if variable == "LH" & element1 == "`c'" & element2 == "`h'"
+            assert reldif(r(mean), `qh' / `qh0') < 1e-12
+        }
+    }
+}
+cge_shock, reset
+* saved, loaded and calibrated again, they stay
+tempfile s2
+quietly cge_save using "`s2'", replace
+quietly cge_use using "`s2'"
+cge_set, list
+assert r(N_sets) == 1
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_equation, list
+assert r(N_equations) >= 20
+* the GAMS program declares a variable with two indexes over pairs of labels
+tempfile g2
+cge_shock tm, value(0)
+quietly cge_solve, name(t3) tolerance(1e-12)
+cge_gams using "`g2'_t", sim(t3) replace
+mata:
+u = cat(st_local("g2") + "_t/cge_user.inc")
+st_numscalar("ok2", sum(u :== "variable U_X(AC, AC);") + (sum(strpos(u, "U_X.l('com_agr', 'hhd')") :> 0) == 1) +
+             sum(u :== "U_FX.fx('com_agr', 'hhd') = 1;"))
+end
+assert scalar(ok2) == 3
+cge_shock, reset
+* errors
+capture noisily cge_variable XX(c,c) = PQ(c)
+assert _rc == 198
+capture noisily cge_variable XX(map) = 1
+assert _rc == 198
+capture noisily cge_set bad(a,c) = act_agr.com_xx
+assert _rc == 111
+capture noisily cge_set bad(a,c) = act_agr
+assert _rc == 198
+capture noisily cge_variable XX = X(com_agr)
+assert _rc == 198
+capture noisily cge_set, clear
+assert _rc == 459
+quietly cge_closure, swap(none)
+cge_equation, clear
+cge_set, clear

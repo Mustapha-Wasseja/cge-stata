@@ -77,3 +77,22 @@ di as err "r(" _rc ");"
 capture noisily cge_variable X3 = sum(c, PQ(c) * (tm(c) > 0))
 di as err "r(" _rc ");"
 *<<
+
+*>> eq_pairs
+quietly cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd npi) enterprises(ent) government(gov)                ///
+    savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_variable XH(c,h)$(base(QH(c, h)) > 0) = PQ(c) * QH(c, h), nominal
+cge_variable XS = sum((c,h), XH(c,h)), nominal
+cge_set map(a,c) = act_agr.com_agr act_man.com_man
+cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal
+cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)
+cge_shock tm, value(0)
+cge_solve, name(pairs)
+quietly cge_results, sim(pairs) clear nodisplay
+list variable element1 element2 base value if inlist(variable, "XH", "XS", "VMAP", "PR"), ///
+    noobs sepby(variable)
+*<<

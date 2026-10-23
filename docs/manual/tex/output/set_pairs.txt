@@ -1,0 +1,34 @@
+. cge_set map(a,c) = act_agr.com_agr act_man.com_man act_hlt.com_hlt
+User set map(a,c): 3 pair(s): act_agr.com_agr act_man.com_man act_hlt.com_hlt
+
+. cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal
+User variable VMAP: 1 element(s), base value 270
+and its definition, equation VMAP
+
+. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)
+User variable PR(a,c)$(map(a,c)): 3 element(s), base values 1 1 1
+and its definition, equation PR
+
+. cge_solve, name(notariff2)
+Simulation notariff2 solved in 7 iteration(s) (newton)
+Largest scaled residual  5.57e-15; WALRAS =  1.74e-14
+
+. quietly cge_results, sim(notariff2) clear nodisplay
+
+. list variable element1 element2 base value if inlist(variable, "VMAP", "PR"), ///
+>     noobs sepby(variable)
+
+  +---------------------------------------------------+
+  | variable   element1   element2   base       value |
+  |---------------------------------------------------|
+  |     VMAP                          270   272.23147 |
+  |---------------------------------------------------|
+  |       PR    act_agr    com_agr      1   1.0208505 |
+  |       PR    act_man    com_man      1   1.0339964 |
+  |       PR    act_hlt    com_hlt      1           1 |
+  +---------------------------------------------------+
+
+. cge_set, list
+set goods (2): com_agr com_man
+set services (2): com_ser com_hlt
+set map(a,c) (3 pairs): act_agr.com_agr act_man.com_man act_hlt.com_hlt

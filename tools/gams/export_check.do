@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions inequalities
+    nests nestvat outces user usersets conditions inequalities pairs
 local ncase : word count `cases'
 
 tempname post
@@ -343,6 +343,34 @@ foreach case of local cases {
         cge_variable PRU = PQ(com_agr) / CPI, upper(1.0001)
         cge_shock tm, value(0)
         cge_shock qg, elements(com_ser) scale(0.9)
+    }
+    * two indexes and sets of pairs (version 0.9.1): variables and equations
+    * over (c,h), a sum over two indexes with a condition, sums and a domain
+    * over a set of pairs of activities and commodities, a target over the
+    * pairs met by GADJ, an exogenous variable over (c,h) that is shocked,
+    * and a floor element by element with its own adjuster
+    else if "`case'" == "pairs" {
+        quietly cge_synthetic, clear institutions
+        quietly cge_sam, labels(account)
+        quietly cge_map, `instmap'
+        quietly cge_calibrate, `sigmas'
+        cge_set map(a,c) = act_agr.com_agr act_ser.com_ser
+        cge_variable XH(c,h) = PQ(c) * QH(c, h), nominal
+        cge_variable XS = sum((c,h)$(base(QH(c, h)) > 0), XH(c,h)), nominal
+        cge_variable VM = sum(map(a,c), PA(a) * QA(a) - PQ(c) * QG(c))
+        cge_variable Y(a,c)$(map(a,c)) = PA(a) / PQ(c)
+        cge_variable LH(c,h)$(base(QH(c, h)) > 0), value(1)
+        cge_equation lh(c,h)$(base(QH(c, h)) > 0): QH(c, h) = LH(c,h) * base(QH(c, h))
+        cge_variable FX(c,h), value(1) fixed
+        cge_variable FL(c,h), lower(0)
+        cge_variable PH2(c,h) = PQ(c) * FX(c,h) + FL(c,h)
+        cge_equation fl(c,h): PH2(c,h) >= 0.9999, perp(FL(c,h))
+        cge_variable LAM, value(1)
+        cge_equation lam: sum(map(a,c), QG(c)) = LAM * sum(map(a,c), base(QG(c)))
+        quietly cge_closure, swap(LAM GADJ)
+        cge_shock LAM, value(1.1)
+        cge_shock FX, elements(com_man.hhd) value(1.05)
+        cge_shock tm, value(0)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers
     else if "`case'" == "nestvat" {

@@ -1,0 +1,56 @@
+. quietly cge_synthetic, clear institutions
+
+. quietly cge_sam, labels(account)
+
+. quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd npi) enterprises(ent) government(gov)                ///
+>     savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+
+. quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+
+. cge_variable XH(c,h)$(base(QH(c, h)) > 0) = PQ(c) * QH(c, h), nominal
+User variable XH(c,h)$(base(QH(c, h)) > 0): 4 element(s), base values 70 80 70 10
+and its definition, equation XH
+
+. cge_variable XS = sum((c,h), XH(c,h)), nominal
+User variable XS: 1 element(s), base value 230
+and its definition, equation XS
+
+. cge_set map(a,c) = act_agr.com_agr act_man.com_man
+User set map(a,c): 2 pair(s): act_agr.com_agr act_man.com_man
+
+. cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal
+User variable VMAP: 1 element(s), base value 240
+and its definition, equation VMAP
+
+. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)
+User variable PR(a,c)$(map(a,c)): 2 element(s), base values 1 1
+and its definition, equation PR
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(pairs)
+Simulation pairs solved in 7 iteration(s) (newton)
+Largest scaled residual  5.15e-14; WALRAS = -1.24e-14
+
+. quietly cge_results, sim(pairs) clear nodisplay
+
+. list variable element1 element2 base value if inlist(variable, "XH", "XS", "VMAP", "PR"), ///
+>     noobs sepby(variable)
+
+  +---------------------------------------------------+
+  | variable   element1   element2   base       value |
+  |---------------------------------------------------|
+  |       XH    com_agr        hhd     70   71.886258 |
+  |       XH    com_man        hhd     80   82.155723 |
+  |       XH    com_ser        hhd     70   71.886258 |
+  |       XH    com_ser        npi     10   10.175226 |
+  |---------------------------------------------------|
+  |       XS                          230   236.10347 |
+  |---------------------------------------------------|
+  |     VMAP                          240   241.46729 |
+  |---------------------------------------------------|
+  |       PR    act_agr    com_agr      1   1.0208603 |
+  |       PR    act_man    com_man      1   1.0340888 |
+  +---------------------------------------------------+

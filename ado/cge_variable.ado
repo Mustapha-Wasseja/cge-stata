@@ -1,4 +1,4 @@
-*! cge_variable.ado  v0.9.0  2026-10-23
+*! cge_variable.ado  v0.9.1  2026-10-23
 *! cge-stata: add a user variable to the model, with the equation that
 *! defines it or a base value (docs/model_spec.md, Section 19)
 *!

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.9.1  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -11,6 +11,9 @@
 
 {p 8 12 2}
 {cmd:cge_set} {it:name} {cmd:=} {it:elements} [{cmd:,} {opt except(elements)}]
+
+{p 8 12 2}
+{cmd:cge_set} {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)} {cmd:=} {it:e1}{cmd:.}{it:f1} [{it:e2}{cmd:.}{it:f2} ...]
 
 {p 8 12 2}
 {cmd:cge_set} {cmd:,} {opt list}
@@ -37,6 +40,18 @@ wherever the letter of a model set does: in the definitions of user variables
 and in the indexes of user parameters ({helpb cge_parameter}). An index is
 the set's name, followed by digits where a second index over the same set is
 needed, as in {cmd:hc2}.
+
+{pstd}
+From version 0.9.1, {cmd:cge_set} {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}
+defines a set of pairs, as a GAMS set over two indexes does: a mapping such as
+the activities and the commodities they make. Each pair is written
+{it:e}{cmd:.}{it:f}, with {it:e} an element of the set of {it:i} and {it:f}
+one of the set of {it:j}. A set of pairs is not an index. It serves in sums,
+{cmd:sum(}{it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}
+being the sum over its pairs, and in conditions, where
+{it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)} is 1 for a pair of the set, so
+that it restricts sums, terms and the domains of variables and equations with
+two indexes; see {it:Two indexes and sets of pairs} in {helpb cge_equation}.
 
 {pstd}
 The elements are written out in the order given, each once, without those in
@@ -68,6 +83,13 @@ once no user variable, equation or parameter uses them.
 
 {pstd}Spending on goods by the government, as a user variable{p_end}
 {phang2}{cmd:. cge_variable GGOODS = sum(goods, PQ(goods) * QG(goods)), nominal}{p_end}
+
+{pstd}Activities paired with the commodities they make; the value of their output, and a price ratio for the pairs only (from version 0.9.1){p_end}
+{phang2}{cmd:. cge_set map(a,c) = act_agr.com_agr act_hlt.com_hlt}{p_end}
+{phang2}{cmd:. cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal}{p_end}
+{phang2}{cmd:. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)}{p_end}
+
+{pstd}The user sets{p_end}
 {phang2}{cmd:. cge_set, list}{p_end}
 
 
@@ -75,7 +97,7 @@ once no user variable, equation or parameter uses them.
 
 {synoptset 16 tabbed}{...}
 {p2col 5 16 20 2: Scalars}{p_end}
-{synopt:{cmd:r(N_elements)}}number of elements of the set defined{p_end}
+{synopt:{cmd:r(N_elements)}}number of elements, or pairs, of the set defined{p_end}
 {synopt:{cmd:r(N_sets)}}number of user sets ({opt list}){p_end}
 {p2col 5 16 20 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}name of the set defined{p_end}

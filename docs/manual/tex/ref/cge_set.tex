@@ -7,7 +7,9 @@ goods that are traded, the health commodities or the rural households. Its
 name then serves as an index wherever the letter of a model set does: in the
 definitions of user variables (\manref{cge_variable}), in user equations
 (\manref{cge_equation}), in sums, and in the indexes of user parameters
-(\manref{cge_parameter}).
+(\manref{cge_parameter}). From version 0.9.1, a set of pairs records a mapping
+between two sets, such as the activities and the commodities they make, for
+sums and conditions.
 
 \cgesec{Quick start}
 
@@ -19,6 +21,12 @@ Government spending on them, as a user variable
 \begin{stcode}
 cge_variable GGOODS = sum(goods, PQ(goods) * QG(goods)), nominal
 \end{stcode}
+Activities paired with the commodities they make, and the value of their
+output
+\begin{stcode}
+cge_set map(a,c) = act_agr.com_agr act_hlt.com_hlt
+cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal
+\end{stcode}
 Display the user sets
 \begin{stcode}
 cge_set, list
@@ -29,6 +37,10 @@ cge_set, list
 Define a set
 \begin{stsyntax}
 \cmdb{cge_set} \argu{name} \cmd{=} \argu{elements} [\texttt{,} \optarg{}{except}{elements}]
+\end{stsyntax}
+Define a set of pairs (from version 0.9.1)
+\begin{stsyntax}
+\cmdb{cge_set} \argu{name}\cmd{(}\argu{i}\cmd{,}\argu{j}\cmd{)} \cmd{=} \argu{e1}\cmd{.}\argu{f1} [\argu{e2}\cmd{.}\argu{f2} \dots]
 \end{stsyntax}
 Display or remove the user sets
 \begin{stsyntax}
@@ -42,7 +54,10 @@ enterprises, \cmd{i} institutions receiving factor income, \cmd{n} nests of
 value added), and names of user sets, separated by spaces. \argu{name} has at
 most 24 characters, letters, digits and underscores; it may not be the name
 of a variable, a parameter, an element, a user equation or another user set,
-nor an index letter of a model set.
+nor an index letter of a model set. In a set of pairs, \argu{i} and
+\argu{j} are two different indexes, model set letters or user sets, and each
+pair \argu{e}\cmd{.}\argu{f} joins an element of the set of \argu{i} to one of
+the set of \argu{j}.
 
 \begin{opttable}
 \optgroup{Main}
@@ -79,7 +94,7 @@ and equations. Government purchases of goods at market prices, and the prices
 of services relative to the consumer price index, after a tariff removal:
 \stlog{set_use}
 A second index over the same set adds digits to its name, as in
-\cmd{sum(goods, sum(goods2, \dots))}.
+\cmd{sum(goods, sum(goods2, ...))}.
 
 \cgesubsec{Example 3: listing the sets}
 
@@ -90,12 +105,21 @@ calibrated again.
 An index that is neither a model set letter nor a user set is an error:
 \stlog{set_err}
 
+\cgesubsec{Example 4: sets of pairs}
+
+From version 0.9.1, a set of pairs maps the elements of one set to those of
+another, as a GAMS set over two indexes does: here the activities and the
+commodities they make. It is not an index. A sum runs over its pairs, and in
+a condition it is 1 for a pair of the set, so that a variable with two indexes
+can be defined for the pairs only:
+\stlog{set_pairs}
+
 \cgesec{Stored results}
 
 \cmd{cge_set} stores the following in \cmd{r()}:
 \begin{storedres}
 \resgroup{Scalars}
-\res{r(N_elements)} & number of elements of the set defined\\
+\res{r(N_elements)} & number of elements, or pairs, of the set defined\\
 \res{r(N_sets)} & number of user sets (\opt{}{list})\\
 \resgroup{Macros}
 \res{r(name)} & name of the set defined\\
@@ -107,7 +131,13 @@ An index that is neither a model set letter nor a user set is an error:
 A user set is an ordered list of labels. An expression is written out for
 each element of the set of its index, and each sum over the elements of its
 set (\chapref{chap:user}), so a user set changes only which elements are
-written out; it adds no variables or equations of its own. In the GAMS
+written out; it adds no variables or equations of its own. A set of pairs
+$P$ of the indexes $i$ and $j$ is a list of pairs of labels; a sum over it is
+written out as
+\begin{equation*}
+\texttt{sum(}P\texttt{(}i\texttt{,}j\texttt{),}\ g\texttt{)} = \sum_{k \in I} \ \sum_{l \in J:\ (k,l) \in P} g\,[\,i = k,\ j = l\,],
+\end{equation*}
+and in a condition $P(k,l)$ is 1 if $(k,l) \in P$ and 0 if not. In the GAMS
 program the equations are written out element by element, so user sets need
 no declaration there.
 

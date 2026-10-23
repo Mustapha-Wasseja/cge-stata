@@ -32,3 +32,14 @@ cge_set, list
 capture noisily cge_variable X = sum(goodz, PQ(goodz))
 di as err "r(" _rc ");"
 *<<
+
+*>> set_pairs
+cge_set map(a,c) = act_agr.com_agr act_man.com_man act_hlt.com_hlt
+cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal
+cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)
+cge_solve, name(notariff2)
+quietly cge_results, sim(notariff2) clear nodisplay
+list variable element1 element2 base value if inlist(variable, "VMAP", "PR"), ///
+    noobs sepby(variable)
+cge_set, list
+*<<

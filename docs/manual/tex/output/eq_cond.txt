@@ -25,7 +25,7 @@ Parameter tm changed for 3 element(s)
 
 . cge_solve, name(notariff)
 Simulation notariff solved in 7 iteration(s) (newton)
-Largest scaled residual  3.55e-14; WALRAS = -2.63e-14
+Largest scaled residual  3.68e-14; WALRAS = -3.83e-14
 
 . quietly cge_results, sim(notariff) clear nodisplay
 

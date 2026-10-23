@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.0  23oct2026}{...}
+{* *! version 0.9.1  23oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -10,10 +10,10 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_equation} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=} {it:expression}
+{cmd:cge_equation} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=} {it:expression}
 
 {p 8 12 2}
-{cmd:cge_equation} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=l=}|{cmd:=g=} {it:expression}{cmd:,}
+{cmd:cge_equation} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=l=}|{cmd:=g=} {it:expression}{cmd:,}
 {opt perp(variable[, up|down])}
 
 {p 8 12 2}
@@ -23,10 +23,10 @@
 {cmd:cge_equation}{cmd:,} {opt clear}
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal}]
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt fixed} {opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt fixed} {opt nominal}]
 
 {p 8 12 2}
 {cmd:cge_variable} {it:name}[...]{cmd:,} {opt lower(#)}|{opt upper(#)} [{opt nominal}]
@@ -69,7 +69,10 @@ and enterprises, {cmd:i} institutions receiving factor income, {cmd:n} nests
 of value added, or a user set defined by {helpb cge_set} (from version
 0.7.1), whose name is then the index. Digits may follow, as in {cmd:c2}.
 A condition (see {it:Conditions} below) restricts the domain to some
-elements.
+elements. From version 0.9.1, a variable or an equation may have two indexes,
+{it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}, and is then written for every pair
+of elements of the two sets, or for the pairs that meet its condition; see
+{it:Two indexes and sets of pairs} below.
 
 
 {title:Expressions}
@@ -84,6 +87,8 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, and:
 {p2col:{it:upar}[{cmd:(}{it:e}[{cmd:,} {it:e2}]{cmd:)}]}a user parameter defined by {helpb cge_parameter}, at its current value (from version 0.7.1){p_end}
 {p2col:{cmd:base(}{it:VAR}[{cmd:(}{it:e}{cmd:)}]{cmd:)}}the base value of a variable{p_end}
 {p2col:{cmd:sum(}{it:i}{cmd:,} {it:expression}{cmd:)}}the sum over the set of index {it:i}, a model set or a user set{p_end}
+{p2col:{cmd:sum((}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over every pair of elements of the sets of {it:i} and {it:j} (from version 0.9.1){p_end}
+{p2col:{cmd:sum(}{it:map}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over the pairs of a set of pairs defined by {helpb cge_set} (from version 0.9.1){p_end}
 {p2col:{cmd:ord(}{it:i}{cmd:)}}the position of the element of index {it:i} in its set, from 1 (from version 0.7.2){p_end}
 {p2colreset}{...}
 
@@ -109,6 +114,7 @@ Arithmetic is evaluated first, then comparisons, {cmd:!}, {cmd:&} and
 
 {p2colset 9 40 42 2}{...}
 {p2col:{it:set}{cmd:(}{it:e}{cmd:)}}1 if element {it:e} belongs to a user set or a model set, as in {cmd:goods(c)}{p_end}
+{p2col:{it:map}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}}1 if the pair of elements belongs to a set of pairs (from version 0.9.1){p_end}
 {p2col:{cmd:sameas(}{it:i}{cmd:,} {it:label}{cmd:)}}1 if the element of index {it:i} is {it:label}{p_end}
 {p2col:{cmd:ord(}{it:i}{cmd:)}}the position of the element in its set{p_end}
 {p2colreset}{...}
@@ -126,6 +132,32 @@ exist: the results leave them out, and a reference to one is 0.
 Write the condition in parentheses after {cmd:$}: on a command line, Stata
 reads {cmd:$}{it:name} as a global macro. A condition that is missing at the
 base, or a domain that no element meets, stops the command with error 459.
+
+
+{title:Two indexes and sets of pairs}
+
+{pstd}
+From version 0.9.1, user variables and equations may have two indexes, as the
+model's {cmd:QH(c,h)} does. {cmd:cge_variable X(c,h) = PQ(c) * QH(c, h)} adds
+a variable for every commodity and household, and
+{cmd:cge_equation lh(c,h)$(base(QH(c, h)) > 0):} ... an equation for the
+pairs that meet the condition. The two indexes must differ: for two indexes
+over the same set, add digits, as in {cmd:(c,c2)}. A sum may run over two
+indexes, {cmd:sum((c,h), X(c,h))}, with a condition if needed,
+{cmd:sum((c,h)$(}{it:condition}{cmd:),} ...{cmd:)}.
+
+{pstd}
+A set of pairs, such as {cmd:cge_set map(a,c) = act_agr.com_agr act_man.com_man}
+({helpb cge_set}), records a mapping between two sets.
+{cmd:sum(map(a,c),} {it:expression}{cmd:)} sums over its pairs, and
+{cmd:map(a,c)} in a condition is 1 for a pair of the set, so that
+{cmd:cge_variable Y(a,c)$(map(a,c)) = PA(a) / PQ(c)} is defined for the pairs
+only. An element of a variable with two indexes is written
+{it:e1}{cmd:.}{it:e2} in {helpb cge_shock}, as in {cmd:elements(com_agr.hhd)};
+an inequality with two indexes is paired with a variable over the same
+indexes, as in {cmd:perp(FL(c,h))}. The results give the second index in
+{cmd:element2}, and {helpb cge_gams} declares the variables over two sets of
+accounts.
 
 
 {title:Inequalities}
@@ -220,6 +252,13 @@ all.
 {phang2}{cmd:. cge_set goods = c, except(com_ser)}{p_end}
 {phang2}{cmd:. cge_variable GG = sum(c, (PQ(c) * QG(c))$(goods(c)))}{p_end}
 {phang2}{cmd:. cge_variable GAS = sum(c$(sameas(c, com_agr) | sameas(c, com_ser)), PQ(c) * QG(c))}{p_end}
+
+{pstd}Household spending by commodity and household, its total, and the output of activities paired with their commodities (from version 0.9.1){p_end}
+{phang2}{cmd:. cge_variable XH(c,h) = PQ(c) * QH(c, h), nominal}{p_end}
+{phang2}{cmd:. cge_variable XS = sum((c,h), XH(c,h)), nominal}{p_end}
+{phang2}{cmd:. cge_set map(a,c) = act_agr.com_agr act_man.com_man}{p_end}
+{phang2}{cmd:. cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal}{p_end}
+{phang2}{cmd:. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)}{p_end}
 
 
 {title:Remarks}
