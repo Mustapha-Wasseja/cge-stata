@@ -39,6 +39,17 @@ p_{5} = x_{(\max(1, \lceil 0.05\,n \rceil))}, \qquad
 p_{95} = x_{(\max(1, \lceil 0.95\,n \rceil))}.
 \end{equation*}
 
+\section{Keeping the draws}
+
+From version 0.8.3, \cmd{keep(}\argu{name}\cmd{)} keeps the solution of every
+draw that converged as a simulation of the model: \argu{name}\cmd{0} with the
+central elasticities, and \argu{name}\cmd{1}, \argu{name}\cmd{2}, \ldots\ for the
+draws, each with the parameters of its draw. Any command that takes a
+simulation can then use them. \manref{cge_microsim} with
+\cmd{bands(}\argu{name}\cmd{)} gives the 5th, 50th and 95th percentiles of
+poverty, inequality and welfare across the draws, by the definition of
+\cmd{_pctile} (chapter~\ref{chap:microsim}).
+
 \section{Interpretation}
 
 The draws do not estimate uncertainty about the elasticities. They show how

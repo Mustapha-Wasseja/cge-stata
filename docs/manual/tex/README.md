@@ -176,6 +176,7 @@ Entry titles, for `\cgeentry` and `\seeentry`:
 | `cge_microsim` | Pass simulations to household survey data |
 | `cge_multiplier` | SAM multipliers and their decomposition |
 | `cge_optimize` | Choose policy instruments to maximise an outcome or reach targets |
+| `cge_parameter` | User parameters for user variables and equations |
 | `cge_parameters` | The calibrated parameters as a dataset |
 | `cge_report` | Standard report tables for one or more simulations |
 | `cge_results` | Report simulation results |
@@ -183,6 +184,7 @@ Entry titles, for `\cgeentry` and `\seeentry`:
 | `cge_samexport` | Write the SAM to a file or to memory |
 | `cge_save` | Save the model and its simulations to a file |
 | `cge_sensitivity` | Sensitivity of a scenario's results to the elasticities |
+| `cge_set` | User sets of elements, for indexes and sums |
 | `cge_shock` | Change a parameter or a fixed variable |
 | `cge_solve` | Solve the model |
 | `cge_spa` | Structural path analysis of a SAM multiplier |

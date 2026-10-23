@@ -17,6 +17,21 @@ with CONOPT, KNITRO and IPOPT), reproduce the solutions of Stata to
 $4 \times 10^{-9}$ or better
 (\secref{sec:gams-import}). The test suite also runs every example do-file.
 
+\textbf{The survey link and the user language.} The measures of
+\manref{cge_microsim} are checked against Stata's own commands and against
+their formulas. Quantile groups and percentiles are identical to those of
+\cmd{xtile} and \cmd{_pctile}. Standard errors agree with \cmd{svy: ratio},
+\cmd{lincom} and \cmd{svy, subpop()} to $10^{-10}$. Poverty, inequality,
+concentration and the indexes of fiscal incidence agree with direct
+computations to $10^{-12}$, and the Palma and S80/S20 ratios with closed
+forms. The welfare of households that follow their group is that of
+\manref{cge_report}, under Cobb--Douglas and LES demand. The contributions of
+the Shapley decomposition add up to the change in every measure, and
+reweighting meets its targets to $10^{-10}$. User equations with sets,
+parameters and conditions are written into the GAMS program like the model's
+own and agree with Stata's solutions (export check cases \cmd{user},
+\cmd{usersets} and \cmd{conditions}).
+
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed
 start, and, for a simulation, its residual, Walras's law and the GDP identity

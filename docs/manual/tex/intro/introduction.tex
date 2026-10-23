@@ -26,10 +26,16 @@ by market, labour-market regimes, a social health insurance fund, factor
 efficiency linked to health services, health outcomes, nests of value added,
 the aggregation of output from several activities, and limits that bind in
 some scenarios and not in others. The model can be solved for one period or
-as a recursive dynamic sequence; its results can be passed to household survey
-data; the sensitivity of results to the elasticities can be measured; policy
+as a recursive dynamic sequence. Its results can be passed to household survey
+data: poverty for several lines, inequality, incidence by decile and the
+growth incidence curve, each household's welfare, the contribution of each
+channel to every change, and fiscal incidence as the Commitment to Equity
+method measures it, with survey weights that follow the model, standard
+errors from the survey design and ranges across draws of the elasticities.
+The sensitivity of results to the elasticities can be measured; policy
 instruments can be chosen to maximise an outcome or reach targets; and users
-can add their own variables and equations. Tools read, aggregate, balance and
+can add their own variables, equations, sets and parameters, with conditions
+as in GAMS. Tools read, aggregate, balance and
 analyse the SAM, and a library gives published elasticities with their
 sources. The model can also be written as a GAMS program, solved there and
 brought back.
@@ -53,6 +59,22 @@ folder:
 \end{stcode}
 \cmd{help cge} lists the commands, and \cmd{cge} displays the version. The
 Mata library is compiled the first time a command runs in a session.
+
+\section{New in versions 0.7 and 0.8}
+
+\begin{cgetable}{p{0.08\linewidth}>{\raggedright\arraybackslash}p{0.60\linewidth}>{\raggedright\arraybackslash}p{0.26\linewidth}}
+\toprule
+Version & Additions & Where\\
+\midrule\endhead
+\bottomrule\endlastfoot
+0.7.0 & An exact Jacobian and Broyden's updates: large models solve three to four times faster & chapter~\ref{chap:solution}, \secref{sec:performance}\\
+0.7.1 & User sets and user parameters, for the indexes, sums and coefficients of user equations & \manref{cge_set}, \manref{cge_parameter}\\
+0.7.2 & Conditions, as GAMS's dollar operator: sums, terms and domains restricted to the elements that meet a condition & \secref{sec:userconditions}\\
+0.8.0 & The survey link for several simulations at once, with the results as a dataset; several poverty lines, including lines by household; eight more inequality measures; incidence by quantile and the growth incidence curve & \manref{cge_microsim}\\
+0.8.1 & Each household's equivalent and compensating variations; the Shapley decomposition of every change by channel; growth and redistribution & \manref{cge_microsim}\\
+0.8.2 & Fiscal incidence: market to final income, concentration and Kakwani indexes, coverage, marginal contributions, the Reynolds--Smolensky index and fiscal impoverishment; in-kind health benefits that follow the model's health spending & \manref{cge_microsim}\\
+0.8.3 & Survey weights that follow the model's employment; standard errors from the survey design; the draws of a sensitivity analysis kept as simulations, and bands across them & \manref{cge_microsim}, \manref{cge_sensitivity}\\
+\end{cgetable}
 
 \section{This manual}
 
@@ -82,5 +104,7 @@ The equations are implemented three times: in Stata and Mata (the package); in
 Python, a reference implementation that writes the expected results of the
 tests; and in GAMS, written from the specification and solved with PATH. The
 Stata test suite compares every result with the Python reference, and the GAMS
-implementation reproduces the same cases. Chapter~\ref{chap:validation} gives
+implementation reproduces the same cases. The measures of the survey link are
+checked against Stata's own commands, such as \cmd{xtile}, \cmd{_pctile} and
+\cmd{svy}, and against their formulas. Chapter~\ref{chap:validation} gives
 the details.
