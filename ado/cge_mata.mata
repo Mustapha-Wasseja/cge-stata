@@ -219,7 +219,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.9")
+    return("0.10.0")
 }
 
 // =====================================================================
@@ -8272,12 +8272,33 @@ void _cge_param_data(string scalar sim, real scalar current)
     struct cge_model scalar M
     struct cge_par scalar p
     string matrix keys
-    string colvector none
     real colvector val
     M = _cge_load()
     _cge_need(M, "calibrated")
     if (sim != "") p = M.simp[_cge_sim_index(M, sim)]
     else p = (current ? M.p : M.p0)
+    _cge_param_list(M, p, keys, val)
+    st_addobs(rows(val))
+    (void) st_addvar("str8", "parameter")
+    (void) st_addvar("str32", "element1")
+    (void) st_addvar("str32", "element2")
+    (void) st_addvar("double", "value")
+    st_sstore(., "parameter", keys[., 1])
+    st_sstore(., "element1", keys[., 2])
+    st_sstore(., "element2", keys[., 3])
+    st_store(., "value", val)
+    st_varlabel("parameter", "Parameter")
+    st_varlabel("element1", "First set element")
+    st_varlabel("element2", "Second set element")
+    st_varlabel("value", "Value")
+    st_numscalar("r(N)", rows(val))
+}
+
+// The calibrated parameters p, element by element: name, elements, value
+// (from version 0.10.0, for cge_parameters and cge_gdx)
+void _cge_param_list(struct cge_model scalar M, struct cge_par scalar p, string matrix keys, real colvector val)
+{
+    string colvector none
     keys = J(0, 3, "")
     val = J(0, 1, .)
     none = J(0, 1, "")
@@ -8349,20 +8370,6 @@ void _cge_param_data(string scalar sim, real scalar current)
     // user parameters (from version 0.7.1)
     _cge_up_data(M, p, keys, val)
     _cge_padd(keys, val, "epsm", p.epsm, "", none);    _cge_padd(keys, val, "pop", p.pop, "", none)
-    st_addobs(rows(val))
-    (void) st_addvar("str8", "parameter")
-    (void) st_addvar("str32", "element1")
-    (void) st_addvar("str32", "element2")
-    (void) st_addvar("double", "value")
-    st_sstore(., "parameter", keys[., 1])
-    st_sstore(., "element1", keys[., 2])
-    st_sstore(., "element2", keys[., 3])
-    st_store(., "value", val)
-    st_varlabel("parameter", "Parameter")
-    st_varlabel("element1", "First set element")
-    st_varlabel("element2", "Second set element")
-    st_varlabel("value", "Value")
-    st_numscalar("r(N)", rows(val))
 }
 
 // =====================================================================
@@ -13091,6 +13098,294 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     st_numscalar("r(N_compared)", ns)
     st_numscalar("r(walras)", walras)
     st_global("r(compared_with)", sim)
+}
+
+// =====================================================================
+// GDX files (from version 0.10.0), through GAMS and gdxdump
+// =====================================================================
+
+// The GAMS program that writes a GDX file (cge_gdx write): the accounts and
+// their roles, the SAM, the levels of the variables at the base and at the
+// simulations sims, and the calibrated parameters. LEVEL(sim, variable, e1,
+// e2) and CAL(name, e1, e2) hold every variable and parameter, with '-' for an
+// index a symbol does not have; GAMS does not store zeros.
+void _cge_gdx_write(string scalar fgms, string scalar gdxname, string scalar s_sims)
+{
+    struct cge_model scalar M
+    string matrix keys
+    string colvector e1, e2, sn, rec
+    string rowvector tok
+    real colvector val, s, pos, x
+    real scalar fh, k, i, j, n
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    tok = tokens(s_sims)
+    if (cols(tok) == 1) if (tok[1] == "_all") tok = (rows(M.simname) ? M.simname' : J(1, 0, ""))
+    s = J(cols(tok), 1, .)
+    for (k = 1; k <= cols(tok); k++) s[k] = _cge_sim_index(M, tok[k])
+    sn = "base" \ (rows(s) ? M.simname[s] : J(0, 1, ""))
+    for (k = 2; k <= rows(sn); k++) if (sn[k] == "base") _cge_fail("cge_gdx: a simulation named base cannot be written; base is the base", 198)
+    fh = _cge_gopen(fgms)
+    fput(fh, "* Written by cge_gdx (cge-stata " + _cge_version() + "): the accounts and their roles, the SAM,")
+    fput(fh, "* the calibrated parameters (CAL) and the levels of the variables (LEVEL) at the")
+    fput(fh, "* base and the simulations, written to " + gdxname + " by GAMS")
+    fput(fh, char(36) + "onempty")
+    fput(fh, "set AC 'accounts' /")
+    for (k = 1; k <= rows(M.labels); k++) fput(fh, "    '" + M.labels[k] + "'" + (k < rows(M.labels) ? "," : ""))
+    fput(fh, "/;")
+    fput(fh, "alias (AC, ACP);")
+    _cge_gset(fh, "A", M.A)
+    _cge_gset(fh, "C", M.C)
+    _cge_gset(fh, "F", M.F)
+    _cge_gset(fh, "H", M.H)
+    _cge_gset(fh, "E", M.E)
+    fput(fh, "parameter SAM(AC, AC) 'social accounting matrix' /")
+    n = sum(M.S :!= 0)
+    j = 0
+    for (i = 1; i <= rows(M.S); i++) {
+        for (k = 1; k <= cols(M.S); k++) {
+            if (M.S[i, k] == 0) continue
+            j++
+            fput(fh, "    '" + M.labels[i] + "'.'" + M.labels[k] + "' " + _cge_gnum17(M.S[i, k]) + (j < n ? "," : ""))
+        }
+    }
+    fput(fh, "/;")
+    // the levels of the variables
+    fput(fh, "set sim 'the base and the simulations' /")
+    for (k = 1; k <= rows(sn); k++) fput(fh, "    '" + sn[k] + "'" + (k < rows(sn) ? "," : ""))
+    fput(fh, "/;")
+    fput(fh, "parameter LEVEL(sim, *, *, *) 'levels of the variables: simulation, variable, element, element' /")
+    rec = J(0, 1, "")
+    for (j = 1; j <= rows(sn); j++) {
+        x = (j == 1 ? M.x0 : M.simx[., s[j - 1]])
+        for (k = 1; k <= rows(M.vname); k++) {
+            pos = _cge_vpos(M, k)
+            if (!rows(pos)) continue
+            _cge_vlabels(M, k, e1, e2)
+            for (i = 1; i <= rows(pos); i++) {
+                if (!M.exists[pos[i]] | x[pos[i]] == 0 | x[pos[i]] >= .) continue
+                rec = rec \ ("    '" + sn[j] + "'.'" + M.vname[k] + "'.'" + (e1[i] == "" ? "-" : e1[i]) + "'.'" +
+                             (e2[i] == "" ? "-" : e2[i]) + "' " + _cge_gnum17(x[pos[i]]))
+            }
+        }
+    }
+    for (i = 1; i <= rows(rec); i++) fput(fh, rec[i] + (i < rows(rec) ? "," : ""))
+    fput(fh, "/;")
+    // after the levels: GAMS's labels ignore case and keep the case they are
+    // first written in, so that variables such as QG keep theirs and a
+    // parameter of the same name, qg, shares the label
+    // the calibrated parameters, at the base
+    keys = J(0, 3, "")
+    val = J(0, 1, .)
+    _cge_param_list(M, M.p0, keys, val)
+    n = sum(val :!= 0 :& val :< .)
+    fput(fh, "parameter CAL(*, *, *) 'calibrated parameters: name, element, element' /")
+    j = 0
+    for (i = 1; i <= rows(val); i++) {
+        if (val[i] == 0 | val[i] >= .) continue
+        j++
+        fput(fh, "    '" + keys[i, 1] + "'.'" + (keys[i, 2] == "" ? "-" : keys[i, 2]) + "'.'" + (keys[i, 3] == "" ? "-" : keys[i, 3]) + "' " +
+                 _cge_gnum17(val[i]) + (j < n ? "," : ""))
+    }
+    fput(fh, "/;")
+    fput(fh, "execute_unload '" + gdxname + "', AC, A, C, F, H, E, SAM, CAL, sim, LEVEL;")
+    fclose(fh)
+    st_numscalar("r(N_sims)", rows(sn) - 1)
+    st_numscalar("r(N_levels)", rows(rec))
+    st_numscalar("r(N_parameters)", sum(val :!= 0 :& val :< .))
+    st_global("r(sims)", invtokens(sn'))
+}
+
+// A number for the GAMS program of a GDX file: 17 significant digits, which
+// a correctly rounded parser, as GAMS's, reads as the same double. Fewer
+// digits, as _cge_gnum chooses, may not be: Stata's own reading of decimals,
+// by which it checks them, is not always correctly rounded.
+string scalar _cge_gnum17(real scalar x)
+{
+    string scalar s
+    if (x == 0) return("0")
+    s = strtrim(sprintf("%25.17g", x))
+    if (substr(s, 1, 1) == ".") s = "0" + s
+    else if (substr(s, 1, 2) == "-.") s = "-0" + substr(s, 2, .)
+    return(s)
+}
+
+// A number written by gdxdump: a decimal or, with dFormat=hexponential, a
+// hexadecimal float such as 0x1.5555555555555p-2, read exactly; Eps is 0, and
+// +Inf, -Inf, NA and Undf are missing
+real scalar _cge_hexf(string scalar s0)
+{
+    string scalar s, h, f
+    real scalar sg, p, k, m, e, i, d
+    s = strtrim(s0)
+    if (s == "") return(.)
+    if (strlower(s) == "eps") return(0)
+    if (anyof(("+inf", "-inf", "inf", "na", "undf"), strlower(s))) return(.)
+    sg = 1
+    if (substr(s, 1, 1) == "-") {
+        sg = -1
+        s = substr(s, 2, .)
+    }
+    else if (substr(s, 1, 1) == "+") s = substr(s, 2, .)
+    if (strlower(substr(s, 1, 2)) != "0x") return(strtoreal(s0))
+    s = strlower(substr(s, 3, .))
+    p = strpos(s, "p")
+    if (!p) return(.)
+    e = strtoreal(substr(s, p + 1, .))
+    h = substr(s, 1, p - 1)
+    k = strpos(h, ".")
+    f = (k ? substr(h, k + 1, .) : "")
+    h = (k ? substr(h, 1, k - 1) : h)
+    // the digits as an integer, exact in a double up to 53 bits
+    m = 0
+    for (i = 1; i <= strlen(h); i++) {
+        d = strpos("0123456789abcdef", substr(h, i, 1)) - 1
+        if (d < 0) return(.)
+        m = m * 16 + d
+    }
+    for (i = 1; i <= strlen(f); i++) {
+        d = strpos("0123456789abcdef", substr(f, i, 1)) - 1
+        if (d < 0) return(.)
+        m = m * 16 + d
+    }
+    return(sg * m * _cge_pow2(e - 4 * strlen(f)))
+}
+
+// 2^k, exactly, for k from -1074 to 1023 (Mata's 2^k is not always exact): a
+// table made by doubling and halving, which are exact, kept for later calls
+real scalar _cge_pow2(real scalar k)
+{
+    pointer() scalar q
+    real colvector P
+    real scalar j
+    if (k < -1074 | k > 1023 | k != floor(k)) return(.)
+    if ((q = findexternal("cge__pow2")) == NULL) {
+        P = J(2098, 1, .)
+        P[1075] = 1
+        for (j = 1; j <= 1023; j++) P[1075 + j] = P[1074 + j] * 2
+        for (j = 1; j <= 1074; j++) P[1075 - j] = P[1076 - j] / 2
+        q = crexternal("cge__pow2")
+        *q = P
+    }
+    return((*q)[1075 + k])
+}
+
+// The CSV file that gdxdump writes for a symbol, as the data in memory: one
+// observation per record, a string variable per index named from the
+// header (dim1, dim2, ... for indexes without a domain), and value, or for
+// a variable or an equation level, marginal, lower, upper and scale, or for
+// a set its text
+void _cge_gdx_csv(string scalar fn, string scalar symbol)
+{
+    string colvector lines, nm, T
+    string rowvector f, hd
+    string matrix L
+    real matrix V
+    real scalar k, i, nd, nv, n, j
+    string scalar kind
+    if (!fileexists(fn)) _cge_fail("cge_gdx: gdxdump wrote no " + fn, 601)
+    lines = cat(fn)
+    lines = select(lines, strtrim(subinstr(lines, char(13), "")) :!= "")
+    if (!rows(lines)) _cge_fail("cge_gdx: " + fn + " is empty: the symbol " + symbol + " is not in the GDX file", 459)
+    hd = _cge_unquote(_cge_split(subinstr(lines[1], char(13), ""), ",", `""""'))
+    // the fields after the indexes: Val, or Val Marginal Lower Upper Scale, or Text
+    nv = 1
+    kind = "parameter"
+    if (anyof(hd, "Marginal")) {
+        nv = 5
+        kind = "variable"
+    }
+    else if (hd[cols(hd)] == "Text") kind = "set"
+    nd = cols(hd) - nv
+    nm = J(nd, 1, "")
+    for (k = 1; k <= nd; k++) {
+        nm[k] = strtoname(strlower(hd[k]))
+        if (regexm(nm[k], "^dim[0-9]+$") | nm[k] == "" | anyof(("value", "level", "marginal", "lower", "upper", "scale", "text"), nm[k])) {
+            nm[k] = "dim" + strofreal(k)
+        }
+        for (j = 1; j < k; j++) if (nm[j] == nm[k]) nm[k] = nm[k] + "_" + strofreal(k)
+    }
+    n = rows(lines) - 1
+    L = J(n, nd, "")
+    V = J(n, nv, .)
+    T = J(n, 1, "")
+    for (i = 1; i <= n; i++) {
+        f = _cge_unquote(_cge_split(subinstr(lines[i + 1], char(13), ""), ",", `""""'))
+        if (cols(f) < nd) _cge_fail("cge_gdx: line " + strofreal(i + 1) + " of " + fn + " has too few fields", 459)
+        if (nd) L[i, .] = f[|1 \ nd|]
+        if (kind == "set") T[i] = (cols(f) > nd ? f[nd + 1] : "")
+        else for (k = 1; k <= nv; k++) V[i, k] = (cols(f) >= nd + k ? _cge_hexf(f[nd + k]) : .)
+    }
+    stata("clear")
+    st_addobs(n)
+    for (k = 1; k <= nd; k++) {
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(L[., k]))))), nm[k])
+        st_sstore(., nm[k], L[., k])
+        st_varlabel(nm[k], hd[k])
+    }
+    if (kind == "set") {
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(T))))), "text")
+        st_sstore(., "text", T)
+    }
+    else if (kind == "variable") {
+        (void) st_addvar(("double", "double", "double", "double", "double"), ("level", "marginal", "lower", "upper", "scale"))
+        st_store(., ("level", "marginal", "lower", "upper", "scale"), V)
+    }
+    else {
+        (void) st_addvar("double", "value")
+        st_store(., "value", V[., 1])
+    }
+    st_numscalar("r(N)", n)
+    st_numscalar("r(dim)", nd)
+    st_global("r(kind)", kind)
+    st_global("r(indexes)", invtokens(nm'))
+    st_global("r(symbol)", symbol)
+}
+
+// The list of symbols that gdxdump writes (symbols): their name, dimension,
+// type, number of records and text
+void _cge_gdx_symbols(string scalar fn, real scalar clear)
+{
+    string colvector lines, nm, ty, tx
+    string rowvector t
+    real colvector dm, nr
+    real scalar k, n, i, p
+    if (!fileexists(fn)) _cge_fail("cge_gdx: gdxdump wrote no " + fn, 601)
+    lines = cat(fn)
+    nm = ty = tx = J(0, 1, "")
+    dm = nr = J(0, 1, .)
+    for (k = 1; k <= rows(lines); k++) {
+        t = tokens(subinstr(lines[k], char(13), ""))
+        if (cols(t) < 5) continue
+        if (strtoreal(t[1]) >= . | strtoreal(t[3]) >= . | strtoreal(t[5]) >= .) continue
+        nm = nm \ t[2]
+        dm = dm \ strtoreal(t[3])
+        ty = ty \ t[4]
+        nr = nr \ strtoreal(t[5])
+        tx = tx \ (cols(t) > 5 ? invtokens(t[|6 \ cols(t)|]) : "")
+    }
+    n = rows(nm)
+    printf("{txt}%-20s %4s %-6s %9s  %s\n{hline 72}\n", "Symbol", "Dim", "Type", "Records", "Text")
+    for (i = 1; i <= n; i++) printf("{res}%-20s {txt}%4.0f %-6s %9.0f  %s\n", nm[i], dm[i], ty[i], nr[i], _cge_trunc(tx[i], 28))
+    printf("{txt}{hline 72}\n")
+    if (clear) {
+        stata("clear")
+        st_addobs(n)
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(nm))))), "symbol")
+        (void) st_addvar("byte", "dim")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(ty))))), "type")
+        (void) st_addvar("double", "records")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(tx))))), "text")
+        if (n) {
+            st_sstore(., "symbol", nm)
+            st_store(., "dim", dm)
+            st_sstore(., "type", ty)
+            st_store(., "records", nr)
+            st_sstore(., "text", tx)
+        }
+    }
+    st_numscalar("r(N_symbols)", n)
+    st_global("r(symbols)", invtokens(nm'))
 }
 
 // =====================================================================

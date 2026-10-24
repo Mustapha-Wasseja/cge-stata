@@ -35,6 +35,10 @@ MAIN = "cge-stata-manual"
 PDF = REPO / "docs" / "manual" / f"{MAIN}.pdf"
 # Text that must never reach the manual from a Stata log
 FORBIDDEN = re.compile(r"(?i)users[\\/]|appdata|dropbox|serial|licen[cs]e|licensed|world bank|uneca")
+# An example that reads what GAMS writes (from version 0.10.0) says so: it is
+# run twice, with the scripts it writes run in between, since Stata for
+# Windows cannot start GAMS in batch mode; its output is that of the second run
+TWO_PASS = "The manual runs this file twice"
 
 
 def find_pdflatex() -> str:
@@ -149,6 +153,13 @@ def run_examples(names: list[str], stata: str) -> None:
                            f'adopath ++ "{(REPO / "data").as_posix()}"\n'
                            f'do "{do.as_posix()}"\n', encoding="utf-8")
         subprocess.run([stata, "/e", "do", wrapper.name], cwd=work, check=True)
+        if TWO_PASS in do.read_text(encoding="utf-8"):
+            # the scripts that write files first, then those that read them
+            scripts = sorted(work.rglob("*.cmd"), key=lambda s: (not s.stem.endswith("_write"), s.name))
+            for s in scripts:
+                subprocess.run(["cmd", "/c", str(s)], cwd=s.parent, capture_output=True, text=True)
+            print(f"  {do.name}: {len(scripts)} script(s) run between the two passes")
+            subprocess.run([stata, "/e", "do", wrapper.name], cwd=work, check=True)
         log = (work / "manual_example.log").read_text(encoding="utf-8", errors="replace").splitlines()
         tail = [l for l in log if l.strip()][-1:] or [""]
         if tail[0].startswith("r("):

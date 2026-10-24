@@ -62,7 +62,11 @@ the constraint cases. The shadow prices and reduced costs of
 target moves, to $10^{-5}$. Each scenario of a loop of \manref{cge_loop} is
 the solution of its shocks solved on their own, to $10^{-12}$, from the
 solution before or from the base, and GAMS, solving the scenarios in order,
-reproduces every one (case \cmd{loop}).
+reproduces every one (case \cmd{loop}). A GDX file written by \manref{cge_gdx}
+and read back gives the SAM, the calibrated parameters and the levels of the
+variables unchanged, to the last bit; the solution of a scenario solved by GAMS,
+read from its own GDX file, agrees with Stata's to $10^{-13}$; and a SAM read
+from that file calibrates the same model (\texttt{tools/gams/run\_gdx\_check.py}).
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed

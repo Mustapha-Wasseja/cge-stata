@@ -1,0 +1,18 @@
+. cge_gdx write using model.gdx, sims(notariff) replace norun gams(C:/GAMS/54/gams.exe)
+To write model.gdx, run ./model_write.cmd (GAMS)
+
+. mata: g = cat("model_write.gms"); for (i = 1; i <= 14; i++) printf("%s\n", g[i])
+* Written by cge_gdx (cge-stata 0.10.0): the accounts and their roles, the SAM,
+* the calibrated parameters (CAL) and the levels of the variables (LEVEL) at the
+* base and the simulations, written to model.gdx by GAMS
+$onempty
+set AC 'accounts' /
+    'act_agr',
+    'act_man',
+    'act_ser',
+    'com_agr',
+    'com_man',
+    'com_ser',
+    'lab',
+    'cap',
+    'hhd',

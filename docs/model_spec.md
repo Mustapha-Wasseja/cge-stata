@@ -1740,6 +1740,20 @@ Measures are report measures or compiled expressions, as in Section 18.
 `cge_gams, loop(n)` exports the scenarios as the periods of a dynamic run
 (`_cge_gams_export_dyn()`), each with its changes from the one before.
 
+**GDX files (from version 0.10.0).** `cge_gdx write` writes a GAMS program
+with the accounts `AC` and the subsets `A`, `C`, `F`, `H` and `E`,
+`SAM(AC, AC)` (`M.S`), `sim` (the base and the simulations), `LEVEL(sim, *,
+*, *)` (each existing element of each variable, `-` for an index it does not
+have) and `CAL(*, *, *)` (the parameters of `cge_parameters`), every number with
+17 significant digits (`_cge_gnum17()`: Stata's own reading of decimals is not
+always correctly rounded, so the shortest form that it reads back may not be
+the one GAMS reads), and ends with `execute_unload`. `cge_gdx read` runs
+`gdxdump` with `format=csv dFormat=hexponential CSVAllFields CSVSetText` and
+reads each hexadecimal float `±0xh.hhhp±e` as `m * 2^(e - 4k)` with an exact
+table of powers of two (`_cge_pow2()`; Mata's `2^k` is not exact); `Eps` is 0
+and the infinities, `NA` and `Undf` are missing. GAMS's labels ignore case and
+keep the case first written, so the levels come before the parameters.
+
 ## 19. User variables and equations (from version 0.6.1)
 
 `cge_variable` and `cge_equation` add variables and equations to the

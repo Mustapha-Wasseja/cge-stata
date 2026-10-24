@@ -1,0 +1,26 @@
+. cge_gdx read using model.gdx, symbol(LEVEL) clear norun gams(C:/GAMS/54/gams.exe)
+
+. return list
+
+scalars:
+                r(dim) =  4
+                  r(N) =  207
+
+macros:
+             r(symbol) : "LEVEL"
+            r(indexes) : "sim dim2 dim3 dim4"
+               r(kind) : "parameter"
+
+. list sim dim2 dim3 value if dim2 == "QA", noobs sepby(sim)
+
+  +---------------------------------------+
+  |      sim   dim2      dim3       value |
+  |---------------------------------------|
+  |     base     QA   act_agr         100 |
+  |     base     QA   act_man         140 |
+  |     base     QA   act_ser         150 |
+  |---------------------------------------|
+  | notariff     QA   act_agr   99.590677 |
+  | notariff     QA   act_man   138.04142 |
+  | notariff     QA   act_ser   151.86047 |
+  +---------------------------------------+

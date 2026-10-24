@@ -1,4 +1,4 @@
-*! cge_sam.ado  v0.6.4  2026-10-22
+*! cge_sam.ado  v0.10.0  2026-10-24
 *! cge-stata: read a social accounting matrix (SAM)
 *! Reads a SAM from the data in memory or from a file, wide or long, and
 *! checks its structure (docs/sam_tools.md, Section 1)
@@ -8,7 +8,7 @@
 
 program define cge_sam, rclass
     version 13.0
-    syntax [using/] [, LABels(name) SHEET(string) CLEAR LONG(namelist min=3 max=3) DIRECT]
+    syntax [using/] [, LABels(name) SHEET(string) CLEAR LONG(namelist min=3 max=3) DIRECT SYMbol(name) NORUN GAMS(string)]
 
     _cge_load
     if `"`using'"' != "" {
@@ -51,8 +51,29 @@ program define cge_sam, rclass
             if `"`sheet'"' != "" local sheetopt `"sheet(`"`sheet'"')"'
             import excel using `"`using'"', firstrow case(preserve) `sheetopt' `clear'
         }
+        else if "`ext'" == ".gdx" {
+            * a parameter with two indexes in a GDX file (from version 0.10.0),
+            * read through gdxdump
+            if "`long'" != "" {
+                display as error "cge_sam reads a GDX symbol as long data itself; give symbol(), not long()"
+                exit 198
+            }
+            if "`symbol'" == "" local symbol SAM
+            if `"`gams'"' != "" local gamsopt `"gams(`"`gams'"')"'
+            cge_gdx read using `"`using'"', symbol(`symbol') `norun' `clear' `gamsopt'
+            if "`r(kind)'" == "" exit
+            if r(dim) != 2 | "`r(kind)'" != "parameter" {
+                display as error "`symbol' is a `r(kind)' with `r(dim)' index(es); a SAM is a parameter with two"
+                exit 459
+            }
+            local long `r(indexes)' value
+        }
         else {
-            display as error "cge_sam reads .csv, .dta, .xls and .xlsx files"
+            display as error "cge_sam reads .csv, .dta, .xls, .xlsx and .gdx files"
+            exit 198
+        }
+        if "`ext'" != ".gdx" & ("`symbol'" != "" | "`norun'" != "" | `"`gams'"' != "") {
+            display as error "symbol(), norun and gams() read a GDX file"
             exit 198
         }
     }

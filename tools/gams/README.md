@@ -32,6 +32,8 @@ parameters and fixed variables (for example, "world import prices times 1.1").
 | `gams_check_results.csv` | results of the last run with PATH, one row per scenario |
 | `export_check.do`, `run_export_check.py` | the check of `cge_gams`: models exported from Stata and solved in GAMS |
 | `export_check_results.csv` | its results, one row per case and solver |
+| `gdx_check.do`, `run_gdx_check.py` | the check of `cge_gdx` (from version 0.10.0): GDX files written by GAMS from Stata and read back, and the GDX file of a scenario solved by GAMS |
+| `gdx_check_results.csv` | its results, one row per check |
 
 ## Running it
 

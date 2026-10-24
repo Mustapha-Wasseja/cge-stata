@@ -1,0 +1,3 @@
+. cge_sam using model.gdx, symbol(SAM) clear norun gams(C:/GAMS/54/gams.exe)
+SAM read: 15 accounts, total 1743
+Largest row-column imbalance:  0.00e+00

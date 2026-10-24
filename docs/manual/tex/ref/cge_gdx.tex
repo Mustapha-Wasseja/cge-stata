@@ -1,0 +1,183 @@
+\cgeentry{cge_gdx}{GAMS data exchange (GDX) files: write, read and list}
+
+\cgesec{Description}
+
+\cmd{cge_gdx} (from version 0.10.0) exchanges data with GAMS through GDX
+files, the binary files of GAMS's \cmd{execute_unload} and \cmd{\$gdxin}.
+\cmd{cge_gdx write} writes the calibrated model and its simulations: the SAM,
+the roles of its accounts, the calibrated parameters and the levels of the
+variables. \cmd{cge_gdx read} reads any symbol of any GDX file into the data in
+memory, a parameter, a set or the levels and marginals of a variable, and
+\cmd{cge_gdx list} lists the symbols of a file. \manref{cge_sam} reads a SAM
+from a GDX file. GAMS writes the files and its tool \cmd{gdxdump} reads them,
+so GAMS must be installed; the numbers pass to the last digit.
+
+\cgesec{Quick start}
+
+The model and a simulation as a GDX file
+\begin{stcode}
+cge_gdx write using model.gdx, sims(notariff) gams(C:/GAMS/54/gams.exe)
+\end{stcode}
+Its symbols, and the levels of the variables read back
+\begin{stcode}
+cge_gdx list using model.gdx, gams(C:/GAMS/54/gams.exe)
+cge_gdx read using model.gdx, symbol(LEVEL) clear gams(C:/GAMS/54/gams.exe)
+\end{stcode}
+A SAM from the GDX file of another GAMS model
+\begin{stcode}
+cge_sam using other.gdx, symbol(SAM) clear gams(C:/GAMS/54/gams.exe)
+\end{stcode}
+The solution of the GAMS program of \manref{cge_gams}, written by GAMS with
+\cmd{gdx=sol.gdx}
+\begin{stcode}
+cge_gdx read using gams_notariff/sol.gdx, symbol(QA) clear gams(C:/GAMS/54/gams.exe)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_gdx write} \cmd{using} \argu{file}\cmd{.gdx} [\texttt{,} \optarg{}{sims}{names} \opt{}{replace} \opt{}{norun} \optarg{}{gams}{path}]\\
+\cmdb{cge_gdx read} \cmd{using} \argu{file}\cmd{.gdx} \texttt{,} \optarg{sym}{bol}{name} \opt{}{clear} [\opt{}{norun} \optarg{}{gams}{path}]\\
+\cmdb{cge_gdx list} \cmd{using} \argu{file}\cmd{.gdx} [\texttt{,} \opt{}{clear} \opt{}{norun} \optarg{}{gams}{path}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{sims}{names} & the simulations whose levels are written, with the base; \cmd{_all} for every one\\
+\optarg{sym}{bol}{name} & the symbol to read\\
+\opt{}{clear} & replace the data in memory\\
+\opt{}{replace} & replace an existing GDX file\\
+\optgroup{GAMS}
+\opt{}{norun} & write the script without running it; read the output of an earlier run\\
+\optarg{}{gams}{path} & the GAMS executable, with \cmd{gdxdump} in its folder\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{sims}{names}] names the stored simulations whose levels are
+written, with the base; \cmd{_all} writes every one, and by default only the
+base is written.
+
+\item[\optarg{sym}{bol}{name}] names the symbol of the file to read.
+
+\item[\opt{}{clear}] replaces the data in memory, which \cmd{cge_gdx read}
+needs; with \cmd{cge_gdx list}, the list is left as a dataset.
+
+\item[\opt{}{replace}] allows an existing GDX file to be replaced.
+
+\item[\opt{}{norun}] writes the script without running it; a command that reads
+then reads what an earlier run of its script wrote.
+
+\item[\optarg{}{gams}{path}] names the GAMS executable, such as
+\cmd{gams(C:/GAMS/54/gams.exe)}; \cmd{gdxdump} is taken from its folder. By
+default \cmd{gams} and \cmd{gdxdump} must be on the system path.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+\cgesubsec{What is written}
+
+\cmd{cge_gdx write} writes a GAMS program, \argu{file}\cmd{_write.gms},
+which holds every number to the last digit and ends with
+\cmd{execute_unload}, and GAMS runs it. The GDX file holds:
+\begin{cgetable}{>{\ttfamily}l p{0.66\linewidth}}
+\toprule
+\normalfont Symbol & Content\\
+\midrule\endhead
+\bottomrule\endlastfoot
+AC & the accounts of the SAM\\
+A, C, F, H, E & the activities, commodities, factors, households and enterprises\\
+SAM(AC, AC) & the SAM, after the layout rewrites of calibration\\
+CAL(*, *, *) & the calibrated parameters: name, element, element\\
+sim & the base and the simulations written\\
+LEVEL(sim, *, *, *) & the levels of the variables: simulation, variable, element, element\\
+\end{cgetable}
+An index that a parameter or variable does not have is \cmd{-}, so that
+\cmd{CAL('tm', 'com\_man', '-')} is the tariff on manufactures and
+\cmd{LEVEL('base', 'EXR', '-', '-')} the base exchange rate. GAMS stores no
+zeros.
+
+\cgesubsec{How the files are read}
+
+\cmd{gdxdump} writes a symbol as a CSV file, with its numbers as hexadecimal
+floats, which \cmd{cge_gdx read} reads exactly. The data in memory then hold
+one observation per record, with a string variable for each index, named
+after its domain (\cmd{dim1}, \cmd{dim2}, \dots\ for an index without one), and
+the values: \cmd{value} for a parameter or scalar; \cmd{level},
+\cmd{marginal}, \cmd{lower}, \cmd{upper} and \cmd{scale} for a variable or an
+equation; \cmd{text} for a set. GAMS's \cmd{EPS} is read as 0, and the
+infinities and the special values \cmd{NA} and \cmd{UNDF} as missing.
+
+\cgesubsec{Scripts and batch mode}
+
+Each command writes a script in the folder of the file that runs GAMS or
+\cmd{gdxdump} there, and runs it with \cmd{shell}. Stata for Windows cannot
+start other programs in batch mode: there, and with \opt{}{norun}, the script is
+written but not run. Run it, then give the command again with \opt{}{norun}: it
+reads what the script wrote. The examples of this entry were made in that
+way, the scripts run between two runs of the do-file.
+
+The SAM is mapped, calibrated and solved:
+\stlog{gdx_setup}
+
+\cgesubsec{Example 1: writing a GDX file}
+
+\stlog{gdx_write}
+
+\cgesubsec{Example 2: the symbols of a file}
+
+\stlog{gdx_list}
+
+\cgesubsec{Example 3: a SAM from a GDX file}
+
+\manref{cge_sam} reads a parameter with two indexes, \cmd{SAM} by default, as
+long data:
+\stlog{gdx_sam}
+
+\cgesubsec{Example 4: reading a symbol}
+
+The levels written, read back to the last digit:
+\stlog{gdx_read}
+
+\cgesec{Stored results}
+
+\cmd{cge_gdx write} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_sims)} & number of simulations written\\
+\res{r(N_levels)} & number of levels written\\
+\res{r(N_parameters)} & number of parameter values written\\
+\resgroup{Macros}
+\res{r(sims)} & the base and the simulations\\
+\end{storedres}
+\cmd{cge_gdx read} stores:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N)} & number of records\\
+\res{r(dim)} & number of indexes\\
+\resgroup{Macros}
+\res{r(kind)} & \cmd{parameter}, \cmd{variable} or \cmd{set}\\
+\res{r(indexes)} & the names of the index variables\\
+\res{r(symbol)} & the symbol\\
+\end{storedres}
+\cmd{cge_gdx list} stores \cmd{r(N_symbols)} and \cmd{r(symbols)}.
+
+\cgesec{Methods and formulas}
+
+A number $x$ is written in the GAMS program with the fewest digits, of 15, 16
+or 17, that give back the same double, so GAMS reads $x$ itself. \cmd{gdxdump},
+with \cmd{dFormat=hexponential}, writes $x = \pm\,0\text{x}h_0.h_1\dots h_k\text{p}e$,
+which is read as $\pm\,m \cdot 2^{e - 4k}$, with $m$ the integer of the
+hexadecimal digits $h_0 h_1 \dots h_k$, exact in double precision; the round
+trip from Stata to GAMS and back therefore gives every number unchanged, as
+the check in \texttt{tools/gams/run\_gdx\_check.py} confirms.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\seeentry{cge_sam}{Read and check a social accounting matrix}
+\seeentry{cge_parameters}{The calibrated parameters as a dataset}
+\seeentry{cge_results}{Report simulation results}
+\end{alsosee}

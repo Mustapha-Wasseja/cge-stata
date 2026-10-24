@@ -1,0 +1,14 @@
+. cge_gdx list using model.gdx, norun gams(C:/GAMS/54/gams.exe)
+Symbol                Dim Type     Records  Text
+------------------------------------------------------------------------
+A                       1 Set            3
+AC                      1 Set           15  accounts
+C                       1 Set            3
+CAL                     3 Par          123  calibrated parameters: nam..
+E                       1 Set            0
+F                       1 Set            2
+H                       1 Set            1
+LEVEL                   4 Par          207  levels of the variables: s..
+SAM                     2 Par           48  social accounting matrix
+sim                     1 Set            2  the base and the simulations
+------------------------------------------------------------------------

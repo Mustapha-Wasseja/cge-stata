@@ -21,6 +21,9 @@ Long data: one observation per cell
 {p 8 12 2}
 {cmd:cge_sam} [{cmd:using} {it:filename}]{cmd:,} {opt long(rowvar colvar valuevar)} [{opt sheet(string)} {opt clear}]
 
+{p 8 12 2}
+{cmd:cge_sam} {cmd:using} {it:filename}{cmd:.gdx}{cmd:,} {opt sym:bol(name)} {opt clear} [{opt norun} {opt gams(path)}]
+
 
 {title:Description}
 
@@ -78,6 +81,11 @@ wide data. The default is the first string variable.
 {opt long(rowvar colvar valuevar)} reads long data.
 
 {phang}
+{opt symbol(name)} (from version 0.10.0) reads the SAM from a GDX file, the
+parameter with two indexes {it:name} ({cmd:SAM} by default), through
+{helpb cge_gdx}; {opt norun} and {opt gams()} are those of {cmd:cge_gdx}.
+
+{phang}
 {opt direct} reads a wide CSV file directly, as described above.
 
 {phang}
@@ -96,6 +104,7 @@ wide data. The default is the first string variable.
 {phang2}{cmd:. cge_sam using mysam.xlsx, sheet("SAM") labels(account) clear}{p_end}
 {phang2}{cmd:. cge_sam using large_sam.csv}{p_end}
 {phang2}{cmd:. cge_sam using sam_cells.dta, long(row column value) clear}{p_end}
+{phang2}{cmd:. cge_sam using model.gdx, symbol(SAM) clear gams(C:/GAMS/54/gams.exe)}{p_end}
 
 
 {title:Stored results}
