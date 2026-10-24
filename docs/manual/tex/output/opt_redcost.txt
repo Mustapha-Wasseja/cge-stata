@@ -1,0 +1,22 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_closure, government(fixgsav)
+Closure
+  external account     flexexr
+  government           fixgsav
+  savings-investment   savings
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_optimize, instruments(tm(com_man)) maximize(welfare equivalent_variation hhd) ///
+>     lower(tm(com_man):0) upper(tm(com_man):0.2) name(capped)
+
+Optimisation capped: converged after 13 solve(s) of the model
+-----------------------------------------------------------------------------
+Instrument                                start          optimum     marginal
+-----------------------------------------------------------------------------
+tm(com_man)                                  .1               .2        3.641 (at its bound)
+-----------------------------------------------------------------------------
+Maximised welfare equivalent_variation hhd:      .5892405236

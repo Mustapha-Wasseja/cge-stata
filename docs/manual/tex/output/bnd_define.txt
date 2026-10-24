@@ -1,0 +1,42 @@
+. cge_bound QM, lower(0.5) upper(2) relative
+Variable QM: lower bound 0.5, upper bound 2, times the base for 3 element(s)
+
+. cge_bound PQ(com_man), lower(0.5)
+Variable PQ: lower bound 0.5 for 1 element(s)
+
+. cge_bound QA(act_man), scale(1000)
+Variable QA: scale 1000 for 1 element(s)
+
+. cge_bound EXR, level(1.05)
+Variable EXR: starting level 1.05 for 1 element(s)
+
+. cge_bound QE, level(1.1) relative
+Variable QE: starting level 1.1, times the base for 3 element(s)
+
+. cge_bound, list
+Variable     Elements                    lower        upper        scale        level
+------------------------------------------------------------------------------------
+QM           all                           0.5            2                           (relative)
+PQ           com_man                       0.5
+QA           act_man                                                1000
+EXR          all                                                                 1.05
+QE           all                                                                  1.1 (relative)
+------------------------------------------------------------------------------------
+Elements with a lower bound 4, an upper bound 3, a scale 1, a starting level 4
+
+. cge_solve, name(bounded)
+Simulation bounded solved in 6 iteration(s) (newton)
+Largest scaled residual  6.51e-15; WALRAS = -8.83e-14
+
+. quietly cge_results, sim(plain) clear nodisplay
+
+. quietly summarize value if variable == "QM" & element1 == "com_man"
+
+. local q1 = r(mean)
+
+. quietly cge_results, sim(bounded) clear nodisplay
+
+. quietly summarize value if variable == "QM" & element1 == "com_man"
+
+. display "QM(com_man): " %12.8f `q1' " without the attributes, " %12.8f r(mean) " with them"
+QM(com_man):  63.00282547 without the attributes,  63.00282547 with them

@@ -1,0 +1,35 @@
+. cge_bound QM(com_man), upper(61)
+Variable QM: upper bound 61 for 1 element(s)
+
+. cge_solve, name(beyond)
+Not solved directly; trying again in 4 steps
+Not solved directly; trying again in 16 steps
+Simulation beyond did not converge (largest scaled residual  8.46e-02)
+Largest scaled residual  8.46e-02; WALRAS = -4.10e-03
+Bounds of cge_bound nearest the last point, with the distance relative to the scale:
+  QM(com_man)                   5.70e-07
+  QM(com_ser)                   4.83e-01
+  PQ(com_man)                   4.93e-01
+A solution beyond a bound cannot be reached: remove the bound, or make the limit a constraint
+Diagnostics
+  Largest scaled residuals
+    I8   government revenue                                             8.463e-02
+    T5   import demand                          com_man                -6.499e-02
+    T5   import demand                          com_agr                -6.497e-02
+    T5   import demand                          com_ser                 6.192e-02
+    S3   balance of payments                                           -4.999e-02
+  (cge_listing, sim() lists every equation element at this point)
+  Smallest pivot of the Jacobian, relative to the largest:  4.88e-04 (WALRAS)
+
+. cge_bound QM(com_man), upper(inf)
+Variable QM: upper bound removed for 1 element(s)
+
+. cge_constraint QM, elements(com_man) upper(61)
+Constraint QM(com_man) <= 61, RM(com_man) up, rents to gov: not solved
+
+. cge_solve, name(quota)
+Simulation quota solved in 10 iteration(s) (newton)
+Largest scaled residual  8.88e-16; WALRAS =  6.10e-14
+Constraints
+  QM(com_man) <= 61, RM(com_man) up, rents to gov: binding
+      QM(com_man) =           61;  RM(com_man) =  .0452721508

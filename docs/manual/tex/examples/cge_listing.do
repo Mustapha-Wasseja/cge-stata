@@ -28,3 +28,9 @@ quietly cge_listing, sim(notariff) clear
 describe, simple
 list block element lhs rhs scaled if inlist(block, "Q4", "I8"), noobs
 *<<
+
+*>> list_solution
+cge_constraint QM, elements(com_man) upper(1.02) scale
+quietly cge_solve, name(quota)
+cge_listing, sim(quota) solution variables(QM RM) blocks(T5)
+*<<

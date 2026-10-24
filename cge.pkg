@@ -55,6 +55,8 @@ f ado/cge_set.ado
 f ado/cge_set.sthlp
 f ado/cge_parameter.ado
 f ado/cge_parameter.sthlp
+f ado/cge_bound.ado
+f ado/cge_bound.sthlp
 f ado/cge_macro.ado
 f ado/cge_macro.sthlp
 f ado/cge_solve.ado

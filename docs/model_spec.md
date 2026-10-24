@@ -1500,6 +1500,36 @@ calibration.
 the simulation. The rent variables appear in the results like other
 variables.
 
+**Attributes of variables (from version 0.9.8).** `cge_bound VAR[(e)],
+lower() upper() scale() level()` stores definitions in `M.bddef` (variable,
+elements, lower, upper, scale, level, `relative`); `_cge_bd_sync()` applies
+them in order, later ones replacing earlier ones and `-inf`/`inf` removing a
+bound, to the positions and values `M.bdlp`/`M.bdlv`, `M.bdup`/`M.bduv` and
+`M.bdsp`/`M.bdsv`, and writes the scales into `M.xscale` (positions in
+`M.bdcp`, restored to `abs(x0)` or 1 when removed). It runs after calibration,
+on loading and when user variables are removed, whose definitions are
+dropped. The bounds are those of a CNS model: `_cge_F()` returns missing
+values at a point outside them, so the line search keeps the iterates within
+them; the base and the starting levels must lie within them, and a fixed
+element outside them stops `cge_solve`. `cge_solve` starts from `x0` with the
+starting levels of the free elements, notes free elements within `1e-9 s` of
+a bound (`r(N_atbound)`) and, after a failure, the bounds nearest the last
+point. `fix(#)` sets `M.xcur` for elements the closure fixes. `cge_gams`
+writes `cge_bounds.inc` after the closure: `.lo`/`.up` of the free variables
+other than the adjusting variables of constraints (none in an MCP scenario),
+`.scale` with `scaleopt`, and `.l`.
+
+The solution listing (`cge_listing, solution`) gives each variable element's
+bounds (its level when fixed; the bounds above or ±infinity when free), each
+equation element with every term on the left (bounds 0, level the residual,
+no marginal, as in a CNS model), and each active constraint as a pair: level
+$g_k = \sigma_k(b_k - Y_k)$, marginal $h_k = \delta_k(X_k - \bar x_k)$. In
+GAMS, the pair is BND ⊥ SLK; from version 0.9.8, `cge_shock_var.inc` writes
+the adjusting variables at $\bar x_k$ (not the solution), and
+`cge_cons_write.inc` writes `(BND.l - BND.lo) s_Y` and `BND.m s_X`, which
+`cge_gams, compare` checks against $g_k$ and $h_k$ (GAMS's MCP marginal of a
+row is the level of its column).
+
 ## 17. Production and tax extensions (from version 0.5.0)
 
 ### 17.1 Taxes on factor use and on factor income

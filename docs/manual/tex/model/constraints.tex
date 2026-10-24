@@ -122,3 +122,22 @@ and adjusted by the paired variable, and the bounds of user variables are
 constraints on the variables themselves. They are listed and solved with the
 constraints of \manref{cge_constraint}.
 
+\section{Marginals}\label{sec:cons-marginals}
+
+From version 0.9.8, the solution listing of \manref{cge_listing},
+\opt{sol}{ution}, gives each constraint as GAMS lists a complementarity pair:
+its level is the room within its bound, $g_k$ in the units of $Y_k$, and its
+marginal is the move of its adjusting variable, $h_k$ in the units of $X_k$,
+such as the premium of a quota or the fall in \cmd{GADJ} under a deficit
+ceiling. One of the two is zero. \manref{cge_gams} writes the scenario with the
+adjusting variables at their fixed levels, so that PATH finds the regimes
+itself, and GAMS reports the same room and marginal for each pair.
+
+\section{Bounds that do not bind}
+
+The bounds of \manref{cge_bound} (from version 0.9.8) are not constraints. As
+the bounds of a GAMS CNS model, they keep the solver within a domain and are
+not meant to bind: the system stays square, with no variable to adjust. A
+solution beyond such a bound cannot be reached; a limit that binds is a
+constraint of this chapter.
+

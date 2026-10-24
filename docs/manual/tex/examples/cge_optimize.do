@@ -54,3 +54,24 @@ cge_optimize, instruments(tm(com_man)) maximize(YG)        ///
     lower(tm(com_man):0) upper(tm(com_man):2) name(revenue)
 display r(N_binding)
 *<<
+
+*>> opt_marginal
+matrix list r(constraint_marginals)
+quietly cge_results, sim(revenue) clear nodisplay
+quietly summarize base if variable == "QM" & element1 == "com_man"
+local b = 0.98 * r(mean)
+foreach s in 1 -1 {
+    quietly cge_shock, reset
+    quietly cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= `=`b' + `s' * 0.05') ///
+        lower(tm(com_man):0) upper(tm(com_man):2) name(rev`=`s' + 1')
+    local f`=`s' + 1' = r(objective)
+}
+display "change in revenue per unit of the floor: " %10.6f (`f2' - `f0') / 0.1
+*<<
+
+*>> opt_redcost
+cge_shock, reset
+cge_closure, government(fixgsav)
+cge_optimize, instruments(tm(com_man)) maximize(welfare equivalent_variation hhd) ///
+    lower(tm(com_man):0) upper(tm(com_man):0.2) name(capped)
+*<<

@@ -1,0 +1,197 @@
+\cgeentry{cge_bound}{Attributes of variables: bounds, scales, starting levels and fixed values}
+
+\cgesec{Description}
+
+\cmd{cge_bound} (from version 0.9.8) gives the elements of a model or user
+variable the attributes that GAMS writes as \cmd{.lo}, \cmd{.up},
+\cmd{.scale}, \cmd{.l} and \cmd{.fx}: bounds that keep the solver within a
+domain, a scale for the solver, the level from which \manref{cge_solve}
+starts, and the value of a variable fixed under the closure. The bounds are
+those of a square system, GAMS's CNS model: they are not meant to bind at the
+solution. A limit that binds in some scenarios and not in others is a
+constraint (\manref{cge_constraint}), with a variable that adjusts when it
+binds. \manref{cge_listing}, \opt{sol}{ution}, lists the variables with their
+bounds, and \manref{cge_gams} writes the attributes into the GAMS program.
+
+\cgesec{Quick start}
+
+Imports within half and twice their base values
+\begin{stcode}
+cge_bound QM, lower(0.5) upper(2) relative
+\end{stcode}
+A floor on the price of manufactures, as \cmd{PQ.lo('com\_man') = 0.5}
+\begin{stcode}
+cge_bound PQ(com_man), lower(0.5)
+\end{stcode}
+A scale for the solver, and a starting level
+\begin{stcode}
+cge_bound QA(act_man), scale(1000)
+cge_bound EXR, level(1.05)
+\end{stcode}
+Foreign savings fixed 20 per cent above the base, as \cmd{FSAV.fx}
+\begin{stcode}
+cge_bound FSAV, fix(1.2) relative
+\end{stcode}
+Display or remove the attributes
+\begin{stcode}
+cge_bound, list
+cge_bound, clear
+\end{stcode}
+
+\cgesec{Syntax}
+
+Bounds, scales and starting levels
+\begin{stsyntax}
+\cmdb{cge_bound} \argu{VAR}[\cmd{(}\argu{e}[\cmd{,}\argu{e2}]\cmd{)}] [\texttt{,} \argu{options}]
+\end{stsyntax}
+The value of a fixed variable
+\begin{stsyntax}
+\cmdb{cge_bound} \argu{VAR}[\cmd{(}\argu{e}[\cmd{,}\argu{e2}]\cmd{)}] \texttt{,} \optarg{}{fix}{\#} [\optarg{el}{ements}{list} \opt{rel}{ative}]
+\end{stsyntax}
+Remove the attributes of a variable, or display and remove them all
+\begin{stsyntax}
+\cmdb{cge_bound} \argu{VAR} \texttt{,} \opt{}{clear}\\
+\cmdb{cge_bound} \texttt{,} \opt{}{list}\\
+\cmdb{cge_bound} \texttt{,} \opt{}{clear}
+\end{stsyntax}
+\argu{VAR} is a model variable or a user variable (\manref{cge_variable}).
+Without elements, the attributes apply to every element that exists. One
+element is written as in GAMS, \cmd{PQ(com_man)} or \cmd{QF(lab,act_agr)};
+several are given in \opt{}{elements()}, as in \manref{cge_shock}, with
+\argu{e1}\cmd{.}\argu{e2} for two indexes.
+
+\begin{opttable}
+\optgroup{Attributes}
+\optarg{lo}{wer}{\#} & lower bound, as \cmd{.lo}; \cmd{-inf} removes it\\
+\optarg{up}{per}{\#} & upper bound, as \cmd{.up}; \cmd{inf} removes it\\
+\optarg{sc}{ale}{\#} & scale of the variable in the solver, as \cmd{.scale}\\
+\optarg{lev}{el}{\#} & starting level of a free variable, as \cmd{.l}\\
+\optarg{}{fix}{\#} & value of a variable fixed under the closure, as \cmd{.fx}\\
+\optgroup{Elements and values}
+\optarg{el}{ements}{list} & the elements\\
+\opt{rel}{ative} & values as multiples of the base values\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{lo}{wer}{\#}, \optarg{up}{per}{\#}] give the bounds. The base
+must lie within them. \cmd{-inf} and \cmd{inf} remove a lower and an upper
+bound.
+
+\item[\optarg{sc}{ale}{\#}] gives the scale, a positive number, which replaces
+the solver's own for these elements: the absolute base value, or 1 where it is
+near zero.
+
+\item[\optarg{lev}{el}{\#}] gives the level from which \manref{cge_solve}
+starts, in place of the base value, for an element the closure leaves free.
+It must lie within the bounds, and be positive for a price or quantity.
+
+\item[\optarg{}{fix}{\#}] sets the value of an element the closure fixes, as
+\manref{cge_shock} does. It is given alone. An element the closure leaves
+free cannot be fixed: the system would have more equations than free
+variables. Swap it into the closure with \cmd{cge_closure, swap()} first.
+
+\item[\optarg{el}{ements}{list}] names the elements; it is not combined with
+an element in parentheses.
+
+\item[\opt{rel}{ative}] reads the values as multiples of the base values, and
+\opt{}{scale()} as a multiple of the automatic scale.
+
+\item[\opt{}{clear}] after a variable removes its attributes;
+\cmd{cge_bound, clear} removes every attribute. \opt{}{list} displays the
+definitions and the number of elements each attribute applies to.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+\cgesubsec{Bounds in a square system}
+
+In GAMS, a CNS model may have bounds on its variables. They keep the solver
+within a domain, such as positive prices, and are not meant to bind at the
+solution; GAMS warns when one is active. The bounds of \cmd{cge_bound} work
+in the same way. The solver rejects every point outside them, so the line
+search shortens a step that would cross one. A solution that lies on a bound
+is accepted with a note; a solution beyond one cannot be reached, and the
+solve fails, naming the bounds nearest the last point. A limit that binds in
+some scenarios and not others, such as a quota or a ceiling on the deficit,
+is a constraint, which a variable meets by adjusting: \manref{cge_constraint},
+an inequality of \manref{cge_equation}, or \opt{}{lower()} and \opt{}{upper()}
+of \manref{cge_variable}.
+
+Definitions apply in order, so a later one replaces an earlier one for the
+same elements and attribute. The attributes are saved with the model
+(\manref{cge_save}) and applied again when it is calibrated again, from the
+new base; those of user variables are removed with them.
+
+The SAM is mapped and calibrated, and the tariffs are removed without
+attributes:
+\stlog{bnd_setup}
+
+\cgesubsec{Example 1: bounds, a scale and starting levels}
+
+Imports within half and twice their base values, a floor on the price of
+manufactures, a scale, and starting levels for the exchange rate and exports.
+The solution is the one without them; the scale and the starting levels
+change only the path of the iterations:
+\stlog{bnd_define}
+The solution listing (\manref{cge_listing}) shows the bounds with the levels:
+\stlog{bnd_listing}
+
+\cgesubsec{Example 2: a bound beyond the solution}
+
+An upper bound on imports of manufactures below the level the tariff cut
+brings cannot be met by the square system, whose equations determine imports:
+the solve fails against the bound. The quota that limits imports is a
+constraint, met by a premium:
+\stlog{bnd_beyond}
+
+\cgesubsec{Example 3: fixed values}
+
+\opt{}{fix()} sets a variable that the closure fixes, here foreign savings,
+as \manref{cge_shock} does; a variable the closure leaves free cannot be
+fixed:
+\stlog{bnd_fix}
+
+\cgesec{Stored results}
+
+\cmd{cge_bound} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_elements)} & number of elements given the attributes\\
+\res{r(N_definitions)} & number of definitions stored\\
+\res{r(N_lower)} & number of elements with a lower bound\\
+\res{r(N_upper)} & number of elements with an upper bound\\
+\res{r(N_scales)} & number of elements with a scale\\
+\res{r(N_levels)} & number of elements with a starting level\\
+\resgroup{Macros}
+\res{r(name)} & the variable\\
+\end{storedres}
+\manref{cge_solve} stores \cmd{r(N_atbound)}, the number of free elements at a
+bound.
+
+\cgesec{Methods and formulas}
+
+The definitions give, for each element $i$, a lower bound $\ell_i$, an upper
+bound $u_i$, a scale $s_i$ and a starting level $x^s_i$, the last definition
+for the element and attribute applying; with \opt{rel}{ative}, the values
+multiply $x^0_i$ (and the automatic scale for $s_i$). The solver works on
+$z_i = x_i / s_i$ (section~\ref{sec:jacobian}), with $s_i = |x^0_i|$, or 1 when
+$|x^0_i| \le 10^{-12}$, unless a scale is given. Its function returns missing
+values at any point with $x_i < \ell_i$ or $x_i > u_i$, as it does for a
+non-positive price or quantity, so that each step is shortened until it
+stays within the bounds. \manref{cge_solve} starts from $x^0$ with $x^s_i$ in
+place of $x^0_i$ for the free elements, and stops if a fixed element lies
+outside its bounds. A free element is at a bound when
+$|x_i - \ell_i| \le 10^{-9} s_i$ or $|x_i - u_i| \le 10^{-9} s_i$.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_listing}{Equation listing, infeasibility report and solution listing}
+\seeentry{cge_constraint}{Limits that bind in some scenarios and not in others}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\seechapter{chap:constraints}{Bounds and complementarity}
+\end{alsosee}

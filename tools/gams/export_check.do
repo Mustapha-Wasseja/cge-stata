@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions inequalities pairs replace functions
+    nests nestvat outces user usersets conditions inequalities pairs replace functions bounds boundscon
 local ncase : word count `cases'
 
 tempname post
@@ -413,6 +413,39 @@ foreach case of local cases {
         cge_variable RP(c) = rel(PQ(c))
         cge_variable LAM, value(1)
         cge_equation lam: LAM * max(base(QG(com_ser)), QG(com_agr)) = QG(com_ser)
+        cge_shock tm, value(0)
+    }
+    * attributes of variables (version 0.9.8): bounds that do not bind, scales
+    * and starting levels, of model and user variables
+    else if "`case'" == "bounds" {
+        quietly cge_synthetic, clear institutions
+        quietly cge_sam, labels(account)
+        quietly cge_map, `instmap'
+        quietly cge_calibrate, `sigmas'
+        cge_variable RP(c) = PQ(c) / CPI
+        cge_bound QM, lower(0.5) upper(2) relative
+        cge_bound PQ(com_man), lower(0.5)
+        cge_bound QF, elements(lab.act_agr cap.act_man) lower(1)
+        cge_bound RP, lower(0.8) upper(1.25)
+        cge_bound QA, scale(1000)
+        cge_bound YI(hhd), scale(5)
+        cge_bound EXR, level(1.2)
+        cge_bound QE, level(1.1) relative
+        cge_shock tm, value(0)
+    }
+    * with constraints, solved as a mixed complementarity problem: the scales
+    * and starting levels, a quota that binds and a limit that does not, whose
+    * room and marginal GAMS reports
+    else if "`case'" == "boundscon" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_bound QM, lower(0.5) upper(2) relative
+        cge_bound QA, scale(1000)
+        cge_bound EXR, level(1.2)
+        cge_constraint QM, elements(com_man) upper(1.02) scale
+        cge_constraint QE, elements(com_agr) upper(2) scale
         cge_shock tm, value(0)
     }
     quietly cge_solve, name(`case') tolerance(1e-12)

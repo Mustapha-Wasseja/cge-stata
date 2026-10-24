@@ -5,11 +5,11 @@ All shocks removed
 >     targets(government tax_import = 8) name(two_tariffs)
 
 Optimisation two_tariffs: converged after 419 solve(s) of the model
-----------------------------------------------------------------
-Instrument                                start          optimum
-----------------------------------------------------------------
-tm(com_agr)                                  .1     -.0335061325
-tm(com_man)                                  .1      .1577235277
-----------------------------------------------------------------
+-----------------------------------------------------------------------------
+Instrument                                start          optimum     marginal
+-----------------------------------------------------------------------------
+tm(com_agr)                                  .1     -.0335061325            0
+tm(com_man)                                  .1      .1577235277            0
+-----------------------------------------------------------------------------
 Maximised welfare equivalent_variation hhd:      .3775370166
-Target government tax_import = 8:                8
+Target government tax_import = 8:                8; marginal .0922726

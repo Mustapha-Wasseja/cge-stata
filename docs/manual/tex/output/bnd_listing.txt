@@ -1,0 +1,17 @@
+. cge_listing, sim(bounded) solution variables(QM PQ)
+Solution listing at simulation bounded: 118 variable elements (93 free), 93 equation elements
+Elements at a bound of cge_bound: 0
+
+---- VAR QM  imports
+
+                                    LOWER          LEVEL          UPPER       MARGINAL
+  com_agr                              10       22.23687             40              .
+  com_man                              30       63.00283            120              .
+  com_ser                              10       18.99368             40              .
+
+---- VAR PQ  composite price
+
+                                    LOWER          LEVEL          UPPER       MARGINAL
+  com_agr                            -INF       .9994807           +INF              .
+  com_man                              .5       .9790053           +INF              .
+  com_ser                            -INF       1.021449           +INF              .

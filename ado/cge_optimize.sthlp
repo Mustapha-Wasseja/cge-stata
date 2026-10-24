@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.4  23oct2026}{...}
+{* *! version 0.9.8  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -53,6 +53,18 @@ equality constraints, met by the augmented Lagrangian method. The optimum is
 stored as a simulation, and the instruments are left at their optimal values
 as current shocks, so that {helpb cge_report} and {helpb cge_results} show
 it.
+
+{pstd}
+From version 0.9.8, an optimisation with an objective reports marginals, as
+the solution listing of GAMS's NLP models does. The marginal of a target or a
+constraint is its shadow price: the change in the objective per unit increase
+in its right side, from the multipliers of the augmented Lagrangian at the
+optimum. It is zero for a constraint that does not bind; for a constraint
+{it:h} {cmd:>=} {it:b} that binds in a maximisation it is negative, since
+raising {it:b} tightens it. The marginal of an instrument is its reduced cost:
+the change in the objective per unit of the instrument, zero within its
+bounds and, at a bound, the gain from relaxing it. Targets alone, without an
+objective, have no marginals.
 
 
 {title:Options}
@@ -116,6 +128,9 @@ each solve (default 100). {opt trace} shows the optimiser's iterations.
 {phang2}{cmd:. cge_shock, reset}{p_end}
 {phang2}{cmd:. cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= 0.98 * base(QM(com_man))) lower(tm(com_man):0) upper(tm(com_man):2) name(revenue)}{p_end}
 
+{pstd}Its shadow price: the revenue lost per unit increase in the floor on imports (from version 0.9.8){p_end}
+{phang2}{cmd:. matrix list r(constraint_marginals)}{p_end}
+
 
 {title:Stored results}
 
@@ -135,6 +150,9 @@ each solve (default 100). {opt trace} shows the optimiser's iterations.
 {synopt:{cmd:r(start)}}their starting values{p_end}
 {synopt:{cmd:r(targets)}}the target measures or expressions at the optimum{p_end}
 {synopt:{cmd:r(constraints)}}the constrained measures or expressions at the optimum{p_end}
+{synopt:{cmd:r(instrument_marginals)}}the reduced costs of the instruments, with an objective (from version 0.9.8){p_end}
+{synopt:{cmd:r(target_marginals)}}the shadow prices of the targets, with an objective{p_end}
+{synopt:{cmd:r(constraint_marginals)}}the shadow prices of the constraints{p_end}
 
 
 {title:Remarks}

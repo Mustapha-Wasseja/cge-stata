@@ -1,0 +1,34 @@
+. cge_constraint QM, elements(com_man) upper(1.02) scale
+Constraint QM(com_man) <= 61.2, RM(com_man) up, rents to gov: not solved
+
+. quietly cge_solve, name(quota)
+
+. cge_listing, sim(quota) solution variables(QM RM) blocks(T5)
+Solution listing at simulation quota: 118 variable elements (93 free), 94 equation elements
+Constraints: 1, of which 1 bind
+
+---- VAR QM  imports
+
+                                    LOWER          LEVEL          UPPER       MARGINAL
+  com_agr                            -INF       22.61351           +INF              .
+  com_man                            -INF           61.2           +INF              .
+  com_ser                            -INF       19.30233           +INF              .
+
+---- VAR RM  import premium
+
+                                    LOWER          LEVEL          UPPER       MARGINAL
+  com_agr                               .              .              .              .
+  com_man                            -INF      .04065936           +INF              .
+  com_ser                               .              .              .              .
+
+---- EQU T5  import demand
+
+                                    LOWER          LEVEL          UPPER       MARGINAL
+  com_agr                               .   1.776357e-14              .              .
+  com_man                               .  -7.105427e-15              .              .
+  com_ser                               .   3.552714e-15              .              .
+
+---- EQU B1  constraint: room within the bound; marginal, the move of the adjusting variable
+
+                                    LOWER          LEVEL          UPPER       MARGINAL
+  QM(com_man)                           .              .           +INF      .04065936

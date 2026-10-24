@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.9.8  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -50,6 +50,8 @@ Files written:
 {p2col:{cmd:cge_shock_par.inc}}parameter changes and the closure{p_end}
 {p2col:{cmd:cge_shock_var.inc}}changes to fixed variables{p_end}
 {p2col:{cmd:cge_constraints.inc}}constraints, as complementarity pairs (from version 0.4.4){p_end}
+{p2col:{cmd:cge_cons_write.inc}}the room within each constraint's bound and its marginal, as GAMS reports them (from version 0.9.8){p_end}
+{p2col:{cmd:cge_bounds.inc}}the attributes of {helpb cge_bound}: {cmd:.lo}, {cmd:.up}, {cmd:.scale} and {cmd:.l} (from version 0.9.8){p_end}
 {p2col:{cmd:cge_user.inc}, {cmd:cge_user_write.inc}}user parameters (as {cmd:UP_}{it:name}, from version 0.7.1), variables and equations, and their results (from version 0.6.1){p_end}
 {p2colreset}{...}
 
@@ -57,7 +59,14 @@ Files written:
 A scenario with constraints ({helpb cge_constraint}) is written as a mixed
 complementarity problem. Each constraint becomes a slack variable, which must
 be zero or positive, paired with its bound, and its adjusting variable is
-linked to the slack. It is solved with PATH or another MCP solver.
+linked to the slack. It is solved with PATH or another MCP solver. From
+version 0.9.8, the adjusting variables start at their fixed levels, so that
+GAMS finds the regime of each constraint itself (before, they were written at
+the solution), and GAMS writes the room within each bound and its marginal,
+the move of the adjusting variable, which {opt compare} checks against the
+solution listing of {helpb cge_listing}. The bounds of {helpb cge_bound} are
+left out of such a scenario, since GAMS's MCP models bound only variables
+paired with an equation; its scales and starting levels are kept.
 
 {pstd}
 GAMS writes {cmd:cge_base.csv} and {cmd:cge_}{it:name}{cmd:.csv}, one row per
@@ -107,7 +116,9 @@ GAMS and then compare with {opt noexport}.
 {opt compare} compares the GAMS results with the Stata base and with
 simulation {opt sim()}. For each value it computes |GAMS - Stata| / max(1,
 |Stata|), over the variables and elements that exist in the model, and
-reports the largest difference for the base and for the scenario.
+reports the largest difference for the base and for the scenario; with
+constraints, the room and marginal of each are compared too (from version
+0.9.8).
 
 {phang}
 {opt noexport} uses the files already in {it:folder}: with {opt run} it

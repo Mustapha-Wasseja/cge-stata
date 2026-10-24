@@ -12,7 +12,7 @@ specification, calibrates the model from the SAM and the user's settings alone,
 and is solved with PATH; it reproduces the 186 scenarios of the Python
 reference, including scenarios with constraints solved as complementarity
 problems, to $2.9 \times 10^{-11}$ or better. \manref{cge_gams} writes any model
-for that GAMS program: 38 exported cases, solved with PATH (17 of them also
+for that GAMS program: 40 exported cases, solved with PATH (17 of them also
 with CONOPT, KNITRO and IPOPT), reproduce the solutions of Stata to
 $4 \times 10^{-9}$ or better
 (\secref{sec:gams-import}). The test suite also runs every example do-file.
@@ -52,7 +52,14 @@ revenue off by the tariffs, element by element. The functions
 give the values of the same formulas computed in Stata from the results, to
 $10^{-12}$; their exact derivatives agree with central differences away from
 the kinks, and GAMS solves a model that uses each of them to Stata's solution
-(case \cmd{functions}).
+(case \cmd{functions}). Bounds that do not bind, scales and starting levels
+leave the solution unchanged to $10^{-10}$, in Stata and in GAMS (cases
+\cmd{bounds} and \cmd{boundscon}). The marginals of the constraints in the
+solution listing are their adjusting variables' moves, and GAMS, which now
+finds each regime itself, reports the same room and marginal for every pair in
+the constraint cases. The shadow prices and reduced costs of
+\manref{cge_optimize} agree with the change in the optimum when a bound or
+target moves, to $10^{-5}$.
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed

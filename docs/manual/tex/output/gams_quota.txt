@@ -12,9 +12,10 @@ Constraints
       QM(com_man) =         61.2;  RM(com_man) =  .0570352246
 
 . cge_gams using gams_quota, sim(quota)
-Wrote the model (15 accounts) and scenario quota (3 change(s) from the base) to gams_quota
+Wrote the model (15 accounts) and scenario quota (2 change(s) from the base) to gams_quota
 Files: cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc cge_shock_par.inc cge_
-> shock_var.inc cge_constraints.inc cge_user.inc cge_user_write.inc cge_run.gms
+> shock_var.inc cge_constraints.inc cge_cons_write.inc cge_bounds.inc cge_user.inc cge_user_write.in
+> c cge_run.gms
 To solve it: gams cge_run.gms in that folder
 
 . type gams_quota/cge_constraints.inc

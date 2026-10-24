@@ -201,7 +201,11 @@ The constraint becomes a slack variable \cmd{SLK1}, zero or positive, paired
 with the bound \cmd{BND1}, and the adjusting variable, the import premium
 \cmd{RM(com_man)}, is freed and linked to the slack by \cmd{LNK1}. The model
 type is \cmd{mcp} by default, for PATH; CONOPT, KNITRO and IPOPT do not solve
-complementarity problems.
+complementarity problems. From version 0.9.8, the premium starts at its fixed
+level, zero, so that GAMS finds the regime itself; before, it was written at
+the solution. GAMS writes the room within the bound and its marginal, the
+premium, which \opt{}{compare} checks against the solution listing of
+\manref{cge_listing}.
 
 \cgesubsec{Example 4: a dynamic run}
 
@@ -230,6 +234,8 @@ cge\_data.inc & the SAM, the roles of its accounts and the calibration settings\
 cge\_shock\_par.inc & parameter changes and the closure\\
 cge\_shock\_var.inc & closure swaps and changes to fixed variables\\
 cge\_constraints.inc & constraints, as complementarity pairs, and the scenario model \cmd{cgecon}\\
+cge\_cons\_write.inc & writes the room within each constraint's bound and its marginal (from version 0.9.8)\\
+cge\_bounds.inc & the attributes of \manref{cge_bound}: \cmd{.lo}, \cmd{.up}, \cmd{.scale} and \cmd{.l} (from version 0.9.8)\\
 cge\_user.inc & user variables and equations (\manref{cge_variable}, \manref{cge_equation})\\
 cge\_user\_write.inc & the results of the user variables\\
 \end{cgetable}

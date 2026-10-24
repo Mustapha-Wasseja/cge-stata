@@ -1,4 +1,4 @@
-\cgeentry{cge_listing}{Equation listing and infeasibility report}
+\cgeentry{cge_listing}{Equation listing, infeasibility report and solution listing}
 
 \cgesec{Description}
 
@@ -10,7 +10,11 @@ where it occurs, and the number of elements that are infeasible there, whose
 scaled residual exceeds the tolerance. It then lists the infeasible elements,
 largest first, with their left and right sides, and, on request, every element
 of the blocks named. The point is a stored simulation, the base, or the
-current point from which the next solve starts.
+current point from which the next solve starts. From version 0.9.8, with
+\opt{sol}{ution}, it gives the solution listing that GAMS writes after a solve:
+the lower bound, level, upper bound and marginal of every element of the
+blocks of variables and equations asked for, with the constraints and their
+marginals.
 
 \cgesec{Quick start}
 
@@ -28,11 +32,16 @@ Every element of every equation at the simulation \cmd{notariff}, as a dataset
 \begin{stcode}
 cge_listing, sim(notariff) clear
 \end{stcode}
+The solution listing of the imports and their premiums, and of import demand
+\begin{stcode}
+cge_listing, sim(notariff) solution variables(QM RM) blocks(T5)
+\end{stcode}
 
 \cgesec{Syntax}
 
 \begin{stsyntax}
-\cmdb{cge_listing} [\texttt{,} \argu{options}]
+\cmdb{cge_listing} [\texttt{,} \argu{options}]\\
+\cmdb{cge_listing} \texttt{,} \opt{sol}{ution} [\argu{options}]
 \end{stsyntax}
 
 \begin{opttable}
@@ -46,6 +55,9 @@ cge_listing, sim(notariff) clear
 \optarg{}{top}{\#} & number of infeasible elements listed; default 20\\
 \optarg{tol}{erance}{\#} & scaled residual above which an element is infeasible; default \texttt{1e-8}\\
 \opt{}{clear} & replace the data in memory with every element\\
+\optgroup{Solution listing}
+\opt{sol}{ution} & the solution listing, with bounds and marginals\\
+\optarg{var}{iables}{list} & list every element of these variables\\
 \end{opttable}
 
 \cgesec{Options}
@@ -72,7 +84,17 @@ of \manref{cge_check}.
 element of the model's equations, with the variables \cmd{block},
 \cmd{element}, \cmd{description}, \cmd{lhs}, \cmd{rhs}, \cmd{residual} (the
 left less the right side), \cmd{scaled}, and the indicators \cmd{insystem},
-\cmd{replaced} (by a user equation) and \cmd{infeasible}.
+\cmd{replaced} (by a user equation) and \cmd{infeasible}. With
+\opt{sol}{ution}, one observation per variable element and per equation
+element in the system, with \cmd{kind} (\cmd{VAR} or \cmd{EQU}), \cmd{name},
+\cmd{element}, \cmd{lower}, \cmd{level}, \cmd{upper} and \cmd{marginal}; an
+infinite bound and a marginal that does not exist are missing.
+
+\item[\opt{sol}{ution}] (from version 0.9.8) gives the solution listing.
+\optarg{block}{s}{list} then names the blocks of equations and
+\optarg{var}{iables}{list} the variables to list, and \opt{}{all} lists every
+block of both. Without them, the listing gives the variables with attributes of
+\manref{cge_bound}. The constraints are always listed.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -105,6 +127,24 @@ solution; the largest scaled residual is the one \manref{cge_solve} reports:
 \stlog{list_clear}
 Elements with two indexes are labelled by both, in the order of their sets.
 
+\cgesubsec{Example 5: the solution listing}
+
+From version 0.9.8, the solution listing shows each element as GAMS does
+after a solve. A variable fixed under the closure, such as the premium
+\cmd{RM} where no constraint frees it, has its level as both bounds; a free one
+has the bounds of \manref{cge_bound}, or none. An equation is written with
+every term on the left, so its bounds are zero and its level is its residual.
+The square system has no marginals, as GAMS's CNS models have none. With a
+quota on imports of manufactures, the constraint is listed as block
+\cmd{B1}: its level, the room within the bound, is zero since it binds, and
+its marginal is the premium that clears the market, the move of
+\cmd{RM(com\_man)} from zero:
+\stlog{list_solution}
+A limit that does not bind has room within its bound and a zero marginal. These
+are the slack and the marginal that GAMS reports for the pair in its MCP model,
+where the marginal of a row is the level of its column; \manref{cge_gams},
+\opt{}{compare}, checks them against GAMS's.
+
 \cgesec{Stored results}
 
 \cmd{cge_listing} stores the following in \cmd{r()}:
@@ -120,6 +160,21 @@ Elements with two indexes are labelled by both, in the order of their sets.
 \res{r(block)} & the block of the largest scaled residual\\
 \res{r(element)} & its element\\
 \res{r(point)} & the point listed\\
+\end{storedres}
+With \opt{sol}{ution}, it stores:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_variables)} & number of variable elements\\
+\res{r(N_free)} & number of free variable elements\\
+\res{r(N_equations)} & number of equation elements in the system\\
+\res{r(N_constraints)} & number of constraints\\
+\res{r(N_binding)} & number of constraints that bind\\
+\res{r(N_atbound)} & number of free elements at a bound of \manref{cge_bound}\\
+\resgroup{Macros}
+\res{r(point)} & the point listed\\
+\resgroup{Matrices}
+\res{r(room)} & the room within each constraint's bound\\
+\res{r(marginals)} & the marginal of each constraint\\
 \end{storedres}
 
 \cgesec{Methods and formulas}
@@ -138,10 +193,27 @@ value. Elements outside the model, such as the import price of a commodity
 that is not imported, are not listed; elements replaced by user equations are
 listed and counted apart.
 
+In the solution listing (from version 0.9.8), the lower and upper bounds of a
+variable element are its level if the closure fixes it, and otherwise the
+bounds of \manref{cge_bound}, $-\infty$ and $+\infty$ by default. An equation
+element is $\ell_{B,e} - r_{B,e} = 0$: its bounds are 0 and its level the
+residual. A constraint on $Y$ with bound $b$, type $\sigma$ and adjusting
+variable $X$, fixed at $\bar X$ and moving in the direction $\delta$
+(chapter~\ref{chap:constraints}), has the level and marginal
+\begin{equation*}
+g = \sigma\,(b - Y) \ge 0, \qquad h = \delta\,(X - \bar X) \ge 0, \qquad g\,h = 0,
+\end{equation*}
+the room within the bound and the move of the adjusting variable, in the
+units of $Y$ and $X$. In the GAMS program the pair is $\text{BND} \perp \text{SLK}$,
+with $\text{BND} = g / s_Y$ and $\text{SLK} = h / s_X$; GAMS gives the
+marginal of a row of an MCP model as the level of its column, so that the
+marginal of BND times $s_X$ is $h$ and its slack times $s_Y$ is $g$.
+
 \cgesec{Also see}
 
 \begin{alsosee}
 \seeentry{cge_solve}{Solve the model}
+\seeentry{cge_bound}{Attributes of variables: bounds, scales, starting levels and fixed values}
 \seeentry{cge_check}{Run model validation checks}
 \seeentry{cge_equation}{User equations: new relations among the model's variables}
 \seechapter{chap:equations}{The equations}

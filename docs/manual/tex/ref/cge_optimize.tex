@@ -14,6 +14,9 @@ factor. The optimisation starts from the instruments' current values, with
 any shocks already applied, under the current closure. The optimum is stored
 as a simulation, and the instruments are left at their optimal values as
 current shocks, so that \mbox{\manref{cge_report}} and \mbox{\manref{cge_results}} show it.
+From version 0.9.8, an optimisation with an objective reports marginals, as
+the solution listing of GAMS's NLP models does: the shadow price of each
+target and constraint, and the reduced cost of each instrument.
 
 \cgesec{Quick start}
 
@@ -209,6 +212,19 @@ The constraint binds: the tariff is the one at which imports are 2 per cent
 below the base, the value a target \cmd{QM(com_man) = 0.98 * base(QM(com_man))}
 would give. Without it, the revenue-maximising tariff is far higher.
 
+\cgesubsec{Example 5: marginals}
+
+From version 0.9.8, the display gives the marginals. The constraint's is its
+shadow price: the change in revenue per unit increase in the floor on
+imports. It is negative, since a higher floor tightens the constraint; the
+tariff, within its bounds, has no reduced cost. Solving the optimisation again
+with the floor raised and lowered by a little gives the same derivative:
+\stlog{opt_marginal}
+An instrument at a bound has a reduced cost, the gain in the objective from
+relaxing the bound: the tariff on manufactures that maximises welfare, with
+its upper bound below the optimum,
+\stlog{opt_redcost}
+
 \cgesubsec{Bounds, failures and local optima}
 
 An instrument at a bound whose gradient points outwards is held there, and
@@ -239,6 +255,9 @@ be local: other starting values, set with \manref{cge_shock}, can be tried.
 \res{r(start)} & their starting values\\
 \res{r(targets)} & the target measures or expressions at the optimum, with targets\\
 \res{r(constraints)} & the constrained measures or expressions at the optimum, with constraints\\
+\res{r(instrument_marginals)} & the reduced costs of the instruments, with an objective (from version 0.9.8)\\
+\res{r(target_marginals)} & the shadow prices of the targets, with an objective\\
+\res{r(constraint_marginals)} & the shadow prices of the constraints\\
 \end{storedres}
 
 \cgesec{Methods and formulas}
@@ -305,6 +324,23 @@ are below $10^{-10}$. A constraint binds when $|h_k - \bar h_k| \le 10^{-6}
 \sigma_k$. An expression, as an objective, a target or a constraint, is
 compiled as a user equation is (chapter~\ref{chap:user}) and evaluated at the
 solution of each trial.
+
+\textit{Marginals} (from version 0.9.8). At the optimum, the Lagrangian of the
+scaled problem is $L = F - \lambda' r + \mu' s$, with the multipliers the
+updates give, $\lambda + \rho\, r$ and $\max(0, \mu - \rho\, s)$. The marginal of
+a target or constraint is the change in the objective per unit increase in its
+right side,
+\begin{equation*}
+\frac{\partial f^*}{\partial \bar g_j} = \pm \max(1, |f^0|)\, \frac{\lambda_j + \rho\, r_j}{\tau_j}, \qquad
+\frac{\partial f^*}{\partial \bar h_k} = \pm \max(1, |f^0|)\, \frac{\pm_k \max(0, \mu_k - \rho\, s_k)}{\sigma_k},
+\end{equation*}
+with the sign of the objective ($-$ for \cmd{minimize()}) and $\pm_k$, $+$ for
+$h_k \le \bar h_k$ and $-$ for $h_k \ge \bar h_k$, as the marginal of an
+equation in GAMS's NLP models. The reduced cost of an instrument at a bound is
+$\max(1, |f^0|)\, (\partial L / \partial z_k) / s_k$, from central
+differences of the augmented objective, whose gradient at the optimum is that
+of $L$; within its bounds it is zero. The test suite checks each against the
+change in the optimum when the right side or the bound moves.
 
 \Chapref{chap:optimize} gives the details.
 

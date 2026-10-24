@@ -15,13 +15,13 @@ Closure
 >     lower(tm(com_man):0) upper(tm(com_man):2) name(revenue)
 
 Optimisation revenue: converged after 234 solve(s) of the model
-----------------------------------------------------------------
-Instrument                                start          optimum
-----------------------------------------------------------------
-tm(com_man)                                  .1      .1296864671
-----------------------------------------------------------------
+-----------------------------------------------------------------------------
+Instrument                                start          optimum     marginal
+-----------------------------------------------------------------------------
+tm(com_man)                                  .1      .1296864671            0
+-----------------------------------------------------------------------------
 Maximised YG:      64.46989099
-Constraint QM(com_man) >= 0.98 * base(QM(com_man)):             58.8 (binding)
+Constraint QM(com_man) >= 0.98 * base(QM(com_man)):             58.8 (binding); marginal -1.20327
 
 . display r(N_binding)
 1

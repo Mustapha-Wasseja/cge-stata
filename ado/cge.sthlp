@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.7  24oct2026}{...}
+{* *! version 0.9.8  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -53,6 +53,7 @@ debt with interest.
 {p2col:{helpb cge_closure}}choose the closure{p_end}
 {p2col:{helpb cge_shock}}change parameters or fixed variables{p_end}
 {p2col:{helpb cge_constraint}}limits that may bind: quotas, capacity, borrowing and deficit ceilings{p_end}
+{p2col:{helpb cge_bound}}attributes of variables: bounds, scales, starting levels and fixed values{p_end}
 {p2col:{helpb cge_variable}}user variables, defined by an expression or by user equations{p_end}
 {p2col:{helpb cge_equation}}user equations: new relations among the model's variables{p_end}
 {p2col:{helpb cge_set}}user sets of elements, for indexes and sums{p_end}

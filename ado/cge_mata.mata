@@ -193,6 +193,13 @@ struct cge_model {
     string matrix    usdef, updef
     // user macros (from version 0.9.7): name, parameters and expression
     string matrix    umac
+    // attributes of variables (from version 0.9.8), as GAMS's .lo, .up,
+    // .scale and .l: the definitions of cge_bound (variable, elements, lower,
+    // upper, scale, level, "relative"), applied in order; the positions and
+    // values of the lower and upper bounds and the starting levels they give,
+    // and the positions given a scale
+    string matrix    bddef
+    real colvector   bdlp, bdlv, bdup, bduv, bdsp, bdsv, bdcp
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -210,7 +217,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.7")
+    return("0.9.8")
 }
 
 // =====================================================================
@@ -3336,6 +3343,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
 
     _cge_pattern(M, p)
     M.calibrated = 1
+    // the attributes of cge_bound, from the new base (from version 0.9.8)
+    _cge_bd_sync(M)
     M.simname = J(0, 1, "")
     M.simclosure = J(0, 1, "")
     M.simmethod = J(0, 1, "")
@@ -4561,6 +4570,9 @@ real colvector _cge_F(struct cge_model scalar M, struct cge_par scalar p, real c
     x[S.free] = z :* M.xscale[S.free]
     if (S.reduced) _cge_derive(M, p, x)
     if (min(x[M.positive]) <= 0 | hasmissing(x)) return(J(S.neq, 1, .))
+    // points outside the bounds of cge_bound are rejected (from version 0.9.8)
+    if (rows(M.bdlp)) if (any(x[M.bdlp] :< M.bdlv)) return(J(S.neq, 1, .))
+    if (rows(M.bdup)) if (any(x[M.bdup] :> M.bduv)) return(J(S.neq, 1, .))
     _cge_eq(M, p, x, L, R, K, 0)
     return(select((L - R) :/ M.escale, S.mask))
 }
@@ -6844,7 +6856,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
                 real scalar steps, real scalar diagnose)
 {
     struct cge_model scalar M
-    real colvector x, x2
+    real colvector x, x2, start
     real scalar conv, iter, err, k, walras, nsteps, done, it2, n
     string scalar method, m2
 
@@ -6854,6 +6866,8 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     M = _cge_load()
     _cge_need(M, "calibrated")
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
+    // the base with the starting levels of cge_bound (from version 0.9.8)
+    start = _cge_bd_start(M, M.xcur)
 
     // Continuation (from version 0.4.5): steps(n) applies the shock in n
     // steps; by default (steps 0) a failed solve is tried again in 4, then 16
@@ -6863,7 +6877,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
         nsteps = (conv ? steps : done)
     }
     else {
-        x = _cge_solve_point(M, M.p, M.xcur, M.x0, tol, maxit, trace, conv, iter, err, method, full)
+        x = _cge_solve_point(M, M.p, M.xcur, start, tol, maxit, trace, conv, iter, err, method, full)
         if (!conv & steps == 0) {
             for (k = 1; k <= 2; k++) {
                 n = (k == 1 ? 4 : 16)
@@ -6891,6 +6905,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     else if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) ({res}%s{txt})\n", name, iter, method)
     else printf("{err}Simulation %s did not converge (largest scaled residual %9.3e)\n", name, err)
     printf("{txt}Largest scaled residual {res}%9.3e{txt}; WALRAS = {res}%9.3e\n", err, walras)
+    _cge_bd_note(M, x, conv)
     st_numscalar("r(N_collapsed)", (conv ? _cge_collapsed(M, x, 1) : .))
     // Diagnostics (from version 0.4.5): after a failure, or when asked
     if (!conv | diagnose) _cge_diagnose(M, M.p, x, full, (diagnose ? 10 : 5))
@@ -6947,6 +6962,664 @@ real scalar _cge_collapsed(struct cge_model scalar M, real colvector x, real sca
     if (n > 5) printf("{txt}  and %f more\n", n - 5)
     printf("{txt}The equations hold, but such a solution rarely makes economic sense.\n")
     return(n)
+}
+
+// =====================================================================
+// Attributes of variables (from version 0.9.8)
+// =====================================================================
+
+// A value given to cge_bound: a number, -1e300 for -inf and 1e300 for inf
+// (or +inf); missing when none is given
+real scalar _cge_bd_num(string scalar s, string scalar what)
+{
+    string scalar t
+    real scalar v
+    t = strlower(strtrim(s))
+    if (t == "") return(.)
+    if (t == "-inf") return(-1e300)
+    if (t == "inf" | t == "+inf") return(1e300)
+    v = strtoreal(t)
+    if (v >= .) _cge_fail("cge_bound: " + what + "() takes a number, or -inf or inf", 198)
+    return(v)
+}
+
+// The positions in pos of elements that exist
+real colvector _cge_bd_exist(struct cge_model scalar M, real colvector pos)
+{
+    real colvector k
+    if (!rows(pos)) return(J(0, 1, .))
+    k = _cge_which(M.exists[pos])
+    return(rows(k) ? pos[k] : J(0, 1, .))
+}
+
+// Positions of the existing elements of variable k named in elems: every
+// existing element when elems is empty, e1.e2 for two indexes. With quiet,
+// an element that no longer exists is left out instead of stopping.
+real colvector _cge_bd_pos(struct cge_model scalar M, real scalar k, string scalar elems, | real scalar quiet)
+{
+    string rowvector tok, two
+    string colvector l1, l2
+    string scalar s1, s2
+    real colvector out
+    real scalar i, a, b
+    if (args() < 4) quiet = 0
+    if (strtrim(elems) == "" | strtrim(elems) == "all") return(_cge_bd_exist(M, _cge_vpos(M, k)))
+    tok = tokens(elems)
+    if (M.vset[k] == "") {
+        if (quiet) return(J(0, 1, .))
+        _cge_fail("cge_bound: " + M.vname[k] + " has no elements", 198)
+    }
+    out = J(0, 1, .)
+    if (_cge_nidx(M.vset[k]) == 1) {
+        l1 = _cge_setlab(M, M.vset[k])
+        for (i = 1; i <= cols(tok); i++) {
+            a = _cge_find(l1, tok[i])
+            if (!a) {
+                if (quiet) continue
+                _cge_fail("cge_bound: " + tok[i] + " is not an element of " + M.vname[k], 111)
+            }
+            out = out \ (M.voff[k] + a)
+        }
+    }
+    else {
+        _cge_setparts(M.vset[k], s1, s2)
+        l1 = _cge_setlab(M, s1)
+        l2 = _cge_setlab(M, s2)
+        for (i = 1; i <= cols(tok); i++) {
+            two = tokens(subinstr(tok[i], ".", " "))
+            a = 0
+            b = 0
+            if (cols(two) == 2) {
+                a = _cge_find(l1, two[1])
+                b = _cge_find(l2, two[2])
+            }
+            if (!a | !b) {
+                if (quiet) continue
+                _cge_fail("cge_bound: " + tok[i] + " is not an element of " + M.vname[k] + "; write e1.e2 for two indexes", 111)
+            }
+            out = out \ (M.voff[k] + (a - 1) * M.vcols[k] + b)
+        }
+    }
+    if (!quiet) {
+        for (i = 1; i <= rows(out); i++) {
+            if (!M.exists[out[i]]) _cge_fail("cge_bound: " + _cge_poslabel(M, out[i]) + " does not exist in this model", 459)
+        }
+    }
+    return(_cge_bd_exist(M, out))
+}
+
+// The bounds, starting levels and scales that the definitions of cge_bound
+// give: applied in order, later ones replacing earlier ones, with -inf and inf
+// removing a bound. A scale replaces the automatic one, abs(x0) or 1, which
+// returns when the scale is removed. The definitions of user variables since
+// removed are dropped.
+void _cge_bd_sync(struct cge_model scalar M)
+{
+    real colvector lo, up, sc, lv, pos, keep, a, au
+    real scalar r, k, n, v
+    n = rows(M.x0)
+    if (rows(M.bdcp)) {
+        pos = select(M.bdcp, M.bdcp :<= n)
+        if (rows(pos)) M.xscale[pos] = abs(M.x0[pos]) :* (abs(M.x0[pos]) :> 1e-12) + (abs(M.x0[pos]) :<= 1e-12)
+    }
+    M.bdlp = M.bdlv = M.bdup = M.bduv = M.bdsp = M.bdsv = M.bdcp = J(0, 1, .)
+    if (rows(M.bddef) == 0 | cols(M.bddef) < 7 | !n) {
+        if (cols(M.bddef) != 7) M.bddef = J(0, 7, "")
+        return
+    }
+    keep = J(rows(M.bddef), 1, 0)
+    for (r = 1; r <= rows(M.bddef); r++) keep[r] = (_cge_vidx(M, M.bddef[r, 1]) > 0)
+    if (!any(keep)) {
+        M.bddef = J(0, 7, "")
+        return
+    }
+    M.bddef = select(M.bddef, keep)
+    lo = up = sc = lv = J(n, 1, .)
+    for (r = 1; r <= rows(M.bddef); r++) {
+        k = _cge_vidx(M, M.bddef[r, 1])
+        pos = _cge_bd_pos(M, k, M.bddef[r, 2], 1)
+        if (!rows(pos)) continue
+        // relative: multiples of the base values, and of the automatic scales
+        a = J(rows(pos), 1, 1)
+        au = a
+        if (M.bddef[r, 7] == "relative") {
+            a = M.x0[pos]
+            au = abs(a) :* (abs(a) :> 1e-12) + (abs(a) :<= 1e-12)
+        }
+        v = _cge_bd_num(M.bddef[r, 3], "lower")
+        if (v < .) lo[pos] = (v <= -1e299 ? J(rows(pos), 1, .) : v :* a)
+        v = _cge_bd_num(M.bddef[r, 4], "upper")
+        if (v < .) up[pos] = (v >= 1e299 ? J(rows(pos), 1, .) : v :* a)
+        v = _cge_bd_num(M.bddef[r, 5], "scale")
+        if (v < .) sc[pos] = v :* au
+        v = _cge_bd_num(M.bddef[r, 6], "level")
+        if (v < .) lv[pos] = v :* a
+    }
+    M.bdlp = _cge_which(lo :< .)
+    M.bdlv = (rows(M.bdlp) ? lo[M.bdlp] : J(0, 1, .))
+    M.bdup = _cge_which(up :< .)
+    M.bduv = (rows(M.bdup) ? up[M.bdup] : J(0, 1, .))
+    M.bdsp = _cge_which(lv :< .)
+    M.bdsv = (rows(M.bdsp) ? lv[M.bdsp] : J(0, 1, .))
+    M.bdcp = _cge_which(sc :< .)
+    if (rows(M.bdcp)) M.xscale[M.bdcp] = sc[M.bdcp]
+}
+
+// The lower and upper bounds of every element, -1e300 and 1e300 where none
+void _cge_bd_full(struct cge_model scalar M, real colvector lo, real colvector up)
+{
+    lo = J(rows(M.x0), 1, -1e300)
+    up = J(rows(M.x0), 1, 1e300)
+    if (rows(M.bdlp)) lo[M.bdlp] = M.bdlv
+    if (rows(M.bdup)) up[M.bdup] = M.bduv
+}
+
+// Each lower bound at most its upper bound, and the base values and the
+// starting levels within the bounds
+void _cge_bd_valid(struct cge_model scalar M)
+{
+    real colvector lo, up, bad, f
+    _cge_bd_full(M, lo, up)
+    bad = _cge_which(lo :> up)
+    if (rows(bad)) _cge_fail("cge_bound: the lower bound of " + _cge_poslabel(M, bad[1]) + " is above its upper bound", 198)
+    bad = _cge_which(M.exists :& ((M.x0 :< lo) :| (M.x0 :> up)))
+    if (rows(bad)) {
+        _cge_fail("cge_bound: the base value of " + _cge_poslabel(M, bad[1]) + ", " + strtrim(sprintf("%14.8g", M.x0[bad[1]])) +
+                  ", lies outside its bounds; the base solution must lie within them", 459)
+    }
+    if (!rows(M.bdsp)) return
+    bad = _cge_which((M.bdsv :< lo[M.bdsp]) :| (M.bdsv :> up[M.bdsp]))
+    if (rows(bad)) _cge_fail("cge_bound: the starting level of " + _cge_poslabel(M, M.bdsp[bad[1]]) + " lies outside its bounds", 459)
+    f = J(rows(M.x0), 1, 0)
+    if (rows(M.positive)) f[M.positive] = J(rows(M.positive), 1, 1)
+    bad = _cge_which(f[M.bdsp] :& (M.bdsv :<= 0))
+    if (rows(bad)) _cge_fail("cge_bound: the starting level of " + _cge_poslabel(M, M.bdsp[bad[1]]) + " must be positive, as its base value is", 459)
+}
+
+// cge_bound: attributes of the elements of a model or user variable, as
+// GAMS's .lo, .up, .scale and .l; or, with fix(), the value of an exogenous
+// variable, as .fx. With rel, the values are multiples of the base values.
+void _cge_bd_add(string scalar name, string scalar elems, string scalar slo, string scalar sup,
+                 string scalar ssc, string scalar slv, string scalar sfx, real scalar rel)
+{
+    struct cge_model scalar M, N
+    real colvector pos, fr
+    real scalar k, vlo, vup, vsc, vlv, vfx
+    string scalar what
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    k = _cge_vidx(M, name)
+    if (!k) _cge_fail("cge_bound: " + name + " is not a model or user variable", 198)
+    pos = _cge_bd_pos(M, k, elems)
+    if (!rows(pos)) _cge_fail("cge_bound: " + name + " has no element in this model", 459)
+    vlo = _cge_bd_num(slo, "lower")
+    vup = _cge_bd_num(sup, "upper")
+    vsc = _cge_bd_num(ssc, "scale")
+    vlv = _cge_bd_num(slv, "level")
+    vfx = _cge_bd_num(sfx, "fix")
+    if (vlo >= . & vup >= . & vsc >= . & vlv >= . & vfx >= .) _cge_fail("cge_bound: give lower(), upper(), scale(), level() or fix()", 198)
+    if (vlo == 1e300 | vup == -1e300) _cge_fail("cge_bound: a lower bound of inf or an upper bound of -inf leaves no value", 198)
+    if (vsc < . & !(vsc > 0 & vsc < 1e299)) _cge_fail("cge_bound: scale() takes a positive number", 198)
+    if ((vlv < . & abs(vlv) >= 1e299) | (vfx < . & abs(vfx) >= 1e299)) _cge_fail("cge_bound: level() and fix() take a number", 198)
+    // fix(): the value of an exogenous variable, as .fx in GAMS
+    if (vfx < .) {
+        if (vlo < . | vup < . | vsc < . | vlv < .) _cge_fail("cge_bound: give fix() alone", 198)
+        fr = _cge_which(M.fixed[pos] :== 0)
+        if (rows(fr)) {
+            _cge_fail("cge_bound: " + _cge_poslabel(M, pos[fr[1]]) + " is endogenous under the closure, so fixing it would leave more equations " +
+                      "than free variables; fix it with cge_closure, swap(), then give its value", 459)
+        }
+        M.xcur[pos] = (rel ? vfx :* M.x0[pos] : J(rows(pos), 1, vfx))
+        _cge_store(M)
+        printf("{txt}Variable {res}%s{txt} fixed at %s for %f element(s)\n", name,
+               _cge_gnum(vfx) + (rel ? " times the base" : ""), rows(pos))
+        st_global("r(name)", name)
+        st_numscalar("r(N_elements)", rows(pos))
+        return
+    }
+    if (vlv < .) {
+        fr = _cge_which(M.fixed[pos])
+        if (rows(fr)) {
+            _cge_fail("cge_bound: " + _cge_poslabel(M, pos[fr[1]]) + " is fixed under the closure; level() gives the starting level of " +
+                      "an endogenous variable, and fix() the value of a fixed one", 459)
+        }
+    }
+    N = M
+    if (cols(N.bddef) != 7) N.bddef = J(0, 7, "")
+    N.bddef = N.bddef \ (name, strtrim(elems), strtrim(slo), strtrim(sup), strtrim(ssc), strtrim(slv), (rel ? "relative" : ""))
+    _cge_bd_sync(N)
+    _cge_bd_valid(N)
+    _cge_store(N)
+    what = ""
+    if (vlo < .) what = what + ", lower bound " + (vlo <= -1e299 ? "removed" : _cge_gnum(vlo))
+    if (vup < .) what = what + ", upper bound " + (vup >= 1e299 ? "removed" : _cge_gnum(vup))
+    if (vsc < .) what = what + ", scale " + _cge_gnum(vsc)
+    if (vlv < .) what = what + ", starting level " + _cge_gnum(vlv)
+    printf("{txt}Variable {res}%s{txt}: %s%s for %f element(s)\n", name, substr(what, 3, .), (rel ? ", times the base" : ""), rows(pos))
+    st_global("r(name)", name)
+    st_numscalar("r(N_elements)", rows(pos))
+    st_numscalar("r(N_definitions)", rows(N.bddef))
+    st_numscalar("r(N_lower)", rows(N.bdlp))
+    st_numscalar("r(N_upper)", rows(N.bdup))
+    st_numscalar("r(N_scales)", rows(N.bdcp))
+    st_numscalar("r(N_levels)", rows(N.bdsp))
+}
+
+// The definitions of cge_bound, and the elements they give attributes
+void _cge_bd_list()
+{
+    struct cge_model scalar M
+    real scalar n, r
+    string scalar rel
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    n = (cols(M.bddef) == 7 ? rows(M.bddef) : 0)
+    st_numscalar("r(N_definitions)", n)
+    st_numscalar("r(N_lower)", rows(M.bdlp))
+    st_numscalar("r(N_upper)", rows(M.bdup))
+    st_numscalar("r(N_scales)", rows(M.bdcp))
+    st_numscalar("r(N_levels)", rows(M.bdsp))
+    if (!n) {
+        printf("{txt}No attributes of variables\n")
+        return
+    }
+    printf("{txt}%-12s %-20s %12s %12s %12s %12s\n{hline 84}\n", "Variable", "Elements", "lower", "upper", "scale", "level")
+    for (r = 1; r <= n; r++) {
+        rel = (M.bddef[r, 7] == "relative" ? " (relative)" : "")
+        printf("{txt}%-12s %-20s {res}%12s %12s %12s %12s{txt}%s\n", M.bddef[r, 1], _cge_trunc((M.bddef[r, 2] == "" ? "all" : M.bddef[r, 2]), 20),
+               M.bddef[r, 3], M.bddef[r, 4], M.bddef[r, 5], M.bddef[r, 6], rel)
+    }
+    printf("{txt}{hline 84}\n")
+    printf("{txt}Elements with a lower bound {res}%f{txt}, an upper bound {res}%f{txt}, a scale {res}%f{txt}, a starting level {res}%f\n",
+           rows(M.bdlp), rows(M.bdup), rows(M.bdcp), rows(M.bdsp))
+}
+
+// Removes the definitions of cge_bound, of variable name or of every variable
+void _cge_bd_clear(string scalar name)
+{
+    struct cge_model scalar M
+    real colvector keep
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (cols(M.bddef) != 7) M.bddef = J(0, 7, "")
+    if (name == "") M.bddef = J(0, 7, "")
+    else if (rows(M.bddef)) {
+        if (!_cge_vidx(M, name)) _cge_fail("cge_bound: " + name + " is not a model or user variable", 198)
+        keep = (M.bddef[., 1] :!= name)
+        M.bddef = (any(keep) ? select(M.bddef, keep) : J(0, 7, ""))
+    }
+    _cge_bd_sync(M)
+    _cge_store(M)
+    printf("{txt}Attributes %sremoved\n", (name == "" ? "of variables " : "of " + name + " "))
+    st_numscalar("r(N_definitions)", rows(M.bddef))
+}
+
+// The start of cge_solve: the base, with the starting levels of cge_bound for
+// the free variables; an exogenous element outside its bounds stops the solve
+real colvector _cge_bd_start(struct cge_model scalar M, real colvector xfix)
+{
+    real colvector x, k
+    x = M.x0
+    if (rows(M.bdlp)) {
+        k = _cge_which(M.fixed[M.bdlp] :& (xfix[M.bdlp] :< M.bdlv))
+        if (rows(k)) _cge_fail(_cge_poslabel(M, M.bdlp[k[1]]) + " is fixed at " + strtrim(sprintf("%14.8g", xfix[M.bdlp[k[1]]])) +
+                               ", below its lower bound (cge_bound)", 459)
+    }
+    if (rows(M.bdup)) {
+        k = _cge_which(M.fixed[M.bdup] :& (xfix[M.bdup] :> M.bduv))
+        if (rows(k)) _cge_fail(_cge_poslabel(M, M.bdup[k[1]]) + " is fixed at " + strtrim(sprintf("%14.8g", xfix[M.bdup[k[1]]])) +
+                               ", above its upper bound (cge_bound)", 459)
+    }
+    if (rows(M.bdsp)) {
+        k = _cge_which(M.fixed[M.bdsp] :== 0)
+        if (rows(k)) x[M.bdsp[k]] = M.bdsv[k]
+    }
+    return(x)
+}
+
+// The free elements of x at a bound of cge_bound, within 1e-9 of their scale
+real colvector _cge_bd_active(struct cge_model scalar M, real colvector x)
+{
+    real colvector a, k
+    a = J(0, 1, .)
+    if (rows(M.bdlp)) {
+        k = _cge_which((M.fixed[M.bdlp] :== 0) :& (abs(x[M.bdlp] - M.bdlv) :<= 1e-9 :* M.xscale[M.bdlp]))
+        if (rows(k)) a = a \ M.bdlp[k]
+    }
+    if (rows(M.bdup)) {
+        k = _cge_which((M.fixed[M.bdup] :== 0) :& (abs(x[M.bdup] - M.bduv) :<= 1e-9 :* M.xscale[M.bdup]))
+        if (rows(k)) a = a \ M.bdup[k]
+    }
+    return(a)
+}
+
+// After cge_solve: the free elements at a bound, which in a square system is
+// not meant to bind, as GAMS warns of in a CNS model; after a failed solve, the
+// bounds nearest the last point
+void _cge_bd_note(struct cge_model scalar M, real colvector x, real scalar conv)
+{
+    real colvector a, pos, d, o
+    real scalar k
+    if (!rows(M.bdlp) & !rows(M.bdup)) {
+        st_numscalar("r(N_atbound)", 0)
+        return
+    }
+    a = _cge_bd_active(M, x)
+    st_numscalar("r(N_atbound)", rows(a))
+    if (conv) {
+        if (!rows(a)) return
+        printf("{txt}Note: {res}%f{txt} variable element(s) at a bound of cge_bound:", rows(a))
+        for (k = 1; k <= min((rows(a), 5)); k++) printf(" {res}%s{txt}", _cge_poslabel(M, a[k]))
+        if (rows(a) > 5) printf(" and %f more", rows(a) - 5)
+        printf("\n{txt}A bound is not meant to bind in a square system, as in GAMS's CNS models; a limit that binds\n")
+        printf("{txt}is a constraint (cge_constraint) or an inequality of cge_equation\n")
+        return
+    }
+    // the distance of each free bounded element from its bound, relative to its scale
+    pos = d = J(0, 1, .)
+    for (k = 1; k <= rows(M.bdlp); k++) {
+        if (M.fixed[M.bdlp[k]]) continue
+        pos = pos \ M.bdlp[k]
+        d = d \ (x[M.bdlp[k]] - M.bdlv[k]) / M.xscale[M.bdlp[k]]
+    }
+    for (k = 1; k <= rows(M.bdup); k++) {
+        if (M.fixed[M.bdup[k]]) continue
+        pos = pos \ M.bdup[k]
+        d = d \ (M.bduv[k] - x[M.bdup[k]]) / M.xscale[M.bdup[k]]
+    }
+    if (!rows(pos)) return
+    o = order(abs(d), 1)
+    printf("{txt}Bounds of cge_bound nearest the last point, with the distance relative to the scale:\n")
+    for (k = 1; k <= min((rows(o), 3)); k++) printf("{txt}  %-28s {res}%9.2e\n", _cge_poslabel(M, pos[o[k]]), d[o[k]])
+    printf("{txt}A solution beyond a bound cannot be reached: remove the bound, or make the limit a constraint\n")
+}
+
+// The attributes of cge_bound for GAMS (cge_bounds.inc), included after the
+// closure, which frees every variable and fixes some: .lo and .up of the
+// variables free under the closure, except the adjusting variables of
+// constraints, which cge_constraints.inc frees; .scale, with scaleopt; and .l,
+// the starting levels of free variables. A mixed complementarity problem
+// (mcp) bounds only the variables paired with an equation, so its bounds,
+// which do not bind, are left out.
+void _cge_gams_bounds(struct cge_model scalar M, real colvector fixed, string scalar fn, | real scalar mcp)
+{
+    real colvector skip
+    string scalar g, idx
+    real scalar fh, k
+    if (args() < 4) mcp = 0
+    fh = _cge_gopen(fn)
+    fput(fh, "* Attributes of variables (cge_bound), written by cge_gams")
+    skip = J(rows(M.x0), 1, (mcp != 0))
+    if (rows(M.bX)) skip[M.bX] = J(rows(M.bX), 1, 1)
+    if (mcp & rows(M.bdlp) + rows(M.bdup)) {
+        fput(fh, "* The bounds are left out: GAMS's MCP models bound only the variables paired with")
+        fput(fh, "* an equation, and in a square system the bounds do not bind")
+    }
+    for (k = 1; k <= rows(M.bdlp); k++) {
+        if (fixed[M.bdlp[k]] | skip[M.bdlp[k]]) continue
+        _cge_gams_ref(M, M.bdlp[k], g, idx)
+        fput(fh, g + ".lo" + idx + " = " + _cge_gnum(M.bdlv[k]) + ";")
+    }
+    for (k = 1; k <= rows(M.bdup); k++) {
+        if (fixed[M.bdup[k]] | skip[M.bdup[k]]) continue
+        _cge_gams_ref(M, M.bdup[k], g, idx)
+        fput(fh, g + ".up" + idx + " = " + _cge_gnum(M.bduv[k]) + ";")
+    }
+    for (k = 1; k <= rows(M.bdcp); k++) {
+        _cge_gams_ref(M, M.bdcp[k], g, idx)
+        fput(fh, g + ".scale" + idx + " = " + _cge_gnum(M.xscale[M.bdcp[k]]) + ";")
+    }
+    if (rows(M.bdcp)) fput(fh, "cge.scaleopt = 1;  cgenlp.scaleopt = 1;  cgecon.scaleopt = 1;")
+    for (k = 1; k <= rows(M.bdsp); k++) {
+        if (fixed[M.bdsp[k]]) continue
+        _cge_gams_ref(M, M.bdsp[k], g, idx)
+        fput(fh, g + ".l" + idx + " = " + _cge_gnum(M.bdsv[k]) + ";")
+    }
+    fclose(fh)
+}
+
+// The variables fixed under the closure of stored simulation k
+real colvector _cge_sim_fixed(struct cge_model scalar M, real scalar k)
+{
+    struct cge_model scalar M2
+    string rowvector cl
+    real colvector fx, fr
+    cl = tokens(M.simclosure[k])
+    M2 = M
+    _cge_swap_parse(M2, _cge_swap_tokens(cl), fx, fr)
+    M2.swfix = fx
+    M2.swfree = fr
+    _cge_closure_apply(M2, cl[1], subinstr(cl[2], ":", " "), cl[3], cl[4],
+                       substr(cl[|5 \ 4 + M.nF|]', strpos(cl[|5 \ 4 + M.nF|]', ":") :+ 1, .))
+    return(M2.fixed)
+}
+
+// Short descriptions of the model's variables (model_spec.md, Section 3)
+string scalar _cge_vdesc(struct cge_model scalar M, string scalar name)
+{
+    string matrix T
+    real colvector k
+    T = ("PA", "activity price") \ ("PVA", "price of value added") \ ("PINTA", "price of aggregate intermediate input") \
+        ("PX", "producer price of commodity output") \ ("PD", "price of domestic sales") \ ("PE", "export price") \
+        ("PWE", "world export price") \ ("PM", "import price") \ ("PQ", "composite price") \ ("W", "average factor price") \
+        ("EXR", "exchange rate") \ ("CPI", "consumer price index") \ ("DPI", "producer price index") \
+        ("QA", "level of activity") \ ("QVA", "aggregate value added") \ ("QINTA", "aggregate intermediate input") \
+        ("QF", "factor demand") \ ("QINT", "intermediate use") \ ("QX", "commodity output") \ ("QD", "domestic sales") \
+        ("QE", "exports") \ ("QM", "imports") \ ("QQ", "composite supply") \ ("QH", "household consumption") \
+        ("QHA", "home consumption") \ ("QG", "government consumption") \ ("QINV", "investment demand") \
+        ("QT", "margin demand") \ ("QER", "exports from composite supply") \ ("QSHI", "purchases of the insurance fund") \
+        ("QFS", "factor supply") \ ("LSW", "slack of the wage curve") \ ("LSM", "slack of the minimum wage") \
+        ("YF", "factor income") \ ("YIF", "factor income of institutions") \ ("YI", "income of institutions") \
+        ("EH", "household consumption spending") \ ("YG", "government revenue") \ ("EG", "government spending") \
+        ("YSHI", "revenue of the insurance fund") \ ("SHIADJ", "scaling factor of the fund's purchases") \
+        ("GSAV", "government savings") \ ("FSAV", "foreign savings") \ ("TINS", "direct tax rate") \
+        ("MPS", "savings rate") \ ("TINSADJ", "direct tax scaling factor") \ ("TQADJ", "sales tax scaling factor") \
+        ("TMADJ", "tariff scaling factor") \ ("TVADJ", "VAT scaling factor") \ ("MPSADJ", "savings rate scaling factor") \
+        ("IADJ", "investment scaling factor") \ ("GADJ", "government consumption scaling factor") \
+        ("WFDIST", "wage distortion factor") \ ("EFF", "factor efficiency") \ ("DW", "days worked") \
+        ("HS", "volume of health services") \ ("WALRAS", "slack of the savings-investment balance") \
+        ("RM", "import premium") \ ("RE", "export premium") \ ("RA", "rent on output") \
+        ("QNA", "quantity of a nest") \ ("PNA", "price of a nest") \ ("QXAC", "output of a commodity by an activity") \
+        ("PXAC", "price of an activity's output")
+    k = selectindex(T[., 1] :== name)
+    if (length(k)) return(T[k[1], 2])
+    if (M.nuv) if (_cge_vidx(M, name) > rows(M.vname) - M.nuv) return("user variable")
+    return("")
+}
+
+// A value of the solution listing, as GAMS prints it: . for zero, -INF and +INF
+string scalar _cge_sol_num(real scalar v)
+{
+    if (v >= .) return("")
+    if (v <= -1e299) return("-INF")
+    if (v >= 1e299) return("+INF")
+    if (v == 0) return(".")
+    return(strtrim(sprintf("%14.7g", v)))
+}
+
+void _cge_sol_head(string scalar kind, string scalar name, string scalar desc)
+{
+    printf("\n{txt}---- %s {res}%s{txt}  %s\n\n", kind, name, desc)
+    printf("{txt}  %-24s %14s %14s %14s %14s\n", "", "LOWER", "LEVEL", "UPPER", "MARGINAL")
+}
+
+void _cge_sol_row(string scalar el, real scalar lo, real scalar lv, real scalar up, real scalar mg)
+{
+    printf("{txt}  %-24s {res}%14s %14s %14s %14s\n", _cge_trunc(el, 24), _cge_sol_num(lo), _cge_sol_num(lv), _cge_sol_num(up),
+           (mg >= . ? "." : _cge_sol_num(mg)))
+}
+
+// The solution listing (from version 0.9.8), as GAMS writes it after a solve:
+// for each block of variables and equations asked for, LOWER, LEVEL, UPPER
+// and MARGINAL of each element. A variable fixed under the closure has its
+// level as both bounds; a free one has the bounds of cge_bound, or -INF and
+// +INF. An equation is written with every term on the left: its bounds are 0
+// and its level is its residual. The square system has no marginals, as
+// GAMS's CNS models have none. A constraint (Section 16, and each inequality
+// of cge_equation) is a complementarity pair: its level is the room within its
+// bound, sigma (b - Y), and its marginal the move of its adjusting variable,
+// delta (X - xbar), as in GAMS's MCP model, where the marginal of a row is the
+// level of its column.
+void _cge_solution(string scalar sim, real scalar base, real scalar current, string scalar vars,
+                   string scalar blocks, real scalar all, real scalar clear)
+{
+    struct cge_model scalar M
+    struct cge_par scalar p
+    real colvector x, L, R, K, fixed, lo, up, pos, room, move, act, g, o, ins, cfix, at
+    string colvector e1, e2, bl, el
+    string rowvector wv, wb
+    string scalar what, d, b, e
+    real scalar k, i, j, n, nc, nb, kv, nrow, row
+    real matrix V
+    string matrix S
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if ((sim != "") + base + current > 1) _cge_fail("give one of sim(), base and current", 198)
+    if (sim == "" & !base & !current) {
+        if (rows(M.simname)) sim = M.simname[rows(M.simname)]
+        else base = 1
+    }
+    if (sim != "") {
+        k = _cge_sim_index(M, sim)
+        if (M.simrun[k] != "") _cge_fail("simulation " + sim + " is a period of dynamic run " + M.simrun[k] + "; give a static simulation", 198)
+        p = M.simp[k]
+        x = M.simx[., k]
+        fixed = _cge_sim_fixed(M, k)
+        what = "simulation " + sim
+    }
+    else if (base) {
+        p = M.p0
+        x = M.x0
+        fixed = M.fixed
+        what = "the base"
+    }
+    else {
+        p = M.p
+        x = M.xcur
+        fixed = M.fixed
+        what = "the current point, before it is solved"
+    }
+    _cge_bd_full(M, lo, up)
+    // the constraints: room within the bound and move of the adjusting variable
+    nc = 0
+    act = room = move = J(0, 1, .)
+    if (rows(M.bY) & rows(p.bmode) == rows(M.bY)) {
+        act = _cge_which(p.bmode :> 0)
+        nc = rows(act)
+        if (nc) {
+            room = M.btype[act] :* (p.bval[act] - x[M.bY[act]])
+            // the fixed levels of the adjusting variables: those of the solve,
+            // or the current ones before a solve
+            move = M.bdir[act] :* (x[M.bX[act]] - (rows(p.bxbar) == rows(M.bY) ? p.bxbar[act] : x[M.bX[act]]))
+        }
+    }
+    cfix = J(rows(x), 1, 0)
+    if (nc) cfix[M.bX[act]] = J(nc, 1, 1)
+    // the equations in the system
+    _cge_eq(M, p, x, L, R, K, 0)
+    ins = _cge_which(M.emask :!= 0)
+    bl = el = J(rows(ins), 1, "")
+    for (i = 1; i <= rows(ins); i++) {
+        _cge_eqlabel(M, ins[i], b, e, d)
+        bl[i] = b
+        el[i] = e
+    }
+    at = _cge_bd_active(M, x)
+    printf("{txt}Solution listing at %s: {res}%f{txt} variable elements ({res}%f{txt} free), {res}%f{txt} equation elements\n",
+           what, sum(M.exists), sum(M.exists :& (fixed :== 0)), rows(ins))
+    if (nc) printf("{txt}Constraints: {res}%f{txt}, of which {res}%f{txt} bind\n", nc, sum(abs(room) :<= 1e-9 :* M.xscale[M.bY[act]]))
+    if (rows(M.bdlp) + rows(M.bdup)) printf("{txt}Elements at a bound of cge_bound: {res}%f\n", rows(at))
+    // the blocks to list
+    wv = (all ? M.vname' : tokens(vars))
+    wb = (all ? J(1, 0, "") : tokens(strupper(blocks)))
+    if (all) {
+        for (i = 1; i <= rows(bl); i++) if (!anyof(wb, bl[i]) & bl[i] != "B1") wb = wb, bl[i]
+    }
+    for (k = 1; k <= cols(wv); k++) if (!_cge_vidx(M, wv[k])) _cge_fail("variables(): " + wv[k] + " is not a model or user variable", 198)
+    for (k = 1; k <= cols(wb); k++) if (!anyof(M.ename, wb[k])) _cge_fail("blocks(): " + wb[k] + " is not an equation block (model_spec.md, Section 5)", 198)
+    // by default the variables with attributes of cge_bound
+    if (!all & !cols(wv) & !cols(wb)) {
+        for (k = 1; k <= rows(M.bddef); k++) if (!anyof(wv, M.bddef[k, 1])) wv = wv, M.bddef[k, 1]
+    }
+    for (k = 1; k <= cols(wv); k++) {
+        kv = _cge_vidx(M, wv[k])
+        pos = _cge_bd_exist(M, _cge_vpos(M, kv))
+        if (!rows(pos)) continue
+        _cge_vlabels(M, kv, e1, e2)
+        _cge_sol_head("VAR", wv[k], _cge_vdesc(M, wv[k]))
+        for (i = 1; i <= rows(pos); i++) {
+            j = pos[i] - M.voff[kv]
+            if (fixed[pos[i]] & !cfix[pos[i]]) _cge_sol_row((e1[j] == "" ? "" : e1[j] + (e2[j] == "" ? "" : "." + e2[j])), x[pos[i]], x[pos[i]], x[pos[i]], .)
+            else _cge_sol_row((e1[j] == "" ? "" : e1[j] + (e2[j] == "" ? "" : "." + e2[j])), lo[pos[i]], x[pos[i]], up[pos[i]], .)
+        }
+    }
+    for (k = 1; k <= cols(wb); k++) {
+        // the constraints are listed below
+        if (wb[k] == "B1") continue
+        o = _cge_which(bl :== wb[k])
+        if (!rows(o)) continue
+        _cge_eqinfo(wb[k], b, d)
+        _cge_sol_head("EQU", wb[k], d)
+        for (i = 1; i <= rows(o); i++) _cge_sol_row(el[o[i]], 0, L[ins[o[i]]] - R[ins[o[i]]], 0, .)
+    }
+    // the constraints, always listed
+    if (nc) {
+        _cge_sol_head("EQU", "B1", "constraint: room within the bound; marginal, the move of the adjusting variable")
+        for (i = 1; i <= nc; i++) _cge_sol_row(_cge_poslabel(M, M.bY[act[i]]), 0, room[i], 1e300, move[i])
+    }
+    if (!cols(wv) & !cols(wb) & !nc) printf("\n{txt}Give variables(), blocks() or all to list blocks\n")
+    // the listing as a dataset: every variable and equation element
+    if (clear) {
+        nrow = sum(M.exists) + rows(ins) + nc
+        S = J(nrow, 3, "")
+        V = J(nrow, 4, .)
+        row = 0
+        for (kv = 1; kv <= rows(M.vname); kv++) {
+            pos = _cge_bd_exist(M, _cge_vpos(M, kv))
+            if (!rows(pos)) continue
+            _cge_vlabels(M, kv, e1, e2)
+            for (i = 1; i <= rows(pos); i++) {
+                row++
+                j = pos[i] - M.voff[kv]
+                S[row, .] = ("VAR", M.vname[kv], (e1[j] == "" ? "" : e1[j] + (e2[j] == "" ? "" : "." + e2[j])))
+                if (fixed[pos[i]] & !cfix[pos[i]]) V[row, .] = (x[pos[i]], x[pos[i]], x[pos[i]], .)
+                else V[row, .] = ((lo[pos[i]] <= -1e299 ? . : lo[pos[i]]), x[pos[i]], (up[pos[i]] >= 1e299 ? . : up[pos[i]]), .)
+            }
+        }
+        for (i = 1; i <= rows(ins); i++) {
+            if (bl[i] == "B1") continue
+            row++
+            S[row, .] = ("EQU", bl[i], el[i])
+            V[row, .] = (0, L[ins[i]] - R[ins[i]], 0, .)
+        }
+        for (i = 1; i <= nc; i++) {
+            row++
+            S[row, .] = ("EQU", "B1", _cge_poslabel(M, M.bY[act[i]]))
+            V[row, .] = (0, room[i], ., move[i])
+        }
+        S = S[|1, 1 \ row, 3|]
+        V = V[|1, 1 \ row, 4|]
+        stata("clear")
+        st_addobs(row)
+        (void) st_addvar("str3", "kind")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(S[., 2]))))), "name")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(S[., 3]))))), "element")
+        (void) st_addvar(("double", "double", "double", "double"), ("lower", "level", "upper", "marginal"))
+        st_sstore(., ("kind", "name", "element"), S)
+        st_store(., ("lower", "level", "upper", "marginal"), V)
+    }
+    st_numscalar("r(N_variables)", sum(M.exists))
+    st_numscalar("r(N_free)", sum(M.exists :& (fixed :== 0)))
+    st_numscalar("r(N_equations)", rows(ins))
+    st_numscalar("r(N_constraints)", nc)
+    st_numscalar("r(N_atbound)", rows(at))
+    if (nc) {
+        nb = sum(abs(room) :<= 1e-9 :* M.xscale[M.bY[act]])
+        st_numscalar("r(N_binding)", nb)
+        st_matrix("r(marginals)", move')
+        st_matrix("r(room)", room')
+    }
+    st_global("r(point)", what)
 }
 
 // =====================================================================
@@ -7982,6 +8655,8 @@ void _cge_use(string scalar fn)
     }
     // Files saved before version 0.4.4 record no constraints
     if (rows(M.simcons) != rows(M.simname)) M.simcons = J(rows(M.simname), 1, "")
+    // the attributes of cge_bound (from version 0.9.8)
+    if (M.calibrated == 1) _cge_bd_sync(M)
     _cge_store(M)
     printf("{txt}Model loaded from {res}%s{txt} (saved by cge-stata %s; %s, %f simulation(s))\n", fn, ver,
            (M.calibrated == 1 ? "calibrated" : (M.mapped == 1 ? "mapped" : "SAM only")), rows(M.simname))
@@ -11767,7 +12442,7 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
     string matrix P
     string colvector lab, e1, e2
     string scalar target, g, mode, gov, idx
-    real colvector v0, v1, pos, fx, fr
+    real colvector v0, v1, pos, fx, fr, xf, act
     real matrix G0, G1, LG
     real scalar lv
     string colvector rl, cl2
@@ -11879,16 +12554,23 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
         fput(fh, g + ".up" + idx + " = inf;")
     }
     fput(fh, "* Changes to fixed variables, written by cge_gams")
+    // the adjusting variables of constraints at their fixed levels, from which
+    // GAMS moves them itself (from version 0.9.8; before, at the solution)
+    xf = x
+    if (rows(M.bY) & rows(p.bmode) == rows(M.bY) & rows(p.bxbar) == rows(M.bY)) {
+        act = _cge_which(p.bmode :> 0)
+        if (rows(act)) xf[M.bX[act]] = p.bxbar[act]
+    }
     for (k = 1; k <= rows(M.vname); k++) {
         pos = _cge_vpos(M, k)
-        if (!any(M.exists[pos] :* fixed[pos] :* (x[pos] :!= x0[pos]))) continue
+        if (!any(M.exists[pos] :* fixed[pos] :* (xf[pos] :!= x0[pos]))) continue
         _cge_vlabels(M, k, e1, e2)
         g = _cge_u_gname(M, k)
         for (i = 1; i <= rows(pos); i++) {
-            if (!M.exists[pos[i]] | !fixed[pos[i]] | x[pos[i]] == x0[pos[i]]) continue
+            if (!M.exists[pos[i]] | !fixed[pos[i]] | xf[pos[i]] == x0[pos[i]]) continue
             target = g + ".fx" + _cge_gams_elem(e1[i], e2[i])
-            fput(fh, target + " = " + (x0[pos[i]] != 0 ? _cge_gnum(x[pos[i]] / x0[pos[i]]) + " * " + g + ".l" +
-                 _cge_gams_elem(e1[i], e2[i]) : _cge_gnum(x[pos[i]])) + ";")
+            fput(fh, target + " = " + (x0[pos[i]] != 0 ? _cge_gnum(xf[pos[i]] / x0[pos[i]]) + " * " + g + ".l" +
+                 _cge_gams_elem(e1[i], e2[i]) : _cge_gnum(xf[pos[i]])) + ";")
             n++
         }
     }
@@ -11917,9 +12599,19 @@ real scalar _cge_gams_cons(struct cge_model scalar M, struct cge_par scalar p, s
 {
     string colvector rec, e1, e2
     string scalar gy, iy, gx, ix, pairs, r, tab
-    real scalar fh, k, n, code, kx, el
+    real scalar fh, k, n, code, kx, el, fw
     fh = _cge_gopen(fn)
     fput(fh, "* Constraints (model_spec.md, Section 16), written by cge_gams")
+    // the room within each bound and its marginal as GAMS reports them, the
+    // slack of BND (its level less its lower bound, the constant GAMS moves
+    // to the right) and its marginal, the level of SLK, in the units of the
+    // limited and adjusting variables (from version 0.9.8), for cge_gams,
+    // compare; batincluded after the scenario's results with the file and
+    // the scenario
+    fw = _cge_gopen(substr(fn, 1, strlen(fn) - strlen("cge_constraints.inc")) + "cge_cons_write.inc")
+    fput(fw, "* Room within each constraint's bound and its marginal (cge_gams, from version 0.9.8)")
+    fput(fw, "%1.ap = 1;")
+    fput(fw, "put %1;")
     rec = _cge_recipients(M)
     pairs = ""
     n = 0
@@ -11948,10 +12640,14 @@ real scalar _cge_gams_cons(struct cge_model scalar M, struct cge_par scalar p, s
             fput(fh, tab + "('" + rec[code] + "', " + substr(ix, 2, strlen(ix) - 2) + ") = 1;")
         }
         pairs = pairs + ", LNK" + r + ", BND" + r + ".SLK" + r
+        fput(fw, "put '%2', '_BROOM', '" + r + "', '', ((BND" + r + ".l - BND" + r + ".lo) * " + _cge_gnum(M.xscale[M.bY[k]]) + ") /;")
+        fput(fw, "put '%2', '_BMARG', '" + r + "', '', (BND" + r + ".m * " + _cge_gnum(M.xscale[M.bX[k]]) + ") /;")
     }
     fput(fh, "model cgecon / cge" + pairs + " /;")
     fput(fh, "cgecon.optfile = cge.optfile;")
     fclose(fh)
+    fput(fw, "putclose %1;")
+    fclose(fw)
     return(n)
 }
 
@@ -11993,9 +12689,11 @@ void _cge_gams_driver(string scalar fn, string scalar name, string scalar solver
     fput(fh, char(36) + "include cge_closure.gms")
     fput(fh, char(36) + "include cge_shock_var.inc")
     fput(fh, char(36) + "include cge_constraints.inc")
+    fput(fh, char(36) + "include cge_bounds.inc")
     fput(fh, char(36) + "batinclude cge_solve.gms cgecon")
     fput(fh, "file rescen / 'cge_" + name + ".csv' /;")
     fput(fh, char(36) + "batinclude cge_write.gms rescen " + name)
+    fput(fh, char(36) + "batinclude cge_cons_write.inc rescen " + name)
     fclose(fh)
 }
 
@@ -12042,6 +12740,7 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
     _cge_gams_data(M, dir + "/cge_data.inc")
     n = _cge_gams_scenario(M, p, x, fixed, cl, dir + "/cge_shock_par.inc", dir + "/cge_shock_var.inc", M.p0, M.x0)
     (void) _cge_gams_cons(M, p, dir + "/cge_constraints.inc")
+    _cge_gams_bounds(M, fixed, dir + "/cge_bounds.inc", (type == "mcp"))
     _cge_gams_user(M, dir + "/cge_user.inc", dir + "/cge_user_write.inc")
     _cge_gams_driver(dir + "/cge_run.gms", name, solver, type)
     st_numscalar("r(N_constraints)", nc)
@@ -12095,6 +12794,7 @@ void _cge_gams_export_dyn(string scalar dir, string scalar run, string scalar so
     _cge_gams_data(M, dir + "/cge_data.inc")
     // no constraints: the scenario model is the base model
     (void) _cge_gams_cons(M, M.simp[s[1]], dir + "/cge_constraints.inc")
+    _cge_gams_bounds(M, fixed, dir + "/cge_bounds.inc", (type == "mcp"))
     _cge_gams_user(M, dir + "/cge_user.inc", dir + "/cge_user_write.inc")
     pprev = M.p0
     xprev = M.x0
@@ -12153,6 +12853,7 @@ void _cge_gams_driver_dyn(string scalar fn, string scalar run, string colvector 
         fput(fh, char(36) + "include cge_" + sims[j] + "_par.inc")
         fput(fh, char(36) + "include cge_closure.gms")
         fput(fh, char(36) + "include cge_" + sims[j] + "_var.inc")
+        fput(fh, char(36) + "include cge_bounds.inc")
         fput(fh, char(36) + "batinclude cge_solve.gms cgecon")
         fput(fh, "file res" + strofreal(j) + " / 'cge_" + sims[j] + ".csv' /;")
         fput(fh, char(36) + "batinclude cge_write.gms res" + strofreal(j) + " " + sims[j])
@@ -12284,6 +12985,34 @@ real scalar _cge_gams_diff(struct cge_model scalar M, transmorphic A, string col
     return(worst)
 }
 
+// The largest difference between the room within each active constraint's
+// bound and its marginal, the move of its adjusting variable, at solution x
+// with parameters p, and those GAMS reports (_BROOM and _BMARG, from version
+// 0.9.8); nm, the number compared
+real scalar _cge_gams_margdiff(struct cge_model scalar M, struct cge_par scalar p, real colvector x,
+                               string colvector key, real colvector val, real scalar nm)
+{
+    real colvector act
+    real scalar j, i, room, mv, worst, d, kr, km
+    nm = 0
+    worst = 0
+    if (!rows(M.bY) | rows(p.bmode) != rows(M.bY)) return(0)
+    act = _cge_which(p.bmode :> 0)
+    for (j = 1; j <= rows(act); j++) {
+        i = act[j]
+        room = M.btype[i] * (p.bval[i] - x[M.bY[i]])
+        mv = M.bdir[i] * (x[M.bX[i]] - (rows(p.bxbar) == rows(M.bY) ? p.bxbar[i] : x[M.bX[i]]))
+        kr = _cge_find(key, "_BROOM|" + strofreal(j) + "|")
+        km = _cge_find(key, "_BMARG|" + strofreal(j) + "|")
+        if (!kr | !km) continue
+        d = max((abs(val[kr] - room) / max((1, abs(room))), abs(val[km] - mv) / max((1, abs(mv)))))
+        if (d >= .) return(.)
+        worst = max((worst, d))
+        nm = nm + 2
+    }
+    return(worst)
+}
+
 // Compares the GAMS base and scenario in dir with the Stata base and the
 // current solution or stored simulation sim
 void _cge_gams_compare(string scalar dir, string scalar sim)
@@ -12293,7 +13022,7 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     string colvector key, e1, e2
     real colvector val, x, pos
     string scalar name, vb, vs
-    real scalar k, i, status, bstatus, db, ds, nb, ns, walras
+    real scalar k, i, status, bstatus, db, ds, nb, ns, walras, dm, nm
 
     M = _cge_load()
     A = asarray_create()
@@ -12315,6 +13044,14 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     db = _cge_gams_diff(M, A, key, val, M.x0, vb, nb)
     _cge_gams_read(dir + "/cge_" + name + ".csv", key, val, status)
     ds = _cge_gams_diff(M, A, key, val, x, vs, ns)
+    // the room within each constraint's bound and its marginal (from version
+    // 0.9.8), as the solution listing gives them
+    dm = _cge_gams_margdiff(M, M.simp[k], x, key, val, nm)
+    if (nm) {
+        if (dm >= . | dm > ds) vs = "constraint marginals"
+        ds = (dm >= . ? . : max((ds, dm)))
+        ns = ns + nm
+    }
     walras = .
     for (i = 1; i <= rows(key); i++) if (key[i] == "WALRAS||") walras = val[i]
     printf("{txt}GAMS model status: base {res}%g{txt}, scenario {res}%g{txt} (1, 2, 15 or 16: solved)\n", bstatus, status)
@@ -14856,6 +15593,8 @@ void _cge_u_clear()
     else M.simx = J(nkeep, 0, .)
     _cge_u_refresh(M)
     _cge_cons_rebuild(M)
+    // the attributes of the user variables go with them (from version 0.9.8)
+    _cge_bd_sync(M)
     _cge_store(M)
     printf("{txt}User variables and equations removed\n")
 }
@@ -15416,6 +16155,31 @@ real colvector _cge_opt_max(struct cge_opt scalar O, real colvector z0, real sca
     return(z)
 }
 
+// The reduced cost of each instrument at z (from version 0.9.8): the
+// derivative of the augmented Lagrangian, which at the optimum is the
+// Lagrangian's, in units of the objective per unit of the instrument; central
+// differences, one-sided at a bound
+real colvector _cge_opt_redcost(struct cge_opt scalar O, real colvector z)
+{
+    real colvector g, e, lo, hi
+    real scalar n, i, a, b, f, h
+    n = rows(z)
+    _cge_opt_box(O, lo, hi)
+    h = 1e-5
+    f = _cge_opt_aug(O, z)
+    g = J(n, 1, .)
+    for (i = 1; i <= n; i++) {
+        e = J(n, 1, 0)
+        e[i] = h
+        a = (z[i] + h <= hi[i] ? _cge_opt_aug(O, z + e) : .)
+        b = (z[i] - h >= lo[i] ? _cge_opt_aug(O, z - e) : .)
+        if (a < . & b < .) g[i] = (a - b) / (2 * h)
+        else if (a < .) g[i] = (a - f) / h
+        else if (b < .) g[i] = (f - b) / h
+    }
+    return(O.sense * O.oscale :* g :/ O.scale)
+}
+
 // An instrument: a parameter that cge_shock changes (one element), or an
 // element of a variable the closure fixes, as name or name(element)
 void _cge_opt_instrument(struct cge_model scalar M, string scalar spec, real scalar kind, string scalar pname,
@@ -15497,7 +16261,7 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     string matrix keys
     string scalar spec, rel, lhs, rhs
     real colvector z, v, r, x, val, v0, r0, re, s, cv
-    real colvector tsc, csc, tv, cb
+    real colvector tsc, csc, tv, cb, tmg, cmg, img
     real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2, nt, nc, viol, ex, rx, sc
     string scalar pn
     if (args() < 11) s_con = ""
@@ -15676,6 +16440,27 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     O = _cge_opt_load()
     v = _cge_opt_values(O, z)
     f = _cge_opt_solve(v, r, x)
+    // Marginals (from version 0.9.8), as those of GAMS's NLP models: the change
+    // in the objective per unit of the right side of each target and
+    // constraint, from the multipliers of the augmented Lagrangian at the
+    // optimum, lam + rho r and max(0, mu - rho s); and the reduced cost of each
+    // instrument, the derivative of the Lagrangian, zero within its bounds
+    tmg = cmg = img = J(0, 1, .)
+    if (O.hasobj & !hasmissing(r)) {
+        nt = rows(O.tval)
+        nc = rows(O.cval)
+        if (nt) tmg = O.sense * O.oscale :* (O.lam + O.rho :* r[|1 \ nt|]) :/ O.tscale
+        if (nc) cmg = O.sense * O.oscale :* rowmax((J(nc, 1, 0), O.mu - O.rho :* r[|nt + 1 \ nt + nc|])) :* O.ctype :/ O.cscale
+        // an instrument within its bounds has none, as in the KKT conditions
+        img = J(n, 1, 0)
+        cb = ((O.lo :< .) :& (abs(v - O.lo) :<= 1e-6 :* O.scale)) :| ((O.hi :< .) :& (abs(v - O.hi) :<= 1e-6 :* O.scale))
+        if (any(cb)) {
+            img = cb :* _cge_opt_redcost(O, z)
+            O = _cge_opt_load()
+            f = _cge_opt_solve(v, r, x)
+            O = _cge_opt_load()
+        }
+    }
     // The optimum becomes the current shocks and is stored as a simulation
     _cge_opt_apply(M, O, v, M.p, M.xcur)
     k = _cge_store_sim(M, name, x, (conv & !hasmissing(x)), O.nevals, _cge_maxres(M, M.p, x), "newton")
@@ -15684,25 +16469,38 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     v0 = O.start
     printf("\n{txt}Optimisation {res}%s{txt}: %s after {res}%f{txt} solve(s) of the model\n", name,
            (conv ? "converged" : "{err}did not converge{txt}"), O.nevals)
-    printf("{txt}{hline 64}\n%-30s %16s %16s\n{hline 64}\n", "Instrument", "start", "optimum")
-    for (k = 1; k <= n; k++) {
-        printf("{txt}%-30s {res}%16.10g %16.10g{txt}%s\n", O.label[k], v0[k], v[k],
-               ((O.lo[k] < . & abs(v[k] - O.lo[k]) <= 1e-6 * O.scale[k]) | (O.hi[k] < . & abs(v[k] - O.hi[k]) <= 1e-6 * O.scale[k]) ?
-                " (at its bound)" : ""))
+    if (rows(img)) {
+        printf("{txt}{hline 77}\n%-30s %16s %16s %12s\n{hline 77}\n", "Instrument", "start", "optimum", "marginal")
+        for (k = 1; k <= n; k++) {
+            printf("{txt}%-30s {res}%16.10g %16.10g %12.4g{txt}%s\n", O.label[k], v0[k], v[k], img[k],
+                   ((O.lo[k] < . & abs(v[k] - O.lo[k]) <= 1e-6 * O.scale[k]) | (O.hi[k] < . & abs(v[k] - O.hi[k]) <= 1e-6 * O.scale[k]) ?
+                    " (at its bound)" : ""))
+        }
+        printf("{txt}{hline 77}\n")
     }
-    printf("{txt}{hline 64}\n")
+    else {
+        printf("{txt}{hline 64}\n%-30s %16s %16s\n{hline 64}\n", "Instrument", "start", "optimum")
+        for (k = 1; k <= n; k++) {
+            printf("{txt}%-30s {res}%16.10g %16.10g{txt}%s\n", O.label[k], v0[k], v[k],
+                   ((O.lo[k] < . & abs(v[k] - O.lo[k]) <= 1e-6 * O.scale[k]) | (O.hi[k] < . & abs(v[k] - O.hi[k]) <= 1e-6 * O.scale[k]) ?
+                    " (at its bound)" : ""))
+        }
+        printf("{txt}{hline 64}\n")
+    }
     if (O.hasobj) printf("{txt}%s %s: {res}%16.10g\n", (O.sense == 1 ? "Maximised" : "Minimised"), _cge_opt_text(O, O.okey, O.oex),
                          _cge_opt_item(M, O, M.p, x, keys, val, O.okey, O.oex, 1))
     for (k = 1; k <= rows(O.tval); k++) {
-        printf("{txt}Target %s: {res}%16.10g\n", O.ttext[k], _cge_opt_item(M, O, M.p, x, keys, val, O.tkeys[k, .], O.tex[k], 1))
+        printf("{txt}Target %s: {res}%16.10g{txt}%s\n", O.ttext[k], _cge_opt_item(M, O, M.p, x, keys, val, O.tkeys[k, .], O.tex[k], 1),
+               (rows(tmg) ? "; marginal {res}" + strtrim(sprintf("%12.6g", tmg[k])) : ""))
     }
     // constraints (from version 0.9.4), and whether they bind
     cv = cb = J(rows(O.cval), 1, .)
     for (k = 1; k <= rows(O.cval); k++) {
         cv[k] = _cge_opt_item(M, O, M.p, x, keys, val, O.ckeys[k, .], O.cex[k], 1)
         cb[k] = _cge_opt_bound(M, O, M.p, x, O.cval[k], O.crex[k])
-        printf("{txt}Constraint %s: {res}%16.10g{txt}%s\n", O.ctext[k], cv[k],
-               (abs(cv[k] - cb[k]) <= 1e-6 * O.cscale[k] ? " (binding)" : ""))
+        printf("{txt}Constraint %s: {res}%16.10g{txt}%s%s\n", O.ctext[k], cv[k],
+               (abs(cv[k] - cb[k]) <= 1e-6 * O.cscale[k] ? " (binding)" : ""),
+               (rows(cmg) ? "; marginal {res}" + strtrim(sprintf("%12.6g", cmg[k])) : ""))
     }
     st_numscalar("r(converged)", conv)
     st_numscalar("r(N_evaluations)", O.nevals)
@@ -15715,6 +16513,13 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     }
     st_matrix("r(instruments)", v')
     st_matrixcolstripe("r(instruments)", (J(n, 1, ""), strtoname(subinstr(O.label, ")", ""))))
+    // marginals (from version 0.9.8)
+    if (rows(img)) {
+        st_matrix("r(instrument_marginals)", img')
+        st_matrixcolstripe("r(instrument_marginals)", (J(n, 1, ""), strtoname(subinstr(O.label, ")", ""))))
+    }
+    if (rows(tmg)) st_matrix("r(target_marginals)", tmg')
+    if (rows(cmg)) st_matrix("r(constraint_marginals)", cmg')
     st_matrix("r(start)", v0')
     st_matrixcolstripe("r(start)", (J(n, 1, ""), strtoname(subinstr(O.label, ")", ""))))
     // the values of the targets' measures or expressions (from version 0.9.4)
@@ -16186,6 +16991,14 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "usdef", M.usdef)
     _cge_io_put(fh, "updef", M.updef)
     _cge_io_put(fh, "umac", M.umac)
+    _cge_io_put(fh, "bddef", M.bddef)
+    _cge_io_put(fh, "bdlp", M.bdlp)
+    _cge_io_put(fh, "bdlv", M.bdlv)
+    _cge_io_put(fh, "bdup", M.bdup)
+    _cge_io_put(fh, "bduv", M.bduv)
+    _cge_io_put(fh, "bdsp", M.bdsp)
+    _cge_io_put(fh, "bdsv", M.bdsv)
+    _cge_io_put(fh, "bdcp", M.bdcp)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -16325,6 +17138,14 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "usdef") M.usdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "updef") M.updef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "umac") M.umac = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "bddef") M.bddef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "bdlp") M.bdlp = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bdlv") M.bdlv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bdup") M.bdup = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bduv") M.bduv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bdsp") M.bdsp = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bdsv") M.bdsv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "bdcp") M.bdcp = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

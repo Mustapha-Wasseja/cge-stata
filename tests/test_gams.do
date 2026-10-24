@@ -149,6 +149,18 @@ st_numscalar("okc", sum(c :== "BND1..  (1) * ((61.2) - QM('com_man')) / 60 =g= 0
              sum(d :== char(36) + "if not set cgetype " + char(36) + "setglobal cgetype mcp"))
 end
 assert scalar(okc) == 5
+* the premium starts at its fixed level, not at the solution, and GAMS writes
+* the room within the bound and its marginal (version 0.9.8)
+mata:
+v = cat(st_local("dir") + "_q/cge_shock_var.inc")
+w = cat(st_local("dir") + "_q/cge_cons_write.inc")
+st_numscalar("okw", (sum(strpos(v, "RM.fx") :> 0) == 0) +
+             (sum(w :== "put '%2', '_BROOM', '1', '', ((BND1.l - BND1.lo) * 60) /;") == 1) +
+             (sum(w :== "put '%2', '_BMARG', '1', '', (BND1.m * 1) /;") == 1) +
+             (sum(d :== char(36) + "batinclude cge_cons_write.inc rescen quota") == 1) +
+             (sum(d :== char(36) + "include cge_bounds.inc") == 1))
+end
+assert scalar(okw) == 5
 capture noisily cge_gams using "`dir'_q", sim(quota) replace type(cns)
 assert _rc == 198
 * Without constraints the file declares the model alone

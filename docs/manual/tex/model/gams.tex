@@ -33,6 +33,8 @@ File & Content\\
 \cmd{cge_shock_par.inc} & parameter changes and the closure\\
 \cmd{cge_shock_var.inc} & changes to fixed variables\\
 \cmd{cge_constraints.inc} & constraints, as complementarity pairs, and the model \cmd{cgecon}\\
+\cmd{cge_cons_write.inc} & the room within each constraint's bound and its marginal (from version 0.9.8)\\
+\cmd{cge_bounds.inc} & the attributes of \manref{cge_bound} (from version 0.9.8)\\
 \cmd{cge_user.inc}, \cmd{cge_user_write.inc} & user variables and equations, and their results (chapter~\ref{chap:user})\\
 \end{cgetable}
 
@@ -94,7 +96,30 @@ and $X_k$ stays at $\bar x_k$; when it is positive, $Y_k$ is at its bound. This
 is the condition \eqref{eq:B1}, which GAMS passes to PATH exactly, without
 smoothing. The variables with no pair must be free or fixed, so the bounds that
 keep prices and quantities positive in the CNS form are left out. The base is
-solved as the model \cmd{cgebase}, the scenario as \cmd{cgecon}.
+solved as the model \cmd{cgebase}, the scenario as \cmd{cgecon}. From version
+0.9.8, the adjusting variables start at their fixed levels $\bar x_k$, not at
+the solution, so that GAMS finds each regime itself, and
+\cmd{cge_cons_write.inc} writes, after the scenario's results, the room
+within each bound and its marginal as GAMS reports them: the slack of
+$\V{BND}_k$, its level less its lower bound (the constant GAMS moves to the
+right), times $s^Y_k$, and its marginal, which in an MCP model is the level of
+the paired column $\V{SLK}_k$, times $s^X_k$. \manref{cge_gams}, \opt{}{compare},
+checks both against the solution listing of \manref{cge_listing}.
+
+\textbf{Attributes of variables.} From version 0.9.8, \cmd{cge_bounds.inc}
+writes the attributes of \manref{cge_bound} after the closure, which frees
+every variable and fixes some: \cmd{.lo} and \cmd{.up} of the variables free in
+the scenario, \cmd{.scale} with \cmd{scaleopt} set for the three models, and
+\cmd{.l}, the starting levels, for example
+\begin{filecode}
+QM.lo('com_man') = 30;
+QA.scale('act_man') = 1000;
+cge.scaleopt = 1;  cgenlp.scaleopt = 1;  cgecon.scaleopt = 1;
+EXR.l = 1.2;
+\end{filecode}
+A scenario solved as an MCP model leaves out the bounds, since GAMS bounds
+only the variables paired with an equation there; in a square system they do
+not bind, so the solution is the same.
 
 \textbf{Tolerances.} Convergence tolerances in GAMS solvers are absolute, so
 they are scaled to the largest SAM cell, within what double precision allows:

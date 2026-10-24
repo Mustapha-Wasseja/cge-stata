@@ -1,0 +1,19 @@
+. cge_constraint, clear
+All constraints removed
+
+. cge_bound, clear
+Attributes of variables removed
+
+. cge_shock, reset
+All shocks removed
+
+. cge_bound FSAV, fix(1.2) relative
+Variable FSAV fixed at 1.2 times the base for 1 element(s)
+
+. cge_solve, name(fsav)
+Simulation fsav solved in 5 iteration(s) (newton)
+Largest scaled residual  3.30e-14; WALRAS =  1.22e-13
+
+. cge_bound QA(act_man), fix(100)
+cge_bound: QA(act_man) is endogenous under the closure, so fixing it would leave more equations than
+>  free variables; fix it with cge_closure, swap(), then give its value
