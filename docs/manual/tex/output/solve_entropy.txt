@@ -1,0 +1,40 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set r = r1 r2 r3
+User set r: 3 element(s): r1 r2 r3
+
+. cge_set c = c1 c2 c3 c4
+User set c: 4 element(s): c1 c2 c3 c4
+
+. cge_parameter a(r,c), values(r1.c1:10 r1.c2:5 r1.c3:2 r1.c4:8 r2.c1:3 r2.c2:12 r2.c3:6 r2.c4:1 ///
+>     r3.c1:4 r3.c2:2 r3.c3:9 r3.c4:7)
+User parameter a(r,c): 12 value(s), from 1 to 12
+
+. cge_parameter u(r), values(r1:30 r2:20 r3:19)
+User parameter u(r): 3 value(s), from 19 to 30
+
+. cge_parameter v(c), values(c1:20 c2:21 c3:16 c4:12)
+User parameter v(c): 4 value(s), from 12 to 21
+
+. cge_variable X(r,c), value(a(r,c))
+User variable X(r,c): 12 element(s), base values 10 5 2 8 3 ...
+Add the equations that determine it with cge_equation
+
+. cge_equation ROW(r): sum(c, X(r,c)) = u(r)
+User equation ROW: 3 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  1.67e-01)
+
+. cge_equation COL(c)$(ord(c) < card(c)): sum(r, X(r,c)) = v(c)
+User equation COL: 3 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  1.50e-01)
+
+. cge_bound X, lower(0)
+Variable X: lower bound 0 for 12 element(s)
+
+. cge_solve, name(ce) minimize(sum((r,c), X(r,c) * ln(X(r,c) / a(r,c))))
+Simulation ce solved in 6 iteration(s) (interior point)
+Minimised sum((r,c), X(r,c) * ln(X(r,c) / a(r,c))):      1.812581996
+Largest scaled error of the optimality conditions  1.00e-11

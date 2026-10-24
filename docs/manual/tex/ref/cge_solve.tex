@@ -7,6 +7,13 @@ from the base, and stores the solution as a named simulation, for
 \manref{cge_results}, \manref{cge_report} and \manref{cge_check}. Solving again
 under an existing name replaces that simulation.
 
+From version 0.15.0, with \opt{min}{imize()} or \opt{max}{imize()},
+\cmd{cge_solve} solves a standalone model (\manref{cge_model}) as a nonlinear
+programme: it chooses its free variables to minimise or maximise an
+expression subject to its equations and the bounds of \manref{cge_bound}, as
+GAMS's \cmd{solve} \dots\ \cmd{using nlp minimizing} does with CONOPT or
+IPOPT (section~\ref{sec:nlp}).
+
 \cgesec{Quick start}
 
 Solve the model with the shocks in memory and store the solution as
@@ -27,6 +34,11 @@ Display the diagnostics of the Jacobian at the solution
 \begin{stcode}
 cge_solve, name(notariff) diagnose
 \end{stcode}
+In a standalone model, choose the free variables that minimise the sum of
+squares of \cmd{X} subject to the model's equations (from version 0.15.0)
+\begin{stcode}
+cge_solve, name(ls) minimize(sum(i, X(i)^2))
+\end{stcode}
 
 \cgesec{Syntax}
 
@@ -40,6 +52,9 @@ cge_solve, name(notariff) diagnose
 \optarg{tol}{erance}{\#} & tolerance on the largest scaled residual; default \texttt{1e-10}\\
 \optarg{iter}{ate}{\#} & maximum number of Newton iterations; default \texttt{100}\\
 \optarg{step}{s}{\#} & apply the shocks in \argu{\#} equal steps; default \texttt{0}, only after a direct solve fails\\
+\optgroup{Nonlinear programmes of standalone models}
+\optarg{min}{imize}{expression} & minimise \argu{expression} subject to the equations\\
+\optarg{max}{imize}{expression} & maximise \argu{expression} subject to the equations\\
 \optgroup{Reporting}
 \opt{}{trace} & display the largest scaled residual at each iteration\\
 \opt{diag}{nose} & display the diagnostics after a solve that converges\\
@@ -66,6 +81,17 @@ default is 100.
 solution the start of the next. The default, \cmd{steps(0)}, does so only after
 a direct solve fails, first in 4 steps and then in 16; \cmd{steps(1)} never
 does.
+
+\item[\optarg{min}{imize}{expression}] and \optarg{max}{imize}{expression}
+(from version 0.15.0) solve a standalone model as a nonlinear programme: the
+free variables minimise or maximise \argu{expression}, an expression of the
+user language (\manref{cge_equation}) in the model's variables and
+parameters, subject to its equations and to the bounds set by
+\manref{cge_bound}. The model must have more free variables than equations,
+and its inequalities must be written as equations with slack variables
+bounded at zero; a variable with equal bounds should be fixed instead. A
+start outside a variable's bounds is moved within them. The tolerance
+applies to the scaled conditions for an optimum.
 
 \item[\opt{}{trace}] displays the largest scaled residual, the number of
 Jacobians computed and the number of Broyden updates at each iteration.
@@ -169,6 +195,29 @@ constraint binds, and then solves the model again with the exact conditions
 (section~\ref{sec:cons-solution}). The regime of each constraint is displayed
 and stored with the simulation, in \res{r(constraints)}.
 
+\cgesubsec{Example 5: a nonlinear programme}
+
+From version 0.15.0, a standalone model with more free variables than
+equations can be solved as a nonlinear programme. Problem 71 of
+\citet{hock1981}, which is IPOPT's example, minimises $x_1 x_4 (x_1 + x_2 +
+x_3) + x_3$ subject to $x_1 x_2 x_3 x_4 \ge 25$, written with a slack $S \ge
+0$, $\sum_i x_i^2 = 40$ and $1 \le x_i \le 5$:
+\stlog{solve_nlp}
+The optimum, 17.0140173, is the published one. The marginals are the
+changes in the objective per unit increase in the right side of each
+equation, the marginals of GAMS's solution listing: tightening the product
+from 25 raises the minimum by 0.552 per unit, and enlarging the sphere lowers
+it by 0.161.
+
+Balancing a matrix to new row and column totals by minimising its cross
+entropy against a prior is another nonlinear programme. One column equation
+is left out, as the row and column totals have the same sum:
+\stlog{solve_entropy}
+The solution is the RAS balance of the prior, $X_{rc} = \rho_r A_{rc}
+\sigma_c$, which minimises the cross entropy subject to the totals
+\citep{mcdougall1999}, to $10^{-11}$, as the test suite checks.
+\manref{cge_balance} balances a SAM by these methods directly.
+
 \cgesubsec{The reduced and the full systems}
 
 Explicit definitions, such as intermediate and household demand, are left out
@@ -193,12 +242,17 @@ to the tolerance, and the test suite checks that they do.
 \res{r(steps)} & steps of continuation (0 for a direct solve)\\
 \res{r(N_constraints)} & number of constraints, if any\\
 \res{r(N_binding)} & number of constraints that bind\\
+\res{r(objective)} & the objective at the optimum, for a nonlinear programme (from version 0.15.0)\\
+\res{r(N_dof)} & free variables less equations, for a nonlinear programme\\
 \resgroup{Macros}
 \res{r(name)} & name of the simulation\\
-\res{r(method)} & solution method: \cmd{newton}, \cmd{broydenpowell} or, with constraints, \cmd{semismooth}\\
+\res{r(method)} & solution method: \cmd{newton}, \cmd{broydenpowell}, with constraints \cmd{semismooth}, or \cmd{nlp}\\
+\res{r(objective_expr)} & the objective of a nonlinear programme\\
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto} (from version 0.10.1)\\
 \res{r(closure)} & closure\\
 \res{r(constraints)} & the constraints and their regimes, if any\\
+\resgroup{Matrices}
+\res{r(marginals)} & the marginals of the equations of a nonlinear programme\\
 \resgroup{Diagnostics (after a failure, or with \opt{diag}{nose}; \manref{cge_listing} lists every equation element)}
 \res{r(diag_block)} & block of the largest residual\\
 \res{r(diag_element)} & its element\\
@@ -258,6 +312,9 @@ parameters and fixed values
 \end{equation*}
 between their base values $\theta^0$ and their shocked values $\theta^1$, each
 step starting from the solution of the step before.
+
+A nonlinear programme is solved by the primal-dual interior-point method of
+\citet{wachter2006} described in section~\ref{sec:nlp}.
 
 Chapter~\ref{chap:solution} gives the details: the reduced system, the
 exact Jacobian, Broyden's updates, the grouping of columns for the differences

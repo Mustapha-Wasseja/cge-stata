@@ -2,7 +2,7 @@
 
 symmetric r(constraint_marginals)[1,1]
             c1
-r1  -1.2032661
+r1  -1.2032694
 
 . quietly cge_results, sim(revenue) clear nodisplay
 

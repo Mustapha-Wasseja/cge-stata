@@ -2196,6 +2196,118 @@ setting saved and loaded; errors. GAMS (PATH, MCP; export check cases
 mcpjosephy, mcptech and manycons) to 7.8e-13, 6.2e-15 and 1.2e-13, constraint
 marginals included.
 
+## 24. Exact derivatives and nonlinear programmes (from version 0.15.0)
+
+**Exact derivatives in `cge_optimize`.** With `gradient(exact)`, the
+default (`O.gmode` 0; `gradient(differences)` sets 1 and keeps the methods
+of Section 18), `_cge_opt_point` solves the model at the scaled instruments
+$z$ (`_cge_opt_solvep`) and `_cge_opt_grad` takes the derivatives of the
+objective and of the residuals of the targets and constraints with respect
+to them at the solution $x$: the exact Jacobian $J$ of the system solved
+(`_cge_jac_trip`), factorised once by the dense LU (`_cge_trip_dense`,
+`_lud`) or the sparse LU (`_cge_slu_update`); for each instrument $k$,
+$\partial F/\partial u_k$ by central differences of `_cge_F` in $u_k$ with
+$x$ held, step $10^{-6}\max(1, |u_k|)$, and $dx/du_k = -J^{-1}\,\partial
+F/\partial u_k$ (the implicit function theorem); then the derivatives of the
+objective and residuals along the tangent $(dx/du_k, 1)$ by central
+differences of `_cge_opt_eval` on it, step $10^{-5}\max(1, |u_k|)$, with the
+reduced system's definitions derived at each point (`_cge_derive`). No
+derivative needs a solve. Targets alone use the exact Jacobian of the
+targets in Newton's method (`_cge_opt_newton`), converged also when a step
+does not reduce a gap already below $10^{-9}$, the precision of the solves. With an objective,
+`_cge_opt_max` maximises the augmented objective of Section 18 with its
+exact gradient; the Hessian of the free coordinates is the central
+difference, step $10^{-4}$, of the gradient of the Lagrangian $f -
+\lambda_t' r + m' s$ with $\lambda_t = \lambda + \rho r$ and $m = \max(0, \mu
+- \rho s)$ held, less $\rho J_t' J_t$ and $\rho J_c' J_c$ over the binding
+constraints; convergence when the largest free gradient is below $10^{-10}$
+($10^{-8}$ with targets or binding constraints); a Newton step whose predicted rise
+is below $10^{-12}\max(1, |F|)$ is taken if it reduces the largest free
+gradient. Reduced costs use the exact gradient (`_cge_opt_redcost`).
+`r(gradient)` returns the method.
+
+**Nonlinear programmes.** `cge_solve, minimize(e)` or `maximize(e)` on a
+standalone model (`_cge_solve(..., obj)`, obj `"min:e"` or `"max:e"`) calls
+`_cge_nlp_run`, which stops with 198 unless the model is standalone and with
+459 if it has constraints or inequalities paired with variables, compiles
+the objective (`_cge_nlp_tok`: the user language, with its GAMS text) and
+solves
+
+$$\min_x\; \sigma f(x) \quad\text{s.t.}\quad c(x) = 0,\quad L \le x \le U$$
+
+over the free variables, $\sigma = 1$ to minimise and $-1$ to maximise, with
+the equations scaled as in `cge_solve` and the bounds of `cge_bound`
+(`_cge_nlp_solve`). It stops with 459 when there are no more free variables
+than equations or when a variable's bounds are equal. A start outside the
+bounds of a free variable is allowed in a standalone model (`_cge_bd_valid`
+notes it; `_cge_bd_start` clips it).
+
+The method is a primal-dual interior point after Wächter and Biegler (2006),
+in scaled variables $z = x/s$:
+
+- the start pushed inside each bound $b$ by $\min(10^{-2}\max(1, |b|), (U -
+  L)/4)$; the objective divided by $\max(1, \max_j |\partial f/\partial z_j|
+  / 100)$ at the start (`_cge_nlp_eval`; its gradient by forward
+  differentiation of the postfix rows, `_cge_nlp_f`); $\mu_0 = 0.1$;
+  least-squares multipliers $\lambda$ (zero if above $10^3$); bound
+  multipliers $\mu/\text{slack}$;
+- the error $\max(\lVert r_d\rVert_\infty / s_d, \lVert c\rVert_\infty,
+  \max(\text{slack} \cdot z) / s_d)$, $r_d = \nabla f + J'\lambda - z_L +
+  z_U$, $s_d = \max(100, (\lVert\lambda\rVert_1 + \lVert z_L\rVert_1 +
+  \lVert z_U\rVert_1)/\max(1, m + n_L + n_U))/100$; converged below the
+  tolerance;
+- $\mu \leftarrow \max(\text{tol}/10, \min(0.2\mu, \mu^{1.5}))$ while the
+  barrier error is at most $10\mu$;
+- the Hessian $W$ of the Lagrangian by central differences of its exact
+  gradient, step $10^{-6}\max(1, |z_i|)$, one-sided toward the inside near a
+  bound; $\Sigma = Z_L S_L^{-1} + Z_U S_U^{-1}$; $\delta = \max(0,
+  10^{-8}\max(1, \max|\text{diag}(W + \Sigma)|) - \lambda_{\min}(Z'(W +
+  \Sigma)Z))$ with $Z$ the null space of $J$ from `qrd(J')`;
+- the step from the primal-dual system $[W + \Sigma + \delta I, J'; J,
+  -\epsilon I]$ by LU, $\epsilon = 0$ and, if singular, $10^{-8} \cdot
+  10^k$, $k = 2, 3, 4$, with $\delta$ raised;
+- the bound multipliers' steps $\Delta z_L = \mu/s_L - z_L - (z_L/s_L)\Delta
+  z$ and likewise for $z_U$; the fraction to the boundary $\tau = \max(0.99, 1
+  - \mu)$ for the variables and, separately, the bound multipliers;
+- backtracking from the largest step on the $\ell_1$ merit $\phi = f - \mu
+  \sum\ln s + \nu\lVert c\rVert_1$, $\nu \leftarrow \max(\nu, \max|\lambda_+|
+  + 1)$, with Armijo's condition $\phi_+ \le \phi + 10^{-4} a
+  \min(\phi', 0) + 10^{-13}\max(1, |\phi|)$, halving to $10^{-12}$;
+  $\lambda \leftarrow \lambda + a(\lambda_+ - \lambda)$;
+- the bound multipliers kept within $[\mu/(10^{10}s), 10^{10}\mu/s]$.
+
+The marginals, `r(marginals)`, are $-\sigma\,\text{osc}\,\lambda / e$ with
+$e$ the scales of the equations: the change in the optimum per unit
+increase in each right side, as GAMS's marginals. The solution is stored
+with method `nlp` and its objective (`M.simobj`, saved with the model and
+kept with the simulations, `_cge_sims_keep`); `r(objective)`, `r(N_dof)`
+and `r(objective_expr)` are returned.
+
+**GAMS.** `cge_gams, sim()` of an NLP simulation (`_cge_gams_isnlp`)
+defaults to `type(nlp)` and `solver(ipopt)` and needs `type(nlp)`;
+`_cge_gams_driver_sa` writes `OBJV`, `EOBJV.. OBJV =e= ` the objective's
+GAMS text and `model cgeprog / cge, EOBJV /`, writes the base as the
+starting levels with model status 0, applies the scenario's changes and
+bounds and solves `cgeprog using nlp minimizing` (or `maximizing`) `OBJV`;
+IPOPT's option file adds `bound_relax_factor 0`; `cge_sa_write.inc` writes
+`__objective__`.
+
+Tests (`tests/test_optgrad.do`, `tests/test_nlp.do`): a planner's choice on
+the frontier $\sum X_i^2 = R^2$ with utility $\sum \alpha_i \ln X_i$, whose
+optimum is $X_i = R\sqrt{\alpha_i}$, with three and ten goods, an instrument
+at a bound and the same bound as a constraint, with their marginals, against
+the closed form to $10^{-8}$; exact derivatives against differences on the
+standard model (tariffs with a revenue target, the direct tax factor for a
+savings target), in fewer solves; Hock and Schittkowski's problem 71 against
+its published optimum, 17.0140173, with the marginals against central
+differences of the optimum in the right sides to $10^{-5}$; Rosenbrock's
+function from $(-1.2, 1)$; the frontier as an NLP in all variables, with
+and without a binding bound added after the start, against the closed form
+to $10^{-7}$ and its marginal $1/200$; a $3 \times 4$ matrix balanced by
+cross entropy against RAS, to $1.1 \times 10^{-11}$; errors. GAMS (IPOPT,
+NLP; export check cases nlphs071, nlpentropy and nlpfrontier) to 6.8e-13,
+3.1e-13 and 3.9e-12.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
@@ -2222,6 +2334,13 @@ Blanchflower, D. G. and A. J. Oswald (1994). *The Wage Curve*. MIT Press.
 
 Fischer, A. (1992). A special Newton-type optimization method. *Optimization*
 24(3-4): 269-284.
+
+Hock, W. and K. Schittkowski (1981). *Test Examples for Nonlinear Programming
+Codes*. Lecture Notes in Economics and Mathematical Systems 187. Springer.
+
+Wächter, A. and L. T. Biegler (2006). On the implementation of an
+interior-point filter line-search algorithm for large-scale nonlinear
+programming. *Mathematical Programming* 106(1): 25-57.
 
 Kanzow, C. (1996). Some noninterior continuation methods for linear
 complementarity problems. *SIAM Journal on Matrix Analysis and Applications*

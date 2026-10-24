@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.14.0 implements the standard single-country model described in
+Version 0.15.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,14 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.15.0 gives `cge_optimize` exact derivatives with respect to the
+instruments, from the model's exact Jacobian at each solution by the implicit
+function theorem, so that the optimiser needs far fewer solves of the model,
+and solves standalone models as nonlinear programmes, `cge_solve,
+minimize()` or `maximize()`, by a primal-dual interior-point method after
+Waechter and Biegler, with the marginals of the equations. It reproduces
+problem 71 of Hock and Schittkowski, balances a matrix by cross entropy to
+the RAS solution, and agrees with IPOPT in GAMS.
 Version 0.14.0 solves constraints and the inequalities of user equations by
 a semismooth Newton method, as complementarity problems: every constraint in
 Fischer-Burmeister form, all at once, with a non-monotone line search; the

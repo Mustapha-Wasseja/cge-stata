@@ -16,7 +16,11 @@ as a simulation, and the instruments are left at their optimal values as
 current shocks, so that \mbox{\manref{cge_report}} and \mbox{\manref{cge_results}} show it.
 From version 0.9.8, an optimisation with an objective reports marginals, as
 the solution listing of GAMS's NLP models does: the shadow price of each
-target and constraint, and the reduced cost of each instrument.
+target and constraint, and the reduced cost of each instrument. From version
+0.15.0, the derivatives of the objective, targets and constraints with
+respect to the instruments are exact, as the derivatives an NLP solver such
+as CONOPT or IPOPT takes from GAMS: they come from the model's exact Jacobian
+at each solution, without solving the model again for each instrument.
 
 \cgesec{Quick start}
 
@@ -70,6 +74,7 @@ cge_optimize, instruments(tm(com_man)) maximize(YG) ///
 \optgroup{Solver}
 \optarg{tol}{erance}{\#} & tolerance of each solve of the model; default \texttt{1e-12}\\
 \optarg{iter}{ate}{\#} & maximum number of Newton iterations of each solve; default \texttt{100}\\
+\optarg{grad}{ient}{method} & \cmd{exact}, the default, or \cmd{differences}\\
 \opt{}{trace} & display the iterations of the optimiser\\
 \end{opttable}
 
@@ -138,6 +143,13 @@ of the model; the default is \texttt{1e-12}.
 \item[\optarg{iter}{ate}{\#}] sets the maximum number of Newton iterations of
 each solve of the model; the default is 100.
 
+\item[\optarg{grad}{ient}{method}] (from version 0.15.0) sets how the
+derivatives with respect to the instruments are found. \cmd{exact}, the
+default, takes them from the model's exact Jacobian at each solution, by the
+implicit function theorem; \cmd{differences} takes them from central
+differences of solves of the model, the only method before version 0.15.0,
+kept for comparison and for objectives whose derivatives are not smooth.
+
 \item[\opt{}{trace}] displays the objective and the largest gradient of the
 free instruments at each iteration, or, with targets alone, the largest
 scaled gap from the targets.
@@ -164,9 +176,12 @@ The tariff on manufactures that maximises the equivalent variation of the
 household, within $[-0.5, 1]$, with the iterations displayed:
 \stlog{opt_max}
 The objective is the equivalent variation in the units of the SAM; it is zero
-at the start, the base. The gradient falls to $7.11 \times 10^{-9}$ in five
-Newton iterations, and the 32 solves of the model include those of the
-finite differences. On the synthetic SAM the optimal tariff is about 30 per
+at the start, the base. The gradient falls below $10^{-10}$ in six Newton
+iterations. It is exact at each solution; the 29 solves of the model include
+those of the differences of the gradient that give the Hessian. With
+\cmd{gradient(differences)}, the method of earlier versions, the optimiser
+needs 32 solves for a gradient of $7 \times 10^{-9}$, and the optimum
+differs in the ninth digit. On the synthetic SAM the optimal tariff is about 30 per
 cent, above the base rate of 10 per cent. The result depends on the SAM and
 the elasticities, which here are synthetic and illustrative, and is not a
 finding about any economy.
@@ -186,7 +201,8 @@ Lagrangian method:
 \stlog{opt_revenue}
 The optimum subsidises imports of agriculture slightly and taxes those of
 manufactures at 16 per cent. Each round of the augmented Lagrangian method
-maximises again, so the optimisation took 419 solves of the model.
+maximises again, so the optimisation took 86 solves of the model; with
+\cmd{gradient(differences)} it takes 419.
 
 \cgesubsec{Example 3: targets alone}
 
@@ -218,7 +234,8 @@ From version 0.9.8, the display gives the marginals. The constraint's is its
 shadow price: the change in revenue per unit increase in the floor on
 imports. It is negative, since a higher floor tightens the constraint; the
 tariff, within its bounds, has no reduced cost. Solving the optimisation again
-with the floor raised and lowered by a little gives the same derivative:
+with the floor raised and lowered by a little gives the same derivative, to
+the seven digits shown (with \cmd{gradient(differences)}, to five):
 \stlog{opt_marginal}
 An instrument at a bound has a reduced cost, the gain in the objective from
 relaxing the bound: the tariff on manufactures that maximises welfare, with
@@ -231,10 +248,12 @@ An instrument at a bound whose gradient points outwards is held there, and
 the display marks it \cmd{(at its bound)}. A trial value at which the model
 does not solve counts in \res{r(N_failed)}; the next trial starts from the
 last solution, and the optimiser steps back. The model must solve at the
-starting values. Derivatives are found by central differences of the solved
-model, and a smooth objective is flat at its optimum, so the optimum is
-located to about $10^{-6}$ relative to the instruments' scale. An optimum may
-be local: other starting values, set with \manref{cge_shock}, can be tried.
+starting values. With exact derivatives, the default from version 0.15.0,
+the optimum is located to about $10^{-8}$ relative to the instruments' scale
+or better; with \cmd{gradient(differences)}, derivatives come from central
+differences of the solved model, and as a smooth objective is flat at its
+optimum, it is located to about $10^{-6}$. An optimum may be local: other
+starting values, set with \manref{cge_shock}, can be tried.
 
 \cgesec{Stored results}
 
@@ -250,6 +269,7 @@ be local: other starting values, set with \manref{cge_shock}, can be tried.
 \resgroup{Macros}
 \res{r(name)} & name of the simulation that holds the optimum\\
 \res{r(instruments_list)} & the instruments\\
+\res{r(gradient)} & \cmd{exact} or \cmd{differences} (from version 0.15.0)\\
 \resgroup{Matrices}
 \res{r(instruments)} & the instruments at the optimum\\
 \res{r(start)} & their starting values\\
@@ -274,24 +294,54 @@ $|u^0_k| \le 10^{-12}$. The target gaps are scaled as
 $r_j = (g_j - \bar g_j)/\tau_j$, with $\tau_j = |\bar g_j|$, or 1 when
 $|\bar g_j| \le 10^{-12}$.
 
-\textit{Targets alone.} Newton's method solves $r(z) = 0$. The Jacobian comes
-from central differences with steps $h_k = 10^{-5}\max(1, |z_k|)$; the step
+\textit{Exact derivatives} (from version 0.15.0). At the solution $x$ of the
+model at instruments $u$, with residuals $F(x, u) = 0$ and exact Jacobian
+$J = \partial F/\partial x$ of the system solved, the solution moves with
+instrument $k$ along
+\begin{equation*}
+\frac{dx}{du_k} = -J^{-1} \frac{\partial F}{\partial u_k},
+\end{equation*}
+by the implicit function theorem. $J$ is factorised once at each solution,
+by the dense or the sparse LU of \manref{cge_options}; $\partial F/\partial
+u_k$ comes from central differences of the residuals in $u_k$ with $x$ held,
+with step $10^{-6}\max(1, |u_k|)$, which need no solve of the model. The
+derivative of the objective, of each target and of each constraint along the
+tangent $(dx/du_k, 1)$ comes from central differences of their values along
+it, with step $10^{-5}\max(1, |u_k|)$, which need no solve either; the
+explicit definitions that the reduced system of \manref{cge_solve} leaves out
+are computed from the other variables at each point. With \cmd{gradient(differences)}, each derivative
+comes instead from two solves of the model, as described below.
+
+\textit{Targets alone.} Newton's method solves $r(z) = 0$. With exact
+derivatives the Jacobian is that of the targets above; with differences it
+comes from central differences with steps $h_k = 10^{-5}\max(1, |z_k|)$; the step
 $\Delta z = -J^{-1} r$ is projected on the bounds and halved, up to 30 times,
 until $\max_j |r_j|$ falls. The iterations stop, converged, when
-$\max_j |r_j| < 10^{-11}$; they stop without converging when a trial
-value does not solve, when 30 halvings do not reduce the gap, and after 50
-iterations.
+$\max_j |r_j| < 10^{-11}$, and, with exact derivatives, when a step does not
+reduce a gap already below $10^{-9}$, the precision of the solves; they stop
+without converging when a trial value does not solve, when 30 halvings do
+not reduce the gap, and after 50 iterations.
 
 \textit{An objective.} A projected Newton method maximises
 \begin{equation*}
 F(z) = \frac{f}{\max(1, |f^0|)} - \lambda' r - \frac{\rho}{2}\, r' r,
 \end{equation*}
 with $f^0$ the objective at the start; without targets, $F$ is the scaled
-objective alone. The gradient comes from central differences with step
-$10^{-5}$ (one-sided at a bound); an instrument at a bound whose gradient
-points outwards is held there. The iterations converge when the largest
-gradient of the free instruments is below $10^{-8}$. The Hessian of the free
-instruments comes from central second differences with step $10^{-3}$. The
+objective alone. With exact derivatives the gradient is exact, and the
+Hessian of the free instruments comes from central differences of the exact
+gradient of the Lagrangian $L = F - \lambda' r + \mu' s$ below, with step
+$10^{-4}$ and the multipliers held, less the penalty's part, $\rho\,
+J_r' J_r$ over the targets and the constraints that bind, from the exact
+Jacobian of their residuals; the iterations converge when the largest
+gradient of the free instruments is below $10^{-10}$ without targets or
+binding constraints and $10^{-8}$ with them, and near the optimum, where $F$ cannot
+rise measurably, a Newton step whose predicted rise is below $10^{-12}
+\max(1, |F|)$ is taken if it reduces the largest free gradient. With
+\cmd{gradient(differences)}, the gradient comes from central differences
+with step $10^{-5}$ (one-sided at a bound), the iterations converge when the
+largest free gradient is below $10^{-8}$, and the Hessian comes from central
+second differences with step $10^{-3}$. An instrument at a bound whose
+gradient points outwards is held there. The
 step is $-H^{-1}\nabla F$ when $H$ is negative definite, and the gradient,
 divided by $\max(1, \max_k |\partial F/\partial z_k|)$, otherwise; it is
 projected on the bounds and halved, up to 40 times, until $F$ rises. If no
@@ -337,10 +387,13 @@ right side,
 with the sign of the objective ($-$ for \cmd{minimize()}) and $\pm_k$, $+$ for
 $h_k \le \bar h_k$ and $-$ for $h_k \ge \bar h_k$, as the marginal of an
 equation in GAMS's NLP models. The reduced cost of an instrument at a bound is
-$\max(1, |f^0|)\, (\partial L / \partial z_k) / s_k$, from central
-differences of the augmented objective, whose gradient at the optimum is that
-of $L$; within its bounds it is zero. The test suite checks each against the
-change in the optimum when the right side or the bound moves.
+$\max(1, |f^0|)\, (\partial L / \partial z_k) / s_k$, from the exact gradient
+of the augmented objective (central differences of it with
+\cmd{gradient(differences)}), whose gradient at the optimum is that of $L$;
+within its bounds it is zero. The test suite checks each against the change
+in the optimum when the right side or the bound moves, and the exact
+derivatives against differences and against problems whose optimum is known
+in closed form (\texttt{tests/test\_optgrad.do}).
 
 \Chapref{chap:optimize} gives the details.
 

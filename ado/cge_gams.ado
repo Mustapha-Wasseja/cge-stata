@@ -1,4 +1,4 @@
-*! cge_gams.ado  v0.13.0  2026-10-24
+*! cge_gams.ado  v0.15.0  2026-10-24
 *! cge-stata: write the model and a scenario as a GAMS program, and
 *! optionally solve it in GAMS and compare the results (docs/gams.md)
 *!
@@ -34,11 +34,15 @@ program define cge_gams, rclass
         display as error "import() takes a static scenario: give sim() or the current shocks"
         exit 198
     }
-    if "`solver'" == "" local solver path
+    * a nonlinear programme of a standalone model (from version 0.15.0) is
+    * solved as one, with IPOPT unless another solver is given
+    local isnlp 0
+    if "`sim'" != "" mata: st_local("isnlp", strofreal(_cge_gams_isnlp("`sim'")))
+    if "`solver'" == "" local solver = cond(`isnlp', "ipopt", "path")
     local solver = strlower("`solver'")
     if "`type'" == "" {
         local type cns
-        if inlist("`solver'", "ipopt", "ipopth", "minos", "snopt") local type nlp
+        if inlist("`solver'", "ipopt", "ipopth", "minos", "snopt") | `isnlp' local type nlp
         * a scenario with constraints is a mixed complementarity problem (from version 0.4.4)
         if "`dynamic'" == "" {
             mata: st_local("hascons", strofreal(_cge_gams_hascons("`sim'")))

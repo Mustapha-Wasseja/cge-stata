@@ -128,8 +128,14 @@ complementarity problem (PATH), which a scenario with constraints needs. The
 default is \cmd{mcp} for a static scenario with constraints, \cmd{nlp} for
 the solvers \cmd{ipopt}, \cmd{ipopth}, \cmd{minos} and \cmd{snopt}, and
 \cmd{cns} otherwise; a scenario with constraints cannot be exported as
-another type. Both the solver and the type can also be set when GAMS is run,
-as in \texttt{gams cge\_run.gms -{}-cgesolver=ipopt -{}-cgetype=nlp}.
+another type. From version 0.15.0, a simulation that \manref{cge_solve}
+solved as a nonlinear programme (section~\ref{sec:nlp}) is exported as one,
+with \cmd{type(nlp)} and the solver \cmd{ipopt} by default: its objective is
+the variable \cmd{OBJV}, defined by the equation \cmd{EOBJV}, which
+\cmd{solve cgeprog using nlp} minimises or maximises, IPOPT's bounds are not
+relaxed, and its base, the starting levels, is written but not solved. Both
+the solver and the type can also be set when GAMS is run, as in
+\texttt{gams cge\_run.gms -{}-cgesolver=ipopt -{}-cgetype=nlp}.
 
 \item[\opt{}{compare}] compares the GAMS results with the Stata base and with
 simulation \cmd{sim()}, or with every period of the run of \cmd{dynamic()}.

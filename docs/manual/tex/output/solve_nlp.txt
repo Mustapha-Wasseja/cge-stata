@@ -1,0 +1,55 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set i = x1 x2 x3 x4
+User set i: 4 element(s): x1 x2 x3 x4
+
+. cge_parameter x0(i), values(x1:1 x2:5 x3:5 x4:1)
+User parameter x0(i): 4 value(s), from 1 to 5
+
+. cge_variable X(i), value(x0(i))
+User variable X(i): 4 element(s), base values 1 5 5 1
+Add the equations that determine it with cge_equation
+
+. cge_variable S, value(0)
+User variable S: 1 element(s), base value 0
+Add the equations that determine it with cge_equation
+
+. cge_equation G1: X(x1) * X(x2) * X(x3) * X(x4) - S = 25
+User equation G1: 1 element(s)
+
+. cge_equation G2: sum(i, X(i)^2) = 40
+User equation G2: 1 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  2.31e-01)
+
+. cge_bound X, lower(1) upper(5)
+Variable X: lower bound 1, upper bound 5 for 4 element(s)
+
+. cge_bound S, lower(0)
+Variable S: lower bound 0 for 1 element(s)
+
+. cge_solve, name(hs071) minimize(X(x1) * X(x4) * (X(x1) + X(x2) + X(x3)) + X(x3))
+Simulation hs071 solved in 16 iteration(s) (interior point)
+Minimised X(x1) * X(x4) * (X(x1) + X(x2) + X(x3)) + X(x3):      17.01401729
+Largest scaled error of the optimality conditions  1.00e-11
+
+. matrix list r(marginals)
+
+r(marginals)[1,2]
+            c1          c2
+r1   .55229366  -.16146857
+
+. cge_results, sim(hs071)
+
+Simulation hs071 of a standalone model (solved, 16 iteration(s), largest scaled residual  1.00e-11)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+X(x1)                                       1            1    0.000
+X(x2)                                       5        4.743   -5.140
+X(x3)                                       5      3.82115  -23.577
+X(x4)                                       1      1.37941   37.941
+S                                           0  1.81063e-11        .
+-------------------------------------------------------------------

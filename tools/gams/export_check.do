@@ -668,6 +668,63 @@ foreach case in standalone exchange mcpjosephy mcptech manycons {
     }
 }
 
+* Nonlinear programmes of standalone models (version 0.15.0), solved by the
+* interior-point method and by an NLP solver (IPOPT by default): Hock and
+* Schittkowski's problem 71, balancing a matrix by cross entropy, and a
+* frontier whose start lies outside a binding bound
+foreach case in nlphs071 nlpentropy nlpfrontier {
+    display as text _n "{hline 60}" _n "Case " as result "`case'"
+    quietly cge_model new
+    if "`case'" == "nlphs071" {
+        quietly cge_set i = x1 x2 x3 x4
+        quietly cge_parameter x0(i), values(x1:1 x2:5 x3:5 x4:1)
+        quietly cge_variable X(i), value(x0(i))
+        quietly cge_variable S, value(0)
+        quietly cge_equation G1: X(x1) * X(x2) * X(x3) * X(x4) - S = 25
+        quietly cge_equation G2: sum(i, X(i)^2) = 40
+        quietly cge_bound X, lower(1) upper(5)
+        quietly cge_bound S, lower(0)
+        local obj minimize(X(x1) * X(x4) * (X(x1) + X(x2) + X(x3)) + X(x3))
+    }
+    else if "`case'" == "nlpentropy" {
+        quietly cge_set r = r1 r2 r3
+        quietly cge_set c = c1 c2 c3 c4
+        quietly cge_parameter a(r,c), values(r1.c1:10 r1.c2:5 r1.c3:2 r1.c4:8 r2.c1:3 r2.c2:12 r2.c3:6 r2.c4:1 ///
+            r3.c1:4 r3.c2:2 r3.c3:9 r3.c4:7)
+        quietly cge_parameter u(r), values(r1:30 r2:20 r3:19)
+        quietly cge_parameter v(c), values(c1:20 c2:21 c3:16 c4:12)
+        quietly cge_variable X(r,c), value(a(r,c))
+        quietly cge_equation ROW(r): sum(c, X(r,c)) = u(r)
+        quietly cge_equation COL(c)$(ord(c) < card(c)): sum(r, X(r,c)) = v(c)
+        quietly cge_bound X, lower(0)
+        local obj minimize(sum((r,c), X(r,c) * ln(X(r,c) / a(r,c))))
+    }
+    else {
+        quietly cge_set g = g1 g2 g3
+        quietly cge_parameter alpha(g) = ord(g) / 6
+        quietly cge_parameter R2 = 100
+        quietly cge_variable X(g), value(5)
+        quietly cge_equation FR: sum(g, X(g)^2) = R2
+        quietly cge_bound X, lower(0)
+        quietly cge_bound X(g1), upper(3)
+        * a scenario: a larger frontier
+        quietly cge_shock R2, value(121)
+        local obj maximize(sum(g, alpha(g) * ln(X(g))))
+    }
+    quietly cge_solve, name(`case') tolerance(1e-12) `obj'
+    assert r(converged) == 1
+    if "`phase'" == "export" {
+        cge_gams using `"`dir'/`case'"', sim(`case') replace
+    }
+    else {
+        capture confirm file `"`dir'/`case'/cge_`case'.csv"'
+        if _rc continue
+        cge_gams using `"`dir'/`case'"', sim(`case') compare noexport
+        post `post' ("`case'") ("`case'") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 * Linked regions (version 0.12.0): a free-trade area between the synthetic
 * SAM and its institutions layout; each region's solution, with its world
 * prices and tariffs from the links as parameters, solved by GAMS on its own

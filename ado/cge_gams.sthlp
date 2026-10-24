@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.9  24oct2026}{...}
+{* *! version 0.15.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -139,7 +139,8 @@ alone it compares results that GAMS wrote earlier.
 path.
 
 {phang}
-{opt solver(name)} chooses the solver; the default is {cmd:path}. When it runs,
+{opt solver(name)} chooses the solver; the default is {cmd:path}, and
+{cmd:ipopt} for a nonlinear programme of a standalone model. When it runs,
 the GAMS program writes an option file with tolerances scaled to the size of
 the SAM for PATH, CONOPT, IPOPT and KNITRO; other solvers use their defaults.
 
@@ -152,7 +153,13 @@ the SAM for PATH, CONOPT, IPOPT and KNITRO; other solvers use their defaults.
 
 {pmore}
 The default is {cmd:mcp} for a scenario with constraints, {cmd:nlp} for
-{cmd:ipopt}, {cmd:minos} and {cmd:snopt}, and {cmd:cns} otherwise. Both
+{cmd:ipopt}, {cmd:minos} and {cmd:snopt}, and {cmd:cns} otherwise. A
+simulation that {helpb cge_solve} solved as a nonlinear programme, with
+{cmd:minimize()} or {cmd:maximize()} (from version 0.15.0), is exported as
+one: its objective is the variable {cmd:OBJV}, defined by equation
+{cmd:EOBJV}, which {cmd:solve cgeprog using nlp} minimises or maximises, and
+its base, the starting levels, is written but not solved; it needs
+{cmd:type(nlp)}. Both
 solver and type can also be set when GAMS is run, for example
 {cmd:gams cge_run.gms --cgesolver=ipopt --cgetype=nlp}.
 

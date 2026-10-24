@@ -8,6 +8,7 @@ scalars:
           r(converged) =  1
               r(steps) =  0
         r(N_collapsed) =  0
+          r(N_atbound) =  0
             r(broyden) =  9
           r(jacobians) =  1
 
@@ -15,3 +16,4 @@ macros:
             r(closure) : "flexexr flexgsav savings cpi lab:mobile cap:mobile"
              r(method) : "newton"
                r(name) : "notariff"
+          r(linsolver) : "dense"

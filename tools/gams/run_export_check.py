@@ -33,6 +33,10 @@ HERE = Path(__file__).resolve().parent
 # Cases of export_check.do with constraints
 MCP_CASES = ("quota", "capacity", "peglimit", "nodeficit", "wagefloor", "inequalities", "pairs", "boundscon",
              "mcpjosephy", "mcptech", "manycons")
+# Nonlinear programmes (version 0.15.0): solved by an NLP solver, IPOPT
+# unless --solver names another
+NLP_CASES = ("nlphs071", "nlpentropy", "nlpfrontier")
+NLP_SOLVERS = ("ipopt", "ipopth", "conopt", "conopt4", "knitro", "snopt", "minos")
 REPO = HERE.parents[1]
 
 
@@ -81,6 +85,7 @@ def main() -> None:
     # Scenarios with constraints (version 0.4.4) are mixed complementarity
     # problems: they are solved only by MCP solvers, with --cgetype=mcp
     mcp_solvers = ("path", "nlpec", "miles")
+    nlp_solver = args.solver if args.solver in NLP_SOLVERS else "ipopt"
     skipped = []
     for d in folders:
         constrained = "positive variable" in (d / "cge_constraints.inc").read_text(encoding="utf-8")
@@ -88,7 +93,10 @@ def main() -> None:
             skipped.append(d.name)
             continue
         gtype = "mcp" if constrained else args.type
-        r = subprocess.run([args.gams, "cge_run.gms", "lo=0", f"--cgesolver={args.solver}",
+        solver = args.solver
+        if d.name in NLP_CASES:
+            gtype, solver = "nlp", nlp_solver
+        r = subprocess.run([args.gams, "cge_run.gms", "lo=0", f"--cgesolver={solver}",
                             f"--cgetype={gtype}"], cwd=d, capture_output=True, text=True)
         print(f"GAMS {d.name:14s} return code {r.returncode}", flush=True)
     folders = [d for d in folders if d.name not in skipped]
@@ -104,15 +112,18 @@ def main() -> None:
     # whatever the type
     out = HERE / "export_check_results.csv"
     fields = ["case", "solver", "type", "gams_modelstat", "values", "base_maxrel", "value_maxrel"]
+    new = [{"case": r["case"], "solver": nlp_solver if r["case"] in NLP_CASES else args.solver,
+            "type": "mcp" if r["case"] in MCP_CASES else ("nlp" if r["case"] in NLP_CASES else args.type),
+            "gams_modelstat": int(float(r["modelstat"])), "values": int(float(r["N"])),
+            "base_maxrel": f"{float(r['base_maxdiff']):.3e}", "value_maxrel": f"{float(r['maxdiff']):.3e}"}
+           for r in rows]
+    done = {(r["case"], r["solver"], r["type"]) for r in new}
     kept = []
     if out.exists():
         with out.open(encoding="utf-8") as handle:
             kept = [r for r in csv.DictReader(handle)
-                    if r["solver"] != args.solver or (r["type"] != args.type and r["case"] not in MCP_CASES)]
-    new = [{"case": r["case"], "solver": args.solver, "type": "mcp" if r["case"] in MCP_CASES else args.type,
-            "gams_modelstat": int(float(r["modelstat"])), "values": int(float(r["N"])),
-            "base_maxrel": f"{float(r['base_maxdiff']):.3e}", "value_maxrel": f"{float(r['maxdiff']):.3e}"}
-           for r in rows]
+                    if (r["solver"] != args.solver or (r["type"] != args.type and r["case"] not in MCP_CASES)
+                        or r["case"] in NLP_CASES) and (r["case"], r["solver"], r["type"]) not in done]
     with out.open("w", newline="", encoding="utf-8") as handle:
         w = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         w.writeheader()

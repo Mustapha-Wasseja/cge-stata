@@ -13,7 +13,7 @@ Closure
 . cge_optimize, instruments(tm(com_man)) maximize(welfare equivalent_variation hhd) ///
 >     lower(tm(com_man):0) upper(tm(com_man):0.2) name(capped)
 
-Optimisation capped: converged after 13 solve(s) of the model
+Optimisation capped: converged after 10 solve(s) of the model
 -----------------------------------------------------------------------------
 Instrument                                start          optimum     marginal
 -----------------------------------------------------------------------------

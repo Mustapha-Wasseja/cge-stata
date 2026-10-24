@@ -3,7 +3,7 @@ All shocks removed
 
 . cge_optimize, instruments(hgoal) targets(government savings = 1.5) name(hgopt)
 
-Optimisation hgopt: converged after 11 solve(s) of the model
+Optimisation hgopt: converged after 5 solve(s) of the model
 ----------------------------------------------------------------
 Instrument                                start          optimum
 ----------------------------------------------------------------

@@ -14,11 +14,12 @@ Simulation qg10fixed did not converge (largest scaled residual  2.26e+00)
 Largest scaled residual  2.26e+00; WALRAS =  4.32e-02
 Diagnostics
   Largest scaled residuals
-    I7   government demand                      com_ser                -2.257e+00
     I7   government demand                      com_man                -2.257e+00
+    I7   government demand                      com_ser                -2.257e+00
     Q4   factor demand                          lab,act_agr            -6.693e-02
     Q4   factor demand                          cap,act_agr            -2.364e-02
     Q4   factor demand                          lab,act_man            -9.633e-03
+  (cge_listing, sim() lists every equation element at this point)
   Smallest pivot of the Jacobian, relative to the largest:  9.57e-06 (GSAV)
 
 r(430);

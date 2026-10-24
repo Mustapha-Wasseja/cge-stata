@@ -138,6 +138,7 @@ cge_report, sims(big_path)
 | `cns` (default) | constrained nonlinear system: the equations, square, with no objective | PATH, CONOPT, KNITRO |
 | `nlp` | the same equations and a constant objective, `OBJ =e= 0` | IPOPT, CONOPT, KNITRO, MINOS, SNOPT |
 | `mcp` (from version 0.4.4; the default with constraints) | a mixed complementarity problem: the equations, unpaired, and each constraint's bound paired with a slack | PATH |
+| `nlp` for a nonlinear programme (from version 0.15.0; the default for one) | the equations of a standalone model and its objective, `OBJV =e=` the expression of `cge_solve, minimize()` or `maximize()`, solved by `solve cgeprog using nlp minimizing OBJV` (or `maximizing`) after the scenario's changes; the base, its starting levels, is written but not solved | IPOPT (the default), CONOPT, KNITRO, MINOS, SNOPT |
 
 **Constraints.** A scenario with constraints (`cge_constraint`; model_spec.md,
 Section 16) can only be written as a mixed complementarity problem. For
@@ -164,7 +165,7 @@ option file for four solvers:
 |---|---|---|
 | PATH | `path.opt` | `convergence_tolerance` = ptol |
 | CONOPT | `conopt.opt` | `rtnwma` = ptol relative to the largest cell |
-| IPOPT | `ipopt.opt` | `tol` = 1e-12, `constr_viol_tol` = ptol |
+| IPOPT | `ipopt.opt` | `tol` = 1e-12, `constr_viol_tol` = ptol; for a nonlinear programme also `bound_relax_factor` = 0 |
 | KNITRO | `knitro.opt` | `feastol_abs` = ptol, `feastol` = 1e-12 |
 
 Other solvers use their defaults.
@@ -205,7 +206,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 31 cases. Together they cover:
+There are 53 cases (version 0.15.0). Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -238,6 +239,13 @@ There are 31 cases. Together they cover:
   and nominal government consumption fixed through them, an indexed
   variable, and an equation with base(), exp() and ln(), which GAMS
   differentiates itself.
+- in later versions: conditions, functions, bounds, replaced equations,
+  declared nests, scenario loops, linked regions, standalone models and
+  complementarity problems;
+- nonlinear programmes of standalone models (from version 0.15.0): problem 71
+  of Hock and Schittkowski, a matrix balanced by cross entropy and a frontier
+  with a binding bound, which IPOPT solves as NLPs to 6.8e-13, 3.1e-13 and
+  3.9e-12 of the interior-point solutions.
 
 Results (21 October 2026, GAMS 54.2; `tools/gams/export_check_results.csv`):
 

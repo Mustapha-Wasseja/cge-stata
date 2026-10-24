@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.10.1  24oct2026}{...}
+{* *! version 0.15.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt step:s(#)} {opt trace}
-{opt diag:nose} {opt full} {opt sp:arse} {opt den:se}]
+{opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}]
 
 
 {title:Description}
@@ -59,6 +59,23 @@ complementarity conditions are first solved in a smoothed form, which finds
 whether each constraint binds; the model is then solved again with the exact
 conditions, changing the regime of any constraint whose other condition
 fails. The regimes are displayed and stored with the simulation.
+
+{pstd}
+From version 0.15.0, with {opt minimize()} or {opt maximize()}, {cmd:cge_solve}
+solves a standalone model ({helpb cge_model}) as a nonlinear programme: it
+chooses the free variables to minimise or maximise an expression subject to
+the model's equations and the bounds of {helpb cge_bound}, as GAMS's
+{cmd:solve} ... {cmd:using nlp minimizing} does with CONOPT or IPOPT. The
+method is a primal-dual interior-point method after Waechter and Biegler
+(2006), with exact derivatives of the objective and the equations, the
+Hessian of the Lagrangian from differences of its exact gradient, and a line
+search on an l1 merit function. The solution is stored as a simulation, with
+the objective in {cmd:r(objective)} and the marginals of the equations, the
+change in the objective per unit increase in each right side, in
+{cmd:r(marginals)}. The model must have more free variables than equations;
+an inequality is written as an equation with a slack variable bounded at
+zero. {helpb cge_gams} exports such a simulation as an NLP, solved with IPOPT
+by default.
 
 {pstd}
 A solution of the equations need not make economic sense. From version
@@ -109,6 +126,15 @@ the full system of large models among them; both give the same solution.
 does so only after a direct solve fails; {cmd:steps(1)} never does.
 
 {phang}
+{opt minimize(expression)} and {opt maximize(expression)} (from version
+0.15.0) solve a standalone model as a nonlinear programme, minimising or
+maximising {it:expression}, an expression of the user language of
+{helpb cge_equation}, such as
+{cmd:minimize(sum((r,c), X(r,c) * ln(X(r,c) / a(r,c))))}. The tolerance
+applies to the scaled conditions for an optimum. A start outside a
+variable's bounds is moved within them.
+
+{phang}
 {opt diagnose} displays the diagnostics after a solve that converges too.
 {helpb cge_listing} lists every equation element at the solution, or where a
 solve stopped (from version 0.9.5).
@@ -129,12 +155,17 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(steps)}}steps of continuation (0 for a direct solve){p_end}
 {synopt:{cmd:r(N_constraints)}}number of constraints, if any{p_end}
 {synopt:{cmd:r(N_binding)}}number of constraints that bind{p_end}
+{synopt:{cmd:r(objective)}}the objective at the optimum, for a nonlinear programme{p_end}
+{synopt:{cmd:r(N_dof)}}free variables less equations, for a nonlinear programme{p_end}
 {p2col 5 18 22 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}simulation name{p_end}
-{synopt:{cmd:r(method)}}solution method{p_end}
+{synopt:{cmd:r(method)}}solution method ({cmd:nlp} for a nonlinear programme){p_end}
+{synopt:{cmd:r(objective_expr)}}the objective of a nonlinear programme{p_end}
 {synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}
+{p2col 5 18 22 2: Matrices}{p_end}
+{synopt:{cmd:r(marginals)}}the marginals of the equations of a nonlinear programme{p_end}
 {p2col 5 18 22 2: Diagnostics}{p_end}
 {synopt:{cmd:r(diag_block)}}block of the largest residual, and {cmd:r(diag_element)} its element{p_end}
 {synopt:{cmd:r(diag_residual)}}that residual{p_end}
@@ -147,5 +178,5 @@ solve stopped (from version 0.9.5).
 {title:Also see}
 
 {psee}
-{helpb cge}, {helpb cge_shock}, {helpb cge_constraint}, {helpb cge_results}, {helpb cge_check}
+{helpb cge}, {helpb cge_shock}, {helpb cge_constraint}, {helpb cge_results}, {helpb cge_check}, {helpb cge_model}, {helpb cge_optimize}
 {p_end}

@@ -1,5 +1,5 @@
 . display r(converged), r(N_evaluations), r(iterations), r(objective)
-1 32 5 .76793612
+1 29 6 .76793612
 
 . matrix list r(instruments)
 

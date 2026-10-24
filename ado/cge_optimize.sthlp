@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.8  24oct2026}{...}
+{* *! version 0.15.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -13,7 +13,7 @@
 {cmd:cge_optimize}{cmd:,} {opt inst:ruments(list)}
 {opt max:imize(objective)}|{opt min:imize(objective)}|{opt targ:ets(spec)}
 [{opt targ:ets(spec)} {opt cons:traints(spec)} {opt low:er(spec)} {opt up:per(spec)} {opt name(name)}
-{opt tol:erance(#)} {opt iter:ate(#)} {opt trace}]
+{opt tol:erance(#)} {opt iter:ate(#)} {opt grad:ient(exact|differences)} {opt trace}]
 
 {p 4 4 2}
 A {it:measure} is a measure of {helpb cge_report}: {it:table measure}
@@ -66,6 +66,17 @@ the change in the objective per unit of the instrument, zero within its
 bounds and, at a bound, the gain from relaxing it. Targets alone, without an
 objective, have no marginals.
 
+{pstd}
+From version 0.15.0, the derivatives with respect to the instruments are
+exact, as those an NLP solver takes from GAMS. At each solution of the model,
+its exact Jacobian is factorised once and the solution's derivative with
+respect to each instrument found by the implicit function theorem,
+dx/du = -J^-1 dF/du, without solving the model again; the derivatives of the
+objective, targets and constraints follow along it. The optimiser needs far
+fewer solves of the model and locates the optimum to about 1e-8 or better.
+{cmd:gradient(differences)} keeps the central differences of solved models
+of earlier versions.
+
 
 {title:Options}
 
@@ -104,6 +115,12 @@ value must lie strictly within its bounds.
 {opt tolerance(#)} is the convergence tolerance of each solve of the model
 (default 1e-12); {opt iterate(#)} the largest number of Newton iterations of
 each solve (default 100). {opt trace} shows the optimiser's iterations.
+
+{phang}
+{opt gradient(exact|differences)} (from version 0.15.0) sets how the
+derivatives with respect to the instruments are found: {cmd:exact}, the
+default, from the model's exact Jacobian; {cmd:differences}, from central
+differences of solves of the model. {cmd:r(gradient)} returns the choice.
 
 
 {title:Examples}
@@ -145,6 +162,7 @@ each solve (default 100). {opt trace} shows the optimiser's iterations.
 {p2col 5 22 26 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}the simulation that holds the optimum{p_end}
 {synopt:{cmd:r(instruments_list)}}the instruments{p_end}
+{synopt:{cmd:r(gradient)}}{cmd:exact} or {cmd:differences} (from version 0.15.0){p_end}
 {p2col 5 22 26 2: Matrices}{p_end}
 {synopt:{cmd:r(instruments)}}the instruments at the optimum{p_end}
 {synopt:{cmd:r(start)}}their starting values{p_end}
@@ -158,11 +176,15 @@ each solve (default 100). {opt trace} shows the optimiser's iterations.
 {title:Remarks}
 
 {pstd}
-Derivatives are found by central differences of the solved model. A smooth
-objective is flat at its optimum, so the optimum is located to about 1e-6
-relative to the instruments' scale. A model that does
-not solve at a trial value makes the optimiser step back. An optimum may be
-local: try other starting values.
+With exact derivatives, the default from version 0.15.0, the optimum is
+located to about 1e-8 relative to the instruments' scale or better. With
+{cmd:gradient(differences)}, derivatives are found by central differences of
+the solved model; a smooth objective is flat at its optimum, so the optimum
+is then located to about 1e-6. A model that does not solve at a trial value
+makes the optimiser step back. An optimum may be local: try other starting
+values. A standalone model ({helpb cge_model}) can also be solved as a
+nonlinear programme in all its variables, with {helpb cge_solve},
+{cmd:minimize()} or {cmd:maximize()}.
 
 
 {title:Also see}

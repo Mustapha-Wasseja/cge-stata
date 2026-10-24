@@ -388,6 +388,71 @@ Its starting levels solve the base, and its solutions agree with those of
 the built-in model to about $10^{-12}$ in four scenarios
 (\chapref{chap:validation}).
 
+\section{Nonlinear programmes}\label{sec:nlp}
+
+From version 0.15.0, a standalone model with more free variables than
+equations is a nonlinear programme when \manref{cge_solve} is given an
+objective:
+\begin{equation*}
+\min_x\; f(x) \quad\text{subject to}\quad \ell_k(x) - r_k(x) = 0,\ k = 1,
+\dots, K, \qquad L \le x \le U,
+\end{equation*}
+with $x$ the free variables, the fixed ones held at their levels, $f$ the
+expression of \cmd{minimize()} or the negative of that of \cmd{maximize()},
+and $L$ and $U$ the bounds of \manref{cge_bound},
+as in GAMS's \cmd{solve m using nlp minimizing obj}. The objective is compiled
+as an equation is and differentiated exactly, by forward differentiation of
+its postfix rows; the equations have the exact Jacobian of
+section~\ref{sec:jacobian}. An inequality is written as an equation with a
+slack bounded at zero, $g(x) - S = b$ with $S \ge 0$ for $g(x) \ge b$;
+inequalities paired with variables are complementarity conditions and stop
+the solve with an error, as do a model without degrees of freedom and a
+variable whose bounds are equal, which should be fixed.
+
+\textbf{Algorithm.} A primal-dual interior-point method after
+\citet{wachter2006}, the method of IPOPT, solves the problem in the scaled
+variables $z = x/s$ and scaled residuals $c(z)$ of \manref{cge_solve}, with
+the objective divided by $\max(1, \max_j |\partial f/\partial z_j| / 100)$
+at the start. The start is moved inside the bounds by $\min(10^{-2}\max(1,
+|b|), (U - L)/4)$ from each bound $b$; the multipliers of the equations
+start at their least-squares values and those of the bounds at $\mu/(z - L)$
+and $\mu/(U - z)$, with the barrier parameter $\mu = 0.1$. At each iterate
+the Hessian $W$ of the Lagrangian comes from central differences of its exact
+gradient with steps $10^{-6}\max(1, |z_j|)$, one-sided near a bound; the
+step solves the primal-dual system
+\begin{equation*}
+\begin{pmatrix} W + \Sigma + \delta I & J' \\ J & 0 \end{pmatrix}
+\begin{pmatrix} \Delta z \\ \lambda_+ \end{pmatrix} =
+-\begin{pmatrix} \nabla f - \mu (Z - L)^{-1} e + \mu (U - Z)^{-1} e \\ c
+\end{pmatrix},
+\end{equation*}
+with $\Sigma$ the ratios of the bound multipliers to their slacks and
+$\delta$ the smallest shift, above $10^{-8}$ of the largest diagonal entry,
+that makes $W + \Sigma + \delta I$ positive definite on the null space of
+$J$, found from a QR decomposition of $J'$ (a small negative diagonal is
+added to the lower block if the system is singular). Steps keep the
+variables and bound multipliers within $\tau = \max(0.99, 1 - \mu)$ of their
+bounds; the step length halves until the $\ell_1$ merit function $f - \mu
+\sum \ln(\text{slacks}) + \nu \lVert c \rVert_1$, $\nu \ge \max |\lambda| +
+1$, falls by Armijo's rule, a line search in place of IPOPT's filter. $\mu$
+falls to $\max(\text{tol}/10, \min(0.2\mu, \mu^{1.5}))$ each time the barrier
+problem is solved to $10\mu$, and the method stops when the largest of the
+scaled dual residual, the residuals of the equations and the complementarity
+of the bounds is below the tolerance.
+
+\textbf{Results.} The solution is stored as a simulation with method
+\cmd{nlp} and its objective, which \manref{cge_results} and the listings
+report as any other. The marginals, \res{r(marginals)}, are the changes in the
+optimal objective per unit increase in the right side of each equation, as in
+GAMS's solution listing; the test suite checks them against differences of
+the optimum in the right sides. The objective of a simulation is saved with
+it, and \manref{cge_gams} exports it as \cmd{OBJV} with the equation
+\cmd{EOBJV}, solved by \cmd{solve cgeprog using nlp} with IPOPT unless
+\opt{}{solver()} names another NLP solver; the base, the starting levels, is
+written but not solved. The export check (\texttt{tools/gams}) solves
+problem 71 of \citet{hock1981}, a balancing by cross entropy and a frontier
+with a binding bound in GAMS with IPOPT and compares the solutions.
+
 \section{Compilation}
 
 Each equation is written out for every element of its set that meets its

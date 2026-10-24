@@ -223,6 +223,10 @@ struct cge_model {
     // the method for constraints (from version 0.14.0): 0 or missing the
     // semismooth Newton method, 1 the active-set method of version 0.4.4
     real scalar      mcpsolver
+    // the objective of each stored simulation solved as a nonlinear
+    // programme (from version 0.15.0): min: or max: and its expression; empty
+    // for the others, and missing rows are empty
+    string colvector simobj
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -240,7 +244,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.14.0")
+    return("0.15.0")
 }
 
 // =====================================================================
@@ -5498,7 +5502,7 @@ void _cge_pattern_sa(struct cge_model scalar M, real colvector rowid, real colve
         }
     }
     keep = J(0, 1, .)
-    if (rows(pr)) keep = (pr :> 0) :& M.exists[pc]
+    if (rows(pr)) keep = (pr :> 0) :& M.exists[pc, 1]
     if (any(keep)) {
         P = uniqrows((select(pr, keep), select(pc, keep)))
         M.jr = P[., 1]
@@ -7276,8 +7280,9 @@ real scalar _cge_jac_trip(struct cge_model scalar M, struct cge_par scalar p, re
     r = T.r[|1 \ T.n|]
     c = T.c[|1 \ T.n|]
     v = T.v[|1 \ T.n|]
-    // existing equations and variables
-    keep = selectindex(M.emask[r] :& M.exists[c])
+    // existing equations and variables; [., 1] because a 1 x 1 vector
+    // subscripted by a column gives a row (a model of one equation)
+    keep = selectindex(M.emask[r, 1] :& M.exists[c, 1])
     r = r[keep]
     c = c[keep]
     v = v[keep]
@@ -7360,17 +7365,17 @@ real scalar _cge_jac_trip(struct cge_model scalar M, struct cge_par scalar p, re
             ncol = nfree + rows(xcols)
         }
     }
-    keep = selectindex((rowsys[r] :> 0) :& (colmap[c] :> 0))
+    keep = selectindex((rowsys[r, 1] :> 0) :& (colmap[c, 1] :> 0))
     if (rows(keep) * cols(keep) == 0) return(1)
     r = r[keep]
     c = c[keep]
-    v = v[keep] :* M.xscale[c] :/ M.escale[r]
+    v = v[keep] :* M.xscale[c, 1] :/ M.escale[r, 1]
     if (hasmissing(v)) {
         v = J(0, 1, .)
         return(0)
     }
-    ri = rowsys[r]
-    ci = colmap[c]
+    ri = rowsys[r, 1]
+    ci = colmap[c, 1]
     // duplicates summed, row by row
     lin = (ri :- 1) :* ncol :+ ci
     o = order(lin, 1)
@@ -8062,6 +8067,7 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
         M.simper = M.simper \ .
         M.simlam = M.simlam \ .
         M.simcons = M.simcons \ _cge_cons_text(M, M.p, x)
+        _cge_set_simobj(M, rows(M.simname), "")
         return(rows(M.simname))
     }
     M.simclosure[k] = _cge_closure_text(M)
@@ -8075,11 +8081,27 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
     M.simper[k] = .
     M.simlam[k] = .
     M.simcons[k] = _cge_cons_text(M, M.p, x)
+    _cge_set_simobj(M, k, "")
     return(k)
 }
 
+// The objective of stored simulation k (from version 0.15.0): "" unless it
+// was solved as a nonlinear programme
+string scalar _cge_simobj(struct cge_model scalar M, real scalar k)
+{
+    if (k > rows(M.simobj)) return("")
+    return(M.simobj[k])
+}
+
+void _cge_set_simobj(struct cge_model scalar M, real scalar k, string scalar obj)
+{
+    if (rows(M.simobj) < rows(M.simname)) M.simobj = M.simobj \ J(rows(M.simname) - rows(M.simobj), 1, "")
+    if (rows(M.simobj) > rows(M.simname)) M.simobj = M.simobj[|1 \ rows(M.simname)|]
+    M.simobj[k] = obj
+}
+
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
-                real scalar steps, real scalar diagnose, string scalar lin)
+                real scalar steps, real scalar diagnose, string scalar lin, string scalar obj)
 {
     struct cge_model scalar M
     real colvector x, x2, start
@@ -8090,8 +8112,14 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     if (args() < 6) steps = 0
     if (args() < 7) diagnose = 0
     if (args() < 8) lin = ""
+    if (args() < 9) obj = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
+    // a nonlinear programme (from version 0.15.0)
+    if (obj != "") {
+        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin)
+        return
+    }
     // the linear solver for this solve (from version 0.10.1), in place of
     // that of cge_options
     keeplin = M.linsolver
@@ -8360,6 +8388,14 @@ void _cge_bd_valid(struct cge_model scalar M)
     bad = _cge_which(lo :> up)
     if (rows(bad)) _cge_fail("cge_bound: the lower bound of " + _cge_poslabel(M, bad[1]) + " is above its upper bound", 198)
     bad = _cge_which(M.exists :& ((M.x0 :< lo) :| (M.x0 :> up)))
+    // in a standalone model (from version 0.15.0) the base is the start: a
+    // free variable starts from the nearest point within its bounds
+    if (rows(bad) & _cge_sa(M)) {
+        if (!any(M.fixed[bad])) {
+            printf("{txt}Note: the starting level of %s is outside its bounds; cge_solve starts it within them\n", _cge_poslabel(M, bad[1]))
+            bad = J(0, 1, .)
+        }
+    }
     if (rows(bad)) {
         _cge_fail("cge_bound: the base value of " + _cge_poslabel(M, bad[1]) + ", " + strtrim(sprintf("%14.8g", M.x0[bad[1]])) +
                   ", lies outside its bounds; the base solution must lie within them", 459)
@@ -8546,6 +8582,18 @@ real colvector _cge_bd_start(struct cge_model scalar M, real colvector xfix)
         }
         k = _cge_which(fr)
         if (rows(k)) x[M.bdsp[k]] = M.bdsv[k]
+    }
+    // a standalone model's free variables start within their bounds (from
+    // version 0.15.0)
+    if (_cge_sa(M)) {
+        if (rows(M.bdlp)) {
+            k = _cge_which(M.fixed[M.bdlp] :== 0)
+            if (rows(k)) x[M.bdlp[k]] = rowmax((x[M.bdlp[k]], M.bdlv[k]))
+        }
+        if (rows(M.bdup)) {
+            k = _cge_which(M.fixed[M.bdup] :== 0)
+            if (rows(k)) x[M.bdup[k]] = rowmin((x[M.bdup[k]], M.bduv[k]))
+        }
     }
     return(x)
 }
@@ -12331,7 +12379,7 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
     for (j = 1; j <= rows(s); j++) sp[j] = M.simp[s[j]]
     M.simp = sp
     if (rows(s) == 0) {
-        M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = J(0, 1, "")
+        M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = M.simobj = J(0, 1, "")
         M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
         M.simx = J(rows(M.simx), 0, .)
         return
@@ -12347,6 +12395,9 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
     M.simper = M.simper[s]
     M.simlam = M.simlam[s]
     M.simcons = M.simcons[s]
+    // the objectives of nonlinear programmes (from version 0.15.0)
+    if (rows(M.simobj) < max(s)) M.simobj = M.simobj \ J(max(s) - rows(M.simobj), 1, "")
+    M.simobj = M.simobj[s]
 }
 
 // Names of the simulations of a dynamic run, in period order
@@ -16084,9 +16135,11 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
     real colvector x, fixed, fx, fr
     string colvector lab
     string rowvector cl
-    string scalar name
-    real scalar k, n, nc, fh, big
+    string scalar name, gobj
+    real scalar k, n, nc, fh, big, sgn
     if (!rows(M.uelab)) _cge_fail("the model has no equations to export", 459)
+    gobj = ""
+    sgn = 1
     if (sim == "") {
         name = "current"
         p = M.p
@@ -16111,6 +16164,11 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
     if (rows(p.bmode) != rows(M.bY)) _cge_fail("the constraints have changed since simulation " + sim + " was solved; solve it again", 459)
     nc = (rows(M.bY) ? sum(p.bmode :> 0) : 0)
     if (nc & type != "mcp") _cge_fail("the scenario has constraints: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
+    // a nonlinear programme (from version 0.15.0): its objective in GAMS
+    if (sim != "") if (M.simmethod[k] == "nlp") {
+        if (type != "nlp") _cge_fail("simulation " + sim + " is a nonlinear programme: export it with type(nlp) and an NLP solver", 198)
+        (void) _cge_nlp_tok(M, _cge_simobj(M, k), sgn, gobj)
+    }
     lab = _cge_us_alllabels(M)
     fh = _cge_gopen(dir + "/cge_data.inc")
     fput(fh, "* The labels of a standalone model (cge_model new), written by cge_gams")
@@ -16124,8 +16182,9 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
     _cge_gams_bounds(M, fixed, dir + "/cge_bounds.inc", (type == "mcp"))
     _cge_gams_user(M, dir + "/cge_user.inc", dir + "/cge_user_write.inc")
     big = (rows(M.x0) ? max((1, max(abs(select(M.x0, M.exists))))) : 1)
-    _cge_gams_driver_sa(dir, name, solver, type, big)
+    _cge_gams_driver_sa(dir, name, solver, type, big, gobj, sgn)
     st_numscalar("r(standalone)", 1)
+    st_numscalar("r(nlp)", (gobj != ""))
     st_numscalar("r(N_constraints)", nc)
     st_global("r(name)", name)
     st_global("r(closure)", invtokens(cl))
@@ -16136,12 +16195,18 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
 }
 
 // The driver of a standalone model (from version 0.13.0), and the include
-// that writes its results; tolerances are scaled by the largest level, big
-void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar solver, string scalar type, real scalar big)
+// that writes its results; tolerances are scaled by the largest level, big.
+// A nonlinear programme (from version 0.15.0) has the GAMS text of its
+// objective in gobj, minimised (sgn 1) or maximised (-1); its base is the
+// starting levels, which GAMS does not solve
+void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar solver, string scalar type, real scalar big,
+                         | string scalar gobj, real scalar sgn)
 {
-    real scalar fh
+    real scalar fh, isnlp
     string scalar d
     d = char(36)
+    if (args() < 6) gobj = ""
+    isnlp = (gobj != "")
     fh = _cge_gopen(dir + "/cge_sa_write.inc")
     fput(fh, "* Results of a standalone model: scenario, variable, element1, element2, value")
     fput(fh, "* " + d + "batinclude cge_sa_write.inc <put file> <scenario name>, written by cge_gams")
@@ -16153,6 +16218,7 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
     fput(fh, "put %1;")
     fput(fh, "put 'scenario', 'variable', 'element1', 'element2', 'value' /;")
     fput(fh, "put '%2', '__status__', '', '', mstat /;")
+    if (isnlp) fput(fh, "put '%2', '__objective__', '', '', OBJV.l /;")
     fput(fh, d + "batinclude cge_user_write.inc %1 %2")
     fput(fh, "putclose %1;")
     fclose(fh)
@@ -16161,9 +16227,10 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
     fput(fh, d + "ontext")
     fput(fh, "Written by cge_gams (cge-stata " + _cge_version() + "). The model was written in the user")
     fput(fh, "language of cge-stata (cge_model new): its labels are in cge_data.inc and its")
-    fput(fh, "parameters, variables and equations in cge_user.inc. GAMS solves the base, the")
-    fput(fh, "starting levels, then scenario " + name + ", whose parameter changes are in")
+    fput(fh, "parameters, variables and equations in cge_user.inc. " + (isnlp ? "GAMS writes the base, the" : "GAMS solves the base, the"))
+    fput(fh, "starting levels, then " + (isnlp ? "solves the nonlinear programme " : "scenario ") + name + ", whose parameter changes are in")
     fput(fh, "cge_shock_par.inc and whose changes to fixed variables are in cge_shock_var.inc.")
+    if (isnlp) fput(fh, (sgn < 0 ? "It maximises " : "It minimises ") + "OBJV, defined by equation EOBJV.")
     fput(fh, "To run it:")
     fput(fh, "  gams cge_run.gms                                    " + solver + ", as " +
          (type == "nlp" ? "a nonlinear programme" : (type == "mcp" ? "a mixed complementarity problem" :
@@ -16192,7 +16259,10 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
     fput(fh, "optf.nd = 3;")
     fput(fh, d + "ifi %cgesolver% == path   putclose optf 'convergence_tolerance ', ptol:0:3 /;")
     fput(fh, d + "ifi %cgesolver% == conopt putclose optf 'rtnwma ', (ptol / " + _cge_gnum(big) + "):0:3 /;")
-    fput(fh, d + "ifi %cgesolver% == ipopt  putclose optf 'tol 1e-12' / 'constr_viol_tol ', ptol:0:3 /;")
+    // variables at their bounds stay there in a nonlinear programme (IPOPT
+    // otherwise relaxes the bounds by 1e-8)
+    fput(fh, d + "ifi %cgesolver% == ipopt  putclose optf 'tol 1e-12' / 'constr_viol_tol ', ptol:0:3 /" +
+         (isnlp ? " 'bound_relax_factor 0' /" : "") + ";")
     fput(fh, d + "ifi %cgesolver% == knitro putclose optf 'feastol_abs ', ptol:0:3 / 'feastol 1e-12' /;")
     fput(fh, "cge.optfile = 0;")
     fput(fh, d + "ifi %cgesolver% == path   cge.optfile = 1;")
@@ -16202,7 +16272,17 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
     fput(fh, "cgenlp.optfile = cge.optfile;")
     fput(fh, "cgebase.optfile = cge.optfile;")
     fput(fh, "option limrow = 0, limcol = 0, solprint = off;")
-    fput(fh, d + "batinclude cge_solve.gms cgebase")
+    if (isnlp) {
+        fput(fh, "variable OBJV " + char(34) + "objective of the nonlinear programme" + char(34) + ";")
+        fput(fh, "equation EOBJV;")
+        fput(fh, "EOBJV..  OBJV =e= " + gobj + ";")
+        fput(fh, "model cgeprog / cge, EOBJV /;")
+        fput(fh, "cgeprog.optfile = cge.optfile;")
+        fput(fh, "* The base: the starting levels, not solved (model status 0)")
+        fput(fh, "mstat = 0;")
+        fput(fh, "OBJV.l = 0;")
+    }
+    else fput(fh, d + "batinclude cge_solve.gms cgebase")
     fput(fh, "file res / 'cge_base.csv' /;")
     fput(fh, d + "batinclude cge_sa_write.inc res __base__")
     fput(fh, "")
@@ -16211,7 +16291,12 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
     fput(fh, d + "include cge_shock_var.inc")
     fput(fh, d + "include cge_constraints.inc")
     fput(fh, d + "include cge_bounds.inc")
-    fput(fh, d + "batinclude cge_solve.gms cgecon")
+    if (isnlp) {
+        fput(fh, "option nlp = %cgesolver%;")
+        fput(fh, "solve cgeprog using nlp " + (sgn < 0 ? "maximizing" : "minimizing") + " OBJV;")
+        fput(fh, "mstat = cgeprog.modelstat;")
+    }
+    else fput(fh, d + "batinclude cge_solve.gms cgecon")
     fput(fh, "file rescen / 'cge_" + name + ".csv' /;")
     fput(fh, d + "batinclude cge_sa_write.inc rescen " + name)
     fput(fh, d + "batinclude cge_cons_write.inc rescen " + name)
@@ -16397,6 +16482,18 @@ void _cge_gams_compare_dyn(string scalar dir, string scalar run, | real scalar i
 }
 
 // 1 if the scenario (current, or stored simulation sim) has constraints
+// 1 if simulation sim is a nonlinear programme (from version 0.15.0)
+real scalar _cge_gams_isnlp(string scalar sim)
+{
+    struct cge_model scalar M
+    real scalar k
+    if (sim == "") return(0)
+    M = _cge_load()
+    k = _cge_find(M.simname, sim)
+    if (!k) return(0)
+    return(M.simmethod[k] == "nlp")
+}
+
 real scalar _cge_gams_hascons(string scalar sim)
 {
     struct cge_model scalar M
@@ -16536,7 +16633,8 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     }
     walras = .
     for (i = 1; i <= rows(key); i++) if (key[i] == "WALRAS||") walras = val[i]
-    printf("{txt}GAMS model status: base {res}%g{txt}, scenario {res}%g{txt} (1, 2, 15 or 16: solved)\n", bstatus, status)
+    if (M.simmethod[k] == "nlp") printf("{txt}GAMS model status: base not solved (the starting levels of a nonlinear programme), scenario {res}%g{txt} (1 or 2: optimal)\n", status)
+    else printf("{txt}GAMS model status: base {res}%g{txt}, scenario {res}%g{txt} (1, 2, 15 or 16: solved)\n", bstatus, status)
     printf("{txt}Base: {res}%f{txt} values compared; largest relative difference {res}%9.2e{txt}%s\n", nb, db,
            (vb != "" ? " (" + vb + ")" : ""))
     printf("{txt}Scenario {res}%s{txt} against simulation {res}%s{txt}: {res}%f{txt} values compared; largest relative difference {res}%9.2e{txt}%s\n",
@@ -19355,17 +19453,23 @@ void _cge_u_fixed(struct cge_model scalar M, real colvector fixed)
     }
 }
 
-// The position of user variable name, element el ("" without an index), or 0
+// The position of user variable name, element el ("" without an index,
+// "e1.e2" with two), or 0
 real scalar _cge_u_vpos(struct cge_model scalar M, string scalar name, string scalar el)
 {
     string colvector e1, e2
-    real colvector pos
-    real scalar k, i
+    real colvector pos, sel
+    real scalar k, i, d
     k = _cge_vidx(M, name)
     if (!k) return(0)
     pos = _cge_vpos(M, k)
     if (el == "") return(rows(pos) == 1 ? pos[1] : 0)
     _cge_vlabels(M, k, e1, e2)
+    d = strpos(el, ".")
+    if (d & e2[1] != "") {
+        sel = _cge_which((e1 :== substr(el, 1, d - 1)) :& (e2 :== substr(el, d + 1, .)))
+        return(rows(sel) ? pos[sel[1]] : 0)
+    }
     i = _cge_find(e1, el)
     return(i ? pos[i] : 0)
 }
@@ -20260,6 +20364,9 @@ struct cge_opt {
     // number, and the text of each, as given (from version 0.9.4)
     real colvector   trex, crex
     string colvector ttext, ctext
+    // derivatives (from version 0.15.0): 0 exact, by the implicit function
+    // theorem, 1 differences of solved models
+    real scalar      gmode
 }
 
 struct cge_opt scalar _cge_opt_load()
@@ -20442,10 +20549,17 @@ real scalar _cge_opt_lookup(string matrix keys, real colvector val, string rowve
 void _cge_opt_apply(struct cge_model scalar M, struct cge_opt scalar O, real colvector values,
                     struct cge_par scalar p, real colvector xfix)
 {
-    real matrix v
-    real scalar k
     p = M.p
     xfix = M.xcur
+    _cge_opt_set(O, values, p, xfix)
+}
+
+// The instruments at the given values set into parameters p and fixed values
+// xfix (from version 0.15.0 a function of its own)
+void _cge_opt_set(struct cge_opt scalar O, real colvector values, struct cge_par scalar p, real colvector xfix)
+{
+    real matrix v
+    real scalar k
     for (k = 1; k <= rows(values); k++) {
         if (O.kind[k] == 1) {
             v = _cge_par_get(p, O.pname[k])
@@ -20486,13 +20600,20 @@ void _cge_opt_box(struct cge_opt scalar O, real colvector lo, real colvector hi)
 // missing without one) and the target residuals r (scaled)
 real scalar _cge_opt_solve(real colvector v, real colvector r, real colvector x)
 {
-    struct cge_model scalar M
-    struct cge_opt scalar O
     struct cge_par scalar p
+    real colvector xfix
+    return(_cge_opt_solvep(v, r, x, p, xfix))
+}
+
+// The solve of _cge_opt_solve, with the parameters p, the regimes of any
+// constraints included, and the fixed values xfix of the solution (from
+// version 0.15.0)
+real scalar _cge_opt_solvep(real colvector v, real colvector r, real colvector x, struct cge_par scalar p,
+                            real colvector xfix)
+{
+    struct cge_opt scalar O
     pointer() scalar q
-    real colvector xfix, val
-    string matrix keys
-    real scalar conv, iter, err, f, k
+    real scalar conv, iter, err
     string scalar method
     q = findexternal("cge__model")
     O = _cge_opt_load()
@@ -20511,26 +20632,216 @@ real scalar _cge_opt_solve(real colvector v, real colvector r, real colvector x)
     }
     O.xlast = x
     _cge_opt_store(O)
-    _cge_opt_rows(*q, p, x, keys, val)
-    // target residuals, then the slacks of the constraints (from version
-    // 0.9.4), each scaled; a slack is not negative where its constraint holds
+    return(_cge_opt_eval(*q, O, p, x, r))
+}
+
+// The objective (scaled, with its sense; missing without one) and the
+// residuals r of the targets and the slacks of the constraints (scaled) at
+// the point (p, x), as the solve finds them (from version 0.15.0 a function
+// of its own, for derivatives along the tangent of the solution); a slack is
+// not negative where its constraint holds
+real scalar _cge_opt_eval(struct cge_model scalar M, struct cge_opt scalar O, struct cge_par scalar p,
+                          real colvector x, real colvector r)
+{
+    real colvector val
+    string matrix keys
+    real scalar k
+    _cge_opt_rows(M, p, x, keys, val)
     r = J(rows(O.tval) + rows(O.cval), 1, .)
     for (k = 1; k <= rows(O.tval); k++) {
-        r[k] = (_cge_opt_item(*q, O, p, x, keys, val, O.tkeys[k, .], O.tex[k], 0) -
-                _cge_opt_bound(*q, O, p, x, O.tval[k], O.trex[k])) / O.tscale[k]
+        r[k] = (_cge_opt_item(M, O, p, x, keys, val, O.tkeys[k, .], O.tex[k], 0) -
+                _cge_opt_bound(M, O, p, x, O.tval[k], O.trex[k])) / O.tscale[k]
     }
     for (k = 1; k <= rows(O.cval); k++) {
-        r[rows(O.tval) + k] = -O.ctype[k] * (_cge_opt_item(*q, O, p, x, keys, val, O.ckeys[k, .], O.cex[k], 0) -
-                                             _cge_opt_bound(*q, O, p, x, O.cval[k], O.crex[k])) / O.cscale[k]
+        r[rows(O.tval) + k] = -O.ctype[k] * (_cge_opt_item(M, O, p, x, keys, val, O.ckeys[k, .], O.cex[k], 0) -
+                                             _cge_opt_bound(M, O, p, x, O.cval[k], O.crex[k])) / O.cscale[k]
     }
-    f = (O.hasobj ? O.sense * _cge_opt_item(*q, O, p, x, keys, val, O.okey, O.oex, 0) / O.oscale : .)
+    return(O.hasobj ? O.sense * _cge_opt_item(M, O, p, x, keys, val, O.okey, O.oex, 0) / O.oscale : .)
+}
+
+// The derivatives of the objective (g) and of the residuals of the targets
+// and constraints (Jr) with respect to the scaled instruments, at the
+// solution x of the model at instruments v, with its parameters p and fixed
+// values xfix (from version 0.15.0). By the implicit function theorem the
+// solution moves with instrument k along dx/du_k = -J^-1 dF/du_k, with J the
+// exact Jacobian of the system solved, factorised once, and dF/du_k the
+// derivative of its residuals at x, by central differences of the residuals,
+// which need no solve; the derivative of the objective and residuals along
+// that tangent comes from central differences of their values on it, which
+// need no solve either. Returns 0 where they cannot be found.
+real scalar _cge_opt_grad(struct cge_model scalar M, struct cge_opt scalar O, real colvector v, struct cge_par scalar p,
+                          real colvector xfix, real colvector x, real colvector g, real matrix Jr)
+{
+    struct cge_sys scalar S
+    struct cge_slu scalar SF
+    struct cge_par scalar pp, pm
+    real colvector zx, jr, jc, jv, b, dz, dx, xp, xm, xfp, xfm, rp, rm, perm, vp, vm
+    real matrix LU, U
+    real scalar n, k, h, tt, fp, fm, sp, nr
+    n = rows(v)
+    S = _cge_sys_make(M, 1)
+    if (rows(S.free) != S.neq) return(0)
+    zx = x[S.free] :/ M.xscale[S.free]
+    if (!_cge_jac_trip(M, p, xfix, S, zx, jr, jc, jv)) return(0)
+    sp = _cge_sparse_on(M, S)
+    if (sp) {
+        _cge_slu_load(SF)
+        if (!_cge_slu_update(SF, jr, jc, jv, rows(zx))) return(0)
+    }
+    else {
+        LU = _cge_trip_dense(jr, jc, jv, S.neq, rows(zx))
+        _lud(LU, U, perm)
+        perm = invorder(perm)
+    }
+    nr = rows(O.tval) + rows(O.cval)
+    g = J(n, 1, 0)
+    Jr = J(nr, n, 0)
+    for (k = 1; k <= n; k++) {
+        // the derivative of the system's residuals with respect to u_k, at x
+        h = 1e-6 * max((1, abs(v[k])))
+        vp = vm = v
+        vp[k] = v[k] + h
+        vm[k] = v[k] - h
+        pp = p
+        pm = p
+        xfp = xfm = xfix
+        _cge_opt_set(O, vp, pp, xfp)
+        _cge_opt_set(O, vm, pm, xfm)
+        b = (_cge_F(M, pp, xfp, S, zx) - _cge_F(M, pm, xfm, S, zx)) / (2 * h)
+        if (hasmissing(b)) return(0)
+        if (sp) dz = _cge_slu_solve(SF, -b)
+        else dz = solveupper(U, solvelower(LU, -b[perm]))
+        if (hasmissing(dz)) return(0)
+        dx = dz :* M.xscale[S.free]
+        // the objective and the residuals along the tangent (dx/du_k, 1)
+        tt = 1e-5 * max((1, abs(v[k])))
+        vp = vm = v
+        vp[k] = v[k] + tt
+        vm[k] = v[k] - tt
+        pp = p
+        pm = p
+        xfp = xfm = xfix
+        _cge_opt_set(O, vp, pp, xfp)
+        _cge_opt_set(O, vm, pm, xfm)
+        xp = xfp
+        xm = xfm
+        xp[S.free] = x[S.free] + tt :* dx
+        xm[S.free] = x[S.free] - tt :* dx
+        if (S.reduced) {
+            _cge_derive(M, pp, xp)
+            _cge_derive(M, pm, xm)
+        }
+        fp = _cge_opt_eval(M, O, pp, xp, rp)
+        fm = _cge_opt_eval(M, O, pm, xm, rm)
+        if (O.hasobj) {
+            if (fp >= . | fm >= .) return(0)
+            g[k] = O.scale[k] * (fp - fm) / (2 * tt)
+        }
+        if (nr) {
+            if (hasmissing(rp) | hasmissing(rm)) return(0)
+            Jr[., k] = O.scale[k] :* (rp - rm) :/ (2 * tt)
+        }
+    }
+    return(1)
+}
+
+// The model solved at the scaled instruments z, with the objective f, the
+// residuals r and their exact derivatives g and Jr (from version 0.15.0);
+// 0 if the model does not solve or the derivatives cannot be found
+real scalar _cge_opt_point(struct cge_opt scalar O, real colvector z, real scalar f, real colvector r,
+                           real colvector g, real matrix Jr)
+{
+    struct cge_opt scalar Q
+    struct cge_par scalar p
+    pointer() scalar q
+    real colvector v, x, xfix
+    q = findexternal("cge__model")
+    v = _cge_opt_values(O, z)
+    f = _cge_opt_solvep(v, r, x, p, xfix)
+    if (hasmissing(r) | (O.hasobj & f >= .)) return(0)
+    Q = _cge_opt_load()
+    return(_cge_opt_grad(*q, Q, v, p, xfix, x, g, Jr))
+}
+
+// The augmented objective of _cge_opt_aug at z and its exact gradient ga
+// (from version 0.15.0); missing if the model does not solve
+real scalar _cge_opt_augg(struct cge_opt scalar O, real colvector z, real colvector ga)
+{
+    struct cge_opt scalar Q
+    real colvector r, g, re, s, m
+    real matrix Jr
+    real scalar f, nt, nc
+    if (!_cge_opt_point(O, z, f, r, g, Jr)) return(.)
+    Q = _cge_opt_load()
+    nt = rows(Q.tval)
+    nc = rows(Q.cval)
+    ga = g
+    if (nt) {
+        re = r[|1 \ nt|]
+        f = f - (Q.lam' * re + 0.5 * Q.rho * (re' * re))
+        ga = ga - Jr[|1, 1 \ nt, cols(Jr)|]' * (Q.lam + Q.rho :* re)
+    }
+    if (nc) {
+        s = r[|nt + 1 \ nt + nc|]
+        m = rowmax((J(nc, 1, 0), Q.mu - Q.rho :* s))
+        f = f - sum(m :^ 2 - Q.mu :^ 2) / (2 * Q.rho)
+        ga = ga + Jr[|nt + 1, 1 \ nt + nc, cols(Jr)|]' * m
+    }
     return(f)
 }
 
-// Targets alone (Section 18): Newton's method on the scaled residuals, with a
-// Jacobian from central differences and steps halved until the residuals fall
+// Targets alone (Section 18): Newton's method on the scaled residuals, with
+// the exact Jacobian of _cge_opt_grad (from version 0.15.0) or, with
+// gradient(differences), central differences of solved models; steps halved
+// until the residuals fall
 real colvector _cge_opt_newton(struct cge_opt scalar O, real colvector z0, real scalar trace, real scalar conv,
                                real scalar iter)
+{
+    real colvector z, r, rt, zt, dz, lo, hi, g
+    real matrix Jm
+    real scalar it, nr, lam, ls, f
+    if (O.gmode == 1) return(_cge_opt_newton_fd(O, z0, trace, conv, iter))
+    _cge_opt_box(O, lo, hi)
+    z = z0
+    conv = 0
+    iter = 0
+    if (!_cge_opt_point(O, z, f, r, g, Jm)) return(z)
+    for (it = 1; it <= 50; it++) {
+        nr = max(abs(r))
+        if (trace) printf("{txt}Newton iteration %f: largest scaled target gap {res}%9.3e\n", it - 1, nr)
+        if (nr < 1e-11) {
+            conv = 1
+            return(z)
+        }
+        iter = it
+        dz = -lusolve(Jm, r)
+        if (hasmissing(dz)) return(z)
+        lam = 1
+        for (ls = 1; ls <= 30; ls++) {
+            zt = rowmax((rowmin((z + lam * dz, hi)), lo))
+            if (_cge_opt_point(O, zt, f, rt, g, Jm)) {
+                if (max(abs(rt)) < nr) break
+            }
+            // below 1e-9 the gap is at the precision of the solves: the
+            // exact step is so small that the trial's solve, from the solution
+            // before, already meets its tolerance, and a shorter one cannot help
+            if (nr < 1e-9) {
+                conv = 1
+                return(z)
+            }
+            lam = lam / 2
+        }
+        if (ls > 30) return(z)
+        z = zt
+        r = rt
+    }
+    return(z)
+}
+
+// The method of _cge_opt_newton with central differences of solved models
+// (gradient(differences); before version 0.15.0, the only one)
+real colvector _cge_opt_newton_fd(struct cge_opt scalar O, real colvector z0, real scalar trace, real scalar conv,
+                                  real scalar iter)
 {
     real colvector z, r, rp, rm, rt, zt, dz, x, lo, hi
     real matrix Jm
@@ -20603,12 +20914,140 @@ real scalar _cge_opt_aug(struct cge_opt scalar O, real colvector z)
     return(f)
 }
 
-// Maximises the augmented objective within the bounds by Newton's method:
-// gradient and Hessian from central differences, coordinates held at a bound
-// whose gradient points outwards, and steps projected on the bounds and
-// halved until the objective rises
+// Maximises the augmented objective within the bounds by Newton's method
+// (from version 0.15.0): the exact gradient; the Hessian of the free
+// coordinates from central differences of the gradient of the Lagrangian,
+// f - lt'r + m's with the multipliers lt = lam + rho r and m = max(0, mu -
+// rho s) held at their values, and the penalty's part, -rho J'J over the
+// targets and the constraints that bind, from the exact Jacobian of their
+// residuals; coordinates held at a bound whose gradient points outwards, and
+// steps projected on the bounds and halved until the objective rises; with
+// gradient(differences), the method of _cge_opt_max_fd
 real colvector _cge_opt_max(struct cge_opt scalar O, real colvector z0, real scalar trace, real scalar conv,
                             real scalar iter)
+{
+    struct cge_opt scalar Q
+    real colvector z, zt, g, gp, gm, gt, r, rp, rm, ga, d, lo, hi, fr, frt, fi, e, lt, m, act, s, re
+    real matrix H, Jr, Jp, Jm, Jt, Jc
+    real scalar n, it, i, f, fa, ft, hh, lam, ls, gn, ok, nt, nc, fp, fm, nw
+    if (O.gmode == 1) return(_cge_opt_max_fd(O, z0, trace, conv, iter))
+    n = rows(z0)
+    _cge_opt_box(O, lo, hi)
+    z = z0
+    conv = 0
+    iter = 0
+    hh = 1e-4
+    for (it = 1; it <= 100; it++) {
+        if (!_cge_opt_point(O, z, f, r, g, Jr)) return(z)
+        Q = _cge_opt_load()
+        nt = rows(Q.tval)
+        nc = rows(Q.cval)
+        // the augmented objective, its gradient and the multipliers
+        fa = f
+        ga = g
+        lt = m = act = J(0, 1, .)
+        if (nt) {
+            re = r[|1 \ nt|]
+            Jt = Jr[|1, 1 \ nt, n|]
+            lt = Q.lam + Q.rho :* re
+            fa = fa - (Q.lam' * re + 0.5 * Q.rho * (re' * re))
+            ga = ga - Jt' * lt
+        }
+        if (nc) {
+            s = r[|nt + 1 \ nt + nc|]
+            Jc = Jr[|nt + 1, 1 \ nt + nc, n|]
+            m = rowmax((J(nc, 1, 0), Q.mu - Q.rho :* s))
+            act = (Q.mu - Q.rho :* s :> 0)
+            fa = fa - sum(m :^ 2 - Q.mu :^ 2) / (2 * Q.rho)
+            ga = ga + Jc' * m
+        }
+        // coordinates at a bound whose gradient points outwards are held
+        fr = !((z :<= lo :+ 1e-12) :& (ga :< 0)) :& !((z :>= hi :- 1e-12) :& (ga :> 0))
+        gn = max(abs(fr :* ga))
+        if (trace) printf("{txt}Iteration %f: objective {res}%14.10g{txt}, largest free gradient {res}%9.3e\n", it - 1, fa, gn)
+        // the exact gradient allows a tighter test than differences of solves;
+        // with targets or active constraints the outer rounds set the
+        // accuracy, while constraints that do not bind leave the objective as
+        // it is
+        if (gn < (nt | (nc ? any(act) : 0) ? 1e-8 : 1e-10)) {
+            conv = 1
+            return(z)
+        }
+        iter = it
+        fi = _cge_which(fr)
+        H = J(rows(fi), rows(fi), .)
+        ok = 1
+        for (i = 1; i <= rows(fi); i++) {
+            e = J(n, 1, 0)
+            e[fi[i]] = hh
+            if (!_cge_opt_point(O, z + e, fp, rp, gp, Jp) | !_cge_opt_point(O, z - e, fm, rm, gm, Jm)) {
+                ok = 0
+                break
+            }
+            if (nt) {
+                gp = gp - Jp[|1, 1 \ nt, n|]' * lt
+                gm = gm - Jm[|1, 1 \ nt, n|]' * lt
+            }
+            if (nc) {
+                gp = gp + Jp[|nt + 1, 1 \ nt + nc, n|]' * m
+                gm = gm + Jm[|nt + 1, 1 \ nt + nc, n|]' * m
+            }
+            H[., i] = (gp[fi] - gm[fi]) / (2 * hh)
+        }
+        d = J(n, 1, 0)
+        if (ok & !hasmissing(H)) {
+            H = (H + H') / 2
+            if (nt) H = H - Q.rho :* (Jt[., fi]' * Jt[., fi])
+            if (nc) if (any(act)) H = H - Q.rho :* (select(Jc[., fi], act)' * select(Jc[., fi], act))
+        }
+        // Newton step where the Hessian is negative definite; otherwise a
+        // step along the gradient
+        nw = 0
+        if (!ok | hasmissing(H)) d[fi] = ga[fi] / max((1, max(abs(ga[fi]))))
+        else if (max(symeigenvalues(H)) >= 0) d[fi] = ga[fi] / max((1, max(abs(ga[fi]))))
+        else {
+            d[fi] = -lusolve(H, ga[fi])
+            nw = 1
+        }
+        // near the optimum the objective cannot rise measurably: a Newton step
+        // whose predicted rise is below rounding is taken if it reduces the
+        // largest free gradient
+        if (nw & abs(ga[fi]' * d[fi]) <= 1e-12 * max((1, abs(fa)))) {
+            zt = rowmax((rowmin((z + d, hi)), lo))
+            if (_cge_opt_augg(O, zt, gt) < .) {
+                frt = !((zt :<= lo :+ 1e-12) :& (gt :< 0)) :& !((zt :>= hi :- 1e-12) :& (gt :> 0))
+                if (max(abs(frt :* gt)) < gn) {
+                    z = zt
+                    continue
+                }
+            }
+        }
+        lam = 1
+        for (ls = 1; ls <= 40; ls++) {
+            zt = z + lam * d
+            zt = rowmax((rowmin((zt, hi)), lo))
+            ft = _cge_opt_aug(O, zt)
+            if (ft < . & ft > fa) break
+            lam = lam / 2
+        }
+        if (ls > 40) {
+            // no rise along the step: the gradient decides
+            conv = (gn < 1e-6)
+            return(z)
+        }
+        if (max(abs(zt - z)) < 1e-13) {
+            conv = 1
+            return(zt)
+        }
+        z = zt
+    }
+    return(z)
+}
+
+// The method of _cge_opt_max with central differences of solved models
+// (gradient(differences); before version 0.15.0, the only one)
+real colvector _cge_opt_max_fd(struct cge_opt scalar O, real colvector z0, real scalar trace, real scalar conv,
+                               real scalar iter)
 {
     real colvector z, zt, g, d, lo, hi, fr, fi, e
     real matrix H, Hf
@@ -20706,6 +21145,10 @@ real colvector _cge_opt_redcost(struct cge_opt scalar O, real colvector z)
 {
     real colvector g, e, lo, hi
     real scalar n, i, a, b, f, h
+    // the exact gradient (from version 0.15.0)
+    if (O.gmode != 1) {
+        if (_cge_opt_augg(O, z, g) < .) return(O.sense * O.oscale :* g :/ O.scale)
+    }
     n = rows(z)
     _cge_opt_box(O, lo, hi)
     h = 1e-5
@@ -20795,7 +21238,7 @@ string rowvector _cge_opt_key(string scalar spec, string scalar what)
 
 void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min, string scalar s_tar,
                    string scalar s_lo, string scalar s_up, string scalar name, real scalar tol, real scalar maxit,
-                   real scalar trace, | string scalar s_con)
+                   real scalar trace, | string scalar s_con, string scalar s_grad)
 {
     struct cge_model scalar M
     struct cge_opt scalar O
@@ -20808,6 +21251,7 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2, nt, nc, viol, ex, rx, sc
     string scalar pn
     if (args() < 11) s_con = ""
+    if (args() < 12) s_grad = ""
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -20919,6 +21363,8 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     O.maxit = maxit
     O.nevals = 0
     O.nfail = 0
+    // the derivatives (from version 0.15.0)
+    O.gmode = (s_grad == "differences")
     O.oscale = 1
     O.xlast = M.x0
     _cge_opt_store(O)
@@ -21073,6 +21519,7 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     }
     st_global("r(name)", name)
     st_global("r(instruments_list)", invtokens(O.label'))
+    st_global("r(gradient)", (O.gmode == 1 ? "differences" : "exact"))
     rmexternal("cge__opt")
 }
 
@@ -21550,7 +21997,7 @@ void _cge_model_new()
     M.calargs = J(1, 0, "")
     _cge_layout(M)
     M.x0 = M.xcur = M.xscale = M.exists = M.fixed = M.nominal = M.positive = J(0, 1, .)
-    M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = J(0, 1, "")
+    M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = M.simobj = J(0, 1, "")
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
@@ -21625,6 +22072,346 @@ void _cge_model_describe()
     st_numscalar("r(N_parameters)", rows(M.updef))
     st_numscalar("r(N_constraints)", rows(M.bY))
     st_numscalar("r(square)", sq)
+}
+
+// =====================================================================
+// Nonlinear programmes (from version 0.15.0; model_spec.md, Section 24)
+// =====================================================================
+
+// cge_solve, minimize(expression) or maximize(expression) for a standalone
+// model with more free variables than equations: the programme
+//   min (or max) f(x) subject to the equations c(x) = 0 and the bounds of
+//   cge_bound, l <= x <= u,
+// solved by the interior-point method of _cge_nlp_solve and stored as a
+// simulation, with the multipliers of the equations
+void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar obj, real scalar tol,
+                  real scalar maxit, real scalar trace, string scalar lin)
+{
+    struct cge_sys scalar S
+    real matrix tok
+    real colvector x, lam, start
+    real scalar sgn, conv, iter, err, fobj, k, keeplin
+    string scalar g
+    if (!_cge_sa(M)) _cge_fail("minimize() and maximize() solve a nonlinear programme of a standalone model (cge_model new); optimise a model from a SAM with cge_optimize", 198)
+    if (rows(M.bY)) {
+        _cge_fail("constraints and inequalities paired with variables are complementarity conditions; a nonlinear programme takes equations and the bounds of cge_bound: write an inequality as an equation with a slack variable bounded at zero", 459)
+    }
+    keeplin = M.linsolver
+    if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
+    tok = _cge_nlp_tok(M, obj, sgn, g)
+    start = _cge_bd_start(M, M.xcur)
+    x = _cge_nlp_solve(M, M.p, M.xcur, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam)
+    M.linsolver = keeplin
+    k = _cge_store_sim(M, name, x, conv, iter, err, "nlp")
+    _cge_set_simobj(M, k, obj)
+    _cge_store(M)
+    if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) (interior point)\n", name, iter)
+    else printf("{err}Simulation %s did not converge (largest scaled error %9.3e)\n", name, err)
+    printf("{txt}%s %s: {res}%16.10g\n", (sgn < 0 ? "Maximised" : "Minimised"), substr(obj, 5, .), fobj)
+    printf("{txt}Largest scaled error of the optimality conditions {res}%9.3e\n", err)
+    st_numscalar("r(converged)", conv)
+    st_numscalar("r(iterations)", iter)
+    st_numscalar("r(max_residual)", err)
+    st_numscalar("r(objective)", fobj)
+    S = _cge_sys_make(M, 0)
+    st_numscalar("r(N_dof)", rows(S.free) - S.neq)
+    if (rows(lam)) st_matrix("r(marginals)", lam')
+    st_global("r(name)", name)
+    st_global("r(method)", "nlp")
+    st_global("r(objective_expr)", substr(obj, 5, .))
+}
+
+// The objective of a nonlinear programme compiled to postfix rows, from
+// "min:expression" or "max:expression": sgn 1 to minimise, -1 to maximise,
+// and its GAMS text in g
+real matrix _cge_nlp_tok(struct cge_model scalar M, string scalar spec, real scalar sgn, string scalar g)
+{
+    sgn = (substr(spec, 1, 4) == "max:" ? -1 : 1)
+    return(_cge_u_compile(M, _cge_u_written(M, M.p0, M.x0, _cge_u_tokens(substr(spec, 5, .))), M.x0, g))
+}
+
+// The objective at x and its gradient gz with respect to the free variables
+// (scaled), by forward differentiation of its postfix rows; map gives the
+// position of each variable among the free ones (0 for fixed ones)
+real scalar _cge_nlp_f(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real matrix tok,
+                       real scalar nfree, real colvector map, real colvector gz)
+{
+    real colvector vpos, sel
+    real rowvector gr
+    real scalar v
+    vpos = select(tok[., 2], tok[., 1] :== 2)
+    gz = J(nfree, 1, 0)
+    if (!rows(vpos)) return(_cge_u_value(M, p, x, tok))
+    vpos = uniqrows(vpos)
+    v = _cge_u_dvalue(M, p, x, tok, vpos, gr)
+    sel = selectindex(map[vpos, 1] :> 0)
+    if (rows(sel) * cols(sel)) gz[map[vpos[sel], 1]] = colshape(gr[sel], 1) :* M.xscale[vpos[sel], 1]
+    return(v)
+}
+
+// A point z (the free variables, scaled) of a nonlinear programme: the
+// objective f (with its sense, divided by osc), its gradient gf, the scaled
+// residuals c of the equations and their exact Jacobian Jm; 0 where they
+// cannot be evaluated
+real scalar _cge_nlp_eval(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                          struct cge_sys scalar S, real colvector z, real matrix tok, real scalar sgn,
+                          real scalar osc, real colvector map, real scalar f, real colvector gf,
+                          real colvector c, real matrix Jm)
+{
+    real colvector x, jr, jc, jv
+    x = xfix
+    x[S.free] = z :* M.xscale[S.free]
+    if (S.reduced) _cge_derive(M, p, x)
+    f = _cge_nlp_f(M, p, x, tok, rows(z), map, gf)
+    if (f >= . | hasmissing(gf)) return(0)
+    f = sgn * f / osc
+    gf = sgn :* gf :/ osc
+    c = J(0, 1, .)
+    Jm = J(0, rows(z), 0)
+    if (S.neq) {
+        c = _cge_F(M, p, xfix, S, z)
+        if (hasmissing(c)) return(0)
+        if (!_cge_jac_trip(M, p, xfix, S, z, jr, jc, jv)) return(0)
+        Jm = _cge_trip_dense(jr, jc, jv, S.neq, rows(z))
+    }
+    return(1)
+}
+
+// The primal-dual interior-point method (from version 0.15.0) for
+//   min f(z) subject to c(z) = 0, L <= z <= U
+// in the scaled free variables z, after Wachter and Biegler (2006): the
+// barrier problem with parameter mu, decreased by the monotone rule as each
+// is solved; Newton's steps on its optimality conditions, with the Hessian of
+// the Lagrangian from central differences of its exact gradient and a
+// multiple of the identity added until the Hessian is positive definite on
+// the null space of the equations' Jacobian; the fraction-to-the-boundary
+// rule; and a line search on the l1 merit function of the barrier problem.
+// Returns the solution x; conv, iter, err (the largest scaled error of the
+// optimality conditions), the objective fobj and the multipliers lam of the
+// equations, in units of the objective per unit of each right side.
+real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                              real colvector start, real matrix tok, real scalar sgn, real scalar tol,
+                              real scalar maxit, real scalar trace, real scalar conv, real scalar iter,
+                              real scalar err, real scalar fobj, real colvector lam)
+{
+    struct cge_sys scalar S
+    real colvector map, z, L, U, il, iu, gf, c, sl, su, zl, zu, rd, dz, dzl, dzu, zn, cn, gfn, e, gp, gm
+    real colvector cp, cm, sol, lamn, gphi, sig, x, esc, ev
+    real matrix Jm, Jn, Jp, Jmm, W, Hs, K, Q, R, Z
+    real scalar n, m, mu, f, fn, it, i, h, hp, hm, osc, sd, ed, ep, ec, emu, del, a, az, tau, nu, phi, phin
+    real scalar dphi, ok, k, lmin, fp, fm, ntry
+    S = _cge_sys_make(M, 0)
+    n = rows(S.free)
+    m = S.neq
+    conv = 0
+    iter = 0
+    err = .
+    fobj = .
+    lam = J(0, 1, .)
+    if (n <= m) {
+        _cge_fail("a nonlinear programme needs more free variables than equations: the model has " + strofreal(n) +
+                  " free variable element(s) and " + strofreal(m) + " equation(s)", 459)
+    }
+    map = J(rows(M.x0), 1, 0)
+    map[S.free] = (1::n)
+    // the bounds of the free variables (cge_bound), scaled
+    L = U = J(n, 1, .)
+    for (k = 1; k <= rows(M.bdlp); k++) if (map[M.bdlp[k]]) L[map[M.bdlp[k]]] = M.bdlv[k] / M.xscale[M.bdlp[k]]
+    for (k = 1; k <= rows(M.bdup); k++) if (map[M.bdup[k]]) U[map[M.bdup[k]]] = M.bduv[k] / M.xscale[M.bdup[k]]
+    il = _cge_which(L :< .)
+    iu = _cge_which(U :< .)
+    for (k = 1; k <= rows(il); k++) {
+        if (U[il[k]] < . & U[il[k]] - L[il[k]] <= 1e-12 * max((1, abs(L[il[k]])))) {
+            _cge_fail(_cge_poslabel(M, S.free[il[k]]) + ": its lower and upper bounds are equal; fix it with cge_variable, fixed", 459)
+        }
+    }
+    // the start, pushed into the bounds
+    z = start[S.free] :/ M.xscale[S.free]
+    for (i = 1; i <= n; i++) {
+        // inside by a margin, as Wachter and Biegler's bound push, at most a
+        // quarter of the interval
+        if (L[i] < . & U[i] < .) {
+            z[i] = max((z[i], L[i] + min((1e-2 * max((1, abs(L[i]))), 0.25 * (U[i] - L[i])))))
+            z[i] = min((z[i], U[i] - min((1e-2 * max((1, abs(U[i]))), 0.25 * (U[i] - L[i])))))
+        }
+        else if (L[i] < .) z[i] = max((z[i], L[i] + 1e-2 * max((1, abs(L[i])))))
+        else if (U[i] < .) z[i] = min((z[i], U[i] - 1e-2 * max((1, abs(U[i])))))
+    }
+    // the objective scaled so that its largest derivative at the start is at
+    // most 100
+    osc = 1
+    if (!_cge_nlp_eval(M, p, xfix, S, z, tok, sgn, osc, map, f, gf, c, Jm)) {
+        _cge_fail("the objective or the equations cannot be evaluated at the start of the nonlinear programme", 459)
+    }
+    osc = max((1, max(abs(gf)) / 100))
+    f = f / osc
+    gf = gf / osc
+    mu = 0.1
+    lam = J(m, 1, 0)
+    // least-squares multipliers to start
+    if (m) {
+        lam = -lusolve(Jm * Jm' + 1e-12 * I(m), Jm * gf)
+        if (hasmissing(lam)) lam = J(m, 1, 0)
+        else if (max(abs(lam)) > 1e3) lam = J(m, 1, 0)
+    }
+    sl = su = J(n, 1, 1)
+    zl = zu = J(n, 1, 0)
+    if (rows(il)) {
+        sl[il] = z[il] - L[il]
+        zl[il] = mu :/ sl[il]
+    }
+    if (rows(iu)) {
+        su[iu] = U[iu] - z[iu]
+        zu[iu] = mu :/ su[iu]
+    }
+    nu = 1
+    for (it = 0; it <= maxit; it++) {
+        iter = it
+        // the optimality conditions, scaled as in Wachter and Biegler (2006)
+        rd = gf - zl + zu
+        if (m) rd = rd + Jm' * lam
+        sd = max((100, (sum(abs(lam)) + sum(zl) + sum(zu)) / max((1, m + rows(il) + rows(iu))))) / 100
+        ed = max(abs(rd)) / sd
+        ep = (m ? max(abs(c)) : 0)
+        ec = 0
+        if (rows(il)) ec = max((ec, max(abs(sl[il] :* zl[il])) / sd))
+        if (rows(iu)) ec = max((ec, max(abs(su[iu] :* zu[iu])) / sd))
+        err = max((ed, ep, ec))
+        if (trace) printf("{txt}Iteration %f: objective {res}%14.8g{txt}, dual {res}%9.2e{txt}, primal {res}%9.2e{txt}, complementarity {res}%9.2e{txt}, mu %9.2e\n",
+                          it, sgn * f * osc, ed, ep, ec, mu)
+        if (err < tol) {
+            conv = 1
+            break
+        }
+        if (it == maxit) break
+        // the barrier parameter, decreased while each barrier problem is solved
+        while (mu > tol / 10) {
+            emu = max((ed, ep))
+            if (rows(il)) emu = max((emu, max(abs(sl[il] :* zl[il] :- mu)) / sd))
+            if (rows(iu)) emu = max((emu, max(abs(su[iu] :* zu[iu] :- mu)) / sd))
+            if (emu > 10 * mu) break
+            mu = max((tol / 10, min((0.2 * mu, mu^1.5))))
+        }
+        // the Hessian of the Lagrangian: central differences of its exact
+        // gradient, one-sided toward the inside near a bound
+        W = J(n, n, .)
+        ok = 1
+        for (i = 1; i <= n; i++) {
+            h = 1e-6 * max((1, abs(z[i])))
+            hp = hm = h
+            if (L[i] < .) if (z[i] - h <= L[i]) hm = 0
+            if (U[i] < .) if (z[i] + h >= U[i]) hp = 0
+            if (hp == 0 & hm == 0) hp = hm = min((sl[i], su[i])) / 4
+            e = J(n, 1, 0)
+            if (hp > 0) {
+                e[i] = hp
+                if (!_cge_nlp_eval(M, p, xfix, S, z + e, tok, sgn, osc, map, fp, gp, cp, Jp)) ok = 0
+                else if (m) gp = gp + Jp' * lam
+            }
+            else gp = rd + zl - zu
+            if (hm > 0) {
+                e[i] = -hm
+                if (!_cge_nlp_eval(M, p, xfix, S, z + e, tok, sgn, osc, map, fm, gm, cm, Jmm)) ok = 0
+                else if (m) gm = gm + Jmm' * lam
+            }
+            else gm = rd + zl - zu
+            if (!ok) break
+            W[., i] = (gp - gm) / (hp + hm)
+        }
+        if (!ok) break
+        W = (W + W') / 2
+        sig = J(n, 1, 0)
+        if (rows(il)) sig[il] = zl[il] :/ sl[il]
+        if (rows(iu)) sig[iu] = sig[iu] + zu[iu] :/ su[iu]
+        Hs = W + diag(sig)
+        // positive definite on the null space of the Jacobian
+        if (m) {
+            qrd(Jm', Q, R)
+            Z = Q[., (m + 1)..n]
+            lmin = min(symeigenvalues(Z' * Hs * Z))
+        }
+        else lmin = min(symeigenvalues(Hs))
+        del = max((0, 1e-8 * max((1, max(abs(diagonal(Hs))))) - lmin))
+        // the step
+        gphi = gf
+        if (rows(il)) gphi[il] = gphi[il] - mu :/ sl[il]
+        if (rows(iu)) gphi[iu] = gphi[iu] + mu :/ su[iu]
+        sol = J(0, 1, .)
+        for (ntry = 1; ntry <= 4; ntry++) {
+            if (m) {
+                K = (Hs + del * I(n), Jm' \ Jm, -(ntry > 1 ? 1e-8 * 10^ntry : 0) * I(m))
+                sol = lusolve(K, -(gphi \ c))
+            }
+            else sol = lusolve(Hs + del * I(n), -gphi)
+            if (!hasmissing(sol)) break
+            del = max((1e-6, 10 * del))
+        }
+        if (hasmissing(sol)) break
+        dz = sol[|1 \ n|]
+        lamn = (m ? sol[|n + 1 \ n + m|] : J(0, 1, .))
+        dzl = dzu = J(n, 1, 0)
+        if (rows(il)) dzl[il] = mu :/ sl[il] - zl[il] - (zl[il] :/ sl[il]) :* dz[il]
+        if (rows(iu)) dzu[iu] = mu :/ su[iu] - zu[iu] + (zu[iu] :/ su[iu]) :* dz[iu]
+        // the fraction to the boundary
+        tau = max((0.99, 1 - mu))
+        a = az = 1
+        for (k = 1; k <= rows(il); k++) {
+            if (dz[il[k]] < 0) a = min((a, -tau * sl[il[k]] / dz[il[k]]))
+            if (dzl[il[k]] < 0) az = min((az, -tau * zl[il[k]] / dzl[il[k]]))
+        }
+        for (k = 1; k <= rows(iu); k++) {
+            if (dz[iu[k]] > 0) a = min((a, tau * su[iu[k]] / dz[iu[k]]))
+            if (dzu[iu[k]] < 0) az = min((az, -tau * zu[iu[k]] / dzu[iu[k]]))
+        }
+        // the line search on the l1 merit function of the barrier problem
+        if (m) nu = max((nu, max(abs(lamn)) + 1))
+        phi = f + (m ? nu * sum(abs(c)) : 0)
+        if (rows(il)) phi = phi - mu * sum(ln(sl[il]))
+        if (rows(iu)) phi = phi - mu * sum(ln(su[iu]))
+        dphi = gphi' * dz - (m ? nu * sum(abs(c)) : 0)
+        ok = 0
+        for (; a >= 1e-12; a = a / 2) {
+            zn = z + a * dz
+            if (!_cge_nlp_eval(M, p, xfix, S, zn, tok, sgn, osc, map, fn, gfn, cn, Jn)) continue
+            phin = fn + (m ? nu * sum(abs(cn)) : 0)
+            if (rows(il)) phin = phin - mu * sum(ln(zn[il] - L[il]))
+            if (rows(iu)) phin = phin - mu * sum(ln(U[iu] - zn[iu]))
+            // Armijo's condition, with room for rounding
+            if (phin <= phi + 1e-4 * a * min((dphi, 0)) + 1e-13 * max((1, abs(phi)))) {
+                ok = 1
+                break
+            }
+        }
+        if (!ok) break
+        z = zn
+        f = fn
+        gf = gfn
+        c = cn
+        Jm = Jn
+        if (m) lam = lam + a * (lamn - lam)
+        if (rows(il)) {
+            sl[il] = z[il] - L[il]
+            zl[il] = zl[il] + az * dzl[il]
+            // the bound multipliers stay close to mu / slack
+            zl[il] = rowmax((rowmin((zl[il], 1e10 * mu :/ sl[il])), mu :/ (1e10 :* sl[il])))
+        }
+        if (rows(iu)) {
+            su[iu] = U[iu] - z[iu]
+            zu[iu] = zu[iu] + az * dzu[iu]
+            zu[iu] = rowmax((rowmin((zu[iu], 1e10 * mu :/ su[iu])), mu :/ (1e10 :* su[iu])))
+        }
+    }
+    x = xfix
+    x[S.free] = z :* M.xscale[S.free]
+    if (S.reduced) _cge_derive(M, p, x)
+    fobj = sgn * f * osc
+    // the marginal of each equation: the change in the objective per unit of
+    // its right side
+    if (m) {
+        esc = select(M.escale, S.mask)
+        lam = -sgn * osc :* lam :/ esc
+    }
+    return(x)
 }
 
 // BEGIN GENERATED: model input-output (tools/gen_mata_io.py; do not edit by hand)
@@ -22014,6 +22801,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "linsolver", M.linsolver)
     _cge_io_put(fh, "standalone", M.standalone)
     _cge_io_put(fh, "mcpsolver", M.mcpsolver)
+    _cge_io_put(fh, "simobj", M.simobj)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -22166,6 +22954,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "linsolver") M.linsolver = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "standalone") M.standalone = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "mcpsolver") M.mcpsolver = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "simobj") M.simobj = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
