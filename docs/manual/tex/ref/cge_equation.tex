@@ -405,6 +405,15 @@ the composite prices, the imports of manufactures while they carry a tariff,
 the number of goods, and a CES aggregate of domestic goods and imports defined
 by a macro, after the tariffs are removed:
 \stlog{eq_functions}
+
+\cgesubsec{Example 11: a complementarity problem}
+
+With variables at a bound and inequalities paired with them, a standalone
+model (\manref{cge_model}) is a mixed complementarity problem: here that of
+\citet{josephy1979}, from MCPLIB, $x \ge 0$, $F(x) \ge 0$, $x'F(x) = 0$, with
+the solution $(\sqrt{6}/2, 0, 0, 1/2)$, solved from $x = 0$ by the
+semismooth Newton method (\secref{sec:cons-solution}):
+\stlog[\scriptsize]{eq_mcp}
 \cmd{MSW} is the imports of manufactures at the base, where the tariff is
 positive, and 0 once the tariff is removed: the condition switches with the
 parameter. \cmd{CQ} is $\big(0.5\,\V{QD}^{-0.5} + 0.5\,\V{QM}^{-0.5}\big)^{-2}$

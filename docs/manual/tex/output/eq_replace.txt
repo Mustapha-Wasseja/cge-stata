@@ -24,7 +24,7 @@ Parameter tm changed for 3 element(s)
 
 . cge_solve, name(replaced)
 Simulation replaced solved in 8 iteration(s) (newton)
-Largest scaled residual  1.02e-15; WALRAS =  7.71e-14
+Largest scaled residual  2.25e-15; WALRAS =  8.98e-14
 
 . quietly cge_results, sim(replaced) clear nodisplay
 
@@ -41,5 +41,5 @@ Largest scaled residual  1.02e-15; WALRAS =  7.71e-14
   |       QG    com_man      5           5 |
   |       QG    com_ser     40          44 |
   |----------------------------------------|
-  |   WALRAS                 0   7.707e-14 |
+  |   WALRAS                 0   8.980e-14 |
   +----------------------------------------+

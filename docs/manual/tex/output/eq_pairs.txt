@@ -32,7 +32,7 @@ Parameter tm changed for 3 element(s)
 
 . cge_solve, name(pairs)
 Simulation pairs solved in 7 iteration(s) (newton)
-Largest scaled residual  5.15e-14; WALRAS = -1.24e-14
+Largest scaled residual  5.27e-14; WALRAS = -3.05e-14
 
 . quietly cge_results, sim(pairs) clear nodisplay
 

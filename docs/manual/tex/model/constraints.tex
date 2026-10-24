@@ -82,24 +82,51 @@ variable, the constraint and the rent's recipient are given together.
 
 \section{Solution}\label{sec:cons-solution}
 
-The conditions are solved in two stages:
-\begin{enumerate}
-\item \textbf{Smoothed.} Each condition is written in the smoothed
-Fischer--Burmeister form of section~\ref{sec:minwage},
+From version 0.14.0 every condition is written in the Fischer--Burmeister
+form
+\begin{equation*}
+\phi(g_k, h_k) = g_k + h_k - \sqrt{g_k^2 + h_k^2} = 0,
+\end{equation*}
+which holds exactly where $g_k \ge 0$, $h_k \ge 0$ and $g_k h_k = 0$
+\citep{fischer1992}, and the conditions and the rest of the model are solved
+at once by the semismooth Newton method of \citet{deluca1996}. $\phi$ is not
+differentiable where $g_k = h_k = 0$, but it is semismooth: each step solves
+the system of an element of its generalised Jacobian, computed from the exact
+derivatives, $\partial\phi/\partial g = 1 - g/\sqrt{g^2 + h^2}$ and
+$\partial\phi/\partial h = 1 - h/\sqrt{g^2 + h^2}$, with $1 - 1/\sqrt{2}$ for
+both at $g = h = 0$. The step $d$ is taken along a line search on the merit
+function $\psi(z) = \tfrac12 \lVert F(z)\rVert^2$, with $F$ the scaled
+residuals, when it is a direction of sufficient descent,
+$\nabla\psi' d \le -10^{-8}\lVert d\rVert^{2.1}$; otherwise, or when its line
+search fails, the step is the steepest descent of the merit function,
+$-\nabla\psi = -J'F$. The line search is non-monotone \citep{grippo1986}: a
+step $t\,d$ is accepted when $\psi(z + t d) \le \max_{j \le 10} \psi_{k-j} +
+10^{-4}\,t\,\nabla\psi' d$, the largest merit of the last ten iterations,
+which the method needs on hard problems such as that of Kojima and Shindo. Near
+a solution where every constraint is either binding or not, with its other
+condition strictly satisfied, the method converges as Newton's method does.
+
+Once the system is solved, each constraint takes the regime of the solution:
+binding, $g_k = 0$, if $h_k > g_k$, and otherwise not binding, $h_k = 0$; the
+model is solved again in these regimes, which polishes the solution, unless a
+regime's other condition then fails. Should the semismooth method fail, the
+active-set method of version 0.4.4 follows: the smoothed form
 \begin{equation*}
 g_k + h_k - \sqrt{g_k^2 + h_k^2 + 2\mu} = 0, \qquad \mu = 10^{-8},
 \end{equation*}
-and solved with the rest of the model. The solver finds the regime; none is
-chosen in advance.
-\item \textbf{Exact.} Each constraint takes the regime of the smoothed
-solution: binding, $g_k = 0$, if $h_k > g_k$, and otherwise not binding,
-$h_k = 0$. The model is solved again with these equations. A constraint whose
-other condition then fails ($h_k < 0$ when binding, $g_k < 0$ when not) changes
-regime, and the model is solved again, for at most ten rounds.
-\end{enumerate}
+finds the regimes, and the model is solved in them, a constraint whose other
+condition fails changing regime, for at most ten rounds;
+\cmd{cge_options, mcp(activeset)} (\manref{cge_options}) makes it the method.
+
 The solution therefore satisfies the conditions exactly, to the solver's
-tolerance. Three implementations check one another, each with its own method:
-Stata, with the two stages above; the Python reference, with an active-set
+tolerance. The test suites check the method on problems of MCPLIB
+\citep{dirkse1995} with known solutions: that of \citet{josephy1979} and that
+of \citet{kojima1986}, with a degenerate solution, from several starts; on
+an economy in the form of MPSGE whose technologies are used or not, against
+the solution of its linear programme; and on many constraints of the
+standard model at once, against the active-set method and PATH. Three
+implementations check one another, each with its own method: Stata, with the
+methods above; the Python reference, with an active-set
 method that starts from the solution without constraints; and GAMS, as a mixed
 complementarity problem solved with PATH (\secref{sec:gams-types}). The
 minimum wage of chapter~\ref{chap:labour} keeps its smoothed condition and its

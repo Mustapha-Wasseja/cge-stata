@@ -1,0 +1,64 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_options, linsolver(dense)
+Linear solver of Newton's steps: dense
+Method for constraints:          semismooth
+
+. foreach a in act_agr act_man act_ser {
+  2.     quietly cge_constraint QA, elements(`a') upper(1) scale adjust(RA `a') up
+  3. }
+
+. quietly cge_constraint QM, elements(com_agr) upper(0.98) scale adjust(RM com_agr) up
+
+. quietly cge_constraint QM, elements(com_man) upper(0.98) scale adjust(RM com_man) up
+
+. cge_shock qinv, scale(1.5)
+Parameter qinv changed for 3 element(s)
+
+. cge_solve, name(semismooth)
+Simulation semismooth solved in 6 iteration(s) (semismooth)
+Largest scaled residual  8.88e-16; WALRAS =  5.85e-14
+Constraints
+  QA(act_agr) <= 100, RA(act_agr) up, rents to gov: binding
+      QA(act_agr) =          100;  RA(act_agr) =  .0031781697
+  QA(act_man) <= 140, RA(act_man) up, rents to gov: binding
+      QA(act_man) =          140;  RA(act_man) =  .0118356175
+  QA(act_ser) <= 150, RA(act_ser) up, rents to gov: not binding
+      QA(act_ser) =          150;  RA(act_ser) =            0
+  QM(com_agr) <= 19.6, RM(com_agr) up, rents to gov: binding
+      QM(com_agr) =         19.6;  RM(com_agr) =  .0171337953
+  QM(com_man) <= 58.8, RM(com_man) up, rents to gov: binding
+      QM(com_man) =         58.8;  RM(com_man) =  .0466881995
+
+. cge_options, mcp(activeset)
+Linear solver of Newton's steps: dense
+Method for constraints:          activeset
+
+. quietly cge_solve, name(activeset)
+
+. display "active set: " r(iterations) " iterations, " r(N_binding) " binding"
+active set: 17 iterations, 4 binding
+
+. quietly cge_results, sim(semismooth) clear nodisplay
+
+. rename value v_ss
+
+. tempfile ss
+
+. quietly save `ss'
+
+. quietly cge_results, sim(activeset) clear nodisplay
+
+. quietly merge 1:1 variable element1 element2 using `ss', nogenerate
+
+. quietly generate double rel = abs(value - v_ss) / max(1, abs(v_ss))
+
+. quietly summarize rel
+
+. display "semismooth against active set: largest relative difference " %9.2e r(max)
+semismooth against active set: largest relative difference  2.55e-13
+
+. cge_options, mcp(semismooth)
+Linear solver of Newton's steps: dense
+Method for constraints:          semismooth

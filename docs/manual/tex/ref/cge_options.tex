@@ -9,7 +9,10 @@ the settings. They are saved with the model and apply to every solve:
 \manref{cge_optimize} and \manref{cge_loop}. \opt{lin}{solver()} chooses the
 linear solver of Newton's steps: Mata's dense LU, the default, or a sparse LU,
 whose memory grows with the number of entries of the Jacobian rather than with
-the square of the number of equations.
+the square of the number of equations. From version 0.14.0,
+\opt{}{mcp()} chooses the method for constraints and inequalities: the
+semismooth Newton method, the default, or the active-set method of earlier
+versions.
 
 \cgesec{Quick start}
 
@@ -21,6 +24,10 @@ The sparse LU for systems of 1,000 equations or more
 \begin{stcode}
 cge_options, linsolver(auto)
 \end{stcode}
+The active-set method for constraints
+\begin{stcode}
+cge_options, mcp(activeset)
+\end{stcode}
 Display the settings
 \begin{stcode}
 cge_options
@@ -29,12 +36,13 @@ cge_options
 \cgesec{Syntax}
 
 \begin{stsyntax}
-\cmdb{cge_options} [\texttt{,} \optarg{lin}{solver}{dense|sparse|auto}]
+\cmdb{cge_options} [\texttt{,} \optarg{lin}{solver}{dense|sparse|auto} \optarg{}{mcp}{semismooth|activeset}]
 \end{stsyntax}
 
 \begin{opttable}
 \optgroup{Main}
 \optarg{lin}{solver}{dense|sparse|auto} & the linear solver of Newton's steps\\
+\optarg{}{mcp}{semismooth|activeset} & the method for constraints and inequalities\\
 \end{opttable}
 
 \cgesec{Options}
@@ -46,6 +54,15 @@ Newton's steps: \cmd{dense}, Mata's LU factorisation with partial pivoting
 \cmd{auto}, the sparse LU for systems of 1,000 equations or more and the
 dense one below. \manref{cge_solve} takes \opt{sp}{arse} or \opt{den}{se} for one
 solve.
+
+\item[\optarg{}{mcp}{semismooth|activeset}] (from version 0.14.0) chooses the
+method for the constraints of \manref{cge_constraint} and the inequalities of
+\manref{cge_equation}: \cmd{semismooth}, every constraint in
+Fischer--Burmeister form, solved at once by the semismooth Newton method (the
+default), with the active-set method if it fails; or \cmd{activeset}, the
+smoothed conditions, then the model solved in the regimes they give, a
+constraint whose other condition fails changing regime
+(\secref{sec:cons-solution}).
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -67,17 +84,27 @@ The SAM is mapped and calibrated, and the tariffs removed:
 The two solutions agree to the solver's tolerance, for the reduced and the
 full system.
 
+\cgesubsec{Example 2: the method for constraints}
+
+Capacity limits on the three activities and quotas on the imports of two
+commodities, with investment half as large again; four of the five bind.
+Both methods find the same regimes and solution, the semismooth Newton method
+in fewer iterations:
+\stlog{opt_mcp}
+
 \cgesec{Stored results}
 
 \cmd{cge_options} stores the following in \cmd{r()}:
 \begin{storedres}
 \resgroup{Macros}
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto}\\
+\res{r(mcp)} & the method for constraints: \cmd{semismooth} or \cmd{activeset}\\
 \end{storedres}
 
 \cgesec{Methods and formulas}
 
-Section~\ref{sec:sparse} describes the sparse LU.
+Section~\ref{sec:sparse} describes the sparse LU, and
+section~\ref{sec:cons-solution} the methods for constraints.
 
 \cgesec{Also see}
 

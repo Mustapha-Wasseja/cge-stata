@@ -27,3 +27,28 @@ foreach s in sparse sparsefull {
     display "`s' against dense: largest relative difference " %9.2e r(max)
 }
 *<<
+
+*>> opt_mcp
+cge_shock, reset
+cge_options, linsolver(dense)
+foreach a in act_agr act_man act_ser {
+    quietly cge_constraint QA, elements(`a') upper(1) scale adjust(RA `a') up
+}
+quietly cge_constraint QM, elements(com_agr) upper(0.98) scale adjust(RM com_agr) up
+quietly cge_constraint QM, elements(com_man) upper(0.98) scale adjust(RM com_man) up
+cge_shock qinv, scale(1.5)
+cge_solve, name(semismooth)
+cge_options, mcp(activeset)
+quietly cge_solve, name(activeset)
+display "active set: " r(iterations) " iterations, " r(N_binding) " binding"
+quietly cge_results, sim(semismooth) clear nodisplay
+rename value v_ss
+tempfile ss
+quietly save `ss'
+quietly cge_results, sim(activeset) clear nodisplay
+quietly merge 1:1 variable element1 element2 using `ss', nogenerate
+quietly generate double rel = abs(value - v_ss) / max(1, abs(v_ss))
+quietly summarize rel
+display "semismooth against active set: largest relative difference " %9.2e r(max)
+cge_options, mcp(semismooth)
+*<<

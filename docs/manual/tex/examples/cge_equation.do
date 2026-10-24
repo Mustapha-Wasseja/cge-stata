@@ -168,3 +168,14 @@ quietly cge_results, sim(functions) clear nodisplay
 list variable element1 base value if inlist(variable, "QEMAX", "QAMIN", "PPROD", ///
     "MSW", "NG", "CQ"), noobs sepby(variable)
 *<<
+
+*>> eq_mcp
+cge_model new
+cge_set i = x1 x2 x3 x4
+cge_variable X(i), lower(0)
+cge_equation F1: 3 * X(x1)^2 + 2 * X(x1) * X(x2) + 2 * X(x2)^2 + X(x3) + 3 * X(x4) - 6 >= 0, perp(X(x1))
+cge_equation F2: 2 * X(x1)^2 + X(x1) + X(x2)^2 + 3 * X(x3) + 2 * X(x4) - 2 >= 0, perp(X(x2))
+cge_equation F3: 3 * X(x1)^2 + X(x1) * X(x2) + 2 * X(x2)^2 + 2 * X(x3) + 3 * X(x4) - 1 >= 0, perp(X(x3))
+cge_equation F4: X(x1)^2 + 3 * X(x2)^2 + 2 * X(x3) + 3 * X(x4) - 3 >= 0, perp(X(x4))
+cge_solve, name(josephy)
+*<<

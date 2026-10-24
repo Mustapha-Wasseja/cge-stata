@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.13.0 implements the standard single-country model described in
+Version 0.14.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,12 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.14.0 solves constraints and the inequalities of user equations by
+a semismooth Newton method, as complementarity problems: every constraint in
+Fischer-Burmeister form, all at once, with a non-monotone line search; the
+active-set method of earlier versions is the fallback and an option
+(`cge_options, mcp()`). It solves problems of MCPLIB with known solutions,
+including Kojima and Shindo's, and agrees with PATH.
 Version 0.13.0 adds standalone models, `cge_model new`: a model written whole
 in the language of `cge_variable` and `cge_equation`, as a GAMS program is,
 without a SAM or the built-in equations. Sets take labels of their own or

@@ -2155,6 +2155,47 @@ most 7.6e-13); `cge_model describe`; save and load; errors. GAMS
 (`tools/gams/export_check.do`, cases `standalone` and `exchange`) solves both
 models to 2.6e-12 and 6.7e-16.
 
+## 23. Complementarity problems: the semismooth Newton method (from version 0.14.0)
+
+With constraints in the system (Section 16: those of `cge_constraint` and
+the inequalities of user equations), `_cge_solve_point` by default
+(`M.mcpsolver` 0 or missing; `cge_options, mcp(semismooth)`) sets every
+active constraint to regime 4, the Fischer-Burmeister function
+$\phi(g, h) = g + h - \sqrt{g^2 + h^2}$ of the scaled $g$ and $h$ of 16.2
+(`_cge_bres`), and `_cge_solve_sys` solves the system with `_cge_ssnewton`:
+at each iterate the exact Jacobian as entries (`_cge_jac_trip`; the B1 rows
+from `_cge_jtrip_ub`, with $\partial\phi/\partial g = 1 - g/r$,
+$\partial\phi/\partial h = 1 - h/r$, $r = \sqrt{g^2 + h^2}$, and
+$1 - 1/\sqrt 2$ for both at $r = 0$); the Newton step $d$ from the dense LU
+(`_cge_trip_dense`) or the sparse LU of `cge_options`; if
+$\nabla\psi' d \le -10^{-8}\lVert d\rVert^{2.1}$, with $\psi = f'f/2$ and
+$\nabla\psi = J'f$ (`_cge_sumby`), a line search halving from 1 to
+$10^{-12}$ accepts $\psi(z + t d) \le \max_{j<10} \psi_{k-j} + 10^{-4} t
+\nabla\psi' d$ (non-monotone, memory 10); otherwise, or if it fails, the
+steepest descent $-\nabla\psi$ with the same rule, halving from 1 to
+$10^{-14}$; converged when the largest scaled residual is below the
+tolerance. The regimes are then read from the solution (binding if $h > g$)
+and the system solved again in them, the result kept if no regime's other
+condition fails by more than $10^{-9}$. If the semismooth method fails, the
+active-set method of 16.3 runs, as with `cge_options, mcp(activeset)`
+(`M.mcpsolver` 1, saved with the model); `r(method)` is `semismooth` when
+it solves. From 0.14.0 `cge_bound ..., level()` also sets the start of
+variables that adjust for constraints and of exogenous user variables at a
+bound (`_cge_bd_movable`, `_cge_bd_start`); their fixed levels stay the
+bounds.
+
+Tests (`tests/test_mcp.do`): MCPLIB josephy (unique solution
+$(\sqrt6/2, 0, 0, 1/2)$) and kojshin (solutions $(\sqrt6/2, 0, 0, 1/2)$,
+degenerate in $x_3$, and $(1, 0, 3, 0)$) from $x = 0$, and kojshin from
+starts near each solution, to 1e-8; an economy in the form of MPSGE with two
+technologies (zero profit against activity levels, factor markets against
+factor prices) against the solution of its linear programme, with one
+technology unused and with both used, to 1e-9; five constraints of the
+standard model, four binding, against the active-set method, to 1e-8; the
+setting saved and loaded; errors. GAMS (PATH, MCP; export check cases
+mcpjosephy, mcptech and manycons) to 7.8e-13, 6.2e-15 and 1.2e-13, constraint
+marginals included.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

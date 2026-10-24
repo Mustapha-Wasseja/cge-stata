@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.13.0  24oct2026}{...}
+{* *! version 0.14.0  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}

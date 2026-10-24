@@ -220,6 +220,9 @@ struct cge_model {
     // in the user language (cge_model new), without a SAM or the built-in
     // equations; missing for a model from a SAM
     real scalar      standalone
+    // the method for constraints (from version 0.14.0): 0 or missing the
+    // semismooth Newton method, 1 the active-set method of version 0.4.4
+    real scalar      mcpsolver
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -237,7 +240,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.13.0")
+    return("0.14.0")
 }
 
 // =====================================================================
@@ -2824,8 +2827,9 @@ real colvector _cge_rentvec(struct cge_model scalar M, struct cge_par scalar p, 
 // Residuals of the constraints (Section 16.2): g = sigma (b - Y) / sY, the
 // distance of the limited variable within its bound, and h = delta (X - xbar) /
 // sX, the move of the adjusting variable in its direction; smoothed
-// Fischer-Burmeister (regime 1), g (binding, 2) or h (not binding, 3; or no
-// constraint, 0)
+// Fischer-Burmeister (regime 1), g (binding, 2), h (not binding, 3; or no
+// constraint, 0) or, from version 0.14.0, the Fischer-Burmeister function
+// itself (4), which the semismooth Newton method solves
 real colvector _cge_bres(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
 {
     real colvector g, h
@@ -2833,7 +2837,7 @@ real colvector _cge_bres(struct cge_model scalar M, struct cge_par scalar p, rea
     g = M.btype :* (p.bval - x[M.bY]) :/ M.xscale[M.bY]
     h = M.bdir :* (x[M.bX] - p.bxbar) :/ M.xscale[M.bX]
     return((p.bmode :== 1) :* (g + h - sqrt(g :^ 2 + h :^ 2 :+ 2 * p.bmu)) + (p.bmode :== 2) :* g +
-           ((p.bmode :== 0) :| (p.bmode :== 3)) :* h)
+           ((p.bmode :== 0) :| (p.bmode :== 3)) :* h + (p.bmode :== 4) :* (g + h - sqrt(g :^ 2 + h :^ 2)))
 }
 
 // Scaled residuals of the existing equation elements. Mata's sum functions
@@ -5163,19 +5167,27 @@ string scalar _cge_lin_name(struct cge_model scalar M)
 }
 
 // cge_options (from version 0.10.1): the settings of the solver, as GAMS's
-// option statement
-void _cge_options(string scalar lin)
+// option statement; from version 0.14.0 the method for constraints
+void _cge_options(string scalar lin, | string scalar mcp)
 {
     struct cge_model scalar M
+    if (args() < 2) mcp = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
-    if (lin != "") {
-        M.linsolver = (lin == "dense" ? 0 : (lin == "sparse" ? 1 : 2))
-        _cge_store(M)
-    }
+    if (lin != "") M.linsolver = (lin == "dense" ? 0 : (lin == "sparse" ? 1 : 2))
+    if (mcp != "") M.mcpsolver = (mcp == "activeset")
+    if (lin != "" | mcp != "") _cge_store(M)
     printf("{txt}Linear solver of Newton's steps: {res}%s{txt}%s\n", _cge_lin_name(M),
            (M.linsolver == 2 ? " (the sparse LU from 1,000 equations)" : ""))
+    printf("{txt}Method for constraints:          {res}%s\n", _cge_mcp_name(M))
     st_global("r(linsolver)", _cge_lin_name(M))
+    st_global("r(mcp)", _cge_mcp_name(M))
+}
+
+// The name of the method for constraints (from version 0.14.0)
+string scalar _cge_mcp_name(struct cge_model scalar M)
+{
+    return(M.mcpsolver == 1 ? "activeset" : "semismooth")
 }
 
 
@@ -6998,7 +7010,7 @@ void _cge_jtrip(struct cge_model scalar M, struct cge_par scalar p, real colvect
 void _cge_jtrip_ub(struct cge_model scalar M, struct cge_par scalar p, real colvector x, struct cge_trip scalar T,
                    real colvector bo)
 {
-    real colvector g, h, sb, bm, vpos
+    real colvector g, h, sb, bm, vpos, r4, q, ag, ah
     real matrix utk, tk1, tk2
     real rowvector gl, gr
     real scalar kb, k
@@ -7010,10 +7022,17 @@ void _cge_jtrip_ub(struct cge_model scalar M, struct cge_par scalar p, real colv
         h = M.bdir :* (x[M.bX] - p.bxbar) :/ M.xscale[M.bX]
         sb = sqrt(g :^ 2 + h :^ 2 :+ 2 * p.bmu)
         bm = p.bmode
+        // the Fischer-Burmeister function (from version 0.14.0): at g = h =
+        // 0, an element of its generalised Jacobian, (1 - 1/sqrt(2), 1 -
+        // 1/sqrt(2))
+        r4 = sqrt(g :^ 2 + h :^ 2)
+        q = (r4 :> 0)
+        ag = q :* (g :/ (r4 + (1 :- q))) + (1 :- q) :* sqrt(0.5)
+        ah = q :* (h :/ (r4 + (1 :- q))) + (1 :- q) :* sqrt(0.5)
         _cge_tadd(T, bo[kb] :+ (1::rows(M.bY)), M.bY,
-                  ((bm :== 1) :* (1 :- g :/ sb) + (bm :== 2)) :* (-M.btype :/ M.xscale[M.bY]))
+                  ((bm :== 1) :* (1 :- g :/ sb) + (bm :== 2) + (bm :== 4) :* (1 :- ag)) :* (-M.btype :/ M.xscale[M.bY]))
         _cge_tadd(T, bo[kb] :+ (1::rows(M.bY)), M.bX,
-                  ((bm :== 1) :* (1 :- h :/ sb) + (bm :== 0) + (bm :== 3)) :* (M.bdir :/ M.xscale[M.bX]))
+                  ((bm :== 1) :* (1 :- h :/ sb) + (bm :== 0) + (bm :== 3) + (bm :== 4) :* (1 :- ah)) :* (M.bdir :/ M.xscale[M.bX]))
     }
 
     // User equations (Section 19): forward differentiation of both sides
@@ -7729,8 +7748,8 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
                                 real scalar trace, real scalar conv, real scalar iter,
                                 real scalar err, string scalar method, | real scalar full, real scalar mode)
 {
-    real colvector x, act, g, h, flip
-    real scalar it2, r
+    real colvector x, x2, act, g, h, flip
+    real scalar it2, r, conv2, err2, iss
     string scalar m2
 
     if (args() < 12) full = 0
@@ -7741,7 +7760,34 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
     if (!rows(M.bY)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full, mode))
     act = (p.bmode :> 0)
     if (!any(act)) return(_cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full, mode))
-    // Constraints (Section 16.3). 1. The smoothed conditions find the regimes.
+    // Constraints (Section 16.3). From version 0.14.0, by default, every
+    // constraint in Fischer-Burmeister form, solved at once by the semismooth
+    // Newton method; the regimes are read from the solution, which is then
+    // polished in them where they hold
+    iss = 0
+    if (M.mcpsolver != 1) {
+        p.bmode = 4 :* act
+        x = _cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full, mode)
+        if (conv) {
+            _cge_bgaps(M, p, x, g, h)
+            p.bmode = act :* (2 :* (h :> g) + 3 :* (h :<= g))
+            x2 = _cge_polish(M, p, xfix, x, tol / 1000, full, mode, conv2, it2, err2)
+            if (conv2) {
+                _cge_bgaps(M, p, x2, g, h)
+                flip = act :* (((p.bmode :== 3) :& (g :< -1e-9)) :| ((p.bmode :== 2) :& (h :< -1e-9)))
+                if (!any(flip)) {
+                    x = x2
+                    iter = iter + it2
+                    err = err2
+                }
+            }
+            return(x)
+        }
+        if (trace) printf("{txt}The semismooth Newton method did not converge; the active-set method\n")
+        iss = iter
+    }
+    // The active-set method (version 0.4.4). 1. The smoothed conditions find
+    // the regimes.
     p.bmode = act
     x = _cge_solve_sys(M, p, xfix, start, tol, maxit, trace, conv, iter, err, method, full, mode)
     if (conv) {
@@ -7766,7 +7812,145 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
     }
     if (r > 10) conv = 0
     if (conv & m2 != "newton") method = m2
+    iter = iter + iss
     return(x)
+}
+
+// A solution polished by Newton's method toward tolerance tol, in the regimes
+// of p (from version 0.14.0), without the fallbacks of _cge_solve_sys: conv
+// 0 leaves x as it was
+real colvector _cge_polish(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                           real colvector x, real scalar tol, real scalar full, real scalar mode,
+                           real scalar conv, real scalar iter, real scalar err)
+{
+    struct cge_sys scalar S
+    real colvector z, x2
+    S = _cge_sys_make(M, !full)
+    conv = 0
+    iter = 0
+    if (rows(S.free) != S.neq) return(x)
+    z = x[S.free] :/ M.xscale[S.free]
+    conv = _cge_newton(M, p, xfix, S, z, tol, 20, 0, iter, err, mode)
+    if (!conv) return(x)
+    x2 = xfix
+    x2[S.free] = z :* M.xscale[S.free]
+    if (S.reduced) _cge_derive(M, p, x2)
+    return(x2)
+}
+
+// The semismooth Newton method for a system whose constraints are in
+// Fischer-Burmeister form (from version 0.14.0; Reference Manual, The
+// solution): phi(g, h) = g + h - sqrt(g^2 + h^2) is zero exactly where g >= 0,
+// h >= 0 and g h = 0. Each step solves the system of an element of the
+// generalised Jacobian, from the exact derivatives, with a line search on the
+// merit function f'f / 2; where Newton's step is not a direction of
+// sufficient descent of the merit function, or its line search fails, the
+// step is the steepest descent of the merit function (De Luca, Facchinei and
+// Kanzow, 1996). The line search is non-monotone: a step is accepted against
+// the largest merit of the last 10 iterations (Grippo, Lampariello and
+// Lucidi, 1986), which the method needs on problems such as Kojima and
+// Shindo's. The sparse LU of cge_options serves as for Newton's method.
+// Returns 1 when the largest scaled residual falls below tol.
+real scalar _cge_ssnewton(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                          struct cge_sys scalar S, real colvector z, real scalar tol, real scalar maxit,
+                          real scalar trace, real scalar iter, real scalar err)
+{
+    struct cge_slu scalar SF
+    real colvector f, fn, dz, zn, jr, jc, jv, gr, perm, hist
+    real matrix LU, U
+    real scalar it, sp, psi, step, ok, slope, ngr, nsd, nnw, pref
+    sp = _cge_sparse_on(M, S)
+    if (sp) _cge_slu_load(SF)
+    f = _cge_F(M, p, xfix, S, z)
+    iter = 0
+    err = .
+    if (hasmissing(f)) return(0)
+    nsd = nnw = 0
+    hist = J(0, 1, .)
+    for (it = 0; it <= maxit; it++) {
+        err = max(abs(f))
+        iter = it
+        if (trace) printf("{txt}Iteration %f: largest scaled residual = {res}%9.3e{txt} (semismooth Newton: %f Newton and %f gradient step(s))\n",
+                          it, err, nnw, nsd)
+        if (err < tol) {
+            st_numscalar("r(jacobians)", it)
+            st_numscalar("r(gradient_steps)", nsd)
+            return(1)
+        }
+        if (it == maxit) break
+        if (!_cge_jac_trip(M, p, xfix, S, z, jr, jc, jv)) break
+        psi = 0.5 * (f' * f)
+        // the reference of the non-monotone line search
+        hist = hist \ psi
+        if (rows(hist) > 10) hist = hist[|rows(hist) - 9 \ rows(hist)|]
+        pref = max(hist)
+        // the gradient of the merit function, J'f
+        gr = _cge_sumby(jc, jv :* f[jr], rows(z))
+        dz = J(0, 1, .)
+        if (sp) {
+            if (_cge_slu_update(SF, jr, jc, jv, rows(z))) dz = _cge_slu_solve(SF, -f)
+        }
+        else {
+            LU = _cge_trip_dense(jr, jc, jv, S.neq, rows(z))
+            _lud(LU, U, perm)
+            perm = invorder(perm)
+            dz = solveupper(U, solvelower(LU, -f[perm]))
+        }
+        ok = 0
+        if (rows(dz)) if (!hasmissing(dz)) {
+            slope = gr' * dz
+            // a direction of sufficient descent of the merit function
+            if (slope <= -1e-8 * norm(dz)^2.1) {
+                for (step = 1; step >= 1e-12; step = step / 2) {
+                    zn = z + step * dz
+                    fn = _cge_F(M, p, xfix, S, zn)
+                    if (!hasmissing(fn)) if (0.5 * (fn' * fn) <= pref + 1e-4 * step * slope) {
+                        ok = 1
+                        break
+                    }
+                }
+            }
+        }
+        if (ok) nnw++
+        else {
+            // the steepest descent of the merit function
+            ngr = gr' * gr
+            if (!(ngr > 0) | ngr >= .) break
+            slope = -ngr
+            for (step = 1; step >= 1e-14; step = step / 2) {
+                zn = z - step * gr
+                fn = _cge_F(M, p, xfix, S, zn)
+                if (!hasmissing(fn)) if (0.5 * (fn' * fn) <= pref + 1e-4 * step * slope) {
+                    ok = 1
+                    break
+                }
+            }
+            if (!ok) break
+            nsd++
+        }
+        z = zn
+        f = fn
+    }
+    st_numscalar("r(jacobians)", iter)
+    st_numscalar("r(gradient_steps)", nsd)
+    return(0)
+}
+
+// The dense matrix of entries (r, c, v), sorted by row with each (r, c) once,
+// as _cge_jac_trip gives them (from version 0.14.0)
+real matrix _cge_trip_dense(real colvector r, real colvector c, real colvector v, real scalar nr, real scalar nc)
+{
+    real matrix A, info
+    real scalar k, a, b
+    A = J(nr, nc, 0)
+    if (!rows(v)) return(A)
+    info = panelsetup(r, 1)
+    for (k = 1; k <= rows(info); k++) {
+        a = info[k, 1]
+        b = info[k, 2]
+        A[r[a], c[|a \ b|]'] = v[|a \ b|]'
+    }
+    return(A)
 }
 
 // g and h of every constraint at x (Section 16.2)
@@ -7801,6 +7985,16 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     z = start[S.free] :/ M.xscale[S.free]
     method = "newton"
     if (args() < 13) mode = 0
+    // constraints in Fischer-Burmeister form (from version 0.14.0): the
+    // semismooth Newton method, without the fallbacks for smooth systems
+    if (rows(p.bmode)) if (any(p.bmode :== 4)) {
+        method = "semismooth"
+        conv = _cge_ssnewton(M, p, xfix, S, z, tol, maxit, trace, iter, err)
+        x = xfix
+        x[S.free] = z :* M.xscale[S.free]
+        if (S.reduced) _cge_derive(M, p, x)
+        return(x)
+    }
     conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter, err, mode)
     if (!conv) {
         // Newton again from the start, with a Jacobian from central
@@ -8221,7 +8415,10 @@ void _cge_bd_add(string scalar name, string scalar elems, string scalar slo, str
         return
     }
     if (vlv < .) {
-        fr = _cge_which(M.fixed[pos])
+        // from version 0.14.0 also the variables that may move from a bound:
+        // those that adjust for constraints and exogenous user variables at
+        // a bound, as GAMS's .l of a positive variable
+        fr = _cge_which(M.fixed[pos] :& (1 :- _cge_bd_movable(M, pos)))
         if (rows(fr)) {
             _cge_fail("cge_bound: " + _cge_poslabel(M, pos[fr[1]]) + " is fixed under the closure; level() gives the starting level of " +
                       "an endogenous variable, and fix() the value of a fixed one", 459)
@@ -8297,11 +8494,38 @@ void _cge_bd_clear(string scalar name)
     st_numscalar("r(N_definitions)", rows(M.bddef))
 }
 
+// 1 for each position in pos of a variable that may move from a bound (from
+// version 0.14.0): one that adjusts for a constraint, or an exogenous user
+// variable at a bound, which an inequality paired with it may move
+real colvector _cge_bd_movable(struct cge_model scalar M, real colvector pos)
+{
+    real colvector out, isx
+    real scalar i, k, u
+    out = J(rows(pos), 1, 0)
+    isx = J(rows(M.x0), 1, 0)
+    if (rows(M.bX)) isx[M.bX] = J(rows(M.bX), 1, 1)
+    for (i = 1; i <= rows(pos); i++) {
+        if (isx[pos[i]]) {
+            out[i] = 1
+            continue
+        }
+        for (k = rows(M.voff); k > 1; k--) if (M.voff[k] < pos[i]) break
+        u = k - (rows(M.vname) - M.nuv)
+        if (u >= 1 & u <= rows(M.uvdef)) {
+            if (M.uvdef[u, 6] == "fixed" & M.uvdef[u, 8] + M.uvdef[u, 9] != "") out[i] = 1
+        }
+    }
+    return(out)
+}
+
 // The start of cge_solve: the base, with the starting levels of cge_bound for
-// the free variables; an exogenous element outside its bounds stops the solve
+// the free variables and, from version 0.14.0, for the variables that adjust
+// for constraints, which start there while their fixed levels stay the
+// bounds they move from; an exogenous element outside its bounds stops the
+// solve
 real colvector _cge_bd_start(struct cge_model scalar M, real colvector xfix)
 {
-    real colvector x, k
+    real colvector x, k, fr, isx
     x = M.x0
     if (rows(M.bdlp)) {
         k = _cge_which(M.fixed[M.bdlp] :& (xfix[M.bdlp] :< M.bdlv))
@@ -8314,7 +8538,13 @@ real colvector _cge_bd_start(struct cge_model scalar M, real colvector xfix)
                                ", above its upper bound (cge_bound)", 459)
     }
     if (rows(M.bdsp)) {
-        k = _cge_which(M.fixed[M.bdsp] :== 0)
+        fr = (M.fixed[M.bdsp] :== 0)
+        if (rows(M.bX)) {
+            isx = J(rows(M.x0), 1, 0)
+            isx[M.bX] = J(rows(M.bX), 1, 1)
+            fr = fr :| isx[M.bdsp]
+        }
+        k = _cge_which(fr)
         if (rows(k)) x[M.bdsp[k]] = M.bdsv[k]
     }
     return(x)
@@ -21783,6 +22013,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "loopdef", M.loopdef)
     _cge_io_put(fh, "linsolver", M.linsolver)
     _cge_io_put(fh, "standalone", M.standalone)
+    _cge_io_put(fh, "mcpsolver", M.mcpsolver)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -21934,6 +22165,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "loopdef") M.loopdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "linsolver") M.linsolver = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "standalone") M.standalone = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "mcpsolver") M.mcpsolver = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

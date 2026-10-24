@@ -1,0 +1,42 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set i = x1 x2 x3 x4
+User set i: 4 element(s): x1 x2 x3 x4
+
+. cge_variable X(i), lower(0)
+User variable X(i): 4 element(s), base values 0 0 0 0
+It is exogenous: the paired variable of an inequality may move it from its bound
+
+. cge_equation F1: 3 * X(x1)^2 + 2 * X(x1) * X(x2) + 2 * X(x2)^2 + X(x3) + 3 * X(x4) - 6 >= 0, perp(
+> X(x1))
+User inequality F1: 1 element(s), 3 * X(x1)^2 + 2 * X(x1) * X(x2) + 2 * X(x2)^2 + X(x3) + 3 * X(x4)
+> - 6 >= 0, paired with X(x1), which may move up
+
+. cge_equation F2: 2 * X(x1)^2 + X(x1) + X(x2)^2 + 3 * X(x3) + 2 * X(x4) - 2 >= 0, perp(X(x2))
+User inequality F2: 1 element(s), 2 * X(x1)^2 + X(x1) + X(x2)^2 + 3 * X(x3) + 2 * X(x4) - 2 >= 0, pa
+> ired with X(x2), which may move up
+
+. cge_equation F3: 3 * X(x1)^2 + X(x1) * X(x2) + 2 * X(x2)^2 + 2 * X(x3) + 3 * X(x4) - 1 >= 0, perp(
+> X(x3))
+User inequality F3: 1 element(s), 3 * X(x1)^2 + X(x1) * X(x2) + 2 * X(x2)^2 + 2 * X(x3) + 3 * X(x4)
+> - 1 >= 0, paired with X(x3), which may move up
+
+. cge_equation F4: X(x1)^2 + 3 * X(x2)^2 + 2 * X(x3) + 3 * X(x4) - 3 >= 0, perp(X(x4))
+User inequality F4: 1 element(s), X(x1)^2 + 3 * X(x2)^2 + 2 * X(x3) + 3 * X(x4) - 3 >= 0, paired wit
+> h X(x4), which may move up
+
+. cge_solve, name(josephy)
+Simulation josephy solved in 12 iteration(s) (semismooth)
+Largest scaled residual  0.00e+00
+Constraints
+  inequality F1, X(x1) up: binding
+      _S_F1 =            0;  X(x1) =  1.224744871
+  inequality F2, X(x2) up: not binding
+      _S_F2 =  3.224744871;  X(x2) =            0
+  inequality F3, X(x3) up: not binding
+      _S_F3 =            5;  X(x3) =            0
+  inequality F4, X(x4) up: binding
+      _S_F4 =            0;  X(x4) =           .5

@@ -64,7 +64,10 @@ an inequality of {helpb cge_equation}, or {opt lower()} and {opt upper()} of
 A scale replaces the solver's own, the absolute base value or 1, for the
 elements given; it changes the path of the iterations, not the solution. A
 starting level replaces the base value of a free variable at the start of
-{helpb cge_solve}. {opt fix()} sets a variable that the closure fixes, as
+{helpb cge_solve} and, from version 0.14.0, of a variable that may move from a
+bound: one that adjusts for a constraint, or an exogenous user variable at a
+bound that a paired inequality may move, as GAMS's {cmd:.l} of a positive
+variable; its fixed level stays the bound. {opt fix()} sets a variable that the closure fixes, as
 {helpb cge_shock} does; a variable the closure leaves free cannot be fixed,
 since the system would have more equations than free variables: swap it into
 the closure with {cmd:cge_closure, swap()} first.

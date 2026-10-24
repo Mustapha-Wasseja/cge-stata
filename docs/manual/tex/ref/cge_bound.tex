@@ -84,8 +84,12 @@ the solver's own for these elements: the absolute base value, or 1 where it is
 near zero.
 
 \item[\optarg{lev}{el}{\#}] gives the level from which \manref{cge_solve}
-starts, in place of the base value, for an element the closure leaves free.
-It must lie within the bounds, and be positive for a price or quantity.
+starts, in place of the base value, for an element the closure leaves free
+or, from version 0.14.0, one that may move from a bound: a variable that
+adjusts for a constraint, or an exogenous user variable at a bound, which a
+paired inequality may move, as GAMS's \cmd{.l} of a positive variable. Its
+fixed level stays the bound it moves from. It must lie within the bounds, and
+be positive for a price or quantity.
 
 \item[\optarg{}{fix}{\#}] sets the value of an element the closure fixes, as
 \manref{cge_shock} does. It is given alone. An element the closure leaves

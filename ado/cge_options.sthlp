@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.10.1  24oct2026}{...}
+{* *! version 0.14.0  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto)}]
+{cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto)} {opt mcp(semismooth|activeset)}]
 
 
 {title:Description}
@@ -44,17 +44,32 @@ same solution, to the solver's tolerance. {helpb cge_solve} takes
 {opt sparse} or {opt dense} for one solve.
 
 
+{pstd}
+{opt mcp()} (from version 0.14.0) chooses the method for the constraints of
+{helpb cge_constraint} and the inequalities of {helpb cge_equation}:
+{cmd:semismooth}, the default, writes every constraint in Fischer-Burmeister
+form and solves them at once with the rest of the model by the semismooth
+Newton method of De Luca, Facchinei and Kanzow, with a non-monotone line
+search, then polishes the solution in the regimes it finds; {cmd:activeset}
+is the method of earlier versions, the smoothed conditions and then the
+model solved in their regimes, a constraint whose other condition fails
+changing regime. The active-set method also follows a failure of the
+semismooth one.
+
+
 {title:Examples}
 
 {phang2}{cmd:. cge_options, linsolver(sparse)}{p_end}
 {phang2}{cmd:. cge_solve, name(large)}{p_end}
 {phang2}{cmd:. cge_options}{p_end}
+{phang2}{cmd:. cge_options, mcp(activeset)}{p_end}
+{phang2}{cmd:. cge_options, mcp(semismooth)}{p_end}
 
 
 {title:Stored results}
 
 {pstd}
-{cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver.
+{cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver, and {cmd:r(mcp)}, the method for constraints.
 
 
 {title:Also see}

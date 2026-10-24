@@ -19,3 +19,4 @@ Parameter tm changed for 3 element(s)
 
 . cge_options
 Linear solver of Newton's steps: dense
+Method for constraints:          semismooth

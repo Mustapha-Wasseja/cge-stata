@@ -307,6 +307,17 @@ GAMS. A defined variable may be held within bounds,
 \cmd{cge_variable PR = PQ(com_agr) / CPI, lower(0.95)}, which makes it the
 larger of its expression and the bound.
 
+With variables at a bound and inequalities paired with them, a standalone
+model (section~\ref{sec:standalone}) states a mixed complementarity problem
+as GAMS's MCP models do: $x \ge 0$, $F(x) \ge 0$, $x'F(x) = 0$ is
+\begin{stcode}
+cge_variable X(i), lower(0)
+cge_equation F(i): f(X) >= 0, perp(X(i))
+\end{stcode}
+and \manref{cge_bound} gives the start, \cmd{cge_bound X(x1), level(1)}, as
+GAMS's \cmd{.l}. From version 0.14.0 the semismooth Newton method of
+section~\ref{sec:cons-solution} solves every pair at once.
+
 \section{Variables and equations}
 
 \cmd{cge_variable NAME(i) = expression} adds the variable $U_i$ and the

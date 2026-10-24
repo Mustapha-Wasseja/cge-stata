@@ -45,6 +45,9 @@ step fails or reduces the residual little. Once the tolerance is met, up to thre
 bring the residual toward a thousandth of the tolerance. If Newton fails, it
 is tried again with a Jacobian from central differences, then Powell's hybrid
 method ({cmd:solvenl()}), followed by Newton steps to polish the result.
+With constraints or inequalities, from version 0.14.0, the semismooth Newton
+method of {helpb cge_options} solves them with the rest of the model, and
+{cmd:r(method)} is {cmd:semismooth}.
 {cmd:cge_solve} exits with error 430 if the
 model does not converge, and with error 459 if the system is not square, for
 example after a variable added with {cmd:cge_variable, value()} without the

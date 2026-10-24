@@ -589,9 +589,48 @@ program drop _donor_exit _debt_relief _tariff_cut
 * swap and a larger endowment
 quietly findfile cge_model.ado
 local exfile = subinstr(subinstr(`"`r(fn)'"', "\", "/", .), "ado/cge_model.ado", "examples/standard_model.do", .)
-foreach case in standalone exchange {
+* Complementarity problems (version 0.14.0), solved by the semismooth Newton
+* method and by PATH as MCP: MCPLIB josephy, an economy in the form of MPSGE
+* with a technology that is not used, and many constraints of the standard
+* model at once
+foreach case in standalone exchange mcpjosephy mcptech manycons {
     display as text _n "{hline 60}" _n "Case " as result "`case'"
-    if "`case'" == "standalone" {
+    if "`case'" == "mcpjosephy" {
+        quietly cge_model new
+        quietly cge_set i = x1 x2 x3 x4
+        quietly cge_variable X(i), lower(0)
+        quietly cge_equation F1: 3 * X(x1)^2 + 2 * X(x1) * X(x2) + 2 * X(x2)^2 + X(x3) + 3 * X(x4) - 6 >= 0, perp(X(x1))
+        quietly cge_equation F2: 2 * X(x1)^2 + X(x1) + X(x2)^2 + 3 * X(x3) + 2 * X(x4) - 2 >= 0, perp(X(x2))
+        quietly cge_equation F3: 3 * X(x1)^2 + X(x1) * X(x2) + 2 * X(x2)^2 + 2 * X(x3) + 3 * X(x4) - 1 >= 0, perp(X(x3))
+        quietly cge_equation F4: X(x1)^2 + 3 * X(x2)^2 + 2 * X(x3) + 3 * X(x4) - 3 >= 0, perp(X(x4))
+    }
+    else if "`case'" == "mcptech" {
+        quietly cge_model new
+        quietly cge_set j = t1 t2
+        quietly cge_parameter a(j), values(t1:1 t2:2)
+        quietly cge_parameter b(j), values(t1:2 t2:1)
+        quietly cge_parameter L = 10
+        quietly cge_parameter K = 30
+        quietly cge_variable Z(j), lower(0)
+        quietly cge_variable W, lower(0)
+        quietly cge_variable R, lower(0)
+        quietly cge_equation PROFIT(j): a(j) * W + b(j) * R - 1 >= 0, perp(Z(j))
+        quietly cge_equation LAB: L - sum(j, a(j) * Z(j)) >= 0, perp(W)
+        quietly cge_equation CAP: K - sum(j, b(j) * Z(j)) >= 0, perp(R)
+    }
+    else if "`case'" == "manycons" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        foreach a in act_agr act_man act_ser {
+            quietly cge_constraint QA, elements(`a') upper(1) scale adjust(RA `a') up
+        }
+        quietly cge_constraint QM, elements(com_agr) upper(0.98) scale adjust(RM com_agr) up
+        quietly cge_constraint QM, elements(com_man) upper(0.98) scale adjust(RM com_man) up
+        quietly cge_shock qinv, scale(1.5)
+    }
+    else if "`case'" == "standalone" {
         preserve
         quietly do `"`exfile'"'
         restore
