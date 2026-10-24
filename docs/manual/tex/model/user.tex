@@ -130,6 +130,27 @@ a user variable given a value. Each period stores the lagged values it used,
 and the GAMS program declares them as parameters, \cmd{LAG1_U_S} for
 \cmd{lag(S)}, which each period of a dynamic run sets before it is solved.
 
+From version 0.10.2, \cmd{lead(VAR)} and \cmd{lead(VAR(e), k)} are the values
+of later periods, $\V{VAR}_{t+k}$, in a run with perfect foresight
+(section~\ref{sec:foresight}), which solves the periods together: across
+periods, a lag or a lead is then a variable of another period, with its
+derivative. Beyond the last period a lead follows the run's terminal
+condition; a recursive run cannot have leads, and in a static simulation they
+are the base values. The value of a unit of capital that earns the real
+rental rate $R$ and depreciates at rate $\delta$, at interest rate $r$,
+\begin{equation*}
+Q_t = \frac{R_{t+1} + (1 - \delta)\,Q_{t+1}}{1 + r},
+\end{equation*}
+is \cmd{cge_equation q: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05}, with
+\cmd{RK} defined as \cmd{W(cap) / CPI}. The names \cmd{tperiod}, \cmd{tfirst}
+and \cmd{tlast} are the period of a dynamic run and 1 in its first or last
+period (0 otherwise, and all three 0 in a static simulation), so that
+\cmd{ifthen(tlast, $x$, $y$)} gives the last period an equation of its own;
+since they change by period, conditions (\cmd{$}), which hold in every
+period, may not use them. The GAMS program declares the values of later
+periods as parameters \cmd{LEAD1_U_Q} and the period as the scalars
+\cmd{TPERIOD}, \cmd{TFIRST} and \cmd{TLAST}.
+
 \section{Functions and macros}\label{sec:userfunctions}
 
 From version 0.9.7, the language has the functions of GAMS that a square

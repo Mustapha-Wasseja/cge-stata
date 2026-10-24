@@ -87,6 +87,14 @@ struct cge_par {
     // values of the variables one to four periods before, one column each;
     // none in a static simulation, where the period before is the base
     real matrix    xlag
+    // values of later periods (from version 0.10.2): in a period of a run
+    // with foresight, the values one to four periods later, one column each,
+    // by the terminal condition beyond the last period; none in a static
+    // simulation, where they are the base
+    real matrix    xlead
+    // the period (from version 0.10.2): its number, and 1 in the first and
+    // in the last period of a dynamic run; none in a static simulation
+    real rowvector tinfo
 }
 
 struct cge_model {
@@ -222,7 +230,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.10.1")
+    return("0.10.2")
 }
 
 // =====================================================================
@@ -4944,7 +4952,7 @@ real colvector _cge_slu_lin(real colvector cp, real colvector ri, real scalar n)
 // F was analysed for its pattern and its pivots stay within the threshold,
 // otherwise in an order chosen again. Returns 0 for a singular matrix.
 real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colvector c, real colvector v,
-                            real scalar n)
+                            real scalar n, | string scalar ext)
 {
     real colvector cp, ri, vv, va
     _cge_slu_csc(r, c, v, n, cp, ri, vv)
@@ -4963,7 +4971,8 @@ real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colv
         return(0)
     }
     // the order is used again by later solves while the pattern is the same
-    _cge_slu_keep(F)
+    if (args() < 6) ext = "cge__slu"
+    _cge_slu_keep(F, ext)
     return(1)
 }
 
@@ -4992,18 +5001,21 @@ void _cge_options(string scalar lin)
 
 
 // The factors of the sparse LU kept from the last solve: an analysis is used
-// again while the pattern of the Jacobian is the same
-void _cge_slu_load(struct cge_slu scalar F)
+// again while the pattern of the Jacobian is the same. Runs with foresight
+// keep theirs apart (external cge__slu_fs, from version 0.10.2).
+void _cge_slu_load(struct cge_slu scalar F, | string scalar ext)
 {
     pointer() scalar q
-    if ((q = findexternal("cge__slu")) != NULL) F = *q
+    if (args() < 2) ext = "cge__slu"
+    if ((q = findexternal(ext)) != NULL) F = *q
     else F.ok = 0
 }
 
-void _cge_slu_keep(struct cge_slu scalar F)
+void _cge_slu_keep(struct cge_slu scalar F, | string scalar ext)
 {
     pointer() scalar q
-    if ((q = findexternal("cge__slu")) == NULL) q = crexternal("cge__slu")
+    if (args() < 2) ext = "cge__slu"
+    if ((q = findexternal(ext)) == NULL) q = crexternal(ext)
     *q = F
 }
 
@@ -6810,10 +6822,24 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
             st[sp] = p.upval[tok[i, 2]]
             G[sp, .] = J(1, nv, 0)
         }
-        // a lagged value (from version 0.9.2), given within the period
+        // a lagged value (from version 0.9.2), given within the period; in a
+        // run with foresight (from version 0.10.2), vpos may hold the codes
+        // pos + k rows(x) of the values k periods before, and pos + (4 + k)
+        // rows(x) of those k periods after, for the derivatives across periods
         else if (c == 9) {
             sp = sp + 1
             st[sp] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
+            G[sp, .] = (vpos' :== tok[i, 2] + tok[i, 3] * rows(x))
+        }
+        else if (c == 11) {
+            sp = sp + 1
+            st[sp] = _cge_u_leadval(M, p, tok[i, 2], tok[i, 3])
+            G[sp, .] = (vpos' :== tok[i, 2] + (4 + tok[i, 3]) * rows(x))
+        }
+        // the period (from version 0.10.2)
+        else if (c == 12) {
+            sp = sp + 1
+            st[sp] = _cge_u_tval(p, tok[i, 2])
             G[sp, .] = J(1, nv, 0)
         }
         else if (c == 4) {
@@ -6959,17 +6985,19 @@ real matrix _cge_jacobian_exact(struct cge_model scalar M, struct cge_par scalar
 
 // The entries of the exact Jacobian of system S at z (from version 0.10.1,
 // for the sparse LU; before, part of _cge_jacobian_exact): rows ri and
-// columns ci of the system, row by row, and values v, scaled. Returns 0 at a
-// point where the equations cannot be evaluated.
+// columns ci of the system, row by row, and values v, scaled. The variables
+// at positions xcols, fixed, take further columns after the free ones (from
+// version 0.10.2, for the capital stocks of runs with foresight). Returns 0
+// at a point where the equations cannot be evaluated.
 real scalar _cge_jac_trip(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                           struct cge_sys scalar S, real colvector z, real colvector ri, real colvector ci,
-                          real colvector v)
+                          real colvector v, | real colvector xcols)
 {
     struct cge_trip scalar T
     real colvector x, r, c, keep, dpos, drow, isdef, dnum, indef, piv, sel, dk, dc, dv, o
     real colvector hasd, kt, vt, rt, nt, first, tt, within, src, start, len, rowsys, colmap, lin
     real matrix info
-    real scalar nd, pass, N, nfree
+    real scalar nd, pass, N, nfree, ncol
 
     nfree = rows(z)
     ri = ci = v = J(0, 1, .)
@@ -7060,6 +7088,13 @@ real scalar _cge_jac_trip(struct cge_model scalar M, struct cge_par scalar p, re
     rowsys = runningsum(S.mask) :* S.mask
     colmap = J(rows(x), 1, 0)
     colmap[S.free] = (1::nfree)
+    ncol = nfree
+    if (args() >= 9) {
+        if (rows(xcols)) {
+            colmap[xcols] = nfree :+ (1::rows(xcols))
+            ncol = nfree + rows(xcols)
+        }
+    }
     keep = selectindex((rowsys[r] :> 0) :& (colmap[c] :> 0))
     if (rows(keep) * cols(keep) == 0) return(1)
     r = r[keep]
@@ -7072,15 +7107,15 @@ real scalar _cge_jac_trip(struct cge_model scalar M, struct cge_par scalar p, re
     ri = rowsys[r]
     ci = colmap[c]
     // duplicates summed, row by row
-    lin = (ri :- 1) :* nfree :+ ci
+    lin = (ri :- 1) :* ncol :+ ci
     o = order(lin, 1)
     lin = lin[o]
     v = v[o]
     info = panelsetup(lin, 1)
     v = panelsum(v, info)
     lin = lin[info[., 1]]
-    ri = floor((lin :- 1) :/ nfree) :+ 1
-    ci = lin - (ri :- 1) :* nfree
+    ri = floor((lin :- 1) :/ ncol) :+ 1
+    ci = lin - (ri :- 1) :* ncol
     return(1)
 }
 
@@ -9480,7 +9515,7 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
                     string scalar growth, string scalar tfp, string scalar gdpgrowth,
                     string scalar baseline, real scalar gpop, real scalar ggov, real scalar gfor,
                     real scalar tol, real scalar maxit, | string scalar deathfac, real scalar dshare,
-                    real scalar wage)
+                    real scalar wage, real scalar fs)
 {
     struct cge_model scalar M
     struct cge_dyn scalar D
@@ -9491,6 +9526,12 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
 
     M = _cge_load()
     _cge_need(M, "calibrated")
+    // lead() refers to later periods, which only a run with foresight solves
+    // (from version 0.10.2)
+    if (args() < 19) fs = 0
+    if (!fs & _cge_u_haslead(M)) {
+        _cge_fail("lead(): user equations refer to later periods; solve the run with perfect foresight, cge_dynamic, foresight", 198)
+    }
     D.name = name
     D.periods = strtoreal(tokens(periods))'
     T = rows(D.periods) - 1
@@ -9608,7 +9649,27 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
     _cge_dyn_store(D)
 }
 
-// Updates before the next period (Section 10, steps 1 to 4), from the solution
+// Population grows at rate gp, government and foreign flows at theirs
+// (Section 10, steps 3 and 4)
+void _cge_dyn_grow(struct cge_model scalar M, struct cge_dyn scalar D, real scalar gp)
+{
+    M.p.gamma = M.p.gamma :* (1 + gp)
+    M.p.gammah = M.p.gammah :* (1 + gp)
+    M.p.hs0 = M.p.hs0 * (1 + gp)
+    M.p.pop = M.p.pop * (1 + gp)
+    M.p.qg = M.p.qg :* (1 + D.ggov)
+    M.p.trdg = M.p.trdg :* (1 + D.ggov)
+    M.p.trgg = M.p.trgg * (1 + D.ggov)
+    M.p.trshi = M.p.trshi * (1 + D.ggov)
+    M.p.trdr = M.p.trdr :* (1 + D.gfor)
+    M.p.trfr = M.p.trfr :* (1 + D.gfor)
+    M.p.trgr = M.p.trgr * (1 + D.gfor)
+    M.p.trrg = M.p.trrg * (1 + D.gfor)
+    M.p.trshir = M.p.trshir * (1 + D.gfor)
+    if (M.c_ext == "flexexr") _cge_setv(M, M.xcur, "FSAV", _cge_vn(M, M.xcur, "FSAV") * (1 + D.gfor))
+}
+
+// Updates before the next period (Section 10, steps 1 to 5), from the solution
 // of the previous period
 void _cge_dyn_advance()
 {
@@ -9664,20 +9725,7 @@ void _cge_dyn_advance()
     _cge_setv(M, M.xcur, "QF", QF)
     _cge_setv(M, M.xcur, "QFS", QFS)
     // 3. Population; 4. government and foreign flows
-    M.p.gamma = M.p.gamma :* (1 + gp)
-    M.p.gammah = M.p.gammah :* (1 + gp)
-    M.p.hs0 = M.p.hs0 * (1 + gp)
-    M.p.pop = M.p.pop * (1 + gp)
-    M.p.qg = M.p.qg :* (1 + D.ggov)
-    M.p.trdg = M.p.trdg :* (1 + D.ggov)
-    M.p.trgg = M.p.trgg * (1 + D.ggov)
-    M.p.trshi = M.p.trshi * (1 + D.ggov)
-    M.p.trdr = M.p.trdr :* (1 + D.gfor)
-    M.p.trfr = M.p.trfr :* (1 + D.gfor)
-    M.p.trgr = M.p.trgr * (1 + D.gfor)
-    M.p.trrg = M.p.trrg * (1 + D.gfor)
-    M.p.trshir = M.p.trshir * (1 + D.gfor)
-    if (M.c_ext == "flexexr") _cge_setv(M, M.xcur, "FSAV", _cge_vn(M, M.xcur, "FSAV") * (1 + D.gfor))
+    _cge_dyn_grow(M, D, gp)
     // 5. Public debt (model_spec.md, 12.3): last period's deficit is borrowed,
     // the share phi abroad; a surplus repays debt in the same shares
     if (M.p.debt == 1) {
@@ -9709,6 +9757,8 @@ void _cge_dyn_solve(real scalar period, real scalar first)
     // the values of the periods before, for the lags of user equations (from
     // version 0.9.2); the first period follows the base
     if (_cge_u_haslag(M)) M.p.xlag = D.prevs
+    // the period, for tperiod, tfirst and tlast (from version 0.10.2)
+    M.p.tinfo = (period, first, period == D.periods[rows(D.periods)])
     if (first) {
         x = _cge_solve_point(M, M.p, M.xcur, M.x0, D.tol, D.maxit, 0, conv, iter, err, method)
     }
@@ -9791,6 +9841,7 @@ void _cge_dyn_end()
     _cge_store(M)
     rmexternal("cge__dyn")
     if (findexternal("cge__dyn_model") != NULL) rmexternal("cge__dyn_model")
+    _cge_fs_clear()
 }
 
 // When a run fails: the model as it was before the run, so that no period is
@@ -9804,6 +9855,1068 @@ void _cge_dyn_abort()
         rmexternal("cge__dyn_model")
     }
     if (findexternal("cge__dyn") != NULL) rmexternal("cge__dyn")
+    _cge_fs_clear()
+}
+
+// =====================================================================
+// Perfect foresight (from version 0.10.2; model_spec.md, Section 10.6)
+// =====================================================================
+//
+// cge_dynamic, foresight solves the periods of a run together. The
+// exogenous path is set period by period as in a recursive run, before
+// anything is solved: the growth of factors, population, government and
+// foreign flows and efficiency, and the shocks of each period
+// (_cge_fs_advance, _cge_fs_probe, _cge_fs_record). What a recursive run
+// carries from the solution of one period to the next -- the capital stocks,
+// public debt, the efficiency factor of growth targets and, with a death
+// rate, population and the workers of the factors that lose them -- are the
+// states of the run: unknowns of the stacked system, with the updates of
+// Section 10 as equations. User equations refer to earlier periods with lag()
+// and to later ones with lead(); beyond the last period a lead follows the
+// terminal condition. The stacked system, the full system of every period
+// and the updates of the states, is solved by Newton's method with the exact
+// Jacobian and the sparse LU.
+
+struct cge_fs {
+    // the number of periods, the terminal condition (1 constant, 2 growth,
+    // 3 base) and the start of Newton's method (1 a recursive run, 2 the base)
+    real scalar              N, term, start
+    // the exogenous fixed values of each period; the parameters are kept in
+    // externals of their own (_cge_fs_pset), since an element of a vector of
+    // structures read into a variable is, in Stata 13, the element itself
+    real matrix              X
+    // the states: kind (1 capital stock, 2 domestic debt, 3 foreign debt, 4
+    // efficiency, 5 population, 6 workers of a factor), factor, position of a
+    // capital stock in x, scale and value in the first period; the effect of
+    // the shocks of each period on capital and debt, after = a + b before
+    // (state x period)
+    real colvector           skind, sfac, spos, sscale, s1
+    real matrix              sa, sb
+    // the supplies of the factors that lose workers: state and position in x
+    real matrix              dmap
+    // the regimes of the constraints of each period, once found (missing
+    // before)
+    real matrix              bm
+    // while the shocks of a period are found: the model before them and after
+    // their first run, and the states before each run and after the first
+    struct cge_model scalar  Mpre, Mpost
+    real colvector           pa, pb, qa
+}
+
+// A run with foresight in its stacked form: the free values (scaled) and
+// states of each period, and the solution and fixed values that follow from
+// them. The parameters of a period are made when needed (_cge_fs_par): Stata
+// 13 fails on a vector of structures filled in a function and read after it
+// returns.
+struct cge_fsw {
+    real matrix              Z, Sg, X, XF
+}
+
+struct cge_fs scalar _cge_fs_load()
+{
+    pointer() scalar q
+    q = findexternal("cge__fs")
+    if (q == NULL) _cge_fail("cge internal error: no run with foresight in progress", 3498)
+    return(*q)
+}
+
+void _cge_fs_store(struct cge_fs scalar FS)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__fs")) == NULL) q = crexternal("cge__fs")
+    *q = FS
+}
+
+// The exogenous parameters of period t of the run with foresight in
+// progress: kept, and a copy of them
+void _cge_fs_pset(real scalar t, struct cge_par scalar p)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__fsp" + strofreal(t))) == NULL) q = crexternal("cge__fsp" + strofreal(t))
+    *q = p
+}
+
+struct cge_par scalar _cge_fs_pget(real scalar t)
+{
+    pointer() scalar q
+    q = findexternal("cge__fsp" + strofreal(t))
+    if (q == NULL) _cge_fail("cge internal error: no parameters for period " + strofreal(t), 3498)
+    return(*q)
+}
+
+// The externals of a run with foresight, removed
+void _cge_fs_clear()
+{
+    real scalar t
+    if (findexternal("cge__fs") != NULL) rmexternal("cge__fs")
+    for (t = 1; findexternal("cge__fsp" + strofreal(t)) != NULL; t++) rmexternal("cge__fsp" + strofreal(t))
+}
+
+// The start of a run with foresight, after _cge_dyn_start: the terminal
+// condition, the start of Newton's method, the states, and the first period,
+// the base
+void _cge_fs_start(string scalar term, string scalar start)
+{
+    struct cge_model scalar M
+    struct cge_dyn scalar D
+    struct cge_fs scalar FS
+    M = _cge_load()
+    D = _cge_dyn_load()
+    _cge_fs_clear()
+    FS.N = rows(D.periods)
+    FS.term = (term == "" | term == "constant" ? 1 : (term == "growth" ? 2 : (term == "base" ? 3 : .)))
+    if (FS.term >= .) _cge_fail("terminal(): give constant, growth or base", 198)
+    FS.start = (start == "" | start == "recursive" ? 1 : (start == "base" ? 2 : .))
+    if (FS.start >= .) _cge_fail("start(): give recursive or base", 198)
+    _cge_fs_states(M, D, FS)
+    FS.sa = J(rows(FS.skind), FS.N, 0)
+    FS.sb = J(rows(FS.skind), FS.N, 1)
+    FS.bm = J(rows(M.p.bmode), FS.N, .)
+    _cge_fs_pset(1, M.p)
+    FS.X = M.xcur
+    _cge_fs_store(FS)
+}
+
+// The states of a run with foresight: the capital stocks, by factor and, for
+// a specific factor, activity; public debt; the efficiency factor of growth
+// targets; and, with a death rate, population and the workers of each factor
+// that loses them, relative to the exogenous path
+void _cge_fs_states(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS)
+{
+    real matrix PF
+    real colvector PS, pos
+    real scalar f, j, nx
+    nx = rows(M.x0)
+    PF = _cge_vn(M, (1::nx), "QF")
+    PS = _cge_vn(M, (1::nx), "QFS")
+    FS.skind = FS.sfac = FS.spos = FS.sscale = FS.s1 = J(0, 1, .)
+    FS.dmap = J(0, 2, .)
+    for (f = 1; f <= M.nF; f++) {
+        if (!D.capital[f]) continue
+        if (M.c_fac[f] == "specific") pos = select(PF[f, .]', M.fa[f, .]' :> 0)
+        else pos = PS[f]
+        for (j = 1; j <= rows(pos); j++) {
+            if (!M.fixed[pos[j]]) _cge_fail("foresight: the stock of capital factor " + M.F[f] + " must be fixed in the closure", 198)
+        }
+        FS.skind = FS.skind \ J(rows(pos), 1, 1)
+        FS.sfac = FS.sfac \ J(rows(pos), 1, f)
+        FS.spos = FS.spos \ pos
+        FS.sscale = FS.sscale \ M.xscale[pos]
+        FS.s1 = FS.s1 \ M.xcur[pos]
+    }
+    if (M.p0.debt == 1) {
+        FS.skind = FS.skind \ 2 \ 3
+        FS.sfac = FS.sfac \ 0 \ 0
+        FS.spos = FS.spos \ 0 \ 0
+        FS.sscale = FS.sscale \ max((1, abs(M.p.ddebt))) \ max((1, abs(M.p.fdebt)))
+        FS.s1 = FS.s1 \ M.p.ddebt \ M.p.fdebt
+    }
+    if (D.mode == 1) {
+        FS.skind = FS.skind \ 4
+        FS.sfac = FS.sfac \ 0
+        FS.spos = FS.spos \ 0
+        FS.sscale = FS.sscale \ 1
+        FS.s1 = FS.s1 \ 1
+    }
+    if (M.p0.hasmort == 1) {
+        FS.skind = FS.skind \ 5
+        FS.sfac = FS.sfac \ 0
+        FS.spos = FS.spos \ 0
+        FS.sscale = FS.sscale \ 1
+        FS.s1 = FS.s1 \ 1
+        for (f = 1; f <= M.nF; f++) {
+            if (!D.dfac[f]) continue
+            FS.skind = FS.skind \ 6
+            FS.sfac = FS.sfac \ f
+            FS.spos = FS.spos \ 0
+            FS.sscale = FS.sscale \ 1
+            FS.s1 = FS.s1 \ 1
+            if (M.c_fac[f] == "specific") pos = select(PF[f, .]', M.fa[f, .]' :> 0)
+            else pos = PS[f]
+            pos = select(pos, M.fixed[pos] :> 0)
+            if (rows(pos) & cols(pos)) FS.dmap = FS.dmap \ (J(rows(pos), 1, rows(FS.skind)), pos)
+        }
+    }
+}
+
+// The updates before a period of a run with foresight that do not depend on
+// the solution of the period before (_cge_dyn_advance, steps 2 to 4): factors
+// other than capital grow at their rates, population at its own; government
+// and foreign flows grow. Capital stocks, debt and the effect of deaths are
+// states of the stacked system.
+void _cge_fs_advance()
+{
+    struct cge_model scalar M
+    struct cge_dyn scalar D
+    real matrix QF
+    real colvector QFS, qlf
+    real scalar f, g
+    M = _cge_load()
+    D = _cge_dyn_load()
+    QF = _cge_vn(M, M.xcur, "QF")
+    QFS = _cge_vn(M, M.xcur, "QFS")
+    qlf = M.p.qlf
+    for (f = 1; f <= M.nF; f++) {
+        if (D.capital[f]) continue
+        g = D.fgrowth[f]
+        if (M.c_fac[f] == "specific") QF[f, .] = (1 + g) :* QF[f, .]
+        else if (M.c_fac[f] == "mobile") QFS[f] = (1 + g) * QFS[f]
+        if (M.p0.inlf[f]) qlf[f] = (1 + g) * qlf[f]
+    }
+    M.p.qlf = qlf
+    _cge_setv(M, M.xcur, "QF", QF)
+    _cge_setv(M, M.xcur, "QFS", QFS)
+    _cge_dyn_grow(M, D, D.gpop)
+    _cge_store(M)
+}
+
+// The values of the capital and debt states in the model (the other states
+// are missing), and setting them
+real colvector _cge_fs_sget(struct cge_model scalar M, struct cge_fs scalar FS)
+{
+    real colvector s
+    real scalar j
+    s = J(rows(FS.skind), 1, .)
+    for (j = 1; j <= rows(s); j++) {
+        if (FS.skind[j] == 1) s[j] = M.xcur[FS.spos[j]]
+        else if (FS.skind[j] == 2) s[j] = M.p.ddebt
+        else if (FS.skind[j] == 3) s[j] = M.p.fdebt
+    }
+    return(s)
+}
+
+void _cge_fs_sset(struct cge_model scalar M, struct cge_fs scalar FS, real colvector s)
+{
+    real scalar j
+    for (j = 1; j <= rows(s); j++) {
+        if (FS.skind[j] == 1) M.xcur[FS.spos[j]] = s[j]
+        else if (FS.skind[j] == 2) M.p.ddebt = s[j]
+        else if (FS.skind[j] == 3) M.p.fdebt = s[j]
+    }
+}
+
+// The effect of the shocks of a period on the capital and debt states, from
+// two runs of the shocks() program: after = a + b before, element by element.
+// Step 1 keeps the model before the shocks; step 2, after the first run,
+// keeps the model and starts the second run from the model before, with other
+// values of the states; step 3, after the second run, finds a and b and puts
+// back the model of the first run.
+void _cge_fs_probe(real scalar step)
+{
+    struct cge_model scalar M, M2, E
+    struct cge_fs scalar FS
+    struct cge_dyn scalar D
+    real colvector b1
+    real scalar j, k
+    M = _cge_load()
+    FS = _cge_fs_load()
+    if (step == 1) {
+        FS.Mpre = M
+        FS.pa = _cge_fs_sget(M, FS)
+        _cge_fs_store(FS)
+        return
+    }
+    if (step == 2) {
+        D = _cge_dyn_load()
+        _cge_fs_shockcheck(FS.Mpre, M, D, FS)
+        FS.Mpost = M
+        FS.qa = _cge_fs_sget(M, FS)
+        FS.pb = FS.pa + FS.sscale :* (FS.skind :<= 3)
+        M2 = FS.Mpre
+        _cge_fs_sset(M2, FS, FS.pb)
+        _cge_store(M2)
+        _cge_fs_store(FS)
+        return
+    }
+    b1 = _cge_fs_sget(M, FS)
+    k = cols(FS.X) + 1
+    for (j = 1; j <= rows(FS.skind); j++) {
+        if (FS.skind[j] > 3) continue
+        FS.sb[j, k] = (b1[j] - FS.qa[j]) / (FS.pb[j] - FS.pa[j])
+        FS.sa[j, k] = FS.qa[j] - FS.sb[j, k] * FS.pa[j]
+    }
+    if (hasmissing(FS.sa[., k]) | hasmissing(FS.sb[., k])) {
+        _cge_fail("shocks(): their effect on the capital and debt states could not be found", 459)
+    }
+    _cge_store(FS.Mpost)
+    FS.Mpre = E
+    FS.Mpost = E
+    _cge_fs_store(FS)
+}
+
+// What the shocks of a period may not change in a run with foresight: the
+// closure and the constraints; with growth targets, efficiency; with a death
+// rate, population and the supply of the factors that lose workers
+void _cge_fs_shockcheck(struct cge_model scalar M0, struct cge_model scalar M1, struct cge_dyn scalar D,
+                        struct cge_fs scalar FS)
+{
+    real scalar f
+    if (M1.fixed != M0.fixed | rows(M1.bY) != rows(M0.bY)) {
+        _cge_fail("shocks(): in a run with foresight the closure and the constraints stay the same in every period", 198)
+    }
+    if (D.mode == 1 & M1.p.ad != M0.p.ad) {
+        _cge_fail("shocks(): with gdpgrowth() and foresight, efficiency (ad) follows the growth targets and may not be shocked", 198)
+    }
+    if (M0.p0.hasmort != 1) return
+    if (M1.p.gamma != M0.p.gamma | M1.p.gammah != M0.p.gammah | M1.p.hs0 != M0.p.hs0 | M1.p.pop != M0.p.pop) {
+        _cge_fail("shocks(): with a death rate and foresight, population follows deaths; gamma, gammah, hs0 and pop may not be shocked", 198)
+    }
+    if (rows(FS.dmap)) {
+        if (M1.xcur[FS.dmap[., 2]] != M0.xcur[FS.dmap[., 2]]) {
+            _cge_fail("shocks(): with foresight, the supply of a factor in deathfactors() follows deaths and may not be shocked", 198)
+        }
+    }
+    for (f = 1; f <= M0.nF; f++) {
+        if (D.dfac[f] & M1.p.qlf[f] != M0.p.qlf[f]) {
+            _cge_fail("shocks(): with foresight, the labour force of a factor in deathfactors() follows deaths and may not be shocked", 198)
+        }
+    }
+}
+
+// Records the exogenous parameters and fixed values of a period after its
+// updates and shocks; efficiency grows at the rates of tfp() or follows the
+// baseline, as in _cge_dyn_solve
+void _cge_fs_record()
+{
+    struct cge_model scalar M
+    struct cge_dyn scalar D
+    struct cge_fs scalar FS
+    M = _cge_load()
+    D = _cge_dyn_load()
+    FS = _cge_fs_load()
+    if (D.mode == 0) M.p.ad = M.p.ad :* (1 :+ D.tfp)
+    else if (D.mode == 2) M.p.ad = M.p.ad :* D.lampath[D.k]
+    D.k = D.k + 1
+    _cge_fs_pset(cols(FS.X) + 1, M.p)
+    FS.X = FS.X, M.xcur
+    _cge_store(M)
+    _cge_dyn_store(D)
+    _cge_fs_store(FS)
+}
+
+// The regimes of the constraints of period t, and setting them
+real colvector _cge_fs_mode(struct cge_fs scalar FS, real scalar t)
+{
+    struct cge_par scalar p
+    if (rows(FS.bm)) if (!hasmissing(FS.bm[., t])) return(FS.bm[., t])
+    p = _cge_fs_pget(t)
+    return(p.bmode)
+}
+
+void _cge_fs_setmode(struct cge_fs scalar FS, real scalar t, real colvector bm)
+{
+    if (rows(FS.bm)) FS.bm[., t] = bm
+}
+
+// The parameters p and fixed values xfix of period t with states s
+void _cge_fs_map(struct cge_model scalar M, struct cge_fs scalar FS, real scalar t, real colvector s,
+                 struct cge_par scalar p, real colvector xfix)
+{
+    real scalar j, k, f
+    p = _cge_fs_pget(t)
+    xfix = FS.X[., t]
+    for (j = 1; j <= rows(s); j++) {
+        k = FS.skind[j]
+        if (k == 1) xfix[FS.spos[j]] = s[j]
+        else if (k == 2) p.ddebt = s[j]
+        else if (k == 3) p.fdebt = s[j]
+        else if (k == 4) p.ad = p.ad :* s[j]
+        else if (k == 5) {
+            p.gamma = p.gamma :* s[j]
+            p.gammah = p.gammah :* s[j]
+            p.hs0 = p.hs0 * s[j]
+            p.pop = p.pop * s[j]
+        }
+        else if (k == 6) {
+            f = FS.sfac[j]
+            if (M.p0.inlf[f]) p.qlf[f] = p.qlf[f] * s[j]
+        }
+    }
+    if (rows(FS.dmap)) xfix[FS.dmap[., 2]] = xfix[FS.dmap[., 2]] :* s[FS.dmap[., 1], 1]
+    if (rows(M.bY)) p.bxbar = xfix[M.bX]
+    if (rows(FS.bm)) if (!hasmissing(FS.bm[., t])) p.bmode = FS.bm[., t]
+}
+
+// Entries (r[i], c[j], V[i, j]) of a matrix, without its zeros
+real matrix _cge_fs_ent(real colvector r, real colvector c, real matrix V)
+{
+    real matrix E
+    real colvector k
+    if (!rows(r) | !rows(c)) return(J(0, 3, .))
+    E = (vec(J(1, rows(c), r)), vec(J(rows(r), 1, c')), vec(V))
+    k = selectindex(E[., 3] :!= 0)
+    if (!rows(k) | !cols(k)) return(J(0, 3, .))
+    return(E[k, .])
+}
+
+// The states of period t from the solution x, parameters p and states s of
+// period t - 1, before the shocks of period t (Section 10, steps 1 and 5,
+// and 15.4), in ph; with wantd, the derivatives of each as entries (state,
+// position in x, value) in DX and (state, state of t - 1, value) in DS. The
+// efficiency state has no update here: its equation is the growth target.
+void _cge_fs_phi(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS,
+                 real colvector s, real colvector x, struct cge_par scalar p, real colvector ph,
+                 real matrix DX, real matrix DS, real scalar wantd)
+{
+    real matrix PF, PW, Dsq, Dtq, Dtf, Deq, Def, Dnq, Dnf, Dg
+    real colvector PS, PI, PQ0, YF0, idx, posq, posw, q, sv, wfd, r, rat, e, cnt, eta, g1, Dtw, Dew, Dnw
+    real scalar nx, f, j, j5, yk, c, inv, newk, del, m, Q, W, avg, E, posG, posE, gsav, exr, posH, hs, ex
+    real scalar dexh, dexr, rho, mu, kap, fg, daw
+    nx = rows(M.x0)
+    ph = J(rows(s), 1, .)
+    DX = J(0, 3, .)
+    DS = J(0, 3, .)
+    // capital (step 1): depreciation plus new capital from real investment,
+    // shared among the activities of a specific factor by their rents
+    if (any(FS.skind :== 1)) {
+        PI = _cge_vn(M, (1::nx), "QINV")
+        PQ0 = _cge_vn(M, M.x0, "PQ")
+        inv = PQ0' * x[PI]
+        YF0 = _cge_vn(M, M.x0, "YF")
+        yk = sum(D.capital :* YF0)
+        PW = _cge_vn(M, (1::nx), "WFDIST")
+        PS = _cge_vn(M, (1::nx), "W")
+        for (f = 1; f <= M.nF; f++) {
+            if (!D.capital[f]) continue
+            idx = selectindex((FS.skind :== 1) :& (FS.sfac :== f))
+            c = D.rental[f] * YF0[f] / yk
+            newk = c * inv
+            del = D.delta[f]
+            if (M.c_fac[f] != "specific") {
+                j = idx[1]
+                ph[j] = (1 - del) * x[FS.spos[j]] + newk
+                if (wantd) DX = DX \ (j, FS.spos[j], 1 - del) \ (J(rows(PI), 1, j), PI, c :* PQ0)
+                continue
+            }
+            m = rows(idx)
+            posq = FS.spos[idx, 1]
+            q = x[posq]
+            Q = sum(q)
+            sv = q / Q
+            posw = select(PW[f, .]', M.fa[f, .]' :> 0)
+            W = x[PS[f]]
+            wfd = x[posw]
+            r = W :* wfd
+            avg = sv' * r
+            rat = r :/ avg
+            g1 = 1 :+ D.sens :* (rat :- 1)
+            e = sv :* g1
+            cnt = (e :> 0)
+            E = sum(e :* cnt)
+            eta = (e :* cnt) / E
+            ph[idx] = (1 - del) :* q + newk :* eta
+            if (!wantd) continue
+            // with respect to the stocks q, the factor price W and the
+            // distortions wfd: shares, rents relative to their average,
+            // weights and shares of new capital
+            Dsq = (I(m) - sv * J(1, m, 1)) / Q
+            Dtq = -(rat * (r' * Dsq)) / avg
+            daw = sv' * wfd
+            Dtw = (wfd - rat * daw) / avg
+            Dtf = (W :* I(m) - rat * (W :* sv')) / avg
+            Deq = cnt :* (g1 :* Dsq + (sv :* D.sens) :* Dtq)
+            Dew = cnt :* ((sv :* D.sens) :* Dtw)
+            Def = cnt :* ((sv :* D.sens) :* Dtf)
+            Dnq = (Deq - eta * colsum(Deq)) / E
+            Dnw = (Dew - eta * colsum(Dew)) / E
+            Dnf = (Def - eta * colsum(Def)) / E
+            DX = DX \ _cge_fs_ent(idx, posq, (1 - del) :* I(m) + newk :* Dnq)
+            DX = DX \ _cge_fs_ent(idx, PS[f], newk :* Dnw)
+            DX = DX \ _cge_fs_ent(idx, posw, newk :* Dnf)
+            DX = DX \ _cge_fs_ent(idx, PI, (c :* eta) * PQ0')
+        }
+    }
+    // public debt (step 5): last period's deficit is borrowed, the share phi
+    // abroad
+    if (M.p0.debt == 1) {
+        posG = _cge_vpos(M, _cge_vidx(M, "GSAV"))
+        posE = _cge_vpos(M, _cge_vidx(M, "EXR"))
+        gsav = x[posG]
+        exr = x[posE]
+        j = selectindex(FS.skind :== 2)
+        ph[j] = s[j] - (1 - p.phi) * gsav
+        if (wantd) {
+            DS = DS \ (j, j, 1)
+            DX = DX \ (j, posG, -(1 - p.phi))
+        }
+        j = selectindex(FS.skind :== 3)
+        ph[j] = s[j] - p.phi * gsav / exr
+        if (wantd) {
+            DS = DS \ (j, j, 1)
+            DX = DX \ (j, posG, -p.phi / exr) \ (j, posE, p.phi * gsav / exr^2)
+        }
+    }
+    // population and the workers of the factors that lose them (15.4):
+    // deaths in the period before relative to the base death rate; the
+    // population state enters the death rate through hs0
+    if (M.p0.hasmort == 1) {
+        posH = _cge_vpos(M, _cge_vidx(M, "HS"))
+        hs = x[posH]
+        j5 = selectindex(FS.skind :== 5)
+        rho = s[j5]
+        ex = p.mort0 - p.mort * (hs / p.hs0) ^ p.epsm
+        dexh = -p.mort * p.epsm * (hs / p.hs0) ^ p.epsm / hs
+        dexr = p.mort * p.epsm * (hs / p.hs0) ^ p.epsm / rho
+        ph[j5] = rho * (1 + D.gpop + ex) / (1 + D.gpop)
+        if (wantd) {
+            DS = DS \ (j5, j5, (1 + D.gpop + ex + rho * dexr) / (1 + D.gpop))
+            DX = DX \ (j5, posH, rho * dexh / (1 + D.gpop))
+        }
+        kap = D.dshare / D.wage
+        for (j = 1; j <= rows(FS.skind); j++) {
+            if (FS.skind[j] != 6) continue
+            fg = D.fgrowth[FS.sfac[j]]
+            mu = s[j]
+            ph[j] = mu * (1 + fg + kap * ex) / (1 + fg)
+            if (wantd) {
+                DS = DS \ (j, j, (1 + fg + kap * ex) / (1 + fg)) \ (j, j5, mu * kap * dexr / (1 + fg))
+                DX = DX \ (j, posH, mu * kap * dexh / (1 + fg))
+            }
+        }
+    }
+}
+
+// The values of the periods before period t, for lag() (from version 0.9.2):
+// the base before the first period
+real matrix _cge_fs_lags(struct cge_model scalar M, real matrix X, real scalar t)
+{
+    real matrix L
+    real scalar k
+    L = J(rows(X), _cge_maxlag(), .)
+    for (k = 1; k <= _cge_maxlag(); k++) L[., k] = (t - k >= 1 ? X[., t - k] : M.x0)
+    return(L)
+}
+
+// The values of the periods after period t, for lead(); beyond the last
+// period the terminal condition: the value of the last period (constant), the
+// growth of the last period continued (growth), or the base
+real matrix _cge_fs_leads(struct cge_model scalar M, struct cge_fs scalar FS, real matrix X, real scalar t)
+{
+    real matrix L
+    real colvector g
+    real scalar k, N
+    N = FS.N
+    L = J(rows(X), _cge_maxlag(), .)
+    g = _cge_fs_growth(X[., N], X[., N - 1])
+    for (k = 1; k <= _cge_maxlag(); k++) {
+        if (t + k <= N) L[., k] = X[., t + k]
+        else if (FS.term == 1) L[., k] = X[., N]
+        else if (FS.term == 2) L[., k] = X[., N] :* g :^ (t + k - N)
+        else L[., k] = M.x0
+    }
+    return(L)
+}
+
+// The growth factor from a to b, 1 where either is zero or missing
+real colvector _cge_fs_growth(real colvector b, real colvector a)
+{
+    real colvector ok
+    ok = (a :!= 0) :& (b :!= 0) :& (a :< .) :& (b :< .)
+    return(ok :* (b :/ (a + (1 :- ok))) + (1 :- ok))
+}
+
+// The stacked vector u in its periods (W.Z and W.Sg), and back
+void _cge_fs_unpack(struct cge_model scalar M, struct cge_fs scalar FS, struct cge_sys scalar S, real colvector u,
+                    struct cge_fsw scalar W)
+{
+    real scalar nf, ns, N
+    nf = rows(S.free)
+    ns = rows(FS.skind)
+    N = FS.N
+    W.Z = colshape(u[|1 \ N * nf|], nf)'
+    W.Sg = J(ns, N, .)
+    if (ns) {
+        W.Sg[., 1] = FS.s1
+        W.Sg[|1, 2 \ ns, N|] = colshape(u[|N * nf + 1 \ rows(u)|], ns)' :* FS.sscale
+    }
+}
+
+real colvector _cge_fs_pack(struct cge_fs scalar FS, struct cge_fsw scalar W)
+{
+    real scalar ns
+    ns = rows(FS.skind)
+    if (!ns) return(vec(W.Z))
+    return(vec(W.Z) \ vec(W.Sg[|1, 2 \ ns, FS.N|] :/ FS.sscale))
+}
+
+// The solution and fixed values of every period from W.Z and W.Sg
+void _cge_fs_build(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS,
+                   struct cge_sys scalar S, struct cge_fsw scalar W)
+{
+    struct cge_par scalar p
+    real colvector xf, x
+    real scalar t, N
+    N = FS.N
+    W.X = W.XF = J(rows(M.x0), N, .)
+    for (t = 1; t <= N; t++) {
+        _cge_fs_map(M, FS, t, W.Sg[., t], p, xf)
+        x = xf
+        x[S.free] = W.Z[., t] :* M.xscale[S.free]
+        W.X[., t] = x
+        W.XF[., t] = xf
+    }
+}
+
+// The parameters of period t of the stacked form W (after _cge_fs_build),
+// with the values of the periods before and after it and the period
+struct cge_par scalar _cge_fs_par(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS,
+                                  struct cge_fsw scalar W, real scalar t)
+{
+    struct cge_par scalar p
+    real colvector xf
+    _cge_fs_map(M, FS, t, W.Sg[., t], p, xf)
+    if (_cge_u_haslag(M)) p.xlag = _cge_fs_lags(M, W.X, t)
+    if (_cge_u_haslead(M)) p.xlead = _cge_fs_leads(M, FS, W.X, t)
+    p.tinfo = (D.periods[t], t == 1, t == FS.N)
+    return(p)
+}
+
+// The residuals of the stacked system at u: the equations of each period,
+// scaled, then the updates of the states of each period after the first,
+// relative to their scale; the growth target is relative to base value added.
+// Missing where an equation cannot be evaluated.
+real colvector _cge_fs_resid(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS,
+                             struct cge_sys scalar S, real colvector u)
+{
+    struct cge_fsw scalar W
+    struct cge_par scalar p
+    real colvector R, f, ph, r
+    real matrix DX, DS
+    real scalar t, N, nf, ns, j4
+    N = FS.N
+    nf = rows(S.free)
+    ns = rows(FS.skind)
+    _cge_fs_unpack(M, FS, S, u, W)
+    _cge_fs_build(M, D, FS, S, W)
+    R = J(N * nf + (N - 1) * ns, 1, .)
+    for (t = 1; t <= N; t++) {
+        p = _cge_fs_par(M, D, FS, W, t)
+        f = _cge_F(M, p, W.XF[., t], S, W.Z[., t])
+        if (hasmissing(f)) return(R)
+        R[|(t - 1) * nf + 1 \ t * nf|] = f
+    }
+    if (!ns) return(R)
+    j4 = selectindex(FS.skind :== 4)
+    for (t = 2; t <= N; t++) {
+        p = _cge_fs_par(M, D, FS, W, t - 1)
+        _cge_fs_phi(M, D, FS, W.Sg[., t - 1], W.X[., t - 1], p, ph, DX, DS, 0)
+        r = (W.Sg[., t] - FS.sa[., t] - FS.sb[., t] :* ph) :/ FS.sscale
+        if (rows(j4) & cols(j4)) {
+            r[j4] = (_cge_dyn_va(M, W.X[., t]) - (1 + D.target[t - 1]) * _cge_dyn_va(M, W.X[., t - 1])) /
+                    _cge_dyn_va(M, M.x0)
+        }
+        R[|N * nf + (t - 2) * ns + 1 \ N * nf + (t - 1) * ns|] = r
+    }
+    return(R)
+}
+
+// The columns of the stacked system for positions pos of x in period t, with
+// the derivative of x[pos] with respect to each: free variables, then, from
+// the second period, capital stocks and the supplies of the factors that
+// lose workers. Adds the entries (rows rr, those columns, values vv times
+// the derivatives) to T; positions without a column are left out.
+void _cge_fs_cols(struct cge_model scalar M, struct cge_fs scalar FS, real scalar nf, real scalar t,
+                  real colvector fidx, real colvector kidx, real colvector didx, real colvector pos,
+                  real colvector rr, real colvector vv, struct cge_trip scalar T)
+{
+    real colvector a, sel
+    real scalar ns, so
+    if (!rows(pos)) return
+    ns = rows(FS.skind)
+    a = fidx[pos]
+    sel = selectindex(a :> 0)
+    if (rows(sel) & cols(sel)) _cge_tadd(T, rr[sel], (t - 1) * nf :+ a[sel], vv[sel] :* M.xscale[pos[sel]])
+    if (t < 2) return
+    so = FS.N * nf + (t - 2) * ns
+    a = kidx[pos] :* (fidx[pos] :== 0)
+    sel = selectindex(a :> 0)
+    if (rows(sel) & cols(sel)) _cge_tadd(T, rr[sel], so :+ a[sel], vv[sel] :* FS.sscale[a[sel], 1])
+    a = didx[pos] :* (fidx[pos] :== 0)
+    sel = selectindex(a :> 0)
+    if (rows(sel) & cols(sel)) _cge_tadd(T, rr[sel], so :+ a[sel], vv[sel] :* FS.X[pos[sel], t])
+}
+
+// The entries of the Jacobian of the stacked system at u, scaled as
+// _cge_fs_resid: within each period, the exact Jacobian of its full system,
+// with its capital stocks as further columns, and central differences for
+// its other states; across periods, the derivatives of user equations with
+// respect to the values that lag() and lead() refer to, and those of the
+// updates of the states. Returns 0 where the equations cannot be evaluated.
+real scalar _cge_fs_jac(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS,
+                        struct cge_sys scalar S, real colvector u, real colvector ri, real colvector ci,
+                        real colvector v)
+{
+    struct cge_fsw scalar W
+    struct cge_trip scalar T
+    struct cge_par scalar p, pt
+    real colvector fidx, kidx, didx, kk, kpos, r, c, w, sel, sg, xf, fp, fm, d, ph, gva, pva, tr, rows_, nr
+    real matrix DX, DS, PQI, GQ
+    real scalar N, nf, ns, nx, t, j, h, so, to, spo, j4, va0, hl
+    N = FS.N
+    nf = rows(S.free)
+    ns = rows(FS.skind)
+    nx = rows(M.x0)
+    _cge_fs_unpack(M, FS, S, u, W)
+    _cge_fs_build(M, D, FS, S, W)
+    fidx = kidx = didx = J(nx, 1, 0)
+    fidx[S.free] = (1::nf)
+    kk = selectindex(FS.skind :== 1)
+    kpos = J(0, 1, .)
+    if (rows(kk) & cols(kk)) {
+        kidx[FS.spos[kk, 1]] = kk
+        kpos = FS.spos[kk, 1]
+    }
+    else kk = J(0, 1, .)
+    if (rows(FS.dmap)) didx[FS.dmap[., 2]] = FS.dmap[., 1]
+    hl = (_cge_u_haslag(M) | _cge_u_haslead(M))
+    _cge_tinit(T)
+    for (t = 1; t <= N; t++) {
+        so = N * nf + (t - 2) * ns
+        // within the period, with its capital stocks as columns nf + 1, ...
+        pt = _cge_fs_par(M, D, FS, W, t)
+        if (!_cge_jac_trip(M, pt, W.XF[., t], S, W.Z[., t], r, c, w, kpos)) return(0)
+        sel = selectindex(c :<= nf)
+        if (rows(sel) & cols(sel)) _cge_tadd(T, (t - 1) * nf :+ r[sel], (t - 1) * nf :+ c[sel], w[sel])
+        if (t >= 2) {
+            sel = selectindex(c :> nf)
+            if (rows(sel) & cols(sel)) _cge_tadd(T, (t - 1) * nf :+ r[sel], so :+ kk[c[sel] :- nf, 1], w[sel])
+            // the other states of the period, by central differences
+            for (j = 1; j <= ns; j++) {
+                if (FS.skind[j] == 1) continue
+                h = 1e-6 * max((1, abs(W.Sg[j, t])))
+                sg = W.Sg[., t]
+                sg[j] = sg[j] + h
+                _cge_fs_map(M, FS, t, sg, p, xf)
+                p.xlag = pt.xlag
+                p.xlead = pt.xlead
+                p.tinfo = pt.tinfo
+                fp = _cge_F(M, p, xf, S, W.Z[., t])
+                sg[j] = W.Sg[j, t] - h
+                _cge_fs_map(M, FS, t, sg, p, xf)
+                p.xlag = pt.xlag
+                p.xlead = pt.xlead
+                p.tinfo = pt.tinfo
+                fm = _cge_F(M, p, xf, S, W.Z[., t])
+                if (hasmissing(fp) | hasmissing(fm)) return(0)
+                d = (fp - fm) :* (FS.sscale[j] / (2 * h))
+                sel = selectindex(d :!= 0)
+                if (rows(sel) & cols(sel)) _cge_tadd(T, (t - 1) * nf :+ sel, J(rows(sel), 1, so + j), d[sel])
+            }
+        }
+        // the values that lag() and lead() refer to
+        if (hl) _cge_fs_ucross(M, FS, S, W, pt, t, fidx, kidx, didx, T)
+    }
+    // the updates of the states
+    if (ns) {
+        j4 = selectindex(FS.skind :== 4)
+        if (rows(j4) & cols(j4)) {
+            // value added at base prices is linear in x: PVA0 QVA less the
+            // commodities in nests at base prices (_cge_va_real)
+            pva = vec(_cge_vn(M, (1::nx), "QVA"))
+            gva = vec(_cge_vn(M, M.x0, "PVA"))
+            if (any(M.ecell)) {
+                PQI = _cge_vn(M, (1::nx), "QINT")
+                GQ = -(M.ecell :* _cge_vn(M, M.x0, "PQ") :* (1 :+ (M.p0.tv :* _cge_vn(M, M.x0, "TVADJ")) * (1 :- M.p0.kappa)'))
+                pva = pva \ vec(PQI)
+                gva = gva \ vec(GQ)
+            }
+            sel = selectindex(gva :!= 0)
+            pva = pva[sel]
+            gva = gva[sel]
+            va0 = _cge_dyn_va(M, M.x0)
+        }
+        for (t = 2; t <= N; t++) {
+            to = N * nf + (t - 2) * ns
+            spo = N * nf + (t - 3) * ns
+            // each state's own entry; the growth target is not an update
+            nr = selectindex(FS.skind :!= 4)
+            if (rows(nr) & cols(nr)) _cge_tadd(T, to :+ nr, to :+ nr, J(rows(nr), 1, 1))
+            p = _cge_fs_par(M, D, FS, W, t - 1)
+            _cge_fs_phi(M, D, FS, W.Sg[., t - 1], W.X[., t - 1], p, ph, DX, DS, 1)
+            if (rows(DX)) {
+                tr = DX[., 1]
+                _cge_fs_cols(M, FS, nf, t - 1, fidx, kidx, didx, DX[., 2], to :+ tr,
+                             -FS.sb[tr, t] :* DX[., 3] :/ FS.sscale[tr, 1], T)
+            }
+            if (rows(DS) & t >= 3) {
+                tr = DS[., 1]
+                _cge_tadd(T, to :+ tr, spo :+ DS[., 2], -FS.sb[tr, t] :* DS[., 3] :* FS.sscale[DS[., 2], 1] :/ FS.sscale[tr, 1])
+            }
+            if (rows(j4) & cols(j4)) {
+                rows_ = J(rows(pva), 1, to + j4)
+                _cge_fs_cols(M, FS, nf, t, fidx, kidx, didx, pva, rows_, gva / va0, T)
+                _cge_fs_cols(M, FS, nf, t - 1, fidx, kidx, didx, pva, rows_, -(1 + D.target[t - 1]) :* gva / va0, T)
+            }
+        }
+    }
+    ri = (T.n ? T.r[|1 \ T.n|] : J(0, 1, .))
+    ci = (T.n ? T.c[|1 \ T.n|] : J(0, 1, .))
+    v = (T.n ? T.v[|1 \ T.n|] : J(0, 1, .))
+    return(!hasmissing(v))
+}
+
+// The derivatives of the user equations of period t, with parameters p, with
+// respect to the values that their lag() and lead() refer to, in the periods
+// they refer to; beyond the last period, through the terminal condition
+void _cge_fs_ucross(struct cge_model scalar M, struct cge_fs scalar FS, struct cge_sys scalar S,
+                    struct cge_fsw scalar W, struct cge_par scalar p, real scalar t, real colvector fidx,
+                    real colvector kidx, real colvector didx, struct cge_trip scalar T)
+{
+    real matrix tk1, tk2, utk
+    real colvector bo, rowsys, sel, vcode, pos, ord
+    real rowvector gl, gr, g
+    real scalar kb, k, nx, nf, N, i, row, rs, tt, jj, xn, xm, gN
+    nx = rows(M.x0)
+    nf = rows(S.free)
+    N = FS.N
+    kb = _cge_find(M.ename, "U")
+    bo = runningsum(M.elen) - M.elen
+    rowsys = runningsum(S.mask) :* S.mask
+    for (k = 1; k <= rows(M.uelab); k++) {
+        tk1 = M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|]
+        tk2 = M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|]
+        utk = tk1 \ tk2
+        sel = selectindex((utk[., 1] :== 9) :| (utk[., 1] :== 11))
+        if (!rows(sel) | !cols(sel)) continue
+        row = bo[kb] + k
+        rs = rowsys[row]
+        if (!rs) continue
+        // a lag of order o has the code pos + o nx, a lead pos + (4 + o) nx
+        vcode = uniqrows(utk[sel, 2] + ((utk[sel, 1] :== 9) :* utk[sel, 3] + (utk[sel, 1] :== 11) :* (4 :+ utk[sel, 3])) :* nx)
+        (void) _cge_u_dvalue(M, p, W.X[., t], tk1, vcode, gl)
+        (void) _cge_u_dvalue(M, p, W.X[., t], tk2, vcode, gr)
+        g = (gl - gr) :/ M.escale[row]
+        pos = mod(vcode :- 1, nx) :+ 1
+        ord = floor((vcode :- 1) :/ nx)
+        for (i = 1; i <= rows(vcode); i++) {
+            if (g[i] == 0) continue
+            if (ord[i] <= 4) {
+                tt = t - ord[i]
+                if (tt >= 1) _cge_fs_cols(M, FS, nf, tt, fidx, kidx, didx, pos[i], (t - 1) * nf + rs, g[i], T)
+                continue
+            }
+            tt = t + ord[i] - 4
+            if (tt <= N) {
+                _cge_fs_cols(M, FS, nf, tt, fidx, kidx, didx, pos[i], (t - 1) * nf + rs, g[i], T)
+                continue
+            }
+            if (FS.term == 1) _cge_fs_cols(M, FS, nf, N, fidx, kidx, didx, pos[i], (t - 1) * nf + rs, g[i], T)
+            else if (FS.term == 2) {
+                // x(N) (x(N) / x(N - 1))^j
+                jj = tt - N
+                xn = W.X[pos[i], N]
+                xm = W.X[pos[i], N - 1]
+                gN = _cge_fs_growth(xn, xm)
+                // where the growth factor is 1 by default, the value of the last period
+                if (!(xm != 0 & xn != 0 & xm < . & xn < .)) {
+                    _cge_fs_cols(M, FS, nf, N, fidx, kidx, didx, pos[i], (t - 1) * nf + rs, g[i], T)
+                }
+                else {
+                    _cge_fs_cols(M, FS, nf, N, fidx, kidx, didx, pos[i], (t - 1) * nf + rs, g[i] * (jj + 1) * gN^jj, T)
+                    _cge_fs_cols(M, FS, nf, N - 1, fidx, kidx, didx, pos[i], (t - 1) * nf + rs, -g[i] * jj * gN^(jj + 1), T)
+                }
+            }
+        }
+    }
+}
+
+// Newton's method on the stacked system from u, with the exact Jacobian, a
+// line search on the residuals and the sparse LU, whose analysis is kept
+// apart from that of single periods. Returns 1 when the largest scaled
+// residual is below tol.
+real scalar _cge_fs_newton(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS,
+                           struct cge_sys scalar S, real colvector u, real scalar tol, real scalar maxit,
+                           real scalar iter, real scalar err)
+{
+    struct cge_slu scalar SF
+    real colvector R, Rn, du, un, ri, ci, v
+    real scalar it, step, n0
+    _cge_slu_load(SF, "cge__slu_fs")
+    R = _cge_fs_resid(M, D, FS, S, u)
+    iter = 0
+    err = .
+    if (hasmissing(R)) return(0)
+    for (it = 0; it <= maxit; it++) {
+        err = max(abs(R))
+        iter = it
+        printf("{txt}Iteration %f: largest scaled residual = {res}%9.3e\n", it, err)
+        displayflush()
+        if (err < tol) return(1)
+        if (it == maxit) break
+        if (!_cge_fs_jac(M, D, FS, S, u, ri, ci, v)) return(0)
+        if (!_cge_slu_update(SF, ri, ci, v, rows(u), "cge__slu_fs")) return(0)
+        du = _cge_slu_solve(SF, -R)
+        if (hasmissing(du)) return(0)
+        n0 = norm(R)
+        for (step = 1; step >= 1e-8; step = step / 2) {
+            un = u + step * du
+            Rn = _cge_fs_resid(M, D, FS, S, un)
+            if (!hasmissing(Rn)) if (norm(Rn) <= (1 - 1e-4 * step) * n0) break
+        }
+        if (step < 1e-8) return(0)
+        u = un
+        R = Rn
+    }
+    return(0)
+}
+
+// The start of Newton's method from a recursive run: each period solved in
+// turn from its states, with the values of later periods expected to be
+// those of the period before (the base in the first), growth targets met
+// approximately, and the states of the next period updated from its
+// solution. Returns the number of periods solved; the regimes of constraints
+// found are kept in FS.bm.
+real scalar _cge_fs_warm(struct cge_model scalar M, struct cge_dyn scalar D, struct cge_fs scalar FS,
+                         struct cge_sys scalar S, struct cge_fsw scalar W)
+{
+    struct cge_par scalar p, pprev
+    real colvector xf, x, ph, sg, j4
+    real matrix DX, DS
+    real scalar t, N, ns, conv, iter, err, nconv, hl, hd
+    string scalar method
+    N = FS.N
+    ns = rows(FS.skind)
+    W.Sg = J(ns, N, .)
+    W.X = J(rows(M.x0), N, .)
+    W.Z = J(rows(S.free), N, .)
+    if (ns) W.Sg[., 1] = FS.s1
+    j4 = selectindex(FS.skind :== 4)
+    hl = _cge_u_haslag(M)
+    hd = _cge_u_haslead(M)
+    nconv = 0
+    for (t = 1; t <= N; t++) {
+        if (t >= 2 & ns) {
+            _cge_fs_phi(M, D, FS, W.Sg[., t - 1], W.X[., t - 1], pprev, ph, DX, DS, 0)
+            sg = FS.sa[., t] + FS.sb[., t] :* ph
+            if (rows(j4) & cols(j4)) sg[j4] = W.Sg[j4, t - 1] * (1 + D.target[t - 1])
+            W.Sg[., t] = sg
+        }
+        _cge_fs_map(M, FS, t, (ns ? W.Sg[., t] : J(0, 1, .)), p, xf)
+        if (hl) p.xlag = _cge_fs_lags(M, W.X, t)
+        if (hd) p.xlead = J(1, _cge_maxlag(), (t >= 2 ? W.X[., t - 1] : M.x0))
+        p.tinfo = (D.periods[t], t == 1, t == N)
+        x = _cge_solve_point(M, p, xf, (t >= 2 ? W.X[., t - 1] : xf), D.tol, D.maxit, 0, conv, iter, err, method)
+        if (conv) nconv++
+        else {
+            x = xf
+            x[S.free] = (t >= 2 ? W.X[S.free, t - 1] : M.x0[S.free])
+        }
+        if (rows(M.bY)) _cge_fs_setmode(FS, t, p.bmode)
+        W.X[., t] = x
+        W.Z[., t] = x[S.free] :/ M.xscale[S.free]
+        pprev = p
+    }
+    return(nconv)
+}
+
+// Solves the run with foresight and stores each period as the simulation
+// <run><period>
+void _cge_fs_solve()
+{
+    struct cge_model scalar M
+    struct cge_dyn scalar D
+    struct cge_fs scalar FS
+    struct cge_sys scalar S
+    struct cge_fsw scalar W
+    struct cge_par scalar p
+    real colvector u, x, g, h, act, flip, bm, j4
+    real scalar N, nf, ns, t, conv, iter, it2, err, r, anyact, nflip, kk, lam, nw
+    M = _cge_load()
+    D = _cge_dyn_load()
+    FS = _cge_fs_load()
+    N = FS.N
+    S = _cge_sys_make(M, 0)
+    if (rows(S.free) != S.neq) {
+        errprintf("the system is not square: %f free variables, %f equations\n", rows(S.free), S.neq)
+        exit(459)
+    }
+    nf = rows(S.free)
+    ns = rows(FS.skind)
+    printf("{txt}Perfect foresight: {res}%f{txt} periods of {res}%f{txt} equations and {res}%f{txt} state(s), {res}%f{txt} equations in all\n",
+           N, nf, ns, N * nf + (N - 1) * ns)
+    anyact = 0
+    if (rows(M.bY)) for (t = 1; t <= N; t++) if (any(_cge_fs_mode(FS, t) :> 0)) anyact = 1
+    if (FS.start == 1) {
+        nw = _cge_fs_warm(M, D, FS, S, W)
+        printf("{txt}Start: a recursive run, {res}%f{txt} of {res}%f{txt} period(s) solved\n", nw, N)
+    }
+    else {
+        W.Sg = J(1, N, FS.s1)
+        W.Z = J(1, N, M.x0[S.free] :/ M.xscale[S.free])
+        printf("{txt}Start: the base in every period\n")
+        // constraints: smoothed conditions find the regimes
+        if (anyact) {
+            for (t = 1; t <= N; t++) _cge_fs_setmode(FS, t, (_cge_fs_mode(FS, t) :> 0))
+            u = _cge_fs_pack(FS, W)
+            conv = _cge_fs_newton(M, D, FS, S, u, D.tol, D.maxit, it2, err)
+            _cge_fs_unpack(M, FS, S, u, W)
+            _cge_fs_build(M, D, FS, S, W)
+            for (t = 1; t <= N; t++) {
+                act = (_cge_fs_mode(FS, t) :> 0)
+                if (conv) {
+                    _cge_bgaps(M, _cge_fs_par(M, D, FS, W, t), W.X[., t], g, h)
+                    _cge_fs_setmode(FS, t, act :* (2 :* (h :> g) + 3 :* (h :<= g)))
+                }
+                else _cge_fs_setmode(FS, t, 3 :* act)
+            }
+            if (!conv) {
+                W.Sg = J(1, N, FS.s1)
+                W.Z = J(1, N, M.x0[S.free] :/ M.xscale[S.free])
+            }
+        }
+    }
+    u = _cge_fs_pack(FS, W)
+    iter = 0
+    // exact conditions in the regimes found; a constraint whose other
+    // condition fails changes regime
+    for (r = 1; r <= 10; r++) {
+        conv = _cge_fs_newton(M, D, FS, S, u, D.tol, D.maxit, it2, err)
+        iter = iter + it2
+        if (!conv | !anyact) break
+        _cge_fs_unpack(M, FS, S, u, W)
+        _cge_fs_build(M, D, FS, S, W)
+        nflip = 0
+        for (t = 1; t <= N; t++) {
+            bm = _cge_fs_mode(FS, t)
+            act = (bm :> 0)
+            _cge_bgaps(M, _cge_fs_par(M, D, FS, W, t), W.X[., t], g, h)
+            flip = act :* (((bm :== 3) :& (g :< -1e-9)) :| ((bm :== 2) :& (h :< -1e-9)))
+            if (any(flip)) {
+                _cge_fs_setmode(FS, t, flip :* (5 :- bm) + (1 :- flip) :* bm)
+                nflip++
+            }
+        }
+        if (!nflip) break
+    }
+    if (!conv) _cge_fail("the run with foresight did not converge (largest scaled residual " + strofreal(err, "%9.3e") + ")", 430)
+    if (r > 10) _cge_fail("the run with foresight did not settle the regimes of its constraints", 430)
+    // each period stored with the values of the periods around it
+    _cge_fs_unpack(M, FS, S, u, W)
+    _cge_fs_build(M, D, FS, S, W)
+    j4 = selectindex(FS.skind :== 4)
+    for (t = 1; t <= N; t++) {
+        p = _cge_fs_par(M, D, FS, W, t)
+        x = W.X[., t]
+        err = _cge_maxres(M, p, x)
+        lam = .
+        if (t >= 2) {
+            if (D.mode == 1) lam = W.Sg[j4, t] / W.Sg[j4, t - 1]
+            else if (D.mode == 2) lam = D.lampath[t - 1]
+        }
+        M.p = p
+        kk = _cge_store_sim(M, D.name + strofreal(D.periods[t]), x, 1, iter, err, "foresight")
+        M.simrun[kk] = D.name
+        M.simper[kk] = D.periods[t]
+        M.simlam[kk] = lam
+        _cge_store(M)
+        M = _cge_load()
+        printf("{txt}Period {res}%f{txt}: largest scaled residual {res}%9.2e", D.periods[t], err)
+        if (!missing(lam)) printf("{txt}; efficiency factor {res}%12.10f", lam)
+        printf("\n")
+    }
+    _cge_store(M)
+    _cge_fs_store(FS)
+    printf("{txt}Solved together in {res}%f{txt} iteration(s)\n", iter)
 }
 
 // Keep only the stored simulations s, in that order (from version 0.6.4)
@@ -13262,6 +14375,23 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
         fput(fh, "LAG" + strofreal(LG[i, 2]) + "_" + g + idx + " = " + _cge_gnum(lv) + ";")
         n++
     }
+    // values of later periods and the period (from version 0.10.2)
+    LG = _cge_u_leads(M)
+    for (i = 1; i <= rows(LG); i++) {
+        lv = _cge_u_leadval(M, p, LG[i, 1], LG[i, 2])
+        if (lv == _cge_u_leadval(M, p0, LG[i, 1], LG[i, 2])) continue
+        _cge_gams_ref(M, LG[i, 1], g, idx)
+        fput(fh, "LEAD" + strofreal(LG[i, 2]) + "_" + g + idx + " = " + _cge_gnum(lv) + ";")
+        n++
+    }
+    if (_cge_u_hastime(M)) {
+        for (i = 1; i <= 3; i++) {
+            lv = _cge_u_tval(p, i)
+            if (lv == _cge_u_tval(p0, i)) continue
+            fput(fh, (i == 1 ? "TPERIOD" : (i == 2 ? "TFIRST" : "TLAST")) + " = " + _cge_gnum(lv) + ";")
+            n++
+        }
+    }
     // Parameters by pair of elements: taxes on factor use (from version 0.5.0),
     // and subsistence quantities, which grow with population in dynamic runs
     // (from version 0.5.3)
@@ -14241,7 +15371,8 @@ void _cge_u_newname(struct cge_model scalar M, string scalar name, string scalar
     if (!regexm(name, "^[A-Za-z_][A-Za-z_0-9]*$") | strlen(name) > 24) {
         _cge_fail(what + " " + name + ": a name has letters, digits and underscores, at most 24 characters, and starts with a letter", 198)
     }
-    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all", "ord", "sameas", "lag", "prod", "smax", "smin", "card", "min", "max", "abs", "sqr", "log10", "ifthen"), name)) {
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all", "ord", "sameas", "lag", "lead", "prod", "smax", "smin", "card",
+               "min", "max", "abs", "sqr", "log10", "ifthen", "tperiod", "tfirst", "tlast"), name)) {
         _cge_fail(name + " is a reserved word", 198)
     }
     if (_cge_um_find(M, name)) _cge_fail(name + " is the name of a macro", 110)
@@ -14969,6 +16100,10 @@ real scalar _cge_u_condval(struct cge_model scalar M, struct cge_par scalar p, r
     real scalar v
     string scalar g
     tok = _cge_u_compile(M, _cge_u_written(M, p, x0, t), x0, g, 1)
+    // the period changes from period to period (from version 0.10.2)
+    if (any(tok[., 1] :== 12)) {
+        _cge_fail("tperiod, tfirst and tlast change by period, but a condition ($) holds in every period; write ifthen(tlast, a, b)", 198)
+    }
     v = _cge_u_value(M, p, x0, tok)
     if (v >= .) _cge_fail("a condition is missing at the base: " + invtokens(t, " "), 459)
     return(v != 0)
@@ -15293,10 +16428,11 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                     }
                     e = _cge_u_close(t, k + 1)
                     // lag(reference[, k]): the value k periods before, given
-                    // within a period (from version 0.9.2)
-                    if (nm == "lag") {
-                        _cge_u_lag(M, (e > k + 2 ? t[|k + 2 \ e - 1|] : J(1, 0, "")), pos, lk, g)
-                        out = out \ (9, pos, lk)
+                    // within a period (from version 0.9.2); lead(reference[,
+                    // k]): the value k periods after (from version 0.10.2)
+                    if (nm == "lag" | nm == "lead") {
+                        _cge_u_lag(M, (e > k + 2 ? t[|k + 2 \ e - 1|] : J(1, 0, "")), pos, lk, g, nm)
+                        out = out \ ((nm == "lag" ? 9 : 11), pos, lk)
                         gtok = gtok, g
                         prev = 1
                         k = e + 1
@@ -15324,6 +16460,15 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                     }
                     args = select(args, args :!= ",")
                 }
+            }
+            // the period (from version 0.10.2): its number, and 1 in the first
+            // and the last period of a dynamic run
+            if (anyof(("tperiod", "tfirst", "tlast"), nm) & !cols(args)) {
+                out = out \ (12, _cge_find(("tperiod", "tfirst", "tlast")', nm), .)
+                gtok = gtok, strupper(nm)
+                prev = 1
+                k = e + 1
+                continue
             }
             pos = _cge_u_varpos(M, nm, args)
             // a user parameter (from version 0.7.1): its value in p.upval
@@ -15489,18 +16634,21 @@ real scalar _cge_maxlag()
     return(4)
 }
 
-// lag(reference[, k]) in an expression (from version 0.9.2): the position of
-// the element of the variable referred to, the order k, from 1 to 4, and the
-// GAMS parameter that holds its lagged value
-void _cge_u_lag(struct cge_model scalar M, string rowvector a, real scalar pos, real scalar k, string scalar g)
+// lag(reference[, k]) in an expression (from version 0.9.2), and lead() (fn,
+// from version 0.10.2): the position of the element of the variable referred
+// to, the order k, from 1 to 4, and the GAMS parameter that holds its value
+void _cge_u_lag(struct cge_model scalar M, string rowvector a, real scalar pos, real scalar k, string scalar g,
+                | string scalar fn)
 {
     string rowvector args
-    string scalar nm
+    string scalar nm, eg
     real scalar e, c
-    if (cols(a) == 0) _cge_fail("lag(): give a variable, as lag(GL) or lag(QA(act_agr), 2)", 198)
+    if (args() < 6) fn = "lag"
+    eg = "as " + fn + "(GL) or " + fn + "(QA(act_agr), 2)"
+    if (cols(a) == 0) _cge_fail(fn + "(): give a variable, " + eg, 198)
     nm = a[1]
-    if (!regexm(nm, "^[A-Za-z_]")) _cge_fail("lag(): give a variable, as lag(GL) or lag(QA(act_agr), 2)", 198)
-    if (!_cge_vidx(M, nm)) _cge_fail("lag(): " + nm + " is not a variable; lags are of variables, as lag(GL) or lag(QA(act_agr), 2)", 198)
+    if (!regexm(nm, "^[A-Za-z_]")) _cge_fail(fn + "(): give a variable, " + eg, 198)
+    if (!_cge_vidx(M, nm)) _cge_fail(fn + "(): " + nm + " is not a variable; " + fn + "() takes a variable, " + eg, 198)
     c = 2
     args = J(1, 0, "")
     if (cols(a) >= 2) {
@@ -15513,15 +16661,15 @@ void _cge_u_lag(struct cge_model scalar M, string rowvector a, real scalar pos, 
     }
     k = 1
     if (c <= cols(a)) {
-        if (a[c] != "," | c + 1 != cols(a)) _cge_fail("lag(): write lag(VAR), lag(VAR(e)) or lag(VAR(e), k)", 198)
+        if (a[c] != "," | c + 1 != cols(a)) _cge_fail(fn + "(): write " + fn + "(VAR), " + fn + "(VAR(e)) or " + fn + "(VAR(e), k)", 198)
         k = strtoreal(a[c + 1])
         if (k >= . | k != floor(k) | k < 1 | k > _cge_maxlag()) {
-            _cge_fail("lag(): the order is a whole number from 1 to " + strofreal(_cge_maxlag()), 198)
+            _cge_fail(fn + "(): the order is a whole number from 1 to " + strofreal(_cge_maxlag()), 198)
         }
     }
     pos = _cge_u_varpos(M, nm, args)
-    if (!pos) _cge_fail("lag(): " + nm + (cols(args) ? "(" + invtokens(args, ",") + ")" : "") + " is not an element of a variable", 111)
-    g = "LAG" + strofreal(k) + "_" + _cge_u_gname(M, _cge_vidx(M, nm)) + (cols(args) ? "('" + invtokens(args, "', '") + "')" : "")
+    if (!pos) _cge_fail(fn + "(): " + nm + (cols(args) ? "(" + invtokens(args, ",") + ")" : "") + " is not an element of a variable", 111)
+    g = strupper(fn) + strofreal(k) + "_" + _cge_u_gname(M, _cge_vidx(M, nm)) + (cols(args) ? "('" + invtokens(args, "', '") + "')" : "")
 }
 
 // The value k periods before of the variable at pos (from version 0.9.2): in
@@ -15531,6 +16679,46 @@ real scalar _cge_u_lagval(struct cge_model scalar M, struct cge_par scalar p, re
 {
     if (k <= cols(p.xlag) & pos <= rows(p.xlag)) return(p.xlag[pos, k])
     return(M.x0[pos])
+}
+
+// The value k periods after of the variable at pos (from version 0.10.2): in a
+// period of a run with foresight, from the solutions after it, by the terminal
+// condition beyond the last period; otherwise the base
+real scalar _cge_u_leadval(struct cge_model scalar M, struct cge_par scalar p, real scalar pos, real scalar k)
+{
+    if (k <= cols(p.xlead) & pos <= rows(p.xlead)) return(p.xlead[pos, k])
+    return(M.x0[pos])
+}
+
+// The period (from version 0.10.2): tperiod (code 1), its number, and tfirst
+// (2) and tlast (3), 1 in the first and in the last period of a dynamic run;
+// 0 in a static simulation
+real scalar _cge_u_tval(struct cge_par scalar p, real scalar code)
+{
+    if (cols(p.tinfo) < 3) return(0)
+    return(p.tinfo[code])
+}
+
+// 1 if a user equation refers to a later period, or to the period (from
+// version 0.10.2)
+real scalar _cge_u_haslead(struct cge_model scalar M)
+{
+    if (!rows(M.utok)) return(0)
+    return(any(M.utok[., 1] :== 11))
+}
+
+real scalar _cge_u_hastime(struct cge_model scalar M)
+{
+    if (!rows(M.utok)) return(0)
+    return(any(M.utok[., 1] :== 12))
+}
+
+// The values of later periods that user equations refer to, as rows of the
+// position of the variable and the order (from version 0.10.2)
+real matrix _cge_u_leads(struct cge_model scalar M)
+{
+    if (!_cge_u_haslead(M)) return(J(0, 2, .))
+    return(uniqrows(select(M.utok[., 2..3], M.utok[., 1] :== 11)))
 }
 
 // 1 if a user equation refers to a lagged value (from version 0.9.2)
@@ -15609,6 +16797,15 @@ real scalar _cge_u_value(struct cge_model scalar M, struct cge_par scalar p, rea
         else if (c == 9) {
             sp = sp + 1
             st[sp] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
+        }
+        // a value of a later period, and the period (from version 0.10.2)
+        else if (c == 11) {
+            sp = sp + 1
+            st[sp] = _cge_u_leadval(M, p, tok[i, 2], tok[i, 3])
+        }
+        else if (c == 12) {
+            sp = sp + 1
+            st[sp] = _cge_u_tval(p, tok[i, 2])
         }
         // a function of several arguments (from version 0.9.7)
         else if (c == 10) {
@@ -16005,9 +17202,11 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     struct cge_par scalar pb
     _cge_u_widen(M)
     M.upar = J(0, 1, "")
-    // at the base, a lagged value is the base value (from version 0.9.2)
+    // at the base, a lagged value is the base value (from version 0.9.2), and
+    // so is a value of a later period (from version 0.10.2)
     pb = p
     pb.xlag = J(1, _cge_maxlag(), x0)
+    pb.xlead = pb.xlag
     // user variables: base values from their expressions
     for (k = 1; k <= rows(M.uvdef); k++) {
         kv = rows(M.vname) - M.nuv + k
@@ -16021,22 +17220,25 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
             if (!dom[j]) {
                 x0[pos[j]] = 0
                 pb.xlag[pos[j], .] = J(1, _cge_maxlag(), 0)
+                pb.xlead[pos[j], .] = J(1, _cge_maxlag(), 0)
                 continue
             }
             tl = _cge_u_pre(M, _cge_u_tokens(M.uvdef[k, 3]))
             if (idx != "") tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
             tl = _cge_u_written(M, pb, x0, tl)
             tok = _cge_u_compile(M, tl, x0, gtl)
-            // a definition cannot give the base value from its own lag
+            // a definition cannot give the base value from its own lag or lead
             for (r = 1; r <= rows(tok); r++) {
-                if (tok[r, 1] == 9 & anyof(pos, tok[r, 2])) {
-                    _cge_fail("user variable " + M.uvdef[k, 1] + " refers to its own lag: give it a value() and an equation (cge_equation)", 198)
+                if ((tok[r, 1] == 9 | tok[r, 1] == 11) & anyof(pos, tok[r, 2])) {
+                    _cge_fail("user variable " + M.uvdef[k, 1] + " refers to its own " + (tok[r, 1] == 9 ? "lag" : "lead") +
+                              ": give it a value() and an equation (cge_equation)", 198)
                 }
             }
             v = _cge_u_value(M, pb, x0, tok)
             if (v >= .) _cge_fail("user variable " + M.uvdef[k, 1] + ": its base value is missing", 459)
             x0[pos[j]] = v
             pb.xlag[pos[j], .] = J(1, _cge_maxlag(), v)
+            pb.xlead[pos[j], .] = J(1, _cge_maxlag(), v)
         }
     }
     // equations, one element per member of the set they are written over
@@ -16196,7 +17398,8 @@ void _cge_u_addvar(string scalar spec)
         if (strtoreal(lo) > strtoreal(up)) _cge_fail("cge_variable: lower() cannot exceed upper()", 198)
     }
     if (_cge_vidx(M, name)) _cge_fail(name + " is already a variable of the model", 110)
-    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas", "lag", "prod", "smax", "smin", "card", "min", "max", "abs", "sqr", "log10", "ifthen"), name)) {
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas", "lag", "lead", "prod", "smax", "smin", "card", "min",
+               "max", "abs", "sqr", "log10", "ifthen", "tperiod", "tfirst", "tlast"), name)) {
         _cge_fail(name + " is a reserved word", 198)
     }
     if (_cge_um_find(M, name)) _cge_fail(name + " is the name of a macro", 110)
@@ -16711,6 +17914,19 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
         }
         fput(fh, g + ix + " = " + _cge_gnum(M.x0[LG[i, 1]]) + ";")
     }
+    // values of later periods (from version 0.10.2) at the base, as lags; the
+    // period, zero outside a dynamic run
+    LG = _cge_u_leads(M)
+    for (i = 1; i <= rows(LG); i++) {
+        _cge_gams_ref(M, LG[i, 1], g, ix)
+        g = "LEAD" + strofreal(LG[i, 2]) + "_" + g
+        if (!anyof(decl, g)) {
+            decl = decl \ g
+            fput(fh, "parameter " + g + (ix == "" ? "" : (strpos(ix, ",") ? "(*, *)" : "(*)")) + ";")
+        }
+        fput(fh, g + ix + " = " + _cge_gnum(M.x0[LG[i, 1]]) + ";")
+    }
+    if (_cge_u_hastime(M)) fput(fh, "scalar TPERIOD / 0 /, TFIRST / 0 /, TLAST / 0 /;")
     // built-in equation elements that user equations replace (from version
     // 0.9.3): the equations of cge_model.gms leave out the elements of XRP
     for (i = 1; i <= rows(M.urep); i++) {
@@ -18152,6 +19368,8 @@ void _cge_par_write(real scalar fh, struct cge_par scalar p, string scalar prefi
     _cge_io_put(fh, prefix + "dac", p.dac)
     _cge_io_put(fh, prefix + "upval", p.upval)
     _cge_io_put(fh, prefix + "xlag", p.xlag)
+    _cge_io_put(fh, prefix + "xlead", p.xlead)
+    _cge_io_put(fh, prefix + "tinfo", p.tinfo)
 }
 
 real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmorphic matrix v)
@@ -18267,6 +19485,8 @@ real scalar _cge_par_member(struct cge_par scalar p, string scalar name, transmo
     else if (name == "dac") p.dac = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "upval") p.upval = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "xlag") p.xlag = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "xlead") p.xlead = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "tinfo") p.tinfo = (rows(v) * cols(v) == 0 ? J(1, 0, .) : v)
     else return(0)
     return(1)
 }

@@ -1,11 +1,14 @@
-\cgeentry{cge_dynamic}{Solve a recursive dynamic run}
+\cgeentry{cge_dynamic}{Solve a dynamic run, recursive or with perfect foresight}
 
 \cgesec{Description}
 
 \cmd{cge_dynamic} solves the calibrated model for a sequence of periods. The
 first period is the calibrated base; each later period is an equilibrium of
 the static model given stocks and exogenous values that are updated from the
-solution of the period before. Agents do not look ahead. Each period is
+solution of the period before. Agents do not look ahead, unless the run has
+perfect foresight (\opt{fores}{ight}, from version 0.10.2): the periods are
+then solved together, and user equations may refer to later periods with
+\cmd{lead()}. Each period is
 stored as a simulation named after the run and the period, such as
 \cmd{base2025}, so that \manref{cge_report}, \manref{cge_results},
 \manref{cge_dynresults}, \manref{cge_save} and \manref{cge_gams} work with it.
@@ -41,6 +44,12 @@ death rate
 cge_dynamic, name(hb) periods(0/10) growth(lab:0.02) population(0.02) ///
     deathfactors(lab) deathshare(0.3) workingage(0.55)
 \end{stcode}
+The periods solved together, with perfect foresight, and leads beyond the last
+period that continue its growth
+\begin{stcode}
+cge_dynamic, name(fs) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.10) ///
+    growth(lab:0.02) foresight terminal(growth)
+\end{stcode}
 
 \cgesec{Syntax}
 
@@ -72,6 +81,10 @@ cge_dynamic, name(hb) periods(0/10) growth(lab:0.02) population(0.02) ///
 \optarg{deathf}{actors}{factors} & labour factors that lose workers to deaths\\
 \optarg{deaths}{hare}{\#} & share of deaths at working ages; default \texttt{0}\\
 \optarg{work}{ingage}{\#} & working-age share of the population; default \texttt{1}\\
+\optgroup{Perfect foresight}
+\opt{fores}{ight} & solve the periods together\\
+\optarg{term}{inal}{constant|growth|base} & value of a lead beyond the last period; default \cmd{constant}\\
+\optarg{}{start}{recursive|base} & start of Newton's method; default \cmd{recursive}\\
 \optgroup{Solver}
 \optarg{tol}{erance}{\#} & tolerance of each period's solve; default \texttt{1e-12}\\
 \optarg{iter}{ate}{\#} & maximum number of Newton iterations of each solve; default \texttt{100}\\
@@ -177,8 +190,36 @@ between 0 and 1; the default is 0. It needs \cmd{deathfactors()}.
 \item[\optarg{work}{ingage}{\#}] is the working-age share of the population,
 above 0 and at most 1; the default is 1. It needs \cmd{deathfactors()}.
 
+\item[\opt{fores}{ight}] (from version 0.10.2) solves the periods of the run
+together, with perfect foresight (\secref{sec:foresight}). The updates that do
+not depend on a solution and the shocks of each period are made first; capital
+stocks, public debt, efficiency under growth targets and, with a death rate,
+population and the factors that lose workers become unknowns of the stacked
+system, with their updates as equations. User equations may then refer to
+later periods, \cmd{lead(VAR)} and \cmd{lead(VAR(e), k)}, $k \le 4$; a run
+whose user equations have leads needs \opt{fores}{ight}. Without leads the
+run gives the recursive run. The \cmd{shocks()} program runs twice in each
+period, the second time quietly, so that a shock to a capital or debt stock
+is applied to the stock that the run finds; with \cmd{gdpgrowth()} efficiency
+may not be shocked, nor, with a death rate, population or the factors in
+\cmd{deathfactors()}, and the closure stays the same.
+
+\item[\optarg{term}{inal}{constant|growth|base}] sets the value of a lead
+beyond the last period $T$: that of the last period (\cmd{constant}, the
+default), the growth of the last period continued, $\V{VAR}_T
+(\V{VAR}_T/\V{VAR}_{T-1})^k$ (\cmd{growth}), or the base (\cmd{base}). An
+equation of its own for the last period is written with
+\cmd{ifthen(tlast,} \ldots\cmd{)} (\manref{cge_equation}).
+
+\item[\optarg{}{start}{recursive|base}] sets the start of Newton's method on
+the stacked system: a recursive run in which each period expects the later
+ones to repeat the period before (\cmd{recursive}, the default), or the base
+in every period (\cmd{base}). Both reach the same solution; the first is
+usually closer.
+
 \item[\optarg{tol}{erance}{\#}] and \optarg{iter}{ate}{\#} are passed to the
-solver of each period; the defaults are \texttt{1e-12} and 100.
+solver of each period, or of the stacked system with \opt{fores}{ight}; the
+defaults are \texttt{1e-12} and 100.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -259,6 +300,36 @@ above the base in period 2. Because rising health services per head lower the
 death rate in a baseline as well, scenarios should be compared with a
 baseline run with the same settings.
 
+\cgesubsec{Example 4: investment with perfect foresight}
+
+In a recursive run investment cannot respond to a policy before it takes
+effect. With perfect foresight it can. Savings adjust to investment
+(\cmd{savinv(investment)}), and investment follows Tobin's $q$, the value of a
+unit of capital that earns the real rental rate $\V{RK} = \V{W}_{cap}/\V{CPI}$
+and depreciates at 5 per cent, at an interest rate of 5 per cent:
+$Q_t = (\V{RK}_{t+1} + 0.95\,Q_{t+1})/1.05$. Its base value, $1/0.10 = 10$,
+is the steady state of the base. The swap fixes $\V{IADJ}/(Q/Q^0)^2$, so that
+the investment factor $\V{IADJ}$ moves with the square of $q$:
+\stlog{dyn_fs_setup}
+A baseline without shocks, and a run in which every import tariff is removed
+from period 4, known from period 0; capital accumulates from investment, at a
+gross rental rate of 10 per cent, and labour grows at 2 per cent:
+\stlog{dyn_fs_run}
+The stacked system has the 96 equations of each of the 11 periods and the
+capital stock of each period after the first. Newton's method starts from a
+recursive run in which each period expects the later ones to repeat the period
+before, and converges in a few iterations. The investment factor against the
+baseline:
+\stlog{dyn_fs_compare}
+In both runs the investment factor is above 1 from period 0: labour grows at 2
+per cent a period, which raises the future return to capital, and $q$ prices
+it at once. The tariff cut adds 2.9 per cent to investment in period 0, four
+periods before the tariffs go, and 4.0 per cent by period 3: the higher return
+to capital from period 4 is known in advance, and capital is built for it.
+From the last period the leads repeat its values (\cmd{terminal(constant)}),
+so investment is the same in periods 9 and 10. A recursive run cannot show the
+early response: in it the cut changes investment only from period 4.
+
 \cgesubsec{Capital}
 
 Capital factors are listed in \cmd{capital()}. New capital comes from the
@@ -330,6 +401,7 @@ program that solves the periods in order.
 \resgroup{Macros}
 \res{r(name)} & name of the run\\
 \res{r(sims)} & simulations of the run, in period order\\
+\res{r(foresight)} & \cmd{foresight} for a run with perfect foresight\\
 \end{storedres}
 
 \cgesec{Methods and formulas}

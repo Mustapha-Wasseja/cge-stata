@@ -1,9 +1,9 @@
 {smcl}
-{* *! version 0.9.2  23oct2026}{...}
+{* *! version 0.10.2  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
-{p2col:{bf:cge_dynamic} {hline 2}}Solve a recursive dynamic run{p_end}
+{p2col:{bf:cge_dynamic} {hline 2}}Solve a dynamic run, recursive or with perfect foresight{p_end}
 {p2colreset}{...}
 
 
@@ -15,6 +15,7 @@
 {opt grow:th(factor:rate ...)} {opt tfp(numlist)} {opt gdp:growth(numlist)} {opt base:line(name)}
 {opt pop:ulation(#)} {opt gov:growth(#)} {opt for:eigngrowth(#)} {opt shock:s(program)}
 {opt deathf:actors(factors)} {opt deaths:hare(#)} {opt work:ingage(#)}
+{opt fores:ight} {opt term:inal(constant|growth|base)} {opt start(recursive|base)}
 {opt tol:erance(#)} {opt iter:ate(#)}]
 
 
@@ -24,7 +25,8 @@
 {cmd:cge_dynamic} solves the calibrated model for a sequence of periods. The
 first period in {opt periods()} is the calibrated base; each later period is
 an equilibrium given stocks and exogenous values updated from the period
-before (Reference Manual, {it:Recursive dynamics}). Agents do not look ahead. Each period
+before (Reference Manual, {it:Dynamics}). Agents do not look ahead, unless
+the run has perfect foresight (from version 0.10.2; see below). Each period
 is stored as the simulation {it:name}{it:period}, for example {cmd:base2025},
 so {helpb cge_report}, {helpb cge_results} and {helpb cge_save} work with it.
 The run uses the current closure and starts from the base; the parameters and
@@ -78,6 +80,29 @@ values of variables in the periods before, {cmd:lag(}{it:VAR}{cmd:)} or
 before the first period they are the base values. Stocks and partial
 adjustment that the model does not update itself can so be written in the
 model's own terms.
+
+{pstd}
+{bf:Perfect foresight} (from version 0.10.2). With {opt foresight}, the periods
+are solved together, and user equations may also refer to later periods,
+{cmd:lead(}{it:VAR}{cmd:)} or {cmd:lead(}{it:VAR}{cmd:(}{it:e}{cmd:),}
+{it:k}{cmd:)} for up to four periods: agents act on the path that the run
+finds, so a shock known in advance moves the periods before it, for example
+investment that follows the expected return to capital. The updates of steps
+2 to 4 and 7 and the shocks of step 6 are made period by period first; what a
+recursive run carries from one solution to the next -- capital stocks, public
+debt, the efficiency factor of growth targets and, with a death rate,
+population and the factors that lose workers -- become unknowns of the stacked
+system, whose equations are the updates of steps 1, 3 and 5. Newton's method
+solves it with the sparse LU. Without leads it gives the recursive run. A
+shock to a capital or debt stock is found by running the {opt shocks()}
+program twice for the period, the second time quietly, and holds as
+{it:after = a + b before}; with {opt gdpgrowth()} efficiency may not be
+shocked, nor, with a death rate, population or the factors in
+{opt deathfactors()}; the closure stays the same. Beyond the last period a
+lead follows {opt terminal()}. {cmd:tperiod}, {cmd:tfirst} and {cmd:tlast} in
+a user equation are the period and 1 in the first or last period (0
+otherwise), so that {cmd:ifthen(tlast,} ...{cmd:)} writes an equation of its
+own for the last period.
 
 
 {title:Options}
@@ -141,11 +166,46 @@ scenarios with a baseline run with the same settings.
 each period after the first.
 
 {phang}
+{opt foresight} (from version 0.10.2) solves the periods together, with
+perfect foresight; it is needed for {cmd:lead()}.
+
+{phang}
+{opt terminal(constant|growth|base)} sets the value of a lead beyond the last
+period: that of the last period ({cmd:constant}, the default), the growth of the
+last period continued ({cmd:growth}), or the base ({cmd:base}).
+
+{phang}
+{opt start(recursive|base)} sets the start of Newton's method: a recursive run
+in which each period expects the later ones to repeat the period before
+({cmd:recursive}, the default), or the base in every period ({cmd:base}).
+
+{phang}
 {opt tolerance(#)} and {opt iterate(#)} are passed to the solver of each
-period; the default tolerance is 1e-12.
+period, or of the stacked system with {opt foresight}; the default tolerance
+is 1e-12.
 
 
 {title:Examples}
+
+{pstd}Perfect foresight: investment-driven savings, with investment that
+follows Tobin's q, the expected value of a unit of capital, and a tariff cut
+in 2022 known from 2018{p_end}
+
+{phang2}{cmd:. cge_synthetic, clear}{p_end}
+{phang2}{cmd:. cge_sam, labels(account)}{p_end}
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+{phang2}{cmd:. cge_closure, savinv(investment)}{p_end}
+{phang2}{cmd:. cge_variable RK = W(cap) / CPI}{p_end}
+{phang2}{cmd:. cge_variable Q, value(10)}{p_end}
+{phang2}{cmd:. cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05}{p_end}
+{phang2}{cmd:. cge_variable IRULE = IADJ / (Q / base(Q))^2}{p_end}
+{phang2}{cmd:. cge_closure, swap(IRULE IADJ)}{p_end}
+{phang2}{cmd:. program define tariff_cut}{p_end}
+{phang2}{cmd:  1.     args t}{p_end}
+{phang2}{cmd:  2.     if `t' == 2022 cge_shock tm, value(0)}{p_end}
+{phang2}{cmd:  3. end}{p_end}
+{phang2}{cmd:. cge_dynamic, name(tq) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.10) growth(lab:0.02) shocks(tariff_cut) foresight}{p_end}
 
 {pstd}Setup: the SYNTHETIC SAM with a health sector and a social health
 insurance fund, which donors abroad help to finance{p_end}
@@ -175,9 +235,16 @@ contributions to the insurance fund ({cmd:trshir}) from 2022:{p_end}
 {p2col 5 16 20 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}name of the run{p_end}
 {synopt:{cmd:r(sims)}}simulations of the run, in period order{p_end}
+{synopt:{cmd:r(foresight)}}{cmd:foresight} for a run with perfect foresight{p_end}
 
 
-{title:Reference}
+{title:References}
+
+{phang}
+Lau, M. I., A. Pahlke, and T. F. Rutherford (2002). Approximating
+infinite-horizon models in a complementarity format: a primer in dynamic
+general equilibrium analysis. Journal of Economic Dynamics and Control 26:
+577-609.
 
 {phang}
 Thurlow, J. (2004). A dynamic computable general equilibrium (CGE) model for

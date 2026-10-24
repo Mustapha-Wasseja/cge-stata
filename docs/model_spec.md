@@ -905,6 +905,50 @@ Period $t$ is then solved from the solution of $t-1$. Scenarios that change
 policy should reuse the baseline's $\lambda_t$, so that efficiency does not
 respond to the scenario.
 
+### 10.6 Perfect foresight (from version 0.10.2)
+
+`cge_dynamic, foresight` sets the exogenous path period by period first:
+`_cge_fs_advance()` makes steps 2 to 4 without the effect of deaths, the shocks
+program runs, and `_cge_fs_record()` makes step 7 with rates or a baseline and
+keeps the parameters and fixed values of the period (`FS.P`, `FS.X`). The
+states (`_cge_fs_states()`), kind 1 the capital stocks (`QF` by activity for a
+specific factor, `QFS` for a mobile one), 2 and 3 the domestic and foreign
+debt, 4 the efficiency index $\Lambda_t$ of growth targets, 5 the population
+ratio $\rho_t$ and 6 the ratio $\mu_{f,t}$ of the workers of each death factor
+to their exogenous path, enter the period through `_cge_fs_map()`: capital
+stocks as fixed values, debt as `ddebt` and `fdebt`, $ad\,\Lambda_t$, $\gamma$,
+$\gamma^h$, `hs0` and `pop` times $\rho_t$, and the death factors' fixed
+supplies and `qlf` times $\mu_{f,t}$. `_cge_fs_phi()` gives the updates from
+period $t-1$ with their derivatives: step 1, step 5, and
+$\rho_t = \rho_{t-1}(1 + g_P + e_{t-1})/(1 + g_P)$,
+$\mu_{f,t} = \mu_{f,t-1}(1 + g_f + \kappa e_{t-1})/(1 + g_f)$ with
+$e_{t-1} = mort0 - mort\,(HS_{t-1}/hs0_{t-1})^{epsm}$ and
+$\kappa = deathshare/workingage$. A shock in period $t$ to a capital or debt
+state is $s_t = a_t + b_t \tilde s_t$ (`FS.sa`, `FS.sb`), found by
+`_cge_fs_probe()` from two runs of the shocks program; with growth targets
+`ad`, and with a death rate $\gamma$, $\gamma^h$, `hs0`, `pop` and the death
+factors' supplies and `qlf`, may not be shocked, and the closure and
+constraints stay fixed (`_cge_fs_shockcheck()`, error 198).
+
+The stacked unknowns are the free variables of the full system of every
+period (scaled) and the states of every period after the first (scaled by
+their base value or 1); the equations are each period's scaled residuals
+(`_cge_F()`, with `p.xlag`, `p.xlead` and `p.tinfo` set by `_cge_fs_build()`)
+and the updates, $(s_t - a_t - b_t \Phi)/scale$, or for $\Lambda_t$ the target
+$(VA_t - (1 + g^Y_t) VA_{t-1})/VA^0$. Beyond the last period $T$,
+`lead(V, k)` is $V_T$ (constant), $V_T (V_T/V_{T-1})^{t+k-T}$ (growth, with a
+factor of 1 where either value is zero) or the base. `_cge_fs_jac()` gives the
+Jacobian: `_cge_jac_trip()` with the capital stocks as columns after the free
+ones, central differences ($h = 10^{-6}\max(1, |s|)$) for states of kinds 2
+to 6, `_cge_fs_ucross()` for the user equations with respect to lagged and
+later values (codes $pos + k\,n_x$ for lags and $pos + (4 + k)\,n_x$ for leads
+in `_cge_u_dvalue()`), and the derivatives of the updates. `_cge_fs_newton()`
+solves the stacked system with a line search and the sparse LU (external
+`cge__slu_fs`), from a recursive run whose periods expect the next to repeat
+the one before (`_cge_fs_warm()`) or from the base; constraints settle their
+regimes by period as in Section 16.3. Each period is stored with method
+`foresight`.
+
 ## 11. Link to household surveys (from version 0.2.2)
 
 `cge_microsim` passes the results of a simulation to household survey data,
@@ -1886,6 +1930,16 @@ the base (`_cge_u_build()`) a lagged value is the base value; a defined
 variable that refers to its own lag is an error. `cge_gams` declares a
 parameter `LAGk_V` for each lagged element at its base value, and each period
 sets those that differ from the period before (`_cge_u_lags()`).
+
+**Leads and the period (from version 0.10.2).** `lead(V[(e)][, k])`
+compiles to a postfix row of type 11, its value `p.xlead[pos, k]`
+(`_cge_u_leadval()`), the base without one; `tperiod`, `tfirst` and `tlast`
+to type 12 with code 1 to 3, the value `p.tinfo[code]` (`_cge_u_tval()`), 0
+without one. Within a period both have derivative 0; across the periods of a
+run with foresight see Section 10.6. A recursive run with leads is error 198,
+and so is the period in a condition, which is evaluated once, at the base.
+`cge_gams` declares `LEADk_V` as it does `LAGk_V`, and the scalars `TPERIOD`,
+`TFIRST` and `TLAST`; recursive runs set `p.tinfo` too.
 
 **Replacing built-in equations (from version 0.9.3).** `cge_equation NAME[(i[,j])]:
 lhs = rhs, replace(B)` (or `replace(B(e1[,e2]))` without an index) stores

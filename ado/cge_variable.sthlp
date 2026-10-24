@@ -34,7 +34,10 @@ only for the elements that meet it; see {it:Conditions} in
 {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}, as in {cmd:X(c,h)}; see
 {it:Two indexes and sets of pairs} in {helpb cge_equation}. From version
 0.9.2, an expression may use the values of earlier periods of a dynamic run,
-{cmd:lag(}{it:VAR}{cmd:)}; see {it:Lags} in {helpb cge_equation}.
+{cmd:lag(}{it:VAR}{cmd:)}, and from version 0.10.2 those of later periods of a
+run with perfect foresight, {cmd:lead(}{it:VAR}{cmd:)}, and the period,
+{cmd:tperiod}, {cmd:tfirst} and {cmd:tlast}; see {it:Lags} in
+{helpb cge_equation}.
 
 {pstd}
 From version 0.9.0, {opt lower(#)} and {opt upper(#)} hold a defined variable

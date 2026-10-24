@@ -1,13 +1,15 @@
-\chapter{Recursive dynamics}\label{chap:dynamics}
+\chapter{Dynamics}\label{chap:dynamics}
 
 A dynamic run of \manref{cge_dynamic} solves the static model of
 chapters~\ref{chap:equations} to~\ref{chap:calibration} for periods
-$t = 0, 1, \dots, T$. Period 0 is the calibrated base. Agents do not look
-ahead: each period is an equilibrium given the stocks and exogenous values of
-that period, which are updated from the previous period's solution. The
-updates follow the recursive dynamic extension of the standard model
-\citep{thurlow2004}; the rates are chosen by the user, and none has a default
-other than zero.
+$t = 0, 1, \dots, T$. Period 0 is the calibrated base. In a recursive run
+agents do not look ahead: each period is an equilibrium given the stocks and
+exogenous values of that period, which are updated from the previous period's
+solution. The updates follow the recursive dynamic extension of the standard
+model \citep{thurlow2004}; the rates are chosen by the user, and none has a
+default other than zero. A run with perfect foresight (from version 0.10.2,
+section~\ref{sec:foresight}) makes the same updates but solves the periods
+together, so that user equations may also look ahead.
 
 \section{Updates between periods}
 
@@ -99,3 +101,80 @@ earlier periods, \cmd{lag(VAR)} for $\V{VAR}_{t-1}$ and \cmd{lag(VAR, k)} for
 $\V{VAR}_{t-k}$, $k \le 4$ (section~\ref{sec:userlags}). Before the first
 period, the lagged values are those of the base. They extend the updates
 between periods above with stocks and adjustment rules of the user's own.
+
+\section{Perfect foresight}\label{sec:foresight}
+
+From version 0.10.2, \manref{cge_dynamic}, \cmd{foresight}, solves the
+periods of a run together, so that the equations of a period may refer to
+later periods: \cmd{lead(VAR)} for $\V{VAR}_{t+1}$ and \cmd{lead(VAR, k)} for
+$\V{VAR}_{t+k}$, $k \le 4$ (section~\ref{sec:userlags}). Agents then act on
+the path of prices and quantities that the run itself finds, as in the
+intertemporal models of \citet{lau2002}: a shock in a later period moves the
+earlier ones when it is known in advance.
+
+\textit{The exogenous path.} The updates above that do not depend on a
+solution, steps 2 to 4 and 7 with rates or a baseline, and the shocks of each
+period (step 6), are made period by period before anything is solved, so a
+shock stays in force in later periods as in a recursive run.
+
+\textit{The states.} What a recursive run carries from the solution of one
+period to the next becomes an unknown of each period after the first, a
+state, with its update as an equation: the capital stocks of step 1; the debt
+stocks of step 5; with growth targets, the efficiency index
+$\Lambda_t = \prod_{s \le t} \lambda_s$, with the target as its equation; and
+with a death rate, population and the labour supply of each factor that loses
+workers to deaths, relative to their exogenous paths, whose updates follow
+the deaths of the period before (section~\ref{sec:population}). In the first
+period the states are those of the base.
+
+\textit{Shocks to the states.} A shock to a capital or debt stock in period $t$
+is taken as an affine function of the stock before it,
+$s_t = a_t + b_t\,\tilde s_t$ for each element, where $\tilde s_t$ is the update
+from period $t - 1$: the shocks program is run twice for the period, from two
+values of the stocks, and $a_t$ and $b_t$ follow from the two results. A
+shock that sets a stock gives $b_t = 0$, one that scales it $a_t = 0$. With
+growth targets, efficiency may not be shocked; with a death rate, nor may the
+population parameters ($\gamma$, $\gamma^h$, $\V{HS}^0$, $\V{POP}$) or the
+supply and labour force of the factors that lose workers. The closure and the
+constraints are the same in every period.
+
+\textit{Terminal conditions.} Beyond the last period $T$, a lead takes the value
+of the last period, $\V{VAR}_{T+k} = \V{VAR}_T$ (\cmd{terminal(constant)}, the
+default); continues its growth in the last period,
+$\V{VAR}_{T+k} = \V{VAR}_T\,(\V{VAR}_T/\V{VAR}_{T-1})^k$
+(\cmd{terminal(growth)}), as on a balanced growth path; or is the base value
+(\cmd{terminal(base)}). Before the first period, a lag is the base value, as in
+a recursive run. An equation of its own in the last period, such as investment
+that keeps the capital stock growing at the rate of output, is written with
+\cmd{ifthen(tlast,} \ldots\cmd{)}: \cmd{tperiod} is the period, and \cmd{tfirst} and
+\cmd{tlast} are 1 in the first and the last period of a run and 0 otherwise
+(all three are 0 in a static simulation).
+
+\textit{The stacked system.} With $n$ equations in the full system of a period
+and $m$ states, the run is a system of $(T + 1)\,n + T m$ equations: the
+equations of each period, scaled, then the updates of the states,
+\begin{equation*}
+F_t\bigl(x_t;\; x_{t-4}, \dots, x_{t-1},\; x_{t+1}, \dots, x_{t+4},\; p(s_t)\bigr) = 0,
+\qquad
+s_t - a_t - b_t \,\Phi\bigl(s_{t-1}, x_{t-1}, p(s_{t-1})\bigr) = 0,
+\end{equation*}
+where $p(s)$ gives the parameters and fixed values of a period from its states
+and $\Phi$ is the update of step 1, 5 or section~\ref{sec:population}. It is
+solved by Newton's method with a line search and the sparse LU
+(section~\ref{sec:sparse}). Its Jacobian is exact within each period, with
+central differences for states that enter through parameters; across periods
+it has the derivatives of the user equations with respect to the values that
+\cmd{lag()} and \cmd{lead()} refer to, through the terminal condition beyond
+the last period, and the derivatives of the updates, the allocation of new
+capital to specific factors included. Newton's method starts from a recursive
+run in which the later periods are expected to repeat the one before
+(\cmd{start(recursive)}, the default), or from the base in every period
+(\cmd{start(base)}).
+
+Without leads, the stacked system has the recursive run as its solution: the
+test suite checks this to $10^{-9}$ for capital mobile and specific, growth
+targets, public debt, deaths and lags, with shocks to capital and debt, from
+either start. Each period of a run with foresight is stored as an ordinary
+simulation with the values of the periods around it, so that it can be
+solved again on its own, by Stata or by GAMS (\manref{cge_gams},
+\cmd{dynamic()}), which the test suite and the GAMS check do.

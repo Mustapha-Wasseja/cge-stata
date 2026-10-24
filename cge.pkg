@@ -1,7 +1,7 @@
 v 3
 d cge -- Computable general equilibrium (CGE) modelling in Stata
 d
-d Builds, calibrates and solves static and recursive dynamic, single-country CGE models
+d Builds, calibrates and solves static and dynamic (recursive or perfect-foresight) single-country CGE models
 d from a social accounting matrix, using Stata and Mata: CES or
 d Cobb-Douglas value added, CET exports, Armington imports,
 d households, government, savings-investment and the rest of the

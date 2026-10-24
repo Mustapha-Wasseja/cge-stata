@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.10.1 implements the standard single-country model described in
+Version 0.10.2 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,14 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.10.2 adds perfect foresight: `cge_dynamic, foresight` solves the
+periods of a run together, with `lead()` in user equations for the values of
+later periods, a terminal condition beyond the last
+(`terminal(constant|growth|base)`) and `tperiod`, `tfirst` and `tlast` for
+equations of their own in a period. Capital stocks, public debt, efficiency
+under growth targets and, with a death rate, population become states of the
+stacked system, solved by Newton's method with the sparse LU; without leads it
+gives the recursive run.
 Version 0.10.1 adds a sparse LU for Newton's steps, `cge_options,
 linsolver(sparse|auto)` or `cge_solve, sparse`: a pivot order chosen once by
 Markowitz's rule with threshold pivoting, the rows with many entries in a small

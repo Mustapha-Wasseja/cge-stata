@@ -1,0 +1,32 @@
+. program define tariff_from4
+  1.     args t
+  2.     if `t' == 4 cge_shock tm, value(0)
+  3. end
+
+. local settings capital(cap) depreciation(0.05) rental(0.10) growth(lab:0.02) foresight
+
+. quietly cge_dynamic, name(fsbase) periods(0/10) `settings'
+
+. cge_dynamic, name(fscut) periods(0/10) `settings' shocks(tariff_from4)
+Parameter tm changed for 3 element(s)
+Perfect foresight: 11 periods of 96 equations and 1 state(s), 1066 equations in all
+Start: a recursive run, 11 of 11 period(s) solved
+Iteration 0: largest scaled residual =  2.63e-02
+Iteration 1: largest scaled residual =  1.35e-02
+Iteration 2: largest scaled residual =  3.12e-05
+Iteration 3: largest scaled residual =  5.65e-10
+Iteration 4: largest scaled residual =  1.42e-15
+Period 0: largest scaled residual  1.11e-15
+Period 1: largest scaled residual  1.11e-15
+Period 2: largest scaled residual  1.14e-15
+Period 3: largest scaled residual  1.42e-15
+Period 4: largest scaled residual  9.47e-16
+Period 5: largest scaled residual  1.02e-15
+Period 6: largest scaled residual  1.03e-15
+Period 7: largest scaled residual  8.12e-16
+Period 8: largest scaled residual  1.11e-15
+Period 9: largest scaled residual  7.11e-16
+Period 10: largest scaled residual  7.77e-16
+Solved together in 4 iteration(s)
+Dynamic run fscut with perfect foresight stored as simulations: fscut0 fscut1 fscut2 fscut3 fscut4 f
+> scut5 fscut6 fscut7 fscut8 fscut9 fscut10

@@ -1,0 +1,53 @@
+. cge_synthetic, clear
+(16 vars, 15 obs)
+
+Synthetic SAM loaded (standard layout): 15 accounts, total   1743.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 15 accounts, total 1743
+Largest row-column imbalance:  0.00e+00
+
+. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+>     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+Accounts mapped: 3 activities, 3 commodities, 2 factors, 1 households, 0 enterprises, 0 margin accou
+> nts
+
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+Calibrated: 93 equations, 93 free variables
+Benchmark replication: largest scaled residual  3.55e-16
+
+. cge_closure, savinv(investment)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   investment
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+
+. cge_variable RK = W(cap) / CPI
+User variable RK: 1 element(s), base value 1
+and its definition, equation RK
+
+. cge_variable Q, value(10)
+User variable Q: 1 element(s), base value 10
+Add the equations that determine it with cge_equation
+
+. cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05
+User equation qeq: 1 element(s)
+
+. cge_variable IRULE = IADJ / (Q / base(Q))^2
+User variable IRULE: 1 element(s), base value 1
+and its definition, equation IRULE
+
+. cge_closure, swap(IRULE IADJ)
+Closure
+  external account     flexexr
+  government           flexgsav
+  savings-investment   investment
+  numeraire            cpi
+  factor lab           mobile
+  factor cap           mobile
+  swap                 IRULE fixed, IADJ free

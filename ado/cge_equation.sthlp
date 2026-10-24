@@ -92,6 +92,8 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, those of
 {p2col:{cmd:sum(}{it:map}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over the pairs of a set of pairs defined by {helpb cge_set} (from version 0.9.1){p_end}
 {p2col:{cmd:ord(}{it:i}{cmd:)}}the position of the element of index {it:i} in its set, from 1 (from version 0.7.2){p_end}
 {p2col:{cmd:lag(}{it:VAR}[{cmd:(}{it:e}{cmd:)}][{cmd:,} {it:k}]{cmd:)}}the value of a variable {it:k} periods before, 1 to 4, 1 if omitted; the base outside dynamic runs (from version 0.9.2){p_end}
+{p2col:{cmd:lead(}{it:VAR}[{cmd:(}{it:e}{cmd:)}][{cmd:,} {it:k}]{cmd:)}}the value of a variable {it:k} periods after, 1 to 4, in a run with perfect foresight; the base in a static simulation (from version 0.10.2){p_end}
+{p2col:{cmd:tperiod}, {cmd:tfirst}, {cmd:tlast}}the period of a dynamic run, and 1 in its first or last period, else 0; all 0 in a static simulation (from version 0.10.2){p_end}
 {p2col:{cmd:card(}{it:set}{cmd:)}}the number of elements of a model or user set, or of pairs of a set of pairs (from version 0.9.7){p_end}
 {p2colreset}{...}
 
@@ -221,6 +223,31 @@ depend on itself; give it {opt value()} and an equation instead. The lagged
 values are stored with each period, and {helpb cge_gams} writes them as
 parameters, {cmd:LAG1_}{it:VAR}, that each period of a dynamic run sets.
 
+{pstd}
+From version 0.10.2, {cmd:lead(}{it:VAR}{cmd:)} and
+{cmd:lead(}{it:VAR}{cmd:(}{it:e}{cmd:),} {it:k}{cmd:)} are the values of later
+periods, {it:VAR}{cmd:(t+1)} and {it:VAR}{cmd:(t+}{it:k}{cmd:)}, in a run with
+perfect foresight ({helpb cge_dynamic}, {opt foresight}), which solves the
+periods together; beyond the last period they follow the run's
+{opt terminal()} condition. A recursive run cannot have them. In a static
+simulation they are the base values. For example, the value of a unit of
+capital that earns the real rental rate and depreciates at 5 per cent, at an
+interest rate of 5 per cent:
+
+{phang2}{cmd:. cge_variable RK = W(cap) / CPI}{p_end}
+{phang2}{cmd:. cge_variable Q, value(10)}{p_end}
+{phang2}{cmd:. cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05}{p_end}
+
+{pstd}
+{cmd:tperiod} is the period, and {cmd:tfirst} and {cmd:tlast} are 1 in the
+first and in the last period of a dynamic run and 0 otherwise; all three are
+0 in a static simulation. An equation of its own for the last period, a
+terminal condition, is written with {cmd:ifthen(tlast,} {it:x}{cmd:,}
+{it:y}{cmd:)}. They may not be used in conditions ({cmd:$}), which are
+evaluated once, at the base. {helpb cge_gams} writes values of later periods
+as parameters {cmd:LEAD1_}{it:VAR}, and the period as {cmd:TPERIOD},
+{cmd:TFIRST} and {cmd:TLAST}.
+
 
 {title:Functions and macros}
 
@@ -231,7 +258,7 @@ square system solves, and macros, as GAMS's {cmd:$macro}:
 {p2colset 9 40 42 2}{...}
 {p2col:{cmd:max(}{it:x}{cmd:,} {it:y}[{cmd:,} ...]{cmd:)}, {cmd:min()}}the largest or smallest of two or more arguments{p_end}
 {p2col:{cmd:abs(}{it:x}{cmd:)}, {cmd:sqr(}{it:x}{cmd:)}, {cmd:log10(}{it:x}{cmd:)}}the absolute value, the square and the logarithm to base 10{p_end}
-{p2col:{cmd:ifthen(}{it:condition}{cmd:,} {it:x}{cmd:,} {it:y}{cmd:)}}{it:x} where the condition holds, else {it:y}; the condition uses parameters, lags and numbers{p_end}
+{p2col:{cmd:ifthen(}{it:condition}{cmd:,} {it:x}{cmd:,} {it:y}{cmd:)}}{it:x} where the condition holds, else {it:y}; the condition uses parameters, lags, leads, the period and numbers{p_end}
 {p2col:{cmd:prod(}{it:i}[{cmd:$(}{it:condition}{cmd:)}]{cmd:,} {it:expression}{cmd:)}}the product over a set, 1 if no element meets the condition{p_end}
 {p2col:{cmd:smax(}{it:i}[{cmd:$(}{it:condition}{cmd:)}]{cmd:,} {it:expression}{cmd:)}, {cmd:smin()}}the largest or smallest value over a set{p_end}
 {p2col:{cmd:card(}{it:set}{cmd:)}}the number of elements or pairs of a set{p_end}

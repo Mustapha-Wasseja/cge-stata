@@ -109,7 +109,7 @@ numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
 \cmd{( )} & grouping\\
 \cmd{exp()}, \cmd{ln()} or \cmd{log()}, \cmd{sqrt()} & functions\\
 \cmd{max()}, \cmd{min()}, \cmd{abs()}, \cmd{sqr()}, \cmd{log10()} & functions of GAMS: the largest and smallest of two or more arguments, the absolute value, the square and the logarithm to base 10 (from version 0.9.7)\\
-\cmd{ifthen(}\argu{condition}\cmd{,} \argu{x}\cmd{,} \argu{y}\cmd{)} & \argu{x} where the condition holds, else \argu{y}; the condition uses parameters, lags and numbers (from version 0.9.7)\\
+\cmd{ifthen(}\argu{condition}\cmd{,} \argu{x}\cmd{,} \argu{y}\cmd{)} & \argu{x} where the condition holds, else \argu{y}; the condition uses parameters, lags, leads, the period and numbers (from version 0.9.7)\\
 \argu{VAR}, \argu{VAR}\cmd{(}\argu{e}\cmd{)}, \argu{VAR}\cmd{(}\argu{e1}\cmd{,} \argu{e2}\cmd{)}
   & a model or user variable at an element, given by its label, such as
     \cmd{com_hlt}, or by the index of the equation or of a sum\\
@@ -125,6 +125,8 @@ numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
 \argu{macro}\cmd{(}\argu{x}\cmd{,} \dots\cmd{)} & a macro defined by \manref{cge_macro}, written out (from version 0.9.7)\\
 \cmd{ord(}\argu{i}\cmd{)} & the position of the element of index \argu{i} in its set, from 1\\
 \cmd{lag(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}][\cmd{,} \argu{k}]\cmd{)} & the value of a variable $k$ periods before, $k$ from 1 to 4, 1 if omitted (from version 0.9.2)\\
+\cmd{lead(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}][\cmd{,} \argu{k}]\cmd{)} & the value of a variable $k$ periods after, in a run with perfect foresight (from version 0.10.2)\\
+\cmd{tperiod}, \cmd{tfirst}, \cmd{tlast} & the period of a dynamic run, and 1 in its first or last period, else 0 (from version 0.10.2)\\
 \cmd{sum(}\argu{i}\cmd{$(}\argu{condition}\cmd{),} \argu{expression}\cmd{)} & the sum over the elements for which the condition holds\\
 \argu{term}\cmd{$(}\argu{condition}\cmd{)} & the term where the condition holds, else 0\\
 \end{cgetable}
@@ -227,6 +229,20 @@ and partial adjustment that the model does not update itself from one period
 to the next (Example 8). A defined variable may not refer to its own lag,
 since its base value would depend on itself: it is given \opt{}{value()} and an
 equation instead.
+
+From version 0.10.2, \cmd{lead(}\argu{VAR}\cmd{)} and
+\cmd{lead(}\argu{VAR}\cmd{(}\argu{e}\cmd{),} \argu{k}\cmd{)} are the values of
+later periods, \argu{VAR}\cmd{(t+1)} and \argu{VAR}\cmd{(t+}\argu{k}\cmd{)}, in
+a run with perfect foresight (\manref{cge_dynamic}, \cmd{foresight}), which
+solves the periods together: a lag or a lead is then a variable of another
+period. Beyond the last period a lead follows the run's \cmd{terminal()}
+condition; in a static simulation it is the base value, and a recursive run
+with leads is an error. \cmd{tperiod} is the period, and \cmd{tfirst} and
+\cmd{tlast} are 1 in the first and in the last period of a dynamic run and 0
+otherwise (all three are 0 in a static simulation), so that
+\cmd{ifthen(tlast, }\argu{x}\cmd{, }\argu{y}\cmd{)} gives the last period an
+equation of its own, a terminal condition. Conditions (\cmd{\$}) are
+evaluated once, at the base, and may not use the period.
 
 \cgesubsec{Replacing built-in equations}
 

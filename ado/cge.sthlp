@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.10.1  24oct2026}{...}
+{* *! version 0.10.2  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -63,7 +63,7 @@ debt with interest.
 {p2col:{helpb cge_options}}settings of the solver: the dense or sparse LU{p_end}
 {p2col:{helpb cge_optimize}}choose instruments to maximise an outcome or reach targets{p_end}
 {p2col:{helpb cge_loop}}solve the model for a list or grid of scenarios{p_end}
-{p2col:{helpb cge_dynamic}}solve a recursive dynamic run, period by period{p_end}
+{p2col:{helpb cge_dynamic}}solve a dynamic run, recursive or with perfect foresight{p_end}
 {p2col:{helpb cge_results}}display or save all results of a simulation{p_end}
 {p2col:{helpb cge_report}}standard report tables, to screen, Stata or Excel{p_end}
 {p2col:{helpb cge_dynresults}}results of a dynamic run, against a baseline{p_end}

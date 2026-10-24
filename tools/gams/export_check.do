@@ -480,7 +480,7 @@ program define _tariff_cut
     args t
     if `t' == 2 cge_shock tm, value(0)
 end
-foreach case in dyninst dynhealth dyndebt dynlag {
+foreach case in dyninst dynhealth dyndebt dynlag dynfore {
     display as text _n "{hline 60}" _n "Case " as result "`case'"
     if "`case'" == "dyninst" {
         * LES demand, whose subsistence quantities grow with population
@@ -529,6 +529,27 @@ foreach case in dyninst dynhealth dyndebt dynlag {
         cge_variable D2 = QA(act_man) - lag(QA(act_man), 2)
         quietly cge_dynamic, name(dynlag) periods(0/4) capital(cap) depreciation(0.05) rental(0.15) ///
             growth(lab:0.02) tfp(0.01) shocks(_tariff_cut)
+    }
+    else if "`case'" == "dynfore" {
+        * perfect foresight (version 0.10.2): investment-driven savings with
+        * investment that follows Tobin's q, which looks a period ahead, and a
+        * tariff cut in period 2 known from the start; the period in a user
+        * variable; leads beyond the last period continue its growth. GAMS
+        * solves each period with the values of the periods around it that
+        * the run found.
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        quietly cge_closure, savinv(investment)
+        cge_variable RK = W(cap) / CPI
+        cge_variable Q, value(10)
+        cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05
+        cge_variable IRULE = IADJ / (Q / base(Q))^2
+        quietly cge_closure, swap(IRULE IADJ)
+        cge_variable TP = tperiod + 10 * tfirst + 100 * tlast
+        quietly cge_dynamic, name(dynfore) periods(0/4) capital(cap) depreciation(0.05) rental(0.10) ///
+            growth(lab:0.02) shocks(_tariff_cut) foresight terminal(growth)
     }
     if "`phase'" == "export" {
         cge_gams using `"`dir'/`case'"', dynamic(`case') replace

@@ -57,3 +57,35 @@ cge_dynamic, name(hbase) periods(0/4) `settings'
 *>> dyn_health
 cge_report, run(hbase) tables(factors health)
 *<<
+
+*>> dyn_fs_setup
+cge_synthetic, clear
+cge_sam, labels(account)
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)       ///
+    dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_closure, savinv(investment)
+cge_variable RK = W(cap) / CPI
+cge_variable Q, value(10)
+cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05
+cge_variable IRULE = IADJ / (Q / base(Q))^2
+cge_closure, swap(IRULE IADJ)
+*<<
+
+*>> dyn_fs_run
+program define tariff_from4
+    args t
+    if `t' == 4 cge_shock tm, value(0)
+end
+local settings capital(cap) depreciation(0.05) rental(0.10) growth(lab:0.02) foresight
+quietly cge_dynamic, name(fsbase) periods(0/10) `settings'
+cge_dynamic, name(fscut) periods(0/10) `settings' shocks(tariff_from4)
+*<<
+
+*>> dyn_fs_compare
+cge_dynresults, run(fscut) baseline(fsbase) clear
+format value baseline %9.4f
+format dev_pct %9.3f
+list period value baseline dev_pct if variable == "IADJ", noobs sep(0)
+*<<
