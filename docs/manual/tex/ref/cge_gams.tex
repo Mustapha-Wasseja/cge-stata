@@ -57,6 +57,7 @@ cge_gams using gams_base, dynamic(base)
 \optgroup{Scenario}
 \optarg{}{sim}{name} & export the shocks and closure of a stored simulation\\
 \optarg{dyn}{amic}{name} & export every period of a dynamic run\\
+\optarg{}{loop}{name} & export every scenario of a loop (from version 0.9.9)\\
 \opt{}{replace} & replace the files of an earlier export\\
 \optgroup{GAMS}
 \opt{}{run} & solve the exported model in GAMS\\
@@ -90,6 +91,13 @@ where \argu{sim} is the period's simulation, such as \cmd{base2025}, and the
 driver solves the periods in order, each from the solution of the one before.
 The periods must have the same closure, and runs with constraints are not
 exported.
+
+\item[\optarg{}{loop}{name}] (from version 0.9.9) exports the scenarios of a
+loop of \manref{cge_loop} in the same way: the changes of each scenario from
+the one before, solved in order from the solution before, as \cmd{cge_loop}
+solves them, with each scenario compared with Stata's by \opt{}{compare}. The
+scenarios must have converged, under the same closure and without
+constraints.
 
 \item[\opt{}{replace}] allows the files of an earlier export in \argu{folder}
 to be replaced. The folder, and any parent folder, is created if it does not
@@ -337,6 +345,7 @@ scaled residual of the model's equations in Stata is below $10^{-8}$
 \seeentry{cge_solve}{Solve the model}
 \seeentry{cge_constraint}{Limits that bind in some scenarios and not in others}
 \seeentry{cge_dynamic}{Solve a recursive dynamic run}
+\seeentry{cge_loop}{Solve the model for a list or grid of scenarios}
 \seeentry{cge_results}{Report simulation results}
 \seechapter{chap:gams}{The GAMS implementation}
 \end{alsosee}

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.8  24oct2026}{...}
+{* *! version 0.9.9  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_gams} {helpb using} {it:folder}
-[{cmd:,} {opt sim(name)} {opt dyn:amic(name)} {opt replace} {opt run} {opt compare} {opt noexport}
+[{cmd:,} {opt sim(name)} {opt dyn:amic(name)} {opt loop(name)} {opt replace} {opt run} {opt compare} {opt noexport}
 {opt gams(path)} {opt solver(name)} {opt type(cns|nlp|mcp)} {opt imp:ort(name)}]
 
 
@@ -91,6 +91,14 @@ period's simulation, for example {cmd:cge_dn1_par.inc} and {cmd:cge_dn1_var.inc}
 the driver solves the periods in order, each from the solution of the one
 before. With {opt compare}, every period is compared with Stata's. Runs with
 constraints are not exported.
+
+{phang}
+{opt loop(name)} (from version 0.9.9) exports the scenarios of a loop of
+{helpb cge_loop} as the periods of a run: the changes of each scenario from the
+one before, which GAMS solves in order, each from the solution of the one
+before, as {cmd:cge_loop} does. With {opt compare}, every scenario is compared
+with Stata's. Its scenarios must have converged, under the same closure and
+without constraints.
 
 {phang}
 {opt import(name)} (from version 0.6.2) stores the GAMS solution of the

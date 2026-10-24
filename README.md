@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.9.8 implements the standard single-country model described in
+Version 0.9.9 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,10 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.9.9 adds scenario loops, as GAMS's loops and GUSS: `cge_loop,
+name(tariff) values(tm(com_man) = 0(0.05)0.3) measures(YG)` solves each
+scenario from the one before, stores it, collects measures and returns the
+results as a dataset; `cge_gams, loop()` writes the loop for GAMS.
 Version 0.9.8 adds GAMS's attributes of variables, `cge_bound` (`.lo`,
 `.up`, `.scale`, `.l`, `.fx`); the solution listing with bounds and marginals,
 `cge_listing, solution`; and shadow prices of targets and constraints, and

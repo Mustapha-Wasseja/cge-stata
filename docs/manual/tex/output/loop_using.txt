@@ -1,0 +1,35 @@
+. clear
+
+. input str8 scenario str14 target double value
+
+      scenario          target       value
+  1. "cut"    "tm(com_man)"  0.5
+  2. "cut"    "tm(com_agr)"  0.5
+  3. "spend"  "qg(com_ser)"  1.1
+  4. end
+
+. list, noobs
+
+  +--------------------------------+
+  | scenario        target   value |
+  |--------------------------------|
+  |      cut   tm(com_man)      .5 |
+  |      cut   tm(com_agr)      .5 |
+  |    spend   qg(com_ser)     1.1 |
+  +--------------------------------+
+
+. tempfile sc
+
+. quietly save `sc'
+
+. cge_loop using `sc', name(policy) scale measures(YG, welfare equivalent_variation hhd)
+
+Loop policy: 2 scenario(s) over 3 target(s), each from the solution before
+----------------------------------------------------------------------------
+Scenario      tm(com_man)    tm(com_agr)    qg(com_ser) converged iterations
+----------------------------------------------------------------------------
+cut                   .05            .05             40       yes          6
+spend                  .1             .1             44       yes          6
+----------------------------------------------------------------------------
+All scenarios converged, in 12 iterations in all
+Stored as simulations policy1 to policy2

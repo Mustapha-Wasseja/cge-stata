@@ -1,0 +1,39 @@
+. cge_loop, name(two) values(tm(com_man) = 0 0.1 0.2; tm(com_agr) = 0 0.1) grid keep(QM) clear
+
+Loop two: 6 scenario(s) over 2 target(s), each from the solution before
+-------------------------------------------------------------
+Scenario      tm(com_man)    tm(com_agr) converged iterations
+-------------------------------------------------------------
+1                       0              0       yes          7
+2                       0             .1       yes          6
+3                      .1              0       yes          7
+4                      .1             .1       yes          6
+5                      .2              0       yes          6
+6                      .2             .1       yes          6
+-------------------------------------------------------------
+All scenarios converged, in 38 iterations in all
+Stored as simulations two1 to two6
+
+. list scenario t1 t2 element1 value if element1 != "com_ser", noobs sepby(scenario)
+
+  +-------------------------------------------+
+  | scenario   t1   t2   element1       value |
+  |-------------------------------------------|
+  |        1    0    0    com_agr   22.236866 |
+  |        1    0    0    com_man   63.002825 |
+  |-------------------------------------------|
+  |        2    0   .1    com_agr   19.178956 |
+  |        2    0   .1    com_man   64.302979 |
+  |-------------------------------------------|
+  |        3   .1    0    com_agr   23.142801 |
+  |        3   .1    0    com_man   58.694717 |
+  |-------------------------------------------|
+  |        4   .1   .1    com_agr          20 |
+  |        4   .1   .1    com_man          60 |
+  |-------------------------------------------|
+  |        5   .2    0    com_agr   23.982564 |
+  |        5   .2    0    com_man   54.784406 |
+  |-------------------------------------------|
+  |        6   .2   .1    com_agr   20.764403 |
+  |        6   .2   .1    com_man   56.088134 |
+  +-------------------------------------------+

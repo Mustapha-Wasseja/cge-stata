@@ -1,4 +1,4 @@
-*! cge_gams.ado  v0.9.8  2026-10-24
+*! cge_gams.ado  v0.9.9  2026-10-24
 *! cge-stata: write the model and a scenario as a GAMS program, and
 *! optionally solve it in GAMS and compare the results (docs/gams.md)
 *!
@@ -7,20 +7,25 @@
 
 program define cge_gams, rclass
     version 13.0
-    syntax using/ [, SIM(name) DYNamic(name) REPLACE RUN COMPARE NOEXPORT GAMS(string) SOLVER(name) TYPE(name) ///
-        IMPort(name)]
+    syntax using/ [, SIM(name) DYNamic(name) LOOP(name) REPLACE RUN COMPARE NOEXPORT GAMS(string) SOLVER(name) ///
+        TYPE(name) IMPort(name)]
 
     _cge_load
-    if "`sim'" != "" & "`dynamic'" != "" {
-        display as error "give sim() for a static simulation or dynamic() for a dynamic run, not both"
+    if ("`sim'" != "") + ("`dynamic'" != "") + ("`loop'" != "") > 1 {
+        display as error "give sim() for a static simulation, dynamic() for a dynamic run or loop() for a loop, one of them"
         exit 198
     }
+    * a loop of cge_loop (from version 0.9.9): its scenarios are written and
+    * compared as the periods of a run
+    local isloop = ("`loop'" != "")
+    if `isloop' local dynamic `loop'
+
     if "`compare'" != "" & "`sim'" == "" & "`dynamic'" == "" {
         display as error "compare needs sim() or dynamic(): the stored simulation or dynamic run whose results GAMS should reproduce"
         exit 198
     }
     * The periods of a dynamic run (from version 0.5.3)
-    if "`dynamic'" != "" mata: _cge_run_sims_local("`dynamic'", "periods")
+    if "`dynamic'" != "" mata: _cge_run_sims_local("`dynamic'", "periods", `isloop')
     if "`noexport'" != "" & "`run'" == "" & "`compare'" == "" & "`import'" == "" {
         display as error "noexport uses the files already in the folder: give run, compare or import()"
         exit 198
@@ -81,7 +86,7 @@ program define cge_gams, rclass
                 }
             }
         }
-        if "`dynamic'" != "" mata: _cge_gams_export_dyn(st_local("dir"), "`dynamic'", "`solver'", "`type'")
+        if "`dynamic'" != "" mata: _cge_gams_export_dyn(st_local("dir"), "`dynamic'", "`solver'", "`type'", `isloop')
         else mata: _cge_gams_export(st_local("dir"), "`sim'", "`solver'", "`type'")
         return add
         * The GAMS model, installed with the package
@@ -92,7 +97,7 @@ program define cge_gams, rclass
         * The path that findfile leaves in r() is not a result
         mata: st_rclear()
         display as text "Files: " as result "`written'" _c
-        if "`dynamic'" != "" display as text " and the scenario files of each period"
+        if "`dynamic'" != "" display as text " and the files of each " cond(`isloop', "scenario", "period")
         else display
         if "`run'" == "" & "`compare'" == "" & "`import'" == "" {
             display as text "To solve it: " as result "gams cge_run.gms" as text " in that folder"
@@ -158,7 +163,7 @@ program define cge_gams, rclass
             as result "`results'"
         exit
     }
-    if "`dynamic'" != "" mata: _cge_gams_compare_dyn(st_local("dir"), "`dynamic'")
+    if "`dynamic'" != "" mata: _cge_gams_compare_dyn(st_local("dir"), "`dynamic'", `isloop')
     else mata: _cge_gams_compare(st_local("dir"), "`sim'")
     return add
 end

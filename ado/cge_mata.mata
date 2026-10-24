@@ -200,6 +200,8 @@ struct cge_model {
     // and the positions given a scale
     string matrix    bddef
     real colvector   bdlp, bdlv, bdup, bduv, bdsp, bdsv, bdcp
+    // scenario loops (from version 0.9.9): name, simulations and targets
+    string matrix    loopdef
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -217,7 +219,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.8")
+    return("0.9.9")
 }
 
 // =====================================================================
@@ -9078,9 +9080,16 @@ string colvector _cge_run_sims(struct cge_model scalar M, string scalar run)
     return(M.simname[s])
 }
 
-void _cge_run_sims_local(string scalar run, string scalar lname)
+void _cge_run_sims_local(string scalar run, string scalar lname, | real scalar isloop)
 {
-    st_local(lname, invtokens(_cge_run_sims(_cge_load(), run)'))
+    struct cge_model scalar M
+    M = _cge_load()
+    // the scenarios of loop run (from version 0.9.9)
+    if (args() > 2) if (isloop) {
+        st_local(lname, invtokens(M.simname[_cge_gams_periods(M, run, 1)]'))
+        return
+    }
+    st_local(lname, invtokens(_cge_run_sims(M, run)'))
 }
 
 // The results of a dynamic run as a dataset: one observation per period and
@@ -12753,8 +12762,13 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
 }
 
 // The periods of dynamic run run, in order (from version 0.5.3)
-real colvector _cge_gams_periods(struct cge_model scalar M, string scalar run)
+real colvector _cge_gams_periods(struct cge_model scalar M, string scalar run, | real scalar isloop)
 {
+    // the scenarios of loop run, in order (from version 0.9.9)
+    if (args() > 2) if (isloop) {
+        if (!rows(_cge_loop_sims(M, run))) _cge_fail("loop " + run + " not found", 111)
+        return(_cge_loop_sims(M, run))
+    }
     real colvector s
     s = _cge_which(M.simrun :== run)
     if (!rows(s)) _cge_fail("dynamic run " + run + " not found", 111)
@@ -12764,7 +12778,8 @@ real colvector _cge_gams_periods(struct cge_model scalar M, string scalar run)
 // A dynamic run (from version 0.5.3): the data, then for each period its
 // changes from the period before, which GAMS solves in order, each period
 // from the solution of the one before
-void _cge_gams_export_dyn(string scalar dir, string scalar run, string scalar solver, string scalar type)
+void _cge_gams_export_dyn(string scalar dir, string scalar run, string scalar solver, string scalar type,
+                          | real scalar isloop)
 {
     struct cge_model scalar M, M2
     struct cge_par scalar p, pprev
@@ -12773,16 +12788,21 @@ void _cge_gams_export_dyn(string scalar dir, string scalar run, string scalar so
     string colvector sims
     real scalar k, n, j
 
+    if (args() < 5) isloop = 0
     M = _cge_load()
     _cge_need(M, "calibrated")
-    s = _cge_gams_periods(M, run)
+    // the scenarios of a loop (from version 0.9.9) are exported as the periods
+    // of a run: each from the solution of the one before
+    s = _cge_gams_periods(M, run, isloop)
     cl = tokens(M.simclosure[s[1]])
     for (j = 1; j <= rows(s); j++) {
-        if (M.simclosure[s[j]] != M.simclosure[s[1]]) _cge_fail("the periods of " + run + " have different closures", 459)
+        if (M.simclosure[s[j]] != M.simclosure[s[1]]) _cge_fail("the " + (isloop ? "scenarios" : "periods") + " of " + run + " have different closures", 459)
         p = M.simp[s[j]]
         if (rows(M.bY) & rows(p.bmode) == rows(M.bY)) {
-            if (any(p.bmode :> 0)) _cge_fail("dynamic run " + run + " has constraints; cge_gams exports dynamic runs without them", 198)
+            if (any(p.bmode :> 0)) _cge_fail((isloop ? "loop " : "dynamic run ") + run + " has constraints; cge_gams exports " +
+                                             (isloop ? "loops" : "dynamic runs") + " without them", 198)
         }
+        if (isloop & !M.simconv[s[j]]) _cge_fail("scenario " + M.simname[s[j]] + " of loop " + run + " did not converge", 459)
     }
     M2 = M
     _cge_swap_parse(M2, _cge_swap_tokens(cl), fx, fr)
@@ -12808,7 +12828,7 @@ void _cge_gams_export_dyn(string scalar dir, string scalar run, string scalar so
         pprev = p
         xprev = x
     }
-    _cge_gams_driver_dyn(dir + "/cge_run.gms", run, sims, solver, type)
+    _cge_gams_driver_dyn(dir + "/cge_run.gms", run, sims, solver, type, isloop)
     st_numscalar("r(N_constraints)", 0)
     st_global("r(name)", run)
     st_global("r(sims)", invtokens(sims'))
@@ -12816,24 +12836,28 @@ void _cge_gams_export_dyn(string scalar dir, string scalar run, string scalar so
     st_numscalar("r(N_changes)", n)
     st_numscalar("r(N_periods)", rows(s))
     st_numscalar("r(N_accounts)", rows(M.labels))
-    printf("{txt}Wrote the model ({res}%f{txt} accounts) and the {res}%f{txt} periods of dynamic run {res}%s{txt} ({res}%f{txt} change(s) in all) to {res}%s\n",
-           rows(M.labels), rows(s), run, n, dir)
+    printf("{txt}Wrote the model ({res}%f{txt} accounts) and the {res}%f{txt} %s {res}%s{txt} ({res}%f{txt} change(s) in all) to {res}%s\n",
+           rows(M.labels), rows(s), (isloop ? "scenarios of loop" : "periods of dynamic run"), run, n, dir)
 }
 
 // The driver of a dynamic run: the base, then each period in order; GAMS
 // starts each period from the solution of the one before
 void _cge_gams_driver_dyn(string scalar fn, string scalar run, string colvector sims, string scalar solver,
-                          string scalar type)
+                          string scalar type, | real scalar isloop)
 {
     real scalar fh, j
+    string scalar what
+    if (args() < 6) isloop = 0
+    // a loop (from version 0.9.9): its scenarios in order, as GAMS's loop
+    what = (isloop ? "scenario" : "period")
     fh = _cge_gopen(fn)
-    fput(fh, char(36) + "title cge-stata dynamic run exported by cge_gams: " + run)
+    fput(fh, char(36) + "title cge-stata " + (isloop ? "loop" : "dynamic run") + " exported by cge_gams: " + run)
     fput(fh, char(36) + "ontext")
     fput(fh, "Written by cge_gams (cge-stata " + _cge_version() + "). GAMS calibrates the model from the")
-    fput(fh, "SAM and settings in cge_data.inc and solves the base, then the " + strofreal(rows(sims)) + " periods of")
-    fput(fh, "dynamic run " + run + " in order. The changes of each period from the one before,")
-    fput(fh, "parameters and closure then fixed variables, are in cge_<period>_par.inc and")
-    fput(fh, "cge_<period>_var.inc; each period is solved from the solution of the one")
+    fput(fh, "SAM and settings in cge_data.inc and solves the base, then the " + strofreal(rows(sims)) + " " + what + "s of")
+    fput(fh, (isloop ? "loop " : "dynamic run ") + run + " in order. The changes of each " + what + " from the one before,")
+    fput(fh, "parameters and closure then fixed variables, are in cge_<" + what + ">_par.inc and")
+    fput(fh, "cge_<" + what + ">_var.inc; each " + what + " is solved from the solution of the one")
     fput(fh, "before. The equations are in cge_model.gms (docs/model_spec.md). To run it:")
     fput(fh, "  gams cge_run.gms                                    " + solver + ", as " +
          (type == "nlp" ? "a nonlinear programme" : (type == "mcp" ? "a mixed complementarity problem" :
@@ -12849,7 +12873,7 @@ void _cge_gams_driver_dyn(string scalar fn, string scalar run, string colvector 
     fput(fh, char(36) + "include cge_constraints.inc")
     for (j = 1; j <= rows(sims); j++) {
         fput(fh, "")
-        fput(fh, "* Period " + sims[j] + ": changes from the period before, then the closure and fixed variables")
+        fput(fh, "* " + (isloop ? "Scenario " : "Period ") + sims[j] + ": changes from the " + what + " before, then the closure and fixed variables")
         fput(fh, char(36) + "include cge_" + sims[j] + "_par.inc")
         fput(fh, char(36) + "include cge_closure.gms")
         fput(fh, char(36) + "include cge_" + sims[j] + "_var.inc")
@@ -12862,7 +12886,7 @@ void _cge_gams_driver_dyn(string scalar fn, string scalar run, string colvector 
 }
 
 // Compares every period of dynamic run run with the GAMS results in dir
-void _cge_gams_compare_dyn(string scalar dir, string scalar run)
+void _cge_gams_compare_dyn(string scalar dir, string scalar run, | real scalar isloop)
 {
     struct cge_model scalar M
     transmorphic A
@@ -12871,6 +12895,7 @@ void _cge_gams_compare_dyn(string scalar dir, string scalar run)
     string scalar vb, vs, worstp
     real scalar k, i, j, status, bstatus, db, ds, nb, ns, worst, worststat, nall, walras, wmax
 
+    if (args() < 3) isloop = 0
     M = _cge_load()
     A = asarray_create()
     for (k = 1; k <= rows(M.vname); k++) {
@@ -12878,7 +12903,7 @@ void _cge_gams_compare_dyn(string scalar dir, string scalar run)
         pos = _cge_vpos(M, k)
         for (i = 1; i <= rows(pos); i++) asarray(A, M.vname[k] + "|" + e1[i] + "|" + e2[i], pos[i])
     }
-    s = _cge_gams_periods(M, run)
+    s = _cge_gams_periods(M, run, isloop)
     _cge_gams_read(dir + "/cge_base.csv", key, val, bstatus)
     db = _cge_gams_diff(M, A, key, val, M.x0, vb, nb)
     printf("{txt}GAMS model status: base {res}%g{txt}; base: {res}%f{txt} values compared, largest relative difference {res}%9.2e\n",
@@ -12893,8 +12918,8 @@ void _cge_gams_compare_dyn(string scalar dir, string scalar run)
         ds = _cge_gams_diff(M, A, key, val, M.simx[., s[j]], vs, ns)
         walras = .
         for (i = 1; i <= rows(key); i++) if (key[i] == "WALRAS||") walras = val[i]
-        printf("{txt}Period {res}%s{txt}: model status {res}%g{txt}, {res}%f{txt} values compared, largest relative difference {res}%9.2e{txt}%s\n",
-               M.simname[s[j]], status, ns, ds, (vs != "" ? " (" + vs + ")" : ""))
+        printf("{txt}%s {res}%s{txt}: model status {res}%g{txt}, {res}%f{txt} values compared, largest relative difference {res}%9.2e{txt}%s\n",
+               (isloop ? "Scenario" : "Period"), M.simname[s[j]], status, ns, ds, (vs != "" ? " (" + vs + ")" : ""))
         if (ds >= . | ds > worst) {
             worst = ds
             worstp = M.simname[s[j]]
@@ -16534,6 +16559,346 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
 }
 
 
+// =====================================================================
+// Scenario loops (from version 0.9.9)
+// =====================================================================
+
+// The scenarios of a loop from the long dataset in memory, with the variables
+// scenario, target and value: the scenarios and targets in the order they
+// first appear, and their values, missing where a scenario leaves a target
+// as it is. Kept in externals for _cge_loop.
+void _cge_loop_read()
+{
+    string colvector sc, tg, us, ut
+    real colvector v
+    real matrix V
+    real scalar i, a, b
+    pointer() scalar q
+    if (st_nobs() == 0) _cge_fail("cge_loop: the dataset of scenarios has no observations", 2000)
+    if (st_isstrvar("scenario")) sc = strtrim(st_sdata(., "scenario"))
+    else sc = strtrim(strofreal(st_data(., "scenario"), "%18.0g"))
+    if (!st_isstrvar("target")) _cge_fail("cge_loop: target must be a string variable, such as tm(com_man)", 109)
+    if (st_isstrvar("value")) _cge_fail("cge_loop: value must be numeric", 109)
+    tg = subinstr(st_sdata(., "target"), " ", "")
+    v = st_data(., "value")
+    us = ut = J(0, 1, "")
+    for (i = 1; i <= rows(sc); i++) {
+        if (sc[i] == "" | sc[i] == ".") _cge_fail("cge_loop: observation " + strofreal(i) + " has no scenario", 198)
+        if (tg[i] == "") _cge_fail("cge_loop: observation " + strofreal(i) + " has no target", 198)
+        if (!anyof(us, sc[i])) us = us \ sc[i]
+        if (!anyof(ut, tg[i])) ut = ut \ tg[i]
+    }
+    V = J(rows(us), rows(ut), .)
+    for (i = 1; i <= rows(sc); i++) {
+        a = _cge_find(us, sc[i])
+        b = _cge_find(ut, tg[i])
+        if (V[a, b] < .) _cge_fail("cge_loop: scenario " + sc[i] + " gives " + tg[i] + " twice", 198)
+        if (v[i] >= .) _cge_fail("cge_loop: the value of " + tg[i] + " in scenario " + sc[i] + " is missing", 198)
+        V[a, b] = v[i]
+    }
+    if ((q = findexternal("cge__lps")) == NULL) q = crexternal("cge__lps")
+    *q = us
+    if ((q = findexternal("cge__lpt")) == NULL) q = crexternal("cge__lpt")
+    *q = ut
+    if ((q = findexternal("cge__lpv")) == NULL) q = crexternal("cge__lpv")
+    *q = V
+}
+
+// The scenarios of a loop of values() (target lists separated by |): in
+// order, or with grid every combination, the first target varying slowest
+real matrix _cge_loop_grid(string scalar s_lists, real scalar T, real scalar grid)
+{
+    string rowvector parts
+    string scalar rest
+    real rowvector n
+    real matrix V
+    pointer(real rowvector) rowvector L
+    real scalar k, S, s, r, i
+    parts = J(1, 0, "")
+    // a copy: Mata passes arguments by reference
+    rest = s_lists + "|"
+    while (strlen(rest)) {
+        k = strpos(rest, "|")
+        parts = parts, strtrim(substr(rest, 1, k - 1))
+        rest = substr(rest, k + 1, .)
+    }
+    if (cols(parts) != T) _cge_fail("cge_loop: give a list of values for each target", 198)
+    L = J(1, T, NULL)
+    n = J(1, T, 0)
+    for (k = 1; k <= T; k++) {
+        L[k] = &(strtoreal(tokens(parts[k])))
+        n[k] = cols(*L[k])
+        if (!n[k] | hasmissing(*L[k])) _cge_fail("cge_loop: each target needs one or more numbers", 198)
+    }
+    if (grid) {
+        S = 1
+        for (k = 1; k <= T; k++) S = S * n[k]
+        V = J(S, T, .)
+        for (s = 1; s <= S; s++) {
+            r = s - 1
+            for (k = T; k >= 1; k--) {
+                i = mod(r, n[k]) + 1
+                r = floor(r / n[k])
+                V[s, k] = (*L[k])[i]
+            }
+        }
+        return(V)
+    }
+    // in order: lists of one value apply to every scenario
+    S = max(n)
+    for (k = 1; k <= T; k++) {
+        if (n[k] != S & n[k] != 1) _cge_fail("cge_loop: the lists of values differ in length; give lists of the same length, or grid for every combination", 198)
+    }
+    V = J(S, T, .)
+    for (k = 1; k <= T; k++) V[., k] = (n[k] == 1 ? J(S, 1, (*L[k])[1]) : (*L[k])')
+    return(V)
+}
+
+// cge_loop: solves the model for each scenario of a list of values of
+// instruments -- parameters, user parameters and fixed variables, as in
+// cge_optimize -- as a GAMS loop over a set of scenarios, or GUSS, does. Each
+// scenario takes the shocks in place with its own values, starts from the
+// solution of the scenario before (from the base with cold) and is stored as
+// a simulation, name1, name2, ...; the measures of each are collected. The
+// shocks in place are left as they were.
+void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, real scalar grid, real scalar scale,
+               real scalar cold, real scalar store, string scalar keep, string scalar s_meas, real scalar clear,
+               real scalar tol, real scalar maxit, real scalar usedata)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    struct cge_par scalar p, psave
+    string rowvector tg, parts, kv, key
+    string colvector snames, tables, simn, e1, e2, cv, ce1, ce2, csc, csim
+    string matrix keys, mkeys
+    real colvector xsave, xfix, x, xprev, start, v, val, mex, conv_v, it_v, res_v, pos, cpos, cs
+    real matrix V, R, X, D
+    real scalar T, S, k, j, s, conv, iter, err, nm, kd, pi, st, it2, done, haskey, nr, w, kk
+    string scalar method, m2, pn
+    pointer() scalar q
+
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (!regexm(name, "^[A-Za-z_][A-Za-z_0-9]*$") | strlen(name) > 24) _cge_fail("cge_loop: name() takes a name of at most 24 characters", 198)
+    // the targets, read as the instruments of cge_optimize
+    if (usedata) tg = (*findexternal("cge__lpt"))'
+    else tg = tokens(s_tar)
+    T = cols(tg)
+    if (!T) _cge_fail("cge_loop: give values() or using", 198)
+    O.kind = O.pidx = O.start = J(T, 1, .)
+    O.pname = J(T, 1, "")
+    O.label = tg'
+    for (k = 1; k <= T; k++) {
+        _cge_opt_instrument(M, tg[k], kd, pn, pi, st)
+        O.kind[k] = kd
+        O.pname[k] = pn
+        O.pidx[k] = pi
+        O.start[k] = st
+        for (j = 1; j < k; j++) {
+            if (O.kind[j] == O.kind[k] & O.pname[j] == O.pname[k] & O.pidx[j] == O.pidx[k]) _cge_fail("cge_loop: target " + tg[k] + " is given twice", 198)
+        }
+    }
+    // the scenarios, one row of values each; with scale, multiples of the
+    // values in place
+    if (usedata) {
+        V = *findexternal("cge__lpv")
+        snames = *findexternal("cge__lps")
+        rmexternal("cge__lpv")
+        rmexternal("cge__lps")
+        rmexternal("cge__lpt")
+    }
+    else {
+        V = _cge_loop_grid(s_lists, T, grid)
+        snames = strofreal(1::rows(V))
+    }
+    S = rows(V)
+    for (k = 1; k <= T; k++) if (scale) V[., k] = V[., k] :* O.start[k]
+    // the measures: report measures or expressions of the user language
+    O.estart = O.elen = J(0, 1, .)
+    O.etok = J(0, 3, .)
+    O.etext = J(0, 1, "")
+    _cge_opt_rows(M, M.p0, M.x0, keys, val)
+    tables = uniqrows(keys[., 1])
+    parts = _cge_opt_parts(s_meas)
+    nm = cols(parts)
+    mkeys = J(nm, 3, "")
+    mex = J(nm, 1, 0)
+    for (k = 1; k <= nm; k++) {
+        mex[k] = _cge_opt_parse(M, O, parts[k], "measures", key, tables)
+        mkeys[k, .] = key
+        if (!mex[k]) (void) _cge_opt_lookup(keys, val, key, 1)
+    }
+    haskey = any(mex :== 0)
+    // the variables of the dataset
+    kv = tokens(keep)
+    for (k = 1; k <= cols(kv); k++) if (!_cge_vidx(M, kv[k])) _cge_fail("cge_loop: keep(): " + kv[k] + " is not a model or user variable", 198)
+    // the scenarios, in order
+    psave = M.p
+    xsave = M.xcur
+    xprev = _cge_bd_start(M, M.xcur)
+    R = J(S, nm, .)
+    conv_v = it_v = res_v = J(S, 1, .)
+    X = J(rows(M.x0), S, .)
+    simn = J(S, 1, "")
+    for (s = 1; s <= S; s++) {
+        v = V[s, .]'
+        // a target that the scenario leaves out keeps its value in place
+        for (k = 1; k <= T; k++) if (v[k] >= .) v[k] = O.start[k]
+        V[s, .] = v'
+        _cge_opt_apply(M, O, v, p, xfix)
+        start = (cold ? _cge_bd_start(M, xfix) : xprev)
+        x = _cge_solve_point(M, p, xfix, start, tol, maxit, 0, conv, iter, err, method, 0)
+        if (!conv & !cold) {
+            x = _cge_solve_point(M, p, xfix, _cge_bd_start(M, xfix), tol, maxit, 0, conv, it2, err, method, 0)
+            iter = iter + it2
+        }
+        if (!conv) {
+            // continuation from the base, in 4 and then 16 steps
+            M.p = p
+            M.xcur = xfix
+            for (j = 1; j <= 2; j++) {
+                x = _cge_continue(M, (j == 1 ? 4 : 16), tol, maxit, 0, conv, it2, err, m2, 0, done)
+                iter = iter + it2
+                if (conv) {
+                    method = m2
+                    break
+                }
+            }
+            M.p = psave
+            M.xcur = xsave
+        }
+        err = _cge_maxres(M, p, x)
+        conv_v[s] = conv
+        it_v[s] = iter
+        res_v[s] = err
+        X[., s] = x
+        if (conv) xprev = x
+        if (haskey) _cge_opt_rows(M, p, x, keys, val)
+        for (k = 1; k <= nm; k++) R[s, k] = _cge_opt_item(M, O, p, x, keys, val, mkeys[k, .], mex[k], 0)
+        if (store) {
+            simn[s] = name + strofreal(s)
+            M.p = p
+            (void) _cge_store_sim(M, simn[s], x, conv, iter, err, method)
+            M.p = psave
+        }
+    }
+    M.p = psave
+    M.xcur = xsave
+    // the loop's record, for cge_gams, loop()
+    if (store) {
+        if (cols(M.loopdef) != 3) M.loopdef = J(0, 3, "")
+        k = (rows(M.loopdef) ? _cge_find(M.loopdef[., 1], name) : 0)
+        if (k) M.loopdef[k, .] = (name, invtokens(simn'), invtokens(tg))
+        else M.loopdef = M.loopdef \ (name, invtokens(simn'), invtokens(tg))
+    }
+    _cge_store(M)
+
+    // the display
+    w = 10 + 15 * min((T, 4)) + 21
+    printf("\n{txt}Loop {res}%s{txt}: {res}%f{txt} scenario(s) over {res}%f{txt} target(s), %s\n", name, S, T,
+           (cold ? "each from the base" : "each from the solution before"))
+    printf("{txt}{hline %f}\n%-10s", w, "Scenario")
+    for (k = 1; k <= min((T, 4)); k++) printf(" %14s", _cge_trunc(tg[k], 14))
+    printf(" %9s %10s\n{txt}{hline %f}\n", "converged", "iterations", w)
+    for (s = 1; s <= min((S, 50)); s++) {
+        printf("{txt}%-10s{res}", _cge_trunc(snames[s], 10))
+        for (k = 1; k <= min((T, 4)); k++) printf(" %14.8g", V[s, k])
+        printf((conv_v[s] ? " %9s" : "{err} %9s{res}"), (conv_v[s] ? "yes" : "no"))
+        printf(" %10.0f\n", it_v[s])
+    }
+    if (S > 50) printf("{txt}and %f more\n", S - 50)
+    printf("{txt}{hline %f}\n", w)
+    if (T > 4) printf("{txt}(the first four targets shown)\n")
+    if (all(conv_v)) printf("{txt}All scenarios converged, in {res}%f{txt} iterations in all\n", sum(it_v))
+    else printf("{err}%f of %f scenario(s) did not converge\n", S - sum(conv_v), S)
+    if (store) printf("{txt}Stored as simulations {res}%s{txt} to {res}%s\n", simn[1], simn[S])
+
+    // the dataset: one observation per scenario and element of the variables
+    // kept, with the scenario's targets, convergence and measures
+    if (clear) {
+        cpos = J(0, 1, .)
+        cv = ce1 = ce2 = J(0, 1, "")
+        for (kk = 1; kk <= rows(M.vname); kk++) {
+            if (cols(kv)) if (!anyof(kv, M.vname[kk])) continue
+            pos = _cge_bd_exist(M, _cge_vpos(M, kk))
+            if (!rows(pos)) continue
+            _cge_vlabels(M, kk, e1, e2)
+            cpos = cpos \ pos
+            cv = cv \ J(rows(pos), 1, M.vname[kk])
+            ce1 = ce1 \ e1[pos :- M.voff[kk]]
+            ce2 = ce2 \ e2[pos :- M.voff[kk]]
+        }
+        nr = rows(cpos) * S
+        stata("clear")
+        st_addobs(nr)
+        cs = (1::S) # J(rows(cpos), 1, 1)
+        csc = csim = J(nr, 1, "")
+        for (s = 1; s <= S; s++) {
+            csc[|(s - 1) * rows(cpos) + 1 \ s * rows(cpos)|] = J(rows(cpos), 1, snames[s])
+            csim[|(s - 1) * rows(cpos) + 1 \ s * rows(cpos)|] = J(rows(cpos), 1, simn[s])
+        }
+        (void) st_addvar("int", "s")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(snames))))), "scenario")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(simn))))), "sim")
+        (void) st_addvar("byte", "converged")
+        D = J(nr, T, .)
+        for (k = 1; k <= T; k++) {
+            (void) st_addvar("double", "t" + strofreal(k))
+            st_varlabel("t" + strofreal(k), tg[k])
+            D[., k] = V[., k] # J(rows(cpos), 1, 1)
+        }
+        for (k = 1; k <= nm; k++) {
+            (void) st_addvar("double", "m" + strofreal(k))
+            st_varlabel("m" + strofreal(k), _cge_trunc(_cge_opt_text(O, mkeys[k, .], mex[k]), 80))
+        }
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(cv))))), "variable")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(ce1))))), "element1")
+        (void) st_addvar("str" + strofreal(max((1, max(strlen(ce2))))), "element2")
+        (void) st_addvar(("double", "double"), ("base", "value"))
+        st_store(., "s", cs)
+        st_sstore(., "scenario", csc)
+        st_sstore(., "sim", csim)
+        st_store(., "converged", conv_v # J(rows(cpos), 1, 1))
+        for (k = 1; k <= T; k++) st_store(., "t" + strofreal(k), D[., k])
+        for (k = 1; k <= nm; k++) st_store(., "m" + strofreal(k), R[., k] # J(rows(cpos), 1, 1))
+        st_sstore(., "variable", J(S, 1, cv))
+        st_sstore(., "element1", J(S, 1, ce1))
+        st_sstore(., "element2", J(S, 1, ce2))
+        st_store(., "base", J(S, 1, M.x0[cpos]))
+        st_store(., "value", colshape(X[cpos, .]', 1))
+    }
+
+    st_numscalar("r(N_scenarios)", S)
+    st_numscalar("r(N_converged)", sum(conv_v))
+    st_numscalar("r(N_failed)", S - sum(conv_v))
+    st_numscalar("r(iterations)", sum(it_v))
+    st_matrix("r(values)", V)
+    st_matrixcolstripe("r(values)", (J(T, 1, ""), strtoname(subinstr(tg', ")", ""))))
+    st_matrix("r(converged)", conv_v)
+    if (nm) st_matrix("r(measures)", R)
+    st_global("r(name)", name)
+    st_global("r(targets)", invtokens(tg))
+    if (store) st_global("r(sims)", invtokens(simn'))
+}
+
+// The simulations of loop name, in order; 0 if none
+real colvector _cge_loop_sims(struct cge_model scalar M, string scalar name)
+{
+    string rowvector sims
+    real colvector s
+    real scalar k, i
+    if (cols(M.loopdef) != 3 | !rows(M.loopdef)) return(J(0, 1, .))
+    k = _cge_find(M.loopdef[., 1], name)
+    if (!k) return(J(0, 1, .))
+    sims = tokens(M.loopdef[k, 2])
+    s = J(cols(sims), 1, .)
+    for (i = 1; i <= cols(sims); i++) {
+        s[i] = _cge_find(M.simname, sims[i])
+        if (!s[i]) _cge_fail("simulation " + sims[i] + " of loop " + name + " has been dropped; run the loop again", 111)
+    }
+    return(s)
+}
+
 // Imports the GAMS solution of a scenario as a simulation (from version
 // 0.6.2): the free variables from GAMS, the fixed ones from Stata, with the
 // equations checked in Stata. For a model too large for Stata's solver, the
@@ -16999,6 +17364,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "bdsp", M.bdsp)
     _cge_io_put(fh, "bdsv", M.bdsv)
     _cge_io_put(fh, "bdcp", M.bdcp)
+    _cge_io_put(fh, "loopdef", M.loopdef)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -17146,6 +17512,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "bdsp") M.bdsp = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "bdsv") M.bdsv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "bdcp") M.bdcp = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
+    else if (name == "loopdef") M.loopdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

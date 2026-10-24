@@ -1,0 +1,194 @@
+\cgeentry{cge_loop}{Solve the model for a list or grid of scenarios}
+
+\cgesec{Description}
+
+\cmd{cge_loop} (from version 0.9.9) solves the model for many scenarios in one
+command, as a GAMS \cmd{loop} over a set of scenarios, or the GAMS scenario
+solver GUSS, does. Each scenario sets the values of a few targets: elements of
+parameters that \manref{cge_shock} changes, of user parameters, or of
+variables fixed under the closure. It takes the shocks in place, starts from
+the solution of the scenario before, and is stored as a simulation; report
+measures and expressions are collected for every scenario, and the results can
+be returned as a dataset. \manref{cge_gams} writes a loop as a GAMS program
+that solves the scenarios in the same order.
+
+\cgesec{Quick start}
+
+A sweep over the tariff on manufactures, with government revenue and welfare
+\begin{stcode}
+cge_loop, name(tariff) values(tm(com_man) = 0(0.05)0.3) ///
+    measures(YG, welfare equivalent_variation hhd)
+\end{stcode}
+Every combination of two tariffs, with the imports as a dataset
+\begin{stcode}
+cge_loop, name(two) values(tm(com_man) = 0 0.1 0.2; tm(com_agr) = 0 0.1) grid ///
+    keep(QM) clear
+\end{stcode}
+Scenarios from a dataset with the variables \cmd{scenario}, \cmd{target} and
+\cmd{value}
+\begin{stcode}
+cge_loop using scenarios.dta, name(policy)
+\end{stcode}
+The loop in GAMS, solved and compared with Stata
+\begin{stcode}
+cge_gams using gams_tariff, loop(tariff) replace run compare
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_loop} \texttt{,} \optarg{}{name}{name} \optarg{val}{ues}{spec} [\argu{options}]\\
+\cmdb{cge_loop} \cmd{using} \argu{filename} \texttt{,} \optarg{}{name}{name} [\argu{options}]
+\end{stsyntax}
+\argu{spec} is \argu{target} \cmd{=} \argu{values}, separated by semicolons,
+where \argu{values} is a numlist.
+
+\begin{opttable}
+\optgroup{Scenarios}
+\optarg{}{name}{name} & the stub of the simulations, \argu{name}\cmd{1}, \argu{name}\cmd{2}, \dots\\
+\optarg{val}{ues}{spec} & the values of each target\\
+\opt{}{grid} & every combination of the lists of values\\
+\opt{sc}{ale} & values as multiples of the targets' values in place\\
+\optgroup{Solution}
+\opt{}{cold} & solve each scenario from the base\\
+\optarg{tol}{erance}{\#} & convergence tolerance of each solve; default \texttt{1e-10}\\
+\optarg{iter}{ate}{\#} & Newton iterations of each solve; default 100\\
+\optgroup{Results}
+\optarg{meas}{ures}{list} & report measures or expressions, separated by commas\\
+\optarg{}{keep}{names} & the variables of the dataset of results; all by default\\
+\opt{}{clear} & replace the data in memory with the results\\
+\opt{}{nostore} & do not store the simulations\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{name}{name}] names the loop; its scenarios are stored as the
+simulations \argu{name}\cmd{1}, \argu{name}\cmd{2}, and so on, replacing
+simulations of those names.
+
+\item[\optarg{val}{ues}{spec}] gives each target its list of values, as
+\cmd{values(tm(com_man) = 0 0.05 0.1; tm(com_agr) = 0 0.1 0.2)}. A target is
+one element of a parameter that \manref{cge_shock} changes, such as
+\cmd{tm(com_man)} or \cmd{trgr}, of a user parameter (\manref{cge_parameter}),
+or of a variable fixed under the closure, such as \cmd{QFS(lab)}: the
+instruments of \manref{cge_optimize}. By default the lists are taken in order,
+one value of each per scenario, and must have the same length; a list of one
+value applies to every scenario.
+
+\item[\opt{}{grid}] makes every combination of the lists a scenario, the first
+target varying slowest, as nested GAMS loops do.
+
+\item[\opt{sc}{ale}] reads the values as multiples of the targets' values in
+place.
+
+\item[\cmd{using} \argu{filename}] reads the scenarios from a dataset with one
+observation per scenario and target: \cmd{scenario}, a string or a number,
+\cmd{target}, a string such as \cmd{tm(com_man)}, and \cmd{value}. Scenarios
+and targets are taken in the order they first appear; a target that a
+scenario leaves out keeps its value in place. The data in memory are left as
+they are.
+
+\item[\opt{}{cold}] solves each scenario from the base, with any starting
+levels of \manref{cge_bound}, as separate solves would. By default each starts
+from the solution of the scenario before.
+
+\item[\optarg{meas}{ures}{list}] collects, for each scenario, report measures,
+as \argu{table measure} [\argu{element}], or expressions of the user language
+(\manref{cge_equation}), as in \manref{cge_optimize}.
+
+\item[\opt{}{clear}] replaces the data in memory with one observation per
+scenario and element of the variables kept, with \cmd{s}, \cmd{scenario},
+\cmd{sim}, \cmd{converged}, the targets \cmd{t1}, \cmd{t2}, \dots, the measures
+\cmd{m1}, \cmd{m2}, \dots, \cmd{variable}, \cmd{element1}, \cmd{element2},
+\cmd{base} and \cmd{value}. \optarg{}{keep}{names} limits it to some
+variables.
+
+\item[\opt{}{nostore}] keeps the results without storing the simulations.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A loop is a sequence of solves of the same model with different values of a
+few parameters. Each scenario starts from the shocks in place: shocks applied
+with \manref{cge_shock} before the loop are part of every scenario, and are
+left as they were after it. Starting each scenario from the solution of the
+one before makes a sweep over a parameter a path of small steps, as GUSS does,
+so the loop takes fewer iterations than separate solves; a scenario that does
+not solve from there is tried from the base and then by continuation, and one
+that still fails is recorded, and the loop goes on.
+
+The SAM is mapped and calibrated:
+\stlog{loop_setup}
+
+\cgesubsec{Example 1: a sweep over a tariff}
+
+The tariff on manufactures from zero to 30 per cent, with government revenue,
+the welfare of the household and spending on government purchases, an
+expression:
+\stlog{loop_sweep}
+Each scenario is the simulation that \manref{cge_shock} and \manref{cge_solve}
+would give on their own; \manref{cge_report} reports them as any other
+simulations.
+
+\cgesubsec{Example 2: a grid and the dataset of results}
+
+Every combination of two tariffs, with the imports of each commodity as a
+dataset:
+\stlog{loop_grid}
+
+\cgesubsec{Example 3: scenarios from a dataset}
+
+A dataset gives the scenarios, one observation per scenario and target; here
+as multiples of the values in place:
+\stlog{loop_using}
+
+\cgesubsec{Example 4: the loop in GAMS}
+
+\manref{cge_gams}, \cmd{loop()}, writes the scenarios as the periods of a
+dynamic run are written: the changes of each from the one before, solved in
+order from the solution before, so that GAMS follows the same path:
+\stlog{loop_gams}
+
+\cgesec{Stored results}
+
+\cmd{cge_loop} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_scenarios)} & number of scenarios\\
+\res{r(N_converged)} & number of scenarios solved\\
+\res{r(N_failed)} & number of scenarios not solved\\
+\res{r(iterations)} & Newton iterations in all\\
+\resgroup{Macros}
+\res{r(name)} & the loop\\
+\res{r(targets)} & its targets\\
+\res{r(sims)} & its simulations, unless \opt{}{nostore}\\
+\resgroup{Matrices}
+\res{r(values)} & the targets' values, one row per scenario\\
+\res{r(converged)} & 1 for each scenario solved\\
+\res{r(measures)} & the measures, one row per scenario\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+With targets $\theta_1, \dots, \theta_T$, their values in place $\theta^c$ and
+the scenarios $s = 1, \dots, S$ with values $v_{s}$ (missing for a target that a
+scenario leaves out, which keeps $\theta^c$), scenario $s$ solves the model of
+\manref{cge_solve} with $\theta = v_s$ (or $\theta^c \odot v_s$ with
+\opt{sc}{ale}) and the other shocks in place, from the point $x_{s-1}$, the
+solution of the scenario before ($x_0$ the base, with the starting levels of
+\manref{cge_bound}), or from the base with \opt{}{cold}. With \opt{}{grid},
+the scenarios are the elements of $V_1 \times \dots \times V_T$ in
+lexicographic order. A scenario that fails from $x_{s-1}$ is solved from the
+base, then by continuation in 4 and then 16 steps (\manref{cge_solve}); the
+next scenario starts from the last solution found.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_shock}{Change a parameter or a fixed variable}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_optimize}{Choose policy instruments to maximise an outcome or reach targets}
+\seeentry{cge_sensitivity}{Sensitivity analysis over elasticities}
+\seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}
+\end{alsosee}

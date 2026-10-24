@@ -1,0 +1,16 @@
+. cge_gams using gams_tariff, loop(tariff) replace
+Wrote the model (15 accounts) and the 7 scenarios of loop tariff (7 change(s) in all) to gams_tariff
+Files: cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc cge_constraints.inc cg
+> e_cons_write.inc cge_bounds.inc cge_user.inc cge_user_write.inc cge_run.gms and the files of each
+> scenario
+To solve it: gams cge_run.gms in that folder
+
+. type gams_tariff/cge_tariff2_par.inc
+* Parameter changes and the closure, written by cge_gams
+tm('com_man') = 0.05;
+clext = 1;
+clgov = 1;
+clsi = 1;
+clnum = 1;
+fclo('lab') = 1;
+fclo('cap') = 1;

@@ -1726,6 +1726,20 @@ residual and its scaled residual, $(\ell - r)/\sigma$ with the scales of
 (default $10^{-8}$). `_cge_blockdom()`, the domains of the blocks that may be
 replaced, is drawn from the same table (`_cge_eqinfo()`).
 
+**Scenario loops (from version 0.9.9).** `cge_loop, name(n) values(t1 = v...;
+t2 = v...) [grid scale cold]` (or `using`, a long dataset of scenario, target
+and value) solves, for each scenario $s$, the model with the targets, read as
+the instruments of Section 18 (`_cge_opt_instrument()`), at $v_s$ ($\theta^c
+\odot v_s$ with `scale`; a target a scenario leaves out keeps its value in
+place) and the other shocks in place (`_cge_opt_apply()`), from the solution of
+scenario $s - 1$ (the base for $s = 1$, and with `cold`), then from the base and
+by continuation in 4 and 16 steps (`_cge_continue()`) if that fails. The
+scenarios are stored as simulations `n1`, `n2`, ... and recorded in
+`M.loopdef` (name, simulations, targets); `M.p` and `M.xcur` are restored.
+Measures are report measures or compiled expressions, as in Section 18.
+`cge_gams, loop(n)` exports the scenarios as the periods of a dynamic run
+(`_cge_gams_export_dyn()`), each with its changes from the one before.
+
 ## 19. User variables and equations (from version 0.6.1)
 
 `cge_variable` and `cge_equation` add variables and equations to the

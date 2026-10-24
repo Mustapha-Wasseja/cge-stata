@@ -543,6 +543,30 @@ foreach case in dyninst dynhealth dyndebt dynlag {
 }
 program drop _donor_exit _debt_relief _tariff_cut
 
+* A scenario loop (version 0.9.9): GAMS solves the scenarios in order, each
+* from the solution of the one before, as cge_loop does; a shock in place is
+* part of every scenario
+display as text _n "{hline 60}" _n "Case " as result "loop"
+quietly cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, `instmap'
+quietly cge_calibrate, `sigmas'
+cge_shock tm, elements(com_agr) value(0)
+cge_loop, name(loop) values(tm(com_man) = 0 0.5 1 1.5; QFS(lab) = 1 1.02 1.04 1.06; qg(com_ser) = 1 1.1 1 0.9) ///
+    scale tolerance(1e-12)
+assert r(N_converged) == 4
+if "`phase'" == "export" {
+    cge_gams using `"`dir'/loop"', loop(loop) replace
+}
+else {
+    capture confirm file `"`dir'/loop/cge_loop4.csv"'
+    if !_rc {
+        cge_gams using `"`dir'/loop"', loop(loop) compare noexport
+        post `post' ("loop") ("loop") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 if "`phase'" == "compare" {
     postclose `post'
     use `"`dir'/export_check.dta"', clear
