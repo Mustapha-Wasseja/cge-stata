@@ -1,0 +1,8 @@
+. cge_model describe
+Model statistics: standalone model
+  Blocks of equations            4     Single equations            9
+  Blocks of variables            4     Single variables            9
+                                        Fixed                       0
+  Non-zero elements             25     Free                        9
+  User sets 2, user parameters 2, macros 0, constraints 0
+  The system is square: 9 free variables and 9 equations

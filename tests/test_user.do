@@ -359,8 +359,9 @@ capture noisily cge_parameter zz(c), values(nosuch:1)
 assert _rc == 111
 capture noisily cge_parameter zz(q), values(com_agr:1)
 assert _rc == 198
+* from version 0.13.0 the value is an expression: an unknown name is error 111
 capture noisily cge_parameter zz(c) = abc
-assert _rc == 198
+assert _rc == 111
 capture noisily cge_variable YY = w(com_agr, hhd)
 assert _rc == 198
 capture noisily cge_variable YY = sum(gods, PQ(gods))

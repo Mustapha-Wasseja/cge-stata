@@ -52,3 +52,12 @@ list if inlist(parameter, "hgoal", "w", "sw", "sh"), noobs sep(0)
 cge_shock, reset
 cge_optimize, instruments(hgoal) targets(government savings = 1.5) name(hgopt)
 *<<
+
+*>> par_assign
+cge_parameter qint0(c,a) = base(QINT(c,a))
+cge_parameter share(c,a) = qint0(c,a) / sum(c2, qint0(c2,a))
+cge_parameter tmr(c)$(tm(c) > 0) = tm(c) / 2, default(-1)
+cge_parameter tmr(c)$(tmr(c) < 0) = 0
+cge_parameters, clear
+list if parameter == "tmr" | (parameter == "share" & element2 == "act_hlt"), noobs sep(0)
+*<<

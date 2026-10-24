@@ -1,4 +1,4 @@
-\cgeentry{cge_parameter}{User parameters for user variables and equations}
+\cgeentry{cge_parameter}{User parameters: values, assignments and data}
 
 \cgesec{Description}
 
@@ -8,7 +8,11 @@ variables (\manref{cge_variable}) and equations (\manref{cge_equation}) refer
 to it by name. The values given are its base values; \manref{cge_shock}
 changes them in a scenario, \manref{cge_optimize} may take one of its elements
 as an instrument, continuation and dynamic runs carry it like the model's own
-parameters, and \manref{cge_gams} writes it into the GAMS program.
+parameters, and \manref{cge_gams} writes it into the GAMS program. From
+version 0.13.0 its value may be an expression, evaluated element by element
+over the elements that meet a condition, as GAMS's assignments, so that
+parameters are calibrated in the language, and data in wide form, as a SAM
+in memory, give a parameter with two indexes.
 
 Do not confuse \cmd{cge_parameter}, which defines a user parameter, with
 \manref{cge_parameters}, which lists every parameter of the model, user
@@ -32,12 +36,25 @@ A scenario with a higher target
 \begin{stcode}
 cge_shock hgoal, value(1.2)
 \end{stcode}
+Assignments: shares of intermediate input by activity, and half the tariff
+rates where there are tariffs
+\begin{stcode}
+cge_parameter qint0(c,a) = base(QINT(c,a))
+cge_parameter share(c,a) = qint0(c,a) / sum(c2, qint0(c2,a))
+cge_parameter tmr(c)$(tm(c) > 0) = tm(c) / 2
+\end{stcode}
+A SAM in memory, one variable for each account, as a parameter
+\begin{stcode}
+cge_parameter sam(ac,ac2), from(act_agr-row) labels(account)
+\end{stcode}
 
 \cgesec{Syntax}
 
-A parameter with one value for all its elements
+A parameter assigned an expression (a number, or from version 0.13.0 any
+expression of parameters)
 \begin{stsyntax}
-\cmdb{cge_parameter} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}] \cmd{=} \argu{\#}
+\cmdb{cge_parameter} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}][\cmd{$(}\argu{condition}\cmd{)}] \cmd{=} \argu{expression}
+[\texttt{,} \optarg{def}{ault}{\#}]
 \end{stsyntax}
 Values by element
 \begin{stsyntax}
@@ -49,19 +66,29 @@ Values from the data in memory
 \cmdb{cge_parameter} \argu{name}\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}\texttt{,}
 \optarg{}{from}{varname} \optarg{lab}{els}{varlist} [\optarg{def}{ault}{\#}]
 \end{stsyntax}
+Values from data in wide form (from version 0.13.0)
+\begin{stsyntax}
+\cmdb{cge_parameter} \argu{name}\cmd{(}\argu{i}\cmd{,}\argu{j}\cmd{)}\texttt{,}
+\optarg{}{from}{varlist} \optarg{lab}{els}{varname} [\optarg{def}{ault}{\#}]
+\end{stsyntax}
 Display or remove the user parameters
 \begin{stsyntax}
 \cmdb{cge_parameter} \texttt{,} \opt{}{list}\\
 \cmdb{cge_parameter} \texttt{,} \opt{}{clear}
 \end{stsyntax}
 \argu{i} and \argu{j} are indexes of model sets (\cmd{a c f h d i n}) or of
-user sets. \argu{name} follows the rules of \manref{cge_set}.
+user sets; in a standalone model (\manref{cge_model}), of user sets only.
+\argu{name} follows the rules of \manref{cge_set}. \argu{expression} is
+written in the language of \manref{cge_equation}: numbers, user parameters,
+the model's parameters, base values of variables (\cmd{base(}\argu{X}\cmd{)}),
+sums, conditions and functions, with the indexes \argu{i} and \argu{j}.
 
 \begin{opttable}
 \optgroup{Main}
 \optarg{val}{ues}{spec} & values by element, \argu{element}\cmd{:}\argu{\#} or \argu{e1}\cmd{.}\argu{e2}\cmd{:}\argu{\#}\\
 \optarg{}{from}{varname} & a variable of the data in memory with the values\\
 \optarg{lab}{els}{varlist} & the string variables with the element labels, one for each index\\
+\optarg{}{from}{varlist} & in wide form, one variable for each element of the second index\\
 \optarg{def}{ault}{\#} & value of the elements not given; default \texttt{0}\\
 \end{opttable}
 
@@ -79,6 +106,13 @@ Observations with a missing value or an empty label are skipped.
 
 \item[\optarg{lab}{els}{varlist}] names the string variables that hold the
 labels of the elements, one for each index, with \opt{}{from()}.
+
+\item[\optarg{}{from}{varlist} \optarg{lab}{els}{varname}] (from version
+0.13.0) read data in wide form for a parameter with two indexes, as a SAM in
+memory: the string variable \argu{varname} labels the elements of the first
+index, one observation each, and each variable of \argu{varlist},
+abbreviations and ranges allowed, holds the values for the element of the
+second index whose label is its name.
 
 \item[\optarg{def}{ault}{\#}] gives the value of the elements that
 \opt{val}{ues()} or \opt{}{from()} leaves out; the default is 0.
@@ -132,6 +166,17 @@ The health purchase target that leaves government savings at 1.5, against 1
 in the base:
 \stlog{par_opt}
 
+\cgesubsec{Example 6: assignments}
+
+From version 0.13.0 a parameter's value is an expression, evaluated for each
+element. The shares of each commodity in the intermediate input of each
+activity, from the base values of the variables; half the import tariff rate,
+where there is a tariff, and $-1$ elsewhere, then 0 where it is $-1$, by a
+second assignment:
+\stlog{par_assign}
+An assignment is evaluated when it is made: \cmd{share} does not change if
+\cmd{QINT} does, and \cmd{tmr} does not follow a later shock to \cmd{tm}.
+
 \cgesec{Stored results}
 
 \cmd{cge_parameter} stores the following in \cmd{r()}:
@@ -155,6 +200,13 @@ the model is calibrated again, the parameters keep their base values. In the
 GAMS program, \cmd{cge_user.inc} declares each parameter as
 \cmd{UP_}\argu{name}, with its base values, and the scenario file changes it
 by the ratio of its value to the base, as for the model's parameters.
+
+An assignment writes its expression out for each element of its domain that
+meets its condition at the base, compiles it as an equation's side is
+compiled and evaluates it with the base values of the parameters and
+variables; an expression that refers to a variable, rather than to its base
+value, is an error, as is an element whose value is missing, such as a
+division by zero.
 
 \cgesec{Also see}
 

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.2  23oct2026}{...}
+{* *! version 0.13.0  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -13,7 +13,7 @@
 {cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal} {opt lower(#)} {opt upper(#)}]
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(#)} [{opt fixed} {opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(expression)} [{opt fixed} {opt nominal}]
 
 {p 8 12 2}
 {cmd:cge_variable} {it:name}[...]{cmd:,} {opt lower(#)}|{opt upper(#)} [{opt nominal}]
@@ -38,6 +38,12 @@ only for the elements that meet it; see {it:Conditions} in
 run with perfect foresight, {cmd:lead(}{it:VAR}{cmd:)}, and the period,
 {cmd:tperiod}, {cmd:tfirst} and {cmd:tlast}; see {it:Lags} in
 {helpb cge_equation}.
+
+{pstd}
+From version 0.13.0, {opt value()} takes an expression, which gives the base
+value of each element as a definition does, with the indexes written out:
+{cmd:value(sam(f, a))} starts {cmd:QF(f,a)} at the SAM's flows. It is the
+starting level of a variable in a standalone model ({helpb cge_model}).
 
 {pstd}
 From version 0.9.0, {opt lower(#)} and {opt upper(#)} hold a defined variable

@@ -8,6 +8,9 @@
 
 program define cge_nest, rclass
     version 13.0
+    * a standalone model has no SAM (from version 0.13.0)
+    _cge_load
+    mata: _cge_need_sam()
     _cge_load
     gettoken sub rest : 0, parse(" ,")
     if "`sub'" == "," | "`sub'" == "" {

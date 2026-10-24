@@ -10,6 +10,9 @@
 
 program define cge_microsim, rclass
     version 13.0
+    * a standalone model has no SAM (from version 0.13.0)
+    _cge_load
+    mata: _cge_need_sam()
     syntax [if] [in] [pweight aweight fweight iweight], SIM(string) GROUP(varname)   ///
         CONSumption(varname numeric) [SIZE(varname numeric) INCome(string)          ///
         BUDget(string) LINE(string) QUANTiles(integer 10) GENerate(name) REPLACE     ///

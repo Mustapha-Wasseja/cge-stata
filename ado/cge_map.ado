@@ -8,6 +8,9 @@
 
 program define cge_map, rclass
     version 13.0
+    * a standalone model has no SAM (from version 0.13.0)
+    _cge_load
+    mata: _cge_need_sam()
     syntax [using/] [, activities(namelist) commodities(namelist) factors(namelist) ///
         households(namelist) government(name) savinv(name) row(name)                ///
         enterprises(namelist) margins(namelist) territorial(namelist)              ///

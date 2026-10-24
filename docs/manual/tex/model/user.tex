@@ -4,7 +4,10 @@
 the calibrated model, written in a small language; \manref{cge_set} and
 \manref{cge_parameter} add the sets and parameters they may use (from
 version 0.7.1), conditions restrict sums, terms and domains (from version
-0.7.2), and \manref{cge_macro} adds macros (from version 0.9.7).
+0.7.2), and \manref{cge_macro} adds macros (from version 0.9.7). From version
+0.13.0 parameters may be calibrated by assignments, and a whole model may be
+written in the language, without a SAM or the built-in equations
+(section~\ref{sec:standalone}).
 
 \section{The language}
 
@@ -60,6 +63,22 @@ scenarios can be written in terms of the user's own parameters. A
 parameter's element may also be an instrument of \manref{cge_optimize}.
 User sets and parameters are saved with the model, and kept when it is
 calibrated again, the parameters at their base values.
+
+From version 0.13.0 a parameter's value may be an expression, as in GAMS's
+assignments: \cmd{cge_parameter share(c,a) = qint0(c,a) / sum(c2,
+qint0(c2,a))} evaluates the expression for each element, with the indexes
+written out, and \cmd{cge_parameter tmr(c)$(tm(c) > 0) = tm(c) / 2} only for
+the elements that meet the condition, the others taking the default. The
+expression may use numbers, user parameters, the model's parameters, the
+base values of variables, \cmd{base(QM(c))}, sums, conditions and the
+functions of the language, but not variables themselves. A parameter that
+exists may be assigned again, over the elements of a condition, until a
+variable, equation or macro uses it. The values are computed once, when the
+parameter is assigned: a parameter computed from another does not follow
+later shocks to it, which belong in the equations. Data in wide form, as a
+SAM in memory, give a parameter with two indexes,
+\cmd{cge_parameter sam(ac,ac2), from(act_agr-row) labels(account)}, and a
+string variable gives the elements of a set, \cmd{cge_set ac, from(account)}.
 
 \section{Conditions}\label{sec:userconditions}
 
@@ -307,6 +326,56 @@ adjusting, is under the CPI numeraire the closure \cmd{fixgsav}; the test
 suites check that the solutions agree to $10^{-9}$. Nominal government
 consumption, $\sum_c \V{PQ}_c\,\V{QG}_c$, fixed with volumes adjusting is
 another closure rule that the standard closures do not offer.
+
+\section{Standalone models}\label{sec:standalone}
+
+From version 0.13.0, \cmd{cge_model new} (\manref{cge_model}) starts a model
+written whole in the language, as a GAMS program is: sets, parameters,
+variables and equations, without a SAM or the built-in equations of
+chapter~\ref{chap:equations}. Its sets have labels of their own or from the
+data in memory, its parameters are calibrated by assignments, its variables
+start at the levels of \opt{}{value()}, expressions of the parameters, and
+the exogenous ones are \opt{}{fixed}. The letters of the model's sets are not
+indexes in it, so its sets take any names, and the index of a set with a
+digit after it, such as \cmd{i2}, runs over the same set, as an alias. The
+model's variables are its user variables, in the order they were added, and
+its equations two blocks, the user equations and the constraints of their
+inequalities:
+\begin{equation*}
+\ell_k(x) - r_k(x) = 0, \qquad k = 1, \dots, K,
+\end{equation*}
+one for each element written out. A variable is free unless it was added
+\opt{}{fixed}; \cmd{cge_closure, swap()} exchanges a fixed variable for a free
+one. \manref{cge_solve} solves the system from the starting levels, which need
+not solve it, by Newton's method with the exact Jacobian of
+section~\ref{sec:jacobian} and, for large systems, the sparse LU of
+section~\ref{sec:sparse}; there is no reduced system, every element being an
+equation of the system. Shocks change user parameters and fixed variables,
+and the results compare each solution with the starting levels.
+
+The commands that work on any model work on a standalone model: macros,
+attributes of variables, inequalities, the solution and equation listings,
+scenario loops, the optimiser with expressions as objectives and targets,
+saving and loading, GDX files and the export to GAMS, which writes the model
+as a GAMS program of its own. The commands that need the built-in equations,
+from \manref{cge_calibrate} to \manref{cge_report} and \manref{cge_dynamic},
+stop with an error.
+
+The example \cmd{examples/standard_model.do} writes the standard model for
+the synthetic SAM in the language: the SAM is read as data, the sets of
+accounts and roles from it, the parameters by assignments such as
+\begin{stcode}
+cge_parameter tm(c)$(sam(row, c) > 0) = sam(tax_imp, c) / sam(row, c)
+cge_parameter dva(f,a) = QF0(f,a) ^ (1 + rva(a)) / sum(f2, QF0(f2,a) ^ (1 + rva(a)))
+\end{stcode}
+and the equations of chapter~\ref{chap:equations} that the SAM uses, 93 in
+all, such as
+\begin{stcode}
+cge_equation T5(c): QM(c) = QD(c) * (PD(c) / PM(c) * dq(c) / dqc(c)) ^ (1 / (1 + rq(c)))
+\end{stcode}
+Its starting levels solve the base, and its solutions agree with those of
+the built-in model to about $10^{-12}$ in four scenarios
+(\chapref{chap:validation}).
 
 \section{Compilation}
 

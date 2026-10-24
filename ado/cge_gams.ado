@@ -1,4 +1,4 @@
-*! cge_gams.ado  v0.9.9  2026-10-24
+*! cge_gams.ado  v0.13.0  2026-10-24
 *! cge-stata: write the model and a scenario as a GAMS program, and
 *! optionally solve it in GAMS and compare the results (docs/gams.md)
 *!
@@ -60,7 +60,7 @@ program define cge_gams, rclass
     if substr(`"`dir'"', -1, 1) == "/" local dir = substr(`"`dir'"', 1, length(`"`dir'"') - 1)
     local written cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms cge_data.inc ///
         cge_shock_par.inc cge_shock_var.inc cge_constraints.inc cge_cons_write.inc cge_bounds.inc cge_user.inc ///
-        cge_user_write.inc cge_run.gms
+        cge_user_write.inc cge_sa_write.inc cge_run.gms
     local name = cond("`sim'" == "", "current", "`sim'")
     * a dynamic run writes one pair of scenario files and one result file per period
     local results cge_`name'.csv
@@ -88,9 +88,16 @@ program define cge_gams, rclass
         }
         if "`dynamic'" != "" mata: _cge_gams_export_dyn(st_local("dir"), "`dynamic'", "`solver'", "`type'", `isloop')
         else mata: _cge_gams_export(st_local("dir"), "`sim'", "`solver'", "`type'")
+        * a standalone model (from version 0.13.0) has a driver of its own and
+        * needs only the solve statements of the package's GAMS files
+        local sa = (r(standalone) == 1)
         return add
         * The GAMS model, installed with the package
-        foreach f in cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms {
+        local gmsfiles cge_model.gms cge_closure.gms cge_write.gms cge_solve.gms
+        if `sa' local gmsfiles cge_solve.gms
+        if `sa' local written cge_data.inc cge_user.inc cge_user_write.inc cge_sa_write.inc cge_shock_par.inc ///
+            cge_shock_var.inc cge_constraints.inc cge_cons_write.inc cge_bounds.inc cge_solve.gms cge_run.gms
+        foreach f of local gmsfiles {
             quietly findfile `f'
             quietly copy `"`r(fn)'"' `"`dir'/`f'"', replace
         }

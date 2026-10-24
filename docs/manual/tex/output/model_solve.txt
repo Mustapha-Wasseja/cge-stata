@@ -1,0 +1,20 @@
+. cge_solve, name(eq)
+Simulation eq solved in 6 iteration(s) (newton)
+Largest scaled residual  2.66e-14
+
+. cge_results, sim(eq)
+
+Simulation eq of a standalone model (solved, 6 iteration(s), largest scaled residual  2.66e-14)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+P(g1)                                       1            1    0.000
+P(g2)                                       1      1.51852   51.852
+Y(h1)                                      12       13.037    8.642
+Y(h2)                                      11      15.1481   37.710
+X(h1,g1)                                  3.6      3.91111    8.642
+X(h1,g2)                                  8.4      6.00976  -28.455
+X(h2,g1)                                  6.6      9.08889   37.710
+X(h2,g2)                                  4.4      3.99024   -9.313
+WALRAS                                      0 -1.60405e-13        .
+-------------------------------------------------------------------

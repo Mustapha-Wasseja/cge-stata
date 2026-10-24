@@ -38,7 +38,7 @@ A variable and its definition
 \end{stsyntax}
 A variable that user equations determine
 \begin{stsyntax}
-\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{value}{\#}
+\cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{value}{expression}
 [\opt{}{fixed} \opt{}{nominal}]
 \end{stsyntax}
 An exogenous variable at a bound, which an inequality may move (from version 0.9.0)
@@ -59,7 +59,7 @@ described in \manref{cge_equation}.
 
 \begin{opttable}
 \optgroup{Main}
-\optarg{}{value}{\#} & base value of a variable that user equations determine\\
+\optarg{}{value}{expression} & base value of a variable that user equations determine\\
 \opt{}{fixed} & the variable is exogenous, at its value\\
 \optarg{}{lower}{\#}, \optarg{}{upper}{\#} & bounds; without a definition, the exogenous level\\
 \opt{}{nominal} & the variable is measured in local currency\\
@@ -68,9 +68,13 @@ described in \manref{cge_equation}.
 \cgesec{Options}
 
 \begin{optdesc}
-\item[\optarg{}{value}{\#}] gives the base value of a variable that user
-equations determine, and adds no equation. A variable has either a definition
-or a value, not both.
+\item[\optarg{}{value}{expression}] gives the base value of a variable that
+user equations determine, and adds no equation. A variable has either a
+definition or a value, not both. From version 0.13.0 the value is an
+expression, a number or one of parameters and base values, evaluated for each
+element with the indexes written out, as a definition is: \cmd{cge_variable
+QF(f,a), value(sam(f, a))} starts each element at the SAM's flow. It gives
+the starting levels of a standalone model (\manref{cge_model}).
 
 \item[\opt{}{fixed}] (from version 0.9.0) makes a variable given a value
 exogenous, as the closure makes the model's exogenous variables: it adds no

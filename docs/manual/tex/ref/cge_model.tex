@@ -1,0 +1,126 @@
+\cgeentry{cge_model}{A standalone model, written whole in the user language}
+
+\cgesec{Description}
+
+\cmd{cge_model new} (from version 0.13.0) starts a standalone model in place
+of the model in memory: a model written whole in the language of
+\manref{cge_variable} and \manref{cge_equation}, without a SAM or the
+built-in equations of Part~\ref{part:model}, as a GAMS program is. Its sets
+are declared with \manref{cge_set}, its parameters with
+\manref{cge_parameter}, as numbers, data or assignments that calibrate the
+model, its variables with \manref{cge_variable}, at starting levels given by
+expressions, and its equations with \manref{cge_equation}.
+\manref{cge_solve} solves it. \cmd{cge_model describe} displays the
+statistics of the model in memory, standalone or built from a SAM, as GAMS's
+model statistics do.
+
+\cgesec{Quick start}
+
+A new standalone model, with two goods, an endowment and a price for each
+\begin{stcode}
+cge_model new
+cge_set g = g1 g2
+cge_parameter e(g), values(g1:10 g2:5)
+cge_variable P(g), value(1)
+\end{stcode}
+The statistics of the model in memory
+\begin{stcode}
+cge_model describe
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_model new}\\
+\cmdb{cge_model} \textbf{\opt{d}{escribe}}
+\end{stsyntax}
+
+\cgesec{Remarks and examples}
+
+A standalone model is built from the commands of the user language. The
+letters \cmd{a c f h d i n} are not the indexes of model sets in it: its sets
+take any names, with labels of their own or from the data in memory,
+\cmd{cge_set ac, from(account)}; the index of a set with a digit after it,
+such as \cmd{i2}, runs over the same set, and \cmd{cge_set j = i} defines a
+set of the same elements, as GAMS's \cmd{alias}. Parameters are calibrated by
+assignments, element by element, \cmd{cge_parameter share(c,a) = io(c,a) /
+sum(c2, io(c2,a))}, which are evaluated once, as in GAMS. Variables start at
+the levels of \opt{}{value()}, an expression that may use the parameters,
+and exogenous variables are \opt{}{fixed}; \manref{cge_closure} exchanges
+fixed and free variables with \opt{}{swap()}. The starting levels need not
+solve the model: \manref{cge_solve} solves it from them, and
+\manref{cge_results} compares each solution with them.
+
+\cgesubsec{Example 1: an exchange economy}
+
+Two consumers trade two goods, with Cobb-Douglas utility and endowments
+$e_{hg}$; good 1 is the numeraire:
+\stlog{model_new}
+The model has nine equations in nine free variables:
+\stlog{model_describe}
+With $\alpha_{hg}$ the budget shares, the market for good 1 gives the price
+of good 2, $P_2 = \sum_h \alpha_{h2}\,e_{h1} / \sum_h \alpha_{h1}\,e_{h2}$,
+here $8.2/5.4 = 1.5185$, which the solution reproduces; \cmd{WALRAS}, the
+excess supply of good 1, is zero, as Walras's law requires:
+\stlog{model_solve}
+
+\cgesubsec{Example 2: a scenario}
+
+The endowments are parameters, which \manref{cge_shock} changes:
+\stlog{model_shock}
+The market equations use the endowments themselves. Had they used a
+parameter assigned from them, \cmd{cge_parameter etot(g) = sum(h,
+e(h,g))}, the shock would not reach it: an assignment is evaluated once.
+
+\cgesubsec{Example 3: the standard model}
+
+The example \cmd{examples/standard_model.do} of the package repository
+writes the standard model of Part~\ref{part:model} for the synthetic SAM as a
+standalone model: 6 sets, 48 parameters calibrated from the SAM by
+assignments, 42 blocks of variables and 35 blocks of equations, 93 equations
+in all. Its solutions agree with those of the built-in model to about
+$10^{-12}$ at the base and in four scenarios, and GAMS solves it to the same
+solution (\chapref{chap:validation}).
+
+\cgesec{Stored results}
+
+\cmd{cge_model new} stores \cmd{r(standalone)}, 1. \cmd{cge_model describe}
+stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(standalone)} & 1 for a standalone model, 0 for a model from a SAM\\
+\res{r(N_eq_blocks)} & blocks of equations\\
+\res{r(N_equations)} & single equations\\
+\res{r(N_var_blocks)} & blocks of variables\\
+\res{r(N_variables)} & single variables\\
+\res{r(N_fixed)} & fixed variables\\
+\res{r(N_free)} & free variables\\
+\res{r(N_nonzeros)} & non-zero entries of the Jacobian at the current point\\
+\res{r(N_sets)} & user sets\\
+\res{r(N_parameters)} & user parameters\\
+\res{r(N_constraints)} & constraints\\
+\res{r(square)} & 1 if the system is square\\
+\res{r(N_reduced)} & equations of the reduced system (a model from a SAM)\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+A standalone model has only user variables, in the order they were added,
+and two blocks of equations: the user equations and the constraints of their
+inequalities (\secref{sec:standalone}). Every equation element is solved,
+with the exact Jacobian of their postfix rows; there is no reduced system.
+Its closure is that of the variables: those added \opt{}{fixed}, then the
+swaps. \manref{cge_gams} writes it as a GAMS program of its own: its labels
+as the set \cmd{AC}, its parameters, variables and equations, and a driver
+that solves the starting levels, with the gaps of the equations there, and
+then the scenario.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_set}{User sets of elements, for indexes and sums}
+\seeentry{cge_parameter}{User parameters: values, assignments and data}
+\seeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+\seeentry{cge_equation}{User equations: new relations among the model's variables}
+\seechapter{chap:user}{User variables and equations}
+\end{alsosee}

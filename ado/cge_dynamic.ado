@@ -8,6 +8,9 @@
 
 program define cge_dynamic, rclass
     version 13.0
+    * a standalone model has no SAM (from version 0.13.0)
+    _cge_load
+    mata: _cge_need_sam()
     syntax , NAME(name) PERiods(numlist integer ascending min=2) [CAPital(namelist)  ///
         DEPreciation(numlist >=0 <1) RENTal(numlist >0) SENSitivity(real 1)             ///
         GROWth(string) TFP(numlist) GDPgrowth(numlist) BASEline(name)                   ///

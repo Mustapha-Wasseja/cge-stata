@@ -7,6 +7,9 @@
 
 program define cge_dynresults, rclass
     version 13.0
+    * a standalone model has no SAM (from version 0.13.0)
+    _cge_load
+    mata: _cge_need_sam()
     syntax , RUN(name) CLEAR [BASEline(name)]
 
     _cge_load

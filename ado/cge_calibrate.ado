@@ -7,6 +7,9 @@
 
 program define cge_calibrate, rclass
     version 13.0
+    * a standalone model has no SAM (from version 0.13.0)
+    _cge_load
+    mata: _cge_need_sam()
     syntax , sigmava(numlist >0) sigmaq(numlist >0) sigmat(numlist >0) ///
         [FQuantities(name) INCelas(numlist >0) FRISch(numlist) SIGMAA(numlist >=0) ///
         healthcom(namelist) healthfac(namelist) healthelas(numlist >=0)          ///

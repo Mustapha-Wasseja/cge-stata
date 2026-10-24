@@ -1,22 +1,25 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.13.0  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
-{p2col:{bf:cge_parameter} {hline 2}}User parameters for user variables and equations{p_end}
+{p2col:{bf:cge_parameter} {hline 2}}User parameters: values, assignments and data{p_end}
 {p2colreset}{...}
 
 
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_parameter} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}] {cmd:=} {it:#}
+{cmd:cge_parameter} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}][{cmd:$(}{it:condition}{cmd:)}] {cmd:=} {it:expression} [{cmd:,} {opt def:ault(#)}]
 
 {p 8 12 2}
 {cmd:cge_parameter} {it:name}{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}{cmd:,} {opt val:ues(spec)} [{opt def:ault(#)}]
 
 {p 8 12 2}
 {cmd:cge_parameter} {it:name}{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}{cmd:,} {opt from(varname)} {opt lab:els(varlist)} [{opt def:ault(#)}]
+
+{p 8 12 2}
+{cmd:cge_parameter} {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}{cmd:,} {opt from(varlist)} {opt lab:els(varname)} [{opt def:ault(#)}]
 
 {p 8 12 2}
 {cmd:cge_parameter} {cmd:,} {opt list}
@@ -26,7 +29,8 @@
 
 {pstd}
 {it:i} and {it:j} are indexes of model sets ({cmd:a c f h d i n}) or of user
-sets ({helpb cge_set}). Do not confuse {cmd:cge_parameter}, which defines a
+sets ({helpb cge_set}); in a standalone model ({helpb cge_model}), of user
+sets only. Do not confuse {cmd:cge_parameter}, which defines a
 user parameter, with {helpb cge_parameters}, which lists the parameters of
 the model, user parameters included, as a dataset.
 
@@ -44,6 +48,20 @@ scenario ({cmd:cge_shock} {it:name}{cmd:, elements(}{it:e}{cmd:) value(}{it:#}{c
 {helpb cge_optimize} may take an element as an instrument, continuation and
 dynamic runs carry them like the model's parameters, and {helpb cge_gams}
 writes them into the GAMS program, as {cmd:UP_}{it:name}.
+
+{pstd}
+From version 0.13.0 the value is an expression, as GAMS's assignments: of
+numbers, user parameters, the model's parameters, the base values of
+variables ({cmd:base(}{it:X}{cmd:)}), sums, conditions and the functions of
+{helpb cge_equation}, with the indexes of the parameter written out element
+by element, so that {cmd:share(c,a) = io(c,a) / sum(c2, io(c2,a))} gives the
+share of each element. A condition, {it:name}{cmd:(}{it:i}{cmd:)$(}{it:condition}{cmd:)},
+limits the elements assigned; the others take {opt default()}. An assignment
+to a parameter that exists, over the same sets, assigns its elements again,
+as in GAMS, if no user variable, equation or macro uses it. The values are
+computed once: a parameter computed from another does not follow later
+shocks to it, which belong in the equations. A parameter's value may not use
+variables themselves; their base values are {cmd:base(}{it:X}{cmd:)}.
 
 {pstd}
 User parameters are saved with the model and kept, at their base values, when
@@ -66,6 +84,14 @@ of the data in memory, one observation per element, and {opt labels(varlist)}
 names the string variables that hold the element labels, one for each index.
 Observations with a missing value or an empty label are skipped; elements
 without an observation take {opt default()}.
+
+{pmore}
+For a parameter with two indexes, {opt from(varlist)} with
+{opt labels(varname)} reads data in wide form, as a SAM in memory: from
+version 0.13.0, the string variable {it:varname} labels the elements of the
+first index, one observation each, and each variable of {it:varlist},
+abbreviations and ranges allowed, holds the values for the element of the
+second index whose label is its name.
 
 {phang}
 {opt default(#)} gives the value of the elements that {opt values()} or
@@ -91,6 +117,11 @@ user equation enforces with government consumption adjusting{p_end}
 {pstd}A scenario with a higher target{p_end}
 {phang2}{cmd:. cge_shock hgoal, value(1.2)}{p_end}
 {phang2}{cmd:. cge_solve, name(goal12)}{p_end}
+
+{pstd}Assignments: the share of each commodity in intermediate input, by activity, and the import tariff rates, where there are imports{p_end}
+{phang2}{cmd:. cge_parameter qint0(c,a) = base(QINT(c,a))}{p_end}
+{phang2}{cmd:. cge_parameter share(c,a) = qint0(c,a) / sum(c2, qint0(c2,a))}{p_end}
+{phang2}{cmd:. cge_parameter tm2(c)$(base(QM(c)) > 0) = tm(c)}{p_end}
 
 {pstd}Weights by commodity, and a price index of the user's own{p_end}
 {phang2}{cmd:. cge_parameter w(c), values(com_agr:0.4 com_man:0.3 com_ser:0.2 com_hlt:0.1)}{p_end}

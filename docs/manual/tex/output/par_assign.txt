@@ -1,0 +1,28 @@
+. cge_parameter qint0(c,a) = base(QINT(c,a))
+User parameter qint0(c,a): 16 value(s), from 0 to 30
+
+. cge_parameter share(c,a) = qint0(c,a) / sum(c2, qint0(c2,a))
+User parameter share(c,a): 16 value(s), from 0 to .666666667
+
+. cge_parameter tmr(c)$(tm(c) > 0) = tm(c) / 2, default(-1)
+User parameter tmr(c): 4 value(s), from -1 to .05
+
+. cge_parameter tmr(c)$(tmr(c) < 0) = 0
+User parameter tmr(c), assigned again: 4 value(s), from 0 to .05
+
+. cge_parameters, clear
+
+. list if parameter == "tmr" | (parameter == "share" & element2 == "act_hlt"), noobs sep(0)
+
+  +--------------------------------------------+
+  | parame~r   element1   element2       value |
+  |--------------------------------------------|
+  |    share    com_agr    act_hlt           0 |
+  |    share    com_man    act_hlt   .66666667 |
+  |    share    com_ser    act_hlt   .33333333 |
+  |    share    com_hlt    act_hlt           0 |
+  |      tmr    com_agr                    .05 |
+  |      tmr    com_man                    .05 |
+  |      tmr    com_ser                      0 |
+  |      tmr    com_hlt                      0 |
+  +--------------------------------------------+

@@ -583,6 +583,52 @@ foreach case in dyninst dynhealth dyndebt dynlag dynfore {
 }
 program drop _donor_exit _debt_relief _tariff_cut
 
+* Standalone models (version 0.13.0), written whole in the user language:
+* the standard model of examples/standard_model.do with the tariffs removed,
+* and an exchange economy with investment-driven savings swapped in by a
+* swap and a larger endowment
+quietly findfile cge_model.ado
+local exfile = subinstr(subinstr(`"`r(fn)'"', "\", "/", .), "ado/cge_model.ado", "examples/standard_model.do", .)
+foreach case in standalone exchange {
+    display as text _n "{hline 60}" _n "Case " as result "`case'"
+    if "`case'" == "standalone" {
+        preserve
+        quietly do `"`exfile'"'
+        restore
+        quietly cge_shock, reset
+        quietly cge_shock tm, value(0)
+        quietly cge_shock QFS, elements(lab) scale(1.05)
+    }
+    else {
+        quietly cge_model new
+        quietly cge_set g = g1 g2 g3
+        quietly cge_set h = h1 h2
+        quietly cge_parameter alpha(h,g), values(h1.g1:0.2 h1.g2:0.5 h1.g3:0.3 h2.g1:0.6 h2.g2:0.1 h2.g3:0.3)
+        quietly cge_parameter e(h,g), values(h1.g1:10 h1.g2:2 h1.g3:4 h2.g1:3 h2.g2:8 h2.g3:5)
+        quietly cge_variable P(g), value(1)
+        quietly cge_variable Y(h) = sum(g, P(g) * e(h,g))
+        quietly cge_variable X(h,g) = alpha(h,g) * Y(h) / P(g)
+        quietly cge_variable PNUM, value(1) fixed
+        quietly cge_variable WALRAS, value(0)
+        quietly cge_equation NUM: P(g1) = PNUM
+        quietly cge_equation MKT(g): sum(h, X(h,g)) = sum(h, e(h,g)) + WALRAS
+        quietly cge_shock e, elements(h1.g1) value(15)
+        quietly cge_shock PNUM, value(2)
+    }
+    quietly cge_solve, name(`case') tolerance(1e-12)
+    assert r(converged) == 1
+    if "`phase'" == "export" {
+        cge_gams using `"`dir'/`case'"', sim(`case') replace
+    }
+    else {
+        capture confirm file `"`dir'/`case'/cge_`case'.csv"'
+        if _rc continue
+        cge_gams using `"`dir'/`case'"', sim(`case') compare noexport
+        post `post' ("`case'") ("`case'") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 * Linked regions (version 0.12.0): a free-trade area between the synthetic
 * SAM and its institutions layout; each region's solution, with its world
 * prices and tariffs from the links as parameters, solved by GAMS on its own

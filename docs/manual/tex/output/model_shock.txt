@@ -1,0 +1,23 @@
+. cge_shock e, elements(h1.g1) value(15)
+User parameter e changed for 1 element(s)
+
+. cge_solve, name(more)
+Simulation more solved in 6 iteration(s) (newton)
+Largest scaled residual  4.97e-15
+
+. cge_results, sim(more)
+
+Simulation more of a standalone model (solved, 6 iteration(s), largest scaled residual  4.97e-15)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+P(g1)                                       1            1    0.000
+P(g2)                                       1      2.16667  116.667
+Y(h1)                                      12      19.3333   61.111
+Y(h2)                                      11      20.3333   84.848
+X(h1,g1)                                  3.6          5.8   61.111
+X(h1,g2)                                  8.4      6.24615  -25.641
+X(h2,g1)                                  6.6         12.2   84.848
+X(h2,g2)                                  4.4      3.75385  -14.685
+WALRAS                                      0  3.21950e-14        .
+-------------------------------------------------------------------

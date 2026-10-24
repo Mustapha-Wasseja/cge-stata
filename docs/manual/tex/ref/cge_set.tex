@@ -38,6 +38,10 @@ Define a set
 \begin{stsyntax}
 \cmdb{cge_set} \argu{name} \cmd{=} \argu{elements} [\texttt{,} \optarg{}{except}{elements}]
 \end{stsyntax}
+Define a set from a string variable of the data in memory (from version 0.13.0)
+\begin{stsyntax}
+\cmdb{cge_set} \argu{name}\texttt{,} \optarg{}{from}{varname} [\optarg{}{except}{elements}]
+\end{stsyntax}
 Define a set of pairs (from version 0.9.1)
 \begin{stsyntax}
 \cmdb{cge_set} \argu{name}\cmd{(}\argu{i}\cmd{,}\argu{j}\cmd{)} \cmd{=} \argu{e1}\cmd{.}\argu{f1} [\argu{e2}\cmd{.}\argu{f2} \dots]
@@ -51,7 +55,10 @@ Display or remove the user sets
 \cmd{com_hlt}, or nests), letters of model sets (\cmd{a} activities, \cmd{c}
 commodities, \cmd{f} factors, \cmd{h} households, \cmd{d} households and
 enterprises, \cmd{i} institutions receiving factor income, \cmd{n} nests of
-value added), and names of user sets, separated by spaces. \argu{name} has at
+value added), and names of user sets, separated by spaces. In a standalone
+model (\manref{cge_model}) there are no model sets: the elements are labels
+of the set's own, of letters, digits and underscores and at most 32
+characters, or names of other user sets. \argu{name} has at
 most 24 characters, letters, digits and underscores; it may not be the name
 of a variable, a parameter, an element, a user equation or another user set,
 nor an index letter of a model set. In a set of pairs, \argu{i} and
@@ -62,6 +69,7 @@ the set of \argu{j}.
 \begin{opttable}
 \optgroup{Main}
 \optarg{}{except}{elements} & elements left out\\
+\optarg{}{from}{varname} & the elements from a string variable in memory\\
 \end{opttable}
 
 \cgesec{Options}
@@ -70,6 +78,11 @@ the set of \argu{j}.
 \item[\optarg{}{except}{elements}] leaves out the elements listed, given as
 for the set.
 
+\item[\optarg{}{from}{varname}] (from version 0.13.0) takes the elements
+from the string variable \argu{varname} of the data in memory, in the order
+they appear, each once and skipping empty values, as the account labels of a
+SAM in memory. In a model from a SAM they must be elements of the model.
+
 \item[\opt{}{list}] displays the user sets and their elements.
 
 \item[\opt{}{clear}] removes every user set. A set that a user variable,
@@ -77,6 +90,14 @@ equation or parameter uses cannot be removed until they are.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
+
+A set whose elements are those of another, \cmd{cge_set j = i}, is the
+analogue of GAMS's \cmd{alias}; the index of a set followed by digits, as
+\cmd{goods2}, also runs over the same set, so that \cmd{sum(goods2, \dots)}
+may appear in an equation over \cmd{goods}. An index that the domain of an
+equation already controls cannot be summed over: \cmd{sum(f, \dots)} in an
+equation over \cmd{f} is an error, as in GAMS, and the sum is written over
+\cmd{f2}.
 
 The SAM with a health sector is mapped and calibrated:
 \stlog{set_setup}

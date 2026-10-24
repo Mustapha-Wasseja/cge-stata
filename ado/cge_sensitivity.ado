@@ -7,6 +7,9 @@
 
 program define cge_sensitivity, rclass
     version 13.0
+    * a standalone model has no SAM (from version 0.13.0)
+    _cge_load
+    mata: _cge_need_sam()
     syntax , SCENario(name) DRAWs(integer) [SEED(integer 12345) SPRead(real 0.5)  ///
         DISTribution(string) COMMON VARy(string) TABles(string) KEEP(name) CLEAR SAVing(string) NODisplay]
 

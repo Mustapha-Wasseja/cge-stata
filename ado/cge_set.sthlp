@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.1  23oct2026}{...}
+{* *! version 0.13.0  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -11,6 +11,9 @@
 
 {p 8 12 2}
 {cmd:cge_set} {it:name} {cmd:=} {it:elements} [{cmd:,} {opt except(elements)}]
+
+{p 8 12 2}
+{cmd:cge_set} {it:name}{cmd:,} {opt from(varname)} [{opt except(elements)}]
 
 {p 8 12 2}
 {cmd:cge_set} {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)} {cmd:=} {it:e1}{cmd:.}{it:f1} [{it:e2}{cmd:.}{it:f2} ...]
@@ -26,7 +29,10 @@
 {cmd:com_hlt}, or nests), the letters of model sets ({cmd:a} activities,
 {cmd:c} commodities, {cmd:f} factors, {cmd:h} households, {cmd:d} households
 and enterprises, {cmd:i} institutions receiving factor income, {cmd:n} nests
-of value added) and the names of other user sets, separated by spaces.
+of value added) and the names of other user sets, separated by spaces. In a
+standalone model ({helpb cge_model}) there are no model sets: the elements
+are labels of the set's own, of letters, digits and underscores, at most 32
+characters, or the names of other user sets.
 
 
 {title:Description}
@@ -56,7 +62,14 @@ two indexes; see {it:Two indexes and sets of pairs} in {helpb cge_equation}.
 {pstd}
 The elements are written out in the order given, each once, without those in
 {opt except()}. A name must be new: not a variable, a parameter, an element,
-an equation or an index letter of a model set.
+an equation or an index letter of a model set. A set whose elements are those
+of another, {cmd:cge_set j = i}, serves as GAMS's {cmd:alias}; the index of a
+set with digits after it, as {cmd:i2}, runs over the same set too.
+
+{pstd}
+From version 0.13.0, {opt from(varname)} takes the elements from a string
+variable of the data in memory, in the order they appear, each once, as the
+account labels of a SAM in memory: {cmd:cge_set ac, from(account)}.
 
 {pstd}
 User sets are saved with the model and kept when it is calibrated again.
@@ -68,6 +81,11 @@ once no user variable, equation or parameter uses them.
 
 {phang}
 {opt except(elements)} leaves out the elements listed, given as for the set.
+
+{phang}
+{opt from(varname)} takes the elements from the string variable
+{it:varname}, skipping empty values; in a model from a SAM they must be
+elements of the model.
 
 
 {title:Examples}

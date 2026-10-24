@@ -2079,6 +2079,82 @@ as simulation *name* with the link variables in its parameters (method
 `linked`), through the external so that it shares nothing with the model's
 own parameters; the routes are stored in `cge__lk`.
 
+## 22. Standalone models and parameter assignments (from version 0.13.0)
+
+`cge_model new` (`_cge_model_new()`) stores a fresh `struct cge_model` with
+`standalone = 1`, `mapped = calibrated = 1`, empty model sets, no SAM and
+empty definitions of user sets, parameters, variables and equations;
+`_cge_sa(M)` is 1 for such a model (`standalone == 1`, so models saved
+before, where the member is missing, are models from a SAM). In a standalone
+model:
+
+- the layout (`_cge_layout`) has only the user variables, in order, so their
+  names may be those of model variables (`_cge_layout_std` gives the built-in
+  ones otherwise);
+- `_cge_eq` has two blocks, `B1` (the constraints of user inequalities and
+  bounds) and `U` (the user equations); `_cge_pattern_sa` gives the pattern
+  of their rows, with no rows of exact derivatives (`drow`, `drow2` empty) and
+  no definitions left out (`dact` zero), so the reduced system is the full
+  one; `_cge_jtrip_ub` gives their exact Jacobian, as in a model from a SAM;
+  `_cge_dense`, `_cge_dense2` and `_cge_derive` do nothing;
+- the closure (`_cge_closure_apply_sa`) fixes the user variables added
+  `fixed`, then applies the swaps; the closure text is `standalone` and the
+  swaps; `cge_closure` takes only `swap()`; `cge_solve` checks that the
+  system is square;
+- the letters `a c f h d i n` are not indexes (`_cge_u_set`,
+  `_cge_u_isindex`, `_cge_u_newname`), the model's parameters are not names
+  of the language (`_cge_u_compile`), and the labels of the model are those
+  of the one-index user sets (`_cge_us_alllabels`); `cge_set` accepts new
+  labels (`_cge_us_newlabel`: letters, digits and underscores, at most 32
+  characters, not a reserved word or a name of a set, parameter or variable);
+- `cge_shock` changes user parameters and fixed variables
+  (`_cge_shock_var`), `cge_parameters` lists the user parameters, the
+  optimiser and loops have no report measures (expressions only), `cge_gdx
+  write` writes the labels as `AC`, `CAL` and `LEVEL`, and the commands that
+  need a SAM stop with error 459 (`_cge_need(M, "sam")`, and
+  `_cge_need_sam()` before options are read).
+
+`cge_gams` writes a standalone model with a driver of its own
+(`_cge_gams_export_sa`, `_cge_gams_driver_sa`): the labels as set `AC`
+(`cge_data.inc`), the user parameters, variables and equations with the base
+gaps times `UBASE` (`cge_user.inc`), models `cge`, `cgenlp`, `cgebase`, a
+tolerance $10^{-13}\max(1, \max_k |x^0_k|)$ (at least $10^{-11}$), the base
+solved and written (`cge_sa_write.inc`), then the scenario's parameter
+changes (`UBASE = 0`), fixed values, swaps, constraints and bounds, solved
+and written; `cge_solve.gms` is the package's.
+
+`cge_parameter name(i[,j])[$(q)] = expression [, default(#)]`
+(`_cge_up_add`, `_cge_up_assign`): for each element of the domain that meets
+$q$ at the base, the expression with the indexes written out
+(`_cge_u_subst2`, `_cge_u_written`) is compiled and evaluated with the base
+parameters and variables; postfix rows of variables, lags, leads or the
+period are an error (198), a missing value an error (459). The other
+elements take `default()` (0), or keep their values when the parameter
+exists, which is allowed over the same sets when no user variable, equation
+or macro uses it (`_cge_up_used`); the new values replace the base and
+current values, not those of stored simulations. `from(varlist)
+labels(var)` for two indexes reads wide data: rows labelled by the first
+index, one variable per element of the second, named as it (`_cge_unab`
+writes out abbreviations and ranges). `cge_set name, from(var)` takes the
+labels of a string variable in order of appearance. `cge_variable ...,
+value(expression)` (`_cge_u_varopts`) gives each element's base value as a
+definition does (`_cge_u_build` evaluates `uvdef[k, 3]` for every row). A
+sum over an index that the domain already controls is an error (198), as
+GAMS's "set already under control".
+
+Tests (`tests/test_standalone.do`): an exchange economy against its closed
+form ($P_2 = \sum_h \alpha_{h2} e_{h1} / \sum_h \alpha_{h1} e_{h2}$, to
+3e-14) and after a shock; assignments, conditions, assignments again, sums
+over two indexes, functions, `base()`, long and wide data and sets from data
+against direct computations; assignments and `value()` expressions in a
+model from a SAM; the standard model written in the user language
+(`examples/standard_model.do`, 93 equations) against the built-in model at
+the base and with tariffs removed, more labour, higher productivity and an
+investment-driven closure with more government demand (106 values each, at
+most 7.6e-13); `cge_model describe`; save and load; errors. GAMS
+(`tools/gams/export_check.do`, cases `standalone` and `exchange`) solves both
+models to 2.6e-12 and 6.7e-16.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
