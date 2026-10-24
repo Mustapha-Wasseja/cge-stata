@@ -2002,6 +2002,38 @@ and the results of the user variables to `cge_user_write.inc`. GAMS then
 differentiates the same equations itself: the export check compares the
 solutions.
 
+## 20. Declared nests (from version 0.11.0)
+
+`cge_nest begin|nest|input|output|end` keeps the block under construction in
+the external `cge__nb` (`struct cge_nb`: name, index, set, condition, output
+quantity and price, efficiency, the equation the top replaces, kind 1 cost or
+2 revenue; nests with parent and elasticity; leaves with quantity, price,
+units, nest and replaced equation). `_cge_nest_end()` writes the definitions
+(`_cge_nest_text()`) and adds them with `_cge_u_addvar()` and
+`_cge_u_addeq()`, the model restored (`cge__nb_model`) if one fails; the
+declarations are kept in `M.unest`, which `cge_equation, clear` empties. For a
+block B over index i, leaf j with quantity x, price p, units u and condition
+$q_j$ = (x != 0) and the block's condition:
+`B_wj(i)$(q_j) = (p)/(u)`, `B_xj(i)$(q_j) = (u)*(x)`; for each nest n, from
+the innermost out, `B_P` or `B_n_P` = the CES or CET index over its children
+with weights $V_c/V_n$, $V_j$ = `base(B_wj)*base(B_xj)` and $V_n$ the sum over
+the leaves within n, each leaf's term with `$(q_j)`; for each inner nest m,
+from the top in, `B_m_Q = V_m * R_parent * (P_parent/P_m)^s` (cost) or
+`(P_m/P_parent)^t` (revenue), with $R_B$ = (Y/base(Y))/E (cost) or
+(Y/base(Y))*E (revenue) and $R_m$ = `B_m_Q`/$V_m$; the equations
+`B_dj(i)$(q_j): B_xj = base(B_xj) * R_n * (P_n/(B_wj/base(B_wj)))^s, replace(...)`
+and `B_z(i): PY = base(PY) * B_P / E` (cost) or `* E` (revenue), replace(...).
+At s = 1 the index is `exp(sum(theta * ln(rel)))` and the demand
+`base * R * P / rel`; at s = 0 the index is `sum(theta * rel)` and the demand
+`base * R`.
+
+`replace(B(lab, a))` in an equation over a stores `B(lab,#1)`;
+`_cge_u_repel()` puts the equation's element in place of `#1` (or `#2`).
+`base(par(e))` compiles to the base value of a parameter that `cge_shock`
+changes, a user parameter or `tf(f, a)` (`_cge_u_parbase()`, from `M.p0`);
+`tf(f, a)` compiles to a postfix row of type 3 with the element
+$(f - 1) n_A + a$, its value `_cge_u_parel(p.tf, el)`, row by row.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

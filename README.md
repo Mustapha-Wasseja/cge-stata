@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.10.2 implements the standard single-country model described in
+Version 0.11.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,13 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.11.0 adds `cge_nest`, which declares a nested CES or CET block as
+MPSGE's production blocks do: `cge_nest begin` with the output, its price and
+the top elasticity, `cge_nest nest` and `cge_nest input` or `output` for the
+tree, and `cge_nest end`, which writes it as user equations in calibrated
+share form in place of the built-in equations named in `replace()`. A block
+of value added at the built-in elasticity gives the built-in solution, and a
+block of two nests the built-in nests of value added, to 1e-10.
 Version 0.10.2 adds perfect foresight: `cge_dynamic, foresight` solves the
 periods of a run together, with `lead()` in user equations for the values of
 later periods, a terminal condition beyond the last

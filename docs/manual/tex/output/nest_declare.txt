@@ -1,0 +1,29 @@
+. cge_nest begin va(a), output(QVA(a)) price(PVA(a)) s(0.8) efficiency(ad(a) / base(ad(a))) replace(
+> Q3)
+Block va(a) begun
+
+. cge_nest nest labour, s(1.5)
+
+. cge_nest input QF(lab_hi, a), price(W(lab_hi) * WFDIST(lab_hi, a) * (1 + tf(lab_hi, a))) ///
+>     units(af(lab_hi)) in(labour) replace(Q4(lab_hi, a))
+
+. cge_nest input QF(lab_lo, a), price(W(lab_lo) * WFDIST(lab_lo, a) * (1 + tf(lab_lo, a))) ///
+>     units(af(lab_lo)) in(labour) replace(Q4(lab_lo, a))
+
+. cge_nest input QF(cap, a), price(W(cap) * WFDIST(cap, a) * (1 + tf(cap, a))) ///
+>     units(af(cap)) replace(Q4(cap, a))
+
+. cge_nest end
+Block va: 9 user variable(s) and 4 equation(s)
+
+. cge_nest, list
+Block va:
+    cge_nest begin va(a), output(QVA(a)) price(PVA(a)) s(0.8) efficiency(ad(a) / base(ad(a)))
+        replace(Q3)
+    cge_nest nest labour, s(1.5)
+    cge_nest input QF(lab_hi, a), price(W(lab_hi) * WFDIST(lab_hi, a) * (1 + tf(lab_hi, a)))
+        units(af(lab_hi)) in(labour) replace(Q4(lab_hi, a))
+    cge_nest input QF(lab_lo, a), price(W(lab_lo) * WFDIST(lab_lo, a) * (1 + tf(lab_lo, a)))
+        units(af(lab_lo)) in(labour) replace(Q4(lab_lo, a))
+    cge_nest input QF(cap, a), price(W(cap) * WFDIST(cap, a) * (1 + tf(cap, a))) units(af(cap))
+        replace(Q4(cap, a))

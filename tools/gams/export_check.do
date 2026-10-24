@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions inequalities pairs replace functions bounds boundscon
+    nests nestvat outces user usersets conditions inequalities pairs replace cgenest functions bounds boundscon
 local ncase : word count `cases'
 
 tempname post
@@ -383,6 +383,25 @@ foreach case of local cases {
         cge_equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))
         cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))
         cge_equation q5(c,a)$(sameas(a, act_man) & base(QINT(c, a)) > 0): QINT(c, a) = base(QINT(c, a)) / base(QINTA(a)) * QINTA(a), replace(Q5)
+        cge_shock tm, value(0)
+    }
+    * A block declared with cge_nest (version 0.11.0): two kinds of labour in a
+    * nest of 1.5 below a top of 0.8 with capital, a payroll tax, and its cut
+    else if "`case'" == "cgenest" {
+        quietly cge_synthetic, clear nests
+        quietly cge_sam, labels(account)
+        quietly cge_map, activities(act_agr act_man act_ser act_ene) commodities(com_agr com_man com_ser com_ene) ///
+            factors(lab_hi lab_lo cap) households(hhd) government(gov) savinv(sav) row(row)             ///
+            dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab_hi)
+        quietly cge_calibrate, `sigmas'
+        quietly cge_nest begin va(a), output(QVA(a)) price(PVA(a)) s(0.8) efficiency(ad(a) / base(ad(a))) replace(Q3)
+        quietly cge_nest nest labour, s(1.5)
+        foreach f in lab_hi lab_lo cap {
+            quietly cge_nest input QF(`f', a), price(W(`f') * WFDIST(`f', a) * (1 + tf(`f', a))) units(af(`f')) ///
+                `=cond("`f'" == "cap", "", "in(labour)")' replace(Q4(`f', a))
+        }
+        quietly cge_nest end
+        cge_shock tf, elements(lab_hi) scale(0.5)
         cge_shock tm, value(0)
     }
     * A nest of capital and manufactures, with VAT not every activity recovers

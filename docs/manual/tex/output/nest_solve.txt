@@ -1,0 +1,23 @@
+. cge_shock QFS, elements(lab_hi) scale(1.1)
+Variable QFS changed for 1 element(s)
+
+. cge_solve, name(skilled)
+Simulation skilled solved in 7 iteration(s) (newton)
+Largest scaled residual  5.17e-14; WALRAS = -1.45e-12
+
+. quietly cge_results, sim(skilled) clear nodisplay
+
+. format base value %9.4f
+
+. list variable element1 element2 base value if inlist(variable, "QF", "W") & ///
+>     inlist(element1, "lab_hi", "lab_lo") & inlist(element2, "", "act_man"), noobs sepby(variable)
+
+  +----------------------------------------------------+
+  | variable   element1   element2      base     value |
+  |----------------------------------------------------|
+  |        W     lab_hi               1.0000    0.9359 |
+  |        W     lab_lo               1.0000    1.0028 |
+  |----------------------------------------------------|
+  |       QF     lab_hi    act_man   12.0000   13.3641 |
+  |       QF     lab_lo    act_man   21.0000   21.0868 |
+  +----------------------------------------------------+

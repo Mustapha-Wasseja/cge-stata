@@ -1,0 +1,186 @@
+\cgeentry{cge_nest}{Declare a nested CES or CET block}
+
+\cgesec{Description}
+
+\cmd{cge_nest} (from version 0.11.0) declares a production or transformation
+function as a tree of CES or CET nests over variables of the model, as the
+production blocks of MPSGE do \citep{rutherford1999}. \cmd{cge_nest begin}
+names the block, its output quantity and price and the elasticity at the top:
+\opt{}{s()} for a cost block, whose inputs substitute for each other, or
+\opt{}{t()} for a revenue block, whose outputs are transformed into each
+other. \cmd{cge_nest nest} adds a nest within the block or within another
+nest. \cmd{cge_nest input} (in a cost block) and \cmd{cge_nest output} (in a
+revenue block) add a leaf: a variable with the expression of its price.
+\cmd{cge_nest end} writes the block as user variables and equations
+(\manref{cge_variable}, \manref{cge_equation}) in calibrated share form, with
+the shares and base values from \cmd{base()}, so that the block holds at the
+base and follows the model when it is calibrated again. The leaves' equations
+and the price of the output take the place of the built-in equations named in
+\opt{rep}{lace()}.
+
+\cgesec{Quick start}
+
+Value added of labour and capital at an elasticity of 0.8, in place of the
+built-in CES function (Q3) and factor demands (Q4)
+\begin{stcode}
+cge_nest begin va(a), output(QVA(a)) price(PVA(a)) s(0.8) replace(Q3)
+cge_nest input QF(lab, a), price(W(lab) * WFDIST(lab, a)) replace(Q4(lab, a))
+cge_nest input QF(cap, a), price(W(cap) * WFDIST(cap, a)) replace(Q4(cap, a))
+cge_nest end
+\end{stcode}
+Labour in a nest of its own within the block
+\begin{stcode}
+cge_nest nest labour, s(1.5)
+cge_nest input QF(lab_hi, a), price(W(lab_hi) * WFDIST(lab_hi, a)) in(labour) replace(Q4(lab_hi, a))
+\end{stcode}
+List the blocks; drop the block that is open
+\begin{stcode}
+cge_nest, list
+cge_nest, drop
+\end{stcode}
+
+\cgesec{Syntax}
+
+Begin a block, add nests and leaves, end it
+\begin{stsyntax}
+\cmdb{cge_nest begin} \argu{name}[\cmd{(}\argu{i}\cmd{)}][\cmd{\$(}\argu{condition}\cmd{)}]\texttt{,}
+\optarg{out}{put}{reference} \optarg{pr}{ice}{reference} \{\optarg{}{s}{\#}|\optarg{}{t}{\#}\} [\optarg{eff}{iciency}{expression} \optarg{rep}{lace}{block}]\\
+\cmdb{cge_nest nest} \argu{nestname}\texttt{,} \{\optarg{}{s}{\#}|\optarg{}{t}{\#}\} [\optarg{}{in}{nestname}]\\
+\cmdb{cge_nest input} \argu{reference}\texttt{,} \optarg{pr}{ice}{expression} [\optarg{un}{its}{expression} \optarg{}{in}{nestname} \optarg{rep}{lace}{block}]\\
+\cmdb{cge_nest output} \argu{reference}\texttt{,} \optarg{pr}{ice}{expression} [\optarg{un}{its}{expression} \optarg{}{in}{nestname} \optarg{rep}{lace}{block}]\\
+\cmdb{cge_nest end}
+\end{stsyntax}
+List the blocks, or drop the block that is open
+\begin{stsyntax}
+\cmdb{cge_nest} \texttt{,} \{\opt{}{list}|\opt{}{drop}\}
+\end{stsyntax}
+\argu{name} has at most 12 characters; the index \argu{i} and the condition
+are those of \manref{cge_equation}. A \argu{reference} is a variable,
+\cmd{QF(lab, a)}, with the block's index; an \argu{expression} is one of the
+language of \manref{cge_equation}.
+
+\begin{opttable}
+\optgroup{begin}
+\optarg{out}{put}{reference} & the output quantity\\
+\optarg{pr}{ice}{reference} & the price of the output\\
+\optarg{}{s}{\#}, \optarg{}{t}{\#} & elasticity of substitution (cost block) or of transformation (revenue block)\\
+\optarg{eff}{iciency}{expression} & efficiency, 1 at the base; default \cmd{1}\\
+\optarg{rep}{lace}{block} & the built-in equation that the price of the output replaces\\
+\optgroup{nest}
+\optarg{}{s}{\#}, \optarg{}{t}{\#} & elasticity of the nest\\
+\optarg{}{in}{nestname} & the nest it is within; default the block\\
+\optgroup{input, output}
+\optarg{pr}{ice}{expression} & the price of the leaf\\
+\optarg{un}{its}{expression} & the units in which the leaf enters; default \cmd{1}\\
+\optarg{}{in}{nestname} & the nest it is within; default the block\\
+\optarg{rep}{lace}{block} & the built-in equation that the leaf's equation replaces\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{out}{put}{reference} \optarg{pr}{ice}{reference}] name the
+variables of the block's output and its price, with the block's index, as
+\cmd{output(QVA(a)) price(PVA(a))}.
+
+\item[\optarg{}{s}{\#}, \optarg{}{t}{\#}] give the elasticity, 0 or more, of
+substitution in a cost block and its nests, or of transformation in a revenue
+block and its nests. At $s = 1$ a nest is Cobb-Douglas, at 0 Leontief.
+
+\item[\optarg{eff}{iciency}{expression}] scales the output of the block; it
+should be 1 at the base, as \cmd{efficiency(ad(a) / base(ad(a)))}, so that a
+shock to \cmd{ad} moves the block as it moves the built-in value added.
+
+\item[\optarg{rep}{lace}{block}] names the built-in equation that the
+equation is put in place of, as \opt{rep}{lace()} of \manref{cge_equation}.
+With the block's index, a label may stand beside it, as
+\cmd{replace(Q4(lab, a))}: the element of Q4 for labour and each activity.
+
+\item[\optarg{pr}{ice}{expression}] of a leaf is the price paid for, or
+received for, its quantity, as \cmd{price(W(lab) * WFDIST(lab, a) * (1 + tf(lab, a)))}
+with the tax on factor use.
+
+\item[\optarg{un}{its}{expression}] makes a leaf enter in units of its own:
+the block takes \argu{units} times the quantity, at the price over
+\argu{units}, as \cmd{units(af(lab))} for a factor in efficiency units.
+
+\item[\optarg{}{in}{nestname}] puts a nest or a leaf within a nest.
+
+\item[\opt{}{list}] lists the declared blocks; \opt{}{drop} drops the block
+that is open. \manref{cge_equation}\cmd{, clear} removes the blocks with the
+other user variables and equations.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A block of value added replaces the built-in function of value added (Q3) and
+the demands for factors (Q4): its leaves' equations give the factors, and its
+top equation the price of value added. The SAM of the example has two kinds of
+labour, capital, an energy commodity and a payroll tax on skilled labour:
+\stlog{nest_setup}
+The two kinds of labour are put in a nest with an elasticity of 1.5, below a
+top of 0.8 with capital; the prices of the factors include the tax on their
+use, and the factors enter in efficiency units:
+\stlog{nest_declare}
+Each leaf has a price per unit and a quantity in units, \cmd{va_w}\argu{k} and
+\cmd{va_x}\argu{k}; the nest has a price index, 1 at the base, and a
+quantity, \cmd{va_labour_P} and \cmd{va_labour_Q}, and the block a price
+index, \cmd{va_P}. The base needs no iteration. Ten per cent more skilled
+labour:
+\stlog{nest_solve}
+The same structure in the built-in nests of value added (\manref{cge_calibrate},
+\cmd{nests()}) gives the same solution:
+\stlog{nest_builtin}
+The test suite checks blocks of one nest at the built-in elasticity, of two
+nests with one elasticity, Cobb-Douglas blocks and CET blocks of exports and
+domestic sales against the built-in functions, and this block against the
+built-in nests, to $10^{-10}$; \manref{cge_gams} solves a block in GAMS.
+
+\cgesec{Stored results}
+
+\cmd{cge_nest end} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_variables)} & user variables written\\
+\res{r(N_equations)} & user equations written\\
+\resgroup{Macros}
+\res{r(name)} & name of the block\\
+\end{storedres}
+\cmd{cge_nest, list} stores \cmd{r(N_blocks)} and \cmd{r(blocks)}.
+
+\cgesec{Methods and formulas}
+
+In nest $n$ with elasticity of substitution $s_n$, children $j$ (leaves or
+nests) with prices $p_j$, base prices $p^0_j$, base quantities $q^0_j$ and
+base value shares $\theta_j = p^0_j q^0_j / \sum_k p^0_k q^0_k$,
+\begin{equation*}
+P_n = \Bigl[\sum_j \theta_j \bigl(p_j/p^0_j\bigr)^{1-s_n}\Bigr]^{1/(1-s_n)},
+\qquad
+q_j = q^0_j\,\frac{Q_n}{Q^0_n}\,\Bigl(\frac{P_n\,p^0_j}{p_j}\Bigr)^{s_n},
+\end{equation*}
+with $P_n = \prod_j (p_j/p^0_j)^{\theta_j}$ at $s_n = 1$ and
+$P_n = \sum_j \theta_j\,p_j/p^0_j$, $q_j = q^0_j\,Q_n/Q^0_n$ at $s_n = 0$. A
+nest's price index is 1 at the base and its quantity its value at base
+prices, the sum of $p^0_j q^0_j$ over the leaves within it. A revenue nest
+with elasticity of transformation $t_n$ has the exponent $1 + t_n$ in place of
+$1 - s_n$ and $q_j = q^0_j\,(Q_n/Q^0_n)\,\bigl(p_j/(p^0_j P_n)\bigr)^{t_n}$. At
+the top, $Q_n/Q^0_n$ is the output relative to its base, divided by
+efficiency $E$ in a cost block and multiplied by it in a revenue block, and
+the price of the output is its base value times $P_n/E$ (cost) or $P_n E$
+(revenue). With units $u_j$, a leaf enters as $u_j\,x_j$ at $p_j/u_j$. The
+shares and base values are written with \cmd{base()}, of variables and from
+version 0.11.0 of parameters, so they are taken again from the base when the
+model is calibrated again. Section~\ref{sec:usernests} gives the
+equations written.
+
+\cgesec{Reference}
+
+\citet{rutherford1999}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_equation}{Add a user equation}
+\seeentry{cge_variable}{Add a user variable}
+\seeentry{cge_calibrate}{Calibrate the model}
+\end{alsosee}

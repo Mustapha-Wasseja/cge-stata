@@ -230,6 +230,40 @@ model, and must keep its accounting consistent: the residual of Walras's law,
 GAMS program, the parameter \cmd{XRP} marks the replaced elements, which the
 equations of \cmd{cge_model.gms} leave out.
 
+\section{Declared nests}\label{sec:usernests}
+
+From version 0.11.0, \manref{cge_nest} declares a tree of CES or CET nests over
+variables of the model, as the production blocks of MPSGE do
+\citep{rutherford1999}, and writes it as user variables and equations. A cost
+block named $B$, with output $Y$, price $P^Y$, efficiency $E$ and leaves $j$,
+quantities $x_j$ in units $u_j$ at prices $\pi_j$, is written as
+\begin{align*}
+w_j &= \pi_j/u_j, \qquad X_j = u_j\,x_j, \qquad
+V_j = w^0_j X^0_j \quad (\text{\cmd{B_w}}j,\ \text{\cmd{B_x}}j),\\
+P_n &= \Bigl[\sum_{j \in n} \tfrac{V_j}{V_n}\,\bigl(w_j/w^0_j\bigr)^{1-s_n}
+       + \sum_{m \in n} \tfrac{V_m}{V_n}\,P_m^{\,1-s_n}\Bigr]^{1/(1-s_n)}
+       \quad (\text{\cmd{B_P}}, \text{\cmd{B_}}n\text{\cmd{_P}}),\\
+Q_m &= V_m\,R_n\,\bigl(P_n/P_m\bigr)^{s_n} \quad (\text{\cmd{B_}}m\text{\cmd{_Q}}),
+\qquad
+X_j = X^0_j\,R_n\,\Bigl(\frac{P_n\,w^0_j}{w_j}\Bigr)^{s_n} \quad (\text{\cmd{B_d}}j),\\
+P^Y &= P^{Y0}\,P_B/E \quad (\text{\cmd{B_z}}),
+\end{align*}
+where $V_n$ is the value at base prices of the leaves within nest $n$, $m$ a
+nest within $n$, $R_B = (Y/Y^0)/E$ for the block and $R_m = Q_m/V_m$ for a
+nest within it. Every $^0$ value is written as \cmd{base()} of a variable or,
+from version 0.11.0, of a parameter, so the block holds at the base and is
+calibrated again with the model. At $s_n = 1$ the index is a geometric mean
+and at 0 a weighted sum; a revenue block has the exponent $1 + t_n$, its
+leaves $X_j = X^0_j R_n (w_j/(w^0_j P_n))^{t_n}$, $R_B = (Y/Y^0)\,E$ and
+$P^Y = P^{Y0} P_B E$. A leaf exists where its quantity is not zero at the base.
+The leaves' equations and $P^Y$ replace the built-in equations named in
+\cmd{replace()}, for value added \eqref{eq:Q4} and \eqref{eq:Q3}, for exports
+and domestic sales \eqref{eq:T1}, \eqref{eq:T2} and \eqref{eq:P4}. A block of
+one nest at the built-in elasticity is the built-in CES or CET function, in
+another form; the test suite checks this, and a block of two nests against the
+built-in nests of value added (section~\ref{sec:nests}). The tax on factor use,
+\cmd{tf(}$f$\cmd{,} $a$\cmd{)}, may be used in expressions from version 0.11.0.
+
 \section{Inequalities and bounds}\label{sec:userineq}
 
 From version 0.9.0, a user equation may be an inequality, $\ell(x) \le r(x)$

@@ -1,0 +1,25 @@
+. quietly cge_equation, clear
+
+. quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) nests(labour: lab_hi lab_lo) sigmanest(lab
+> our:1.5)
+
+. quietly cge_shock QFS, elements(lab_hi) scale(1.1)
+
+. quietly cge_solve, name(builtin)
+
+. quietly cge_results, sim(builtin) clear nodisplay
+
+. format value %9.4f
+
+. list variable element1 element2 value if inlist(variable, "QF", "W") & ///
+>     inlist(element1, "lab_hi", "lab_lo") & inlist(element2, "", "act_man"), noobs sepby(variable)
+
+  +------------------------------------------+
+  | variable   element1   element2     value |
+  |------------------------------------------|
+  |        W     lab_hi               0.9359 |
+  |        W     lab_lo               1.0028 |
+  |------------------------------------------|
+  |       QF     lab_hi    act_man   13.3641 |
+  |       QF     lab_lo    act_man   21.0868 |
+  +------------------------------------------+

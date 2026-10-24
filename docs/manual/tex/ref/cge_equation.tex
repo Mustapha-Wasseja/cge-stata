@@ -115,7 +115,8 @@ numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
     \cmd{com_hlt}, or by the index of the equation or of a sum\\
 \argu{par}, \argu{par}\cmd{(}\argu{e}\cmd{)} & a parameter, at its current value\\
 \argu{upar}, \argu{upar}\cmd{(}\argu{e}[\cmd{,} \argu{e2}]\cmd{)} & a user parameter (\manref{cge_parameter}), at its current value\\
-\cmd{base(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}]\cmd{)} & the base value of a variable\\
+\cmd{base(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}]\cmd{)} & the base value of a variable, or from version 0.11.0 of a parameter, as \cmd{base(ad(act_agr))}\\
+\cmd{tf(}\argu{f}\cmd{,} \argu{a}\cmd{)} & the tax on the use of factor \argu{f} in activity \argu{a} (from version 0.11.0)\\
 \cmd{sum(}\argu{i}\cmd{,} \argu{expression}\cmd{)} & the sum over the elements of the set of index \argu{i}\\
 \cmd{sum((}\argu{i}\cmd{,}\argu{j}\cmd{),} \argu{expression}\cmd{)} & the sum over every pair of elements of the sets of \argu{i} and \argu{j} (from version 0.9.1)\\
 \cmd{sum(}\argu{map}\cmd{(}\argu{i}\cmd{,}\argu{j}\cmd{),} \argu{expression}\cmd{)} & the sum over the pairs of a set of pairs (\manref{cge_set}; from version 0.9.1)\\
@@ -252,7 +253,10 @@ edit an equation of the model. An equation with an index replaces the elements
 of the block with the labels of its own; its indexes run over the sets of the
 block, or over user sets within them, in the same order. An equation without an
 index replaces a block without an index, or the element given,
-\cmd{replace(}\argu{block}\cmd{(}\argu{e}\cmd{))}. The replaced elements leave the
+\cmd{replace(}\argu{block}\cmd{(}\argu{e}\cmd{))}. From version 0.11.0 an
+equation with an index may give a label beside the index,
+\cmd{replace(Q4(lab, a))}: the elements of \eqref{eq:Q4} for labour and each
+activity. \manref{cge_nest} writes its blocks so. The replaced elements leave the
 system, which therefore stays square, and the closure is unchanged.
 Section~\ref{sec:userreplace} lists the blocks that may be replaced. Those
 with derivatives coded in the package cannot be: equations \eqref{eq:P7},

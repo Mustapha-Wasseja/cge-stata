@@ -145,6 +145,9 @@ struct cge_model {
     // built-in equation elements that user equations replace (from version
     // 0.9.3): block and element labels, and their rows in the equations
     string matrix    urep
+    // blocks declared with cge_nest (from version 0.11.0): name and the
+    // declarations, one per line
+    string matrix    unest
     real colvector   erep
     real scalar      neq
     // closure
@@ -230,7 +233,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.10.2")
+    return("0.11.0")
 }
 
 // =====================================================================
@@ -2607,9 +2610,9 @@ string scalar _cge_blockdom(string scalar b)
 string scalar _cge_u_repcheck(struct cge_model scalar M, string scalar rep, string scalar idx, string scalar set)
 {
     string scalar b, dom, s1, s2, u1, u2, els
-    string rowvector el
+    string rowvector el, iv
     string colvector lb, lu
-    real scalar nb, nu, k
+    real scalar nb, nu, k, c, r, nidx
     if (!regexm(strtrim(rep), "^([A-Za-z][A-Za-z0-9]*)[ ]*(\((.*)\))?$")) {
         _cge_fail("replace(): give an equation block, as replace(I7) or replace(I7(com_ser))", 198)
     }
@@ -2625,15 +2628,34 @@ string scalar _cge_u_repcheck(struct cge_model scalar M, string scalar rep, stri
     _cge_setparts(dom, s1, s2)
     nb = (s1 != "") + (s2 != "")
     if (els != "") {
-        if (idx != "") _cge_fail("replace(): an equation with an index replaces the elements of its domain; write replace(" + b + ")", 198)
         el = tokens(els, ",")
         el = strtrim(select(el, el :!= ","))
         if (cols(el) != nb) _cge_fail("replace(): block " + b + " has " + strofreal(nb) + " index(es); " + strofreal(cols(el)) + " given", 198)
-        if (nb >= 1) {
-            if (!anyof(_cge_setlab(M, s1), el[1])) _cge_fail("replace(): " + el[1] + " is not an element of block " + b, 111)
+        // an index of the equation in place of a label (from version 0.11.0),
+        // as replace(Q4(lab, a)): its elements, within the block's set
+        iv = J(1, 0, "")
+        if (idx != "") {
+            iv = tokens(idx, ",")
+            iv = strtrim(select(iv, iv :!= ","))
         }
-        if (nb == 2) {
-            if (!anyof(_cge_setlab(M, s2), el[2])) _cge_fail("replace(): " + el[2] + " is not an element of block " + b, 111)
+        _cge_setparts(set, u1, u2)
+        nidx = 0
+        for (k = 1; k <= nb; k++) {
+            lb = _cge_setlab(M, (k == 1 ? s1 : s2))
+            c = 0
+            if (cols(iv)) c = _cge_find(iv', el[k])
+            if (c) {
+                lu = _cge_setlab(M, (c == 1 ? u1 : u2))
+                for (r = 1; r <= rows(lu); r++) {
+                    if (!anyof(lb, lu[r])) _cge_fail("replace(): " + lu[r] + " is not an element of block " + b + "; the indexes of the equation must run over its sets", 198)
+                }
+                el[k] = "#" + strofreal(c)
+                nidx++
+            }
+            else if (!anyof(lb, el[k])) _cge_fail("replace(): " + el[k] + " is not an element of block " + b, 111)
+        }
+        if (cols(iv) & nidx != cols(iv)) {
+            _cge_fail("replace(): an equation with an index replaces elements that follow it: write replace(" + b + "), or the index in place of a label, as replace(Q4(lab, a))", 198)
         }
         return(b + "(" + invtokens(el, ",") + ")")
     }
@@ -2666,11 +2688,16 @@ string scalar _cge_u_repcheck(struct cge_model scalar M, string scalar rep, stri
 string rowvector _cge_u_repel(string scalar spec, string scalar e1, string scalar e2)
 {
     string rowvector el
-    real scalar c
+    real scalar c, k
     c = strpos(spec, "(")
     if (!c) return((spec, e1, e2))
     el = tokens(substr(spec, c + 1, strlen(spec) - c - 1), ",")
     el = select(el, el :!= ",")
+    // an index of the equation (from version 0.11.0): its element
+    for (k = 1; k <= cols(el); k++) {
+        if (el[k] == "#1") el[k] = e1
+        else if (el[k] == "#2") el[k] = e2
+    }
     return((substr(spec, 1, c - 1), (cols(el) >= 1 ? el[1] : ""), (cols(el) >= 2 ? el[2] : "")))
 }
 
@@ -6814,7 +6841,7 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
         else if (c == 3) {
             v = _cge_par_get(p, M.upar[tok[i, 2]])
             sp = sp + 1
-            st[sp] = v[tok[i, 3]]
+            st[sp] = _cge_u_parel(v, tok[i, 3])
             G[sp, .] = J(1, nv, 0)
         }
         else if (c == 7) {
@@ -16316,7 +16343,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     string colvector lab
     string scalar tk, nm, g
     real matrix out, opst
-    real scalar k, e, prev, pos, pi, el, j, pr, code, n, lk, na
+    real scalar k, e, prev, pos, pi, el, j, pr, code, n, lk, na, pv
     real colvector a1, a2
     real matrix sub
     string rowvector gp
@@ -16439,14 +16466,22 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                         continue
                     }
                     if (nm == "base") {
-                        // base(reference): the base value, a number
-                        if (e < k + 3) _cge_fail("base(): give a variable, as base(GSAV) or base(QG(com_hlt))", 198)
+                        // base(reference): the base value, a number; of a
+                        // variable, or from version 0.11.0 of a parameter
+                        if (e < k + 3) _cge_fail("base(): give a variable or a parameter, as base(GSAV) or base(ad(act_agr))", 198)
                         nm = t[k + 2]
                         args = (e > k + 3 ? t[|k + 4 \ e - 2|] : J(1, 0, ""))
-                        if (e > k + 3 & (t[k + 3] != "(" | t[e - 1] != ")")) _cge_fail("base(): give a variable, as base(GSAV) or base(QG(com_hlt))", 198)
+                        if (e > k + 3 & (t[k + 3] != "(" | t[e - 1] != ")")) _cge_fail("base(): give a variable or a parameter, as base(GSAV) or base(ad(act_agr))", 198)
                         args = select(args, args :!= ",")
                         pos = _cge_u_varpos(M, nm, args)
-                        if (!pos) _cge_fail("base(): " + nm + " is not a variable", 111)
+                        if (!pos) {
+                            pv = _cge_u_parbase(M, nm, args)
+                            out = out \ (1, pv, .)
+                            gtok = gtok, "(" + _cge_gnum(pv) + ")"
+                            prev = 1
+                            k = e + 1
+                            continue
+                        }
                         out = out \ (1, x0[pos], .)
                         gtok = gtok, "(" + _cge_gnum(x0[pos]) + ")"
                         prev = 1
@@ -16502,6 +16537,20 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                 gtok = gtok, g + (cols(args) ? "('" + invtokens(args, "', '") + "')" : "")
             }
             else {
+                // the tax on factor use by factor and activity (from version
+                // 0.11.0), tf(f, a)
+                if (nm == "tf") {
+                    if (cols(args) != 2) _cge_fail("parameter tf needs a factor and an activity, as tf(lab, act_agr)", 198)
+                    el = _cge_find(M.F, args[1])
+                    j = _cge_find(M.A, args[2])
+                    if (!el | !j) _cge_fail("tf(" + args[1] + ", " + args[2] + "): give a factor and an activity", 111)
+                    if (!_cge_find(M.upar, nm)) M.upar = M.upar \ nm
+                    out = out \ (3, _cge_find(M.upar, nm), (el - 1) * rows(M.A) + j)
+                    gtok = gtok, "tf('" + args[1] + "', '" + args[2] + "')"
+                    prev = 1
+                    k = e + 1
+                    continue
+                }
                 pi = _cge_find(P[., 1], nm)
                 if (!pi & condmode & _cge_u_isindex(M, nm)) {
                     _cge_fail("index " + nm + " in a condition: compare elements with sameas(" + nm + ", label) or positions with ord(" + nm + ")", 198)
@@ -16626,6 +16675,68 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     n = rows(out)
     if (!n) _cge_fail("an empty expression", 198)
     return(out)
+}
+
+// The base value of element args of a parameter (from version 0.11.0): a user
+// parameter, or one that cge_shock changes
+real scalar _cge_u_parbase(struct cge_model scalar M, string scalar nm, string rowvector args)
+{
+    string matrix P
+    string colvector lab
+    real matrix v
+    real scalar pi, el, j
+    pi = _cge_up_find(M, nm)
+    if (pi) {
+        if (cols(args) != _cge_nidx(M.updef[pi, 2]) + _cge_nidx(M.updef[pi, 3])) {
+            _cge_fail("base(): parameter " + nm + " has " + strofreal(_cge_nidx(M.updef[pi, 2]) + _cge_nidx(M.updef[pi, 3])) +
+                      " index(es); " + strofreal(cols(args)) + " given", 198)
+        }
+        el = 1
+        if (cols(args)) {
+            lab = _cge_setlab(M, M.updef[pi, 2])
+            el = _cge_find(lab, args[1])
+            if (!el) _cge_fail("base(): " + args[1] + " is not an element of parameter " + nm, 111)
+            if (cols(args) == 2) {
+                lab = _cge_setlab(M, M.updef[pi, 3])
+                j = _cge_find(lab, args[2])
+                if (!j) _cge_fail("base(): " + args[2] + " is not an element of parameter " + nm, 111)
+                el = (el - 1) * rows(lab) + j
+            }
+        }
+        return(M.p0.upval[_cge_up_pos(M, pi)[el]])
+    }
+    if (nm == "tf") {
+        if (cols(args) != 2) _cge_fail("base(): parameter tf needs a factor and an activity", 198)
+        el = _cge_find(M.F, args[1])
+        j = _cge_find(M.A, args[2])
+        if (!el | !j) _cge_fail("base(): tf(" + args[1] + ", " + args[2] + ") is not an element of tf", 111)
+        return(M.p0.tf[el, j])
+    }
+    P = _cge_gams_params()
+    pi = _cge_find(P[., 1], nm)
+    if (!pi) _cge_fail("base(): " + nm + " is not a variable or a parameter", 111)
+    el = 1
+    if (P[pi, 3] == "") {
+        if (cols(args)) _cge_fail("base(): parameter " + nm + " has no elements", 198)
+    }
+    else {
+        if (cols(args) != 1) _cge_fail("base(): parameter " + nm + " needs one element", 198)
+        lab = _cge_gams_setlabels(M, P[pi, 3])
+        el = _cge_find(lab, args[1])
+        if (!el) _cge_fail("base(): " + args[1] + " is not an element of parameter " + nm, 111)
+    }
+    v = _cge_par_get(M.p0, nm)
+    return(v[el])
+}
+
+// Element el of a parameter's values: of a vector, or row by row of a matrix
+// (tf, from version 0.11.0)
+real scalar _cge_u_parel(real matrix v, real scalar el)
+{
+    // a model without taxes on factor use may hold tf empty
+    if (rows(v) * cols(v) == 0) return(0)
+    if (rows(v) > 1 & cols(v) > 1) return(v[ceil(el / cols(v)), mod(el - 1, cols(v)) + 1])
+    return(v[el])
 }
 
 // The longest lag (from version 0.9.2)
@@ -16788,7 +16899,7 @@ real scalar _cge_u_value(struct cge_model scalar M, struct cge_par scalar p, rea
         else if (c == 3) {
             v = _cge_par_get(p, M.upar[tok[i, 2]])
             sp = sp + 1
-            st[sp] = v[tok[i, 3]]
+            st[sp] = _cge_u_parel(v, tok[i, 3])
         }
         else if (c == 7) {
             sp = sp + 1
@@ -17874,8 +17985,386 @@ void _cge_u_clear()
     _cge_cons_rebuild(M)
     // the attributes of the user variables go with them (from version 0.9.8)
     _cge_bd_sync(M)
+    M.unest = J(0, 2, "")
     _cge_store(M)
     printf("{txt}User variables and equations removed\n")
+}
+
+// =====================================================================
+// Declared nests of CES and CET functions (from version 0.11.0;
+// model_spec.md, Section 20)
+// =====================================================================
+//
+// cge_nest declares a production (cost) or transformation (revenue)
+// function as a tree of CES or CET nests over variables of the model, in
+// the manner of MPSGE's production blocks: cge_nest begin names the block,
+// its output and price and the elasticity at the top; cge_nest nest adds an
+// inner nest; cge_nest input (or output) a leaf, a quantity with its price;
+// cge_nest end writes the block as user variables and equations in
+// calibrated share form, with shares and base values from base(), so that
+// the block holds at the base and follows the model when it is calibrated
+// again. Each leaf's equation and the top equation, the price of the output
+// against the price index of the block, take the place of the built-in
+// equations named in replace().
+
+struct cge_nb {
+    // the block: name, index and its set, condition, output quantity and
+    // price, efficiency, the built-in equation the top equation replaces,
+    // and the kind (1 cost, with elasticities of substitution; 2 revenue,
+    // with elasticities of transformation)
+    string scalar   name, idx, set, cond, outq, outp, eff, orep
+    real scalar     kind
+    // the nests: name (the block's own first), parent and elasticity
+    string colvector nn, np
+    real colvector   ns
+    // the leaves: quantity, price, units, nest and the equation replaced
+    string matrix    lf
+    // the declarations, as written
+    string colvector text
+}
+
+struct cge_nb scalar _cge_nb_load()
+{
+    pointer() scalar q
+    q = findexternal("cge__nb")
+    if (q == NULL) _cge_fail("cge_nest: no block is open; start one with cge_nest begin", 198)
+    return(*q)
+}
+
+void _cge_nb_store(struct cge_nb scalar NB)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__nb")) == NULL) q = crexternal("cge__nb")
+    *q = NB
+}
+
+// cge_nest begin: a new block
+void _cge_nest_begin(string scalar head, string scalar outq, string scalar outp, string scalar s,
+                     string scalar t, string scalar eff, string scalar rep, string scalar line)
+{
+    struct cge_model scalar M
+    struct cge_nb scalar NB, OPEN
+    string scalar name, idx, set, cond
+    real scalar e
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (findexternal("cge__nb") != NULL) {
+        OPEN = _cge_nb_load()
+        _cge_fail("cge_nest: block " + OPEN.name + " is open; end it with cge_nest end", 198)
+    }
+    _cge_u_head(M, head, name, idx, set, cond)
+    if (substr(name, 1, 1) == "_") _cge_fail(name + ": names that begin with _ are kept for the package", 198)
+    if (strlen(name) > 12) _cge_fail("cge_nest: a block name has at most 12 characters, so that the names made from it fit", 198)
+    if ((s != "") + (t != "") != 1) _cge_fail("cge_nest begin: give s(#), an elasticity of substitution, or t(#), one of transformation", 198)
+    e = strtoreal(s + t)
+    if (e >= . | e < 0) _cge_fail("cge_nest begin: the elasticity must be zero or positive", 198)
+    if (outq == "" | outp == "") _cge_fail("cge_nest begin: give output() and price()", 198)
+    NB.name = name
+    NB.idx = idx
+    NB.set = set
+    NB.cond = cond
+    NB.outq = strtrim(outq)
+    NB.outp = strtrim(outp)
+    NB.eff = (strtrim(eff) == "" ? "1" : strtrim(eff))
+    NB.orep = strtrim(rep)
+    NB.kind = (s != "" ? 1 : 2)
+    NB.nn = name
+    NB.np = ""
+    NB.ns = e
+    NB.lf = J(0, 5, "")
+    NB.text = stritrim(line)
+    _cge_nb_store(NB)
+}
+
+// cge_nest nest: an inner nest of the open block
+void _cge_nest_nest(string scalar name, string scalar s, string scalar t, string scalar parent, string scalar line)
+{
+    struct cge_nb scalar NB
+    real scalar e
+    NB = _cge_nb_load()
+    if (!regexm(name, "^[A-Za-z][A-Za-z0-9]*$")) _cge_fail("cge_nest nest: a nest name has letters and digits and starts with a letter", 198)
+    if (anyof(NB.nn, name)) _cge_fail("cge_nest nest: " + name + " is already a nest of block " + NB.name, 110)
+    if (strlen(NB.name) + strlen(name) > 20) _cge_fail("cge_nest nest: the names of the block and the nest together have at most 20 characters", 198)
+    if ((NB.kind == 1 & (t != "" | s == "")) | (NB.kind == 2 & (s != "" | t == ""))) {
+        _cge_fail("cge_nest nest: a nest of a " + (NB.kind == 1 ? "cost block takes s(#)" : "revenue block takes t(#)"), 198)
+    }
+    e = strtoreal(s + t)
+    if (e >= . | e < 0) _cge_fail("cge_nest nest: the elasticity must be zero or positive", 198)
+    if (parent == "") parent = NB.name
+    if (!anyof(NB.nn, parent)) _cge_fail("cge_nest nest: in(" + parent + ") is not a nest of block " + NB.name, 111)
+    NB.nn = NB.nn \ name
+    NB.np = NB.np \ parent
+    NB.ns = NB.ns \ e
+    NB.text = NB.text \ stritrim(line)
+    _cge_nb_store(NB)
+}
+
+// cge_nest input and cge_nest output: a leaf of the open block, a quantity
+// with its price, in units of its own (efficiency units, for example)
+void _cge_nest_leaf(real scalar kind, string scalar q, string scalar price, string scalar units, string scalar in,
+                    string scalar rep, string scalar line)
+{
+    struct cge_nb scalar NB
+    NB = _cge_nb_load()
+    if (kind != NB.kind) {
+        _cge_fail("cge_nest: block " + NB.name + " is a " + (NB.kind == 1 ? "cost block; its leaves are cge_nest input" : "revenue block; its leaves are cge_nest output"), 198)
+    }
+    if (strtrim(q) == "" | strtrim(price) == "") _cge_fail("cge_nest: a leaf needs a quantity and price()", 198)
+    if (in == "") in = NB.name
+    if (!anyof(NB.nn, in)) _cge_fail("cge_nest: in(" + in + ") is not a nest of block " + NB.name, 111)
+    NB.lf = NB.lf \ (strtrim(q), strtrim(price), (strtrim(units) == "" ? "1" : strtrim(units)), in, strtrim(rep))
+    NB.text = NB.text \ stritrim(line)
+    _cge_nb_store(NB)
+}
+
+// The block under construction dropped
+void _cge_nest_drop()
+{
+    if (findexternal("cge__nb") != NULL) rmexternal("cge__nb")
+}
+
+// cge_nest end: the block written as user variables and equations. The model
+// is restored if any of them fails.
+void _cge_nest_end()
+{
+    struct cge_model scalar M
+    struct cge_nb scalar NB
+    string colvector vdef, edef
+    real scalar k
+    pointer() scalar q
+    NB = _cge_nb_load()
+    M = _cge_load()
+    if (!rows(NB.lf)) _cge_fail("cge_nest end: block " + NB.name + " has no leaves", 198)
+    _cge_nest_text(NB, vdef, edef)
+    if ((q = findexternal("cge__nb_model")) == NULL) q = crexternal("cge__nb_model")
+    *q = M
+    for (k = 1; k <= rows(vdef); k++) _cge_u_addvar(vdef[k])
+    for (k = 1; k <= rows(edef); k++) _cge_u_addeq(edef[k])
+    M = _cge_load()
+    _cge_un_widen(M)
+    M.unest = M.unest \ (NB.name, invtokens(NB.text', char(10)))
+    _cge_store(M)
+    rmexternal("cge__nb_model")
+    _cge_nest_drop()
+    printf("{txt}Block {res}%s{txt}: %f nest(s), %f leaf(s), %f user variable(s) and %f equation(s)\n",
+           NB.name, rows(NB.nn), rows(NB.lf), rows(vdef), rows(edef))
+    st_global("r(name)", NB.name)
+    st_numscalar("r(N_variables)", rows(vdef))
+    st_numscalar("r(N_equations)", rows(edef))
+}
+
+// When cge_nest end fails: the model as it was, the block still open
+void _cge_nest_abort()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__nb_model")) != NULL) {
+        _cge_store(*q)
+        rmexternal("cge__nb_model")
+    }
+}
+
+// The definitions of the block's user variables (vdef) and equations (edef),
+// as cge_variable and cge_equation would take them. Leaf j has its price per
+// unit, NAME_wj, and its quantity in units, NAME_xj; an inner nest m its
+// price index NAME_m_P (1 at the base) and quantity NAME_m_Q (its value at
+// base prices at the base); the block its price index NAME_P. Each leaf's
+// equation, NAME_dj, gives its quantity from the price index and quantity of
+// its nest; the top equation, NAME_z, the price of the output.
+void _cge_nest_text(struct cge_nb scalar NB, string colvector vdef, string colvector edef)
+{
+    string scalar N, I, ix, c0, h, lc, rel, bv, sv, P, R, term, dem
+    string colvector lcond, lrel, lbase, lval, nval, nrel
+    real colvector order_, isleaf, ch
+    real scalar j, n, m, s, nl, nn, k
+    N = NB.name
+    I = (NB.idx != "" ? "(" + NB.idx + ")" : "")
+    c0 = NB.cond
+    nl = rows(NB.lf)
+    nn = rows(NB.nn)
+    vdef = edef = J(0, 1, "")
+    // the leaves: price per unit and quantity in units, where the leaf exists
+    lcond = lrel = lbase = lval = J(nl, 1, "")
+    for (j = 1; j <= nl; j++) {
+        lcond[j] = "(" + NB.lf[j, 1] + " != 0)" + (c0 != "" ? " & (" + c0 + ")" : "")
+        h = N + "_w" + strofreal(j)
+        if (strlen(h) > 24) _cge_fail("cge_nest: block name too long", 198)
+        vdef = vdef \ (h + I + "$(" + lcond[j] + ") = (" + NB.lf[j, 2] + ") / (" + NB.lf[j, 3] + ")")
+        vdef = vdef \ (N + "_x" + strofreal(j) + I + "$(" + lcond[j] + ") = (" + NB.lf[j, 3] + ") * (" + NB.lf[j, 1] + ")")
+        lrel[j] = "(" + h + I + " / base(" + h + I + "))"
+        lbase[j] = "base(" + N + "_x" + strofreal(j) + I + ")"
+        lval[j] = "(base(" + h + I + ") * " + lbase[j] + ")"
+    }
+    // the value at base prices of each nest: the sum over the leaves within it
+    nval = J(nn, 1, "")
+    for (n = 1; n <= nn; n++) {
+        sv = ""
+        for (j = 1; j <= nl; j++) {
+            if (_cge_nest_within(NB, NB.lf[j, 4], NB.nn[n])) sv = sv + (sv != "" ? " + " : "") + lval[j] + "$(" + lcond[j] + ")"
+        }
+        if (sv == "") _cge_fail("cge_nest end: nest " + NB.nn[n] + " has no leaves", 198)
+        nval[n] = "(" + sv + ")"
+    }
+    // price indexes, from the innermost nests out
+    nrel = J(nn, 1, "")
+    for (n = 1; n <= nn; n++) nrel[n] = (n == 1 ? N + "_P" + I : N + "_" + NB.nn[n] + "_P" + I)
+    order_ = _cge_nest_post(NB)
+    for (k = 1; k <= rows(order_); k++) {
+        n = order_[k]
+        s = NB.ns[n]
+        sv = ""
+        // children: leaves, then nests
+        for (j = 1; j <= nl; j++) {
+            if (NB.lf[j, 4] != NB.nn[n]) continue
+            sv = sv + (sv != "" ? " + " : "") + "(" + lval[j] + " / " + nval[n] + " * " + _cge_nest_pow(lrel[j], s, NB.kind) + ")$(" + lcond[j] + ")"
+        }
+        for (m = 2; m <= nn; m++) {
+            if (NB.np[m] != NB.nn[n]) continue
+            sv = sv + (sv != "" ? " + " : "") + "(" + nval[m] + " / " + nval[n] + " * " + _cge_nest_pow(nrel[m], s, NB.kind) + ")"
+        }
+        P = _cge_nest_index(sv, s, NB.kind)
+        vdef = vdef \ ((n == 1 ? N + "_P" : N + "_" + NB.nn[n] + "_P") + I + (c0 != "" ? "$(" + c0 + ")" : "") + " = " + P)
+    }
+    // quantities of the inner nests, from the top in
+    for (k = rows(order_); k >= 1; k--) {
+        n = order_[k]
+        if (n == 1) continue
+        m = _cge_find(NB.nn, NB.np[n])
+        dem = _cge_nest_demand(nval[n], _cge_nest_ratio(NB, m, nval[m], I), nrel[m], nrel[n], NB.ns[m], NB.kind)
+        vdef = vdef \ (N + "_" + NB.nn[n] + "_Q" + I + (c0 != "" ? "$(" + c0 + ")" : "") + " = " + dem)
+    }
+    // the leaves' equations
+    for (j = 1; j <= nl; j++) {
+        m = _cge_find(NB.nn, NB.lf[j, 4])
+        dem = _cge_nest_demand(lbase[j], _cge_nest_ratio(NB, m, nval[m], I), nrel[m], lrel[j], NB.ns[m], NB.kind)
+        edef = edef \ (N + "_d" + strofreal(j) + I + "$(" + lcond[j] + "): " + N + "_x" + strofreal(j) + I + " = " + dem +
+                       (NB.lf[j, 5] != "" ? ", replace(" + NB.lf[j, 5] + ")" : ""))
+    }
+    // the price of the output: the price index against efficiency
+    edef = edef \ (N + "_z" + I + (c0 != "" ? "$(" + c0 + ")" : "") + ": " + NB.outp + " = base(" + NB.outp + ") * " + N + "_P" + I +
+                   (NB.kind == 1 ? " / (" : " * (") + NB.eff + ")" + (NB.orep != "" ? ", replace(" + NB.orep + ")" : ""))
+}
+
+// 1 if nest a is nest b or within it
+real scalar _cge_nest_within(struct cge_nb scalar NB, string scalar a, string scalar b)
+{
+    real scalar k
+    while (a != "") {
+        if (a == b) return(1)
+        k = _cge_find(NB.nn, a)
+        a = NB.np[k]
+    }
+    return(0)
+}
+
+// The nests from the innermost out: each after the nests within it
+real colvector _cge_nest_post(struct cge_nb scalar NB)
+{
+    real colvector depth
+    real scalar n
+    string scalar a
+    depth = J(rows(NB.nn), 1, 0)
+    for (n = 1; n <= rows(NB.nn); n++) {
+        a = NB.np[n]
+        while (a != "") {
+            depth[n] = depth[n] + 1
+            a = NB.np[_cge_find(NB.nn, a)]
+        }
+    }
+    return(order((-depth, (1::rows(NB.nn))), (1, 2)))
+}
+
+// A relative price raised to the exponent of a CES (1 - s) or CET (1 + s)
+// index, or, for the limits, as it stands
+string scalar _cge_nest_pow(string scalar rel, real scalar s, real scalar kind)
+{
+    if (kind == 1 & s == 1) return("ln(" + rel + ")")
+    if ((kind == 1 & s == 0) | (kind == 2 & s == 0)) return(rel)
+    return(rel + "^(" + _cge_gnum(kind == 1 ? 1 - s : 1 + s) + ")")
+}
+
+// The price index of a nest from the sum of its share-weighted terms
+string scalar _cge_nest_index(string scalar sv, real scalar s, real scalar kind)
+{
+    if (kind == 1 & s == 1) return("exp(" + sv + ")")
+    if (s == 0) return("(" + sv + ")")
+    return("(" + sv + ")^(" + _cge_gnum(1 / (kind == 1 ? 1 - s : 1 + s)) + ")")
+}
+
+// The quantity ratio of nest m to the base: for the block, the output against
+// efficiency; for an inner nest, its quantity against its value
+string scalar _cge_nest_ratio(struct cge_nb scalar NB, real scalar m, string scalar val, string scalar I)
+{
+    if (m == 1) {
+        return("(" + NB.outq + " / base(" + NB.outq + ")" + (NB.kind == 1 ? " / (" : " * (") + NB.eff + "))")
+    }
+    return("(" + NB.name + "_" + NB.nn[m] + "_Q" + I + " / " + val + ")")
+}
+
+// The quantity of a child: its base, the ratio of its nest, and its price
+// against the nest's index (cost: (P / p)^s; revenue: (p / P)^t)
+string scalar _cge_nest_demand(string scalar base, string scalar ratio, string scalar P, string scalar rel,
+                               real scalar s, real scalar kind)
+{
+    if (s == 0) return(base + " * " + ratio)
+    if (kind == 1) {
+        if (s == 1) return(base + " * " + ratio + " * " + P + " / " + rel)
+        return(base + " * " + ratio + " * (" + P + " / " + rel + ")^(" + _cge_gnum(s) + ")")
+    }
+    return(base + " * " + ratio + " * (" + rel + " / " + P + ")^(" + _cge_gnum(s) + ")")
+}
+
+// The text of a declaration split at the first comma outside parentheses:
+// the head (a reference with its index and condition) into local h, the
+// options, from the comma, into local o
+void _cge_nest_split(string scalar text, string scalar h, string scalar o)
+{
+    real scalar k, d
+    string scalar ch
+    d = 0
+    for (k = 1; k <= strlen(text); k++) {
+        ch = substr(text, k, 1)
+        if (ch == "(") d++
+        else if (ch == ")") d--
+        else if (ch == "," & d == 0) {
+            st_local(h, strtrim(substr(text, 1, k - 1)))
+            st_local(o, substr(text, k, .))
+            return
+        }
+    }
+    st_local(h, strtrim(text))
+    st_local(o, "")
+}
+
+// The declared blocks, listed
+void _cge_nest_list()
+{
+    struct cge_model scalar M
+    string rowvector L
+    real scalar k, j
+    M = _cge_load()
+    _cge_un_widen(M)
+    if (!rows(M.unest)) {
+        printf("{txt}No blocks are declared\n")
+        st_numscalar("r(N_blocks)", 0)
+        return
+    }
+    for (k = 1; k <= rows(M.unest); k++) {
+        printf("{txt}Block {res}%s{txt}:\n", M.unest[k, 1])
+        L = tokens(M.unest[k, 2], char(10))
+        for (j = 1; j <= cols(L); j++) {
+            if (L[j] != char(10)) printf("{p 4 8 2}{res}%s{p_end}\n", L[j])
+        }
+    }
+    st_numscalar("r(N_blocks)", rows(M.unest))
+    st_global("r(blocks)", invtokens(M.unest[., 1]'))
+}
+
+// Models saved before version 0.11.0 have no list of blocks
+void _cge_un_widen(struct cge_model scalar M)
+{
+    if (rows(M.unest) == 0 | cols(M.unest) != 2) {
+        if (rows(M.unest) == 0) M.unest = J(0, 2, "")
+    }
 }
 
 // The user variables and equations for GAMS (cge_user.inc), and the lines
@@ -19580,6 +20069,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "escale", M.escale)
     _cge_io_put(fh, "emask", M.emask)
     _cge_io_put(fh, "urep", M.urep)
+    _cge_io_put(fh, "unest", M.unest)
     _cge_io_put(fh, "erep", M.erep)
     _cge_io_put(fh, "neq", M.neq)
     _cge_io_put(fh, "c_ext", M.c_ext)
@@ -19731,6 +20221,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "escale") M.escale = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "emask") M.emask = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "urep") M.urep = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "unest") M.unest = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "erep") M.erep = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "neq") M.neq = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "c_ext") M.c_ext = (rows(v) * cols(v) == 0 ? "" : v)

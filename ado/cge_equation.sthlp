@@ -86,7 +86,8 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, those of
 {p2col:{it:VAR} or {it:VAR}{cmd:(}{it:e}[{cmd:,} {it:e2}]{cmd:)}}a model or user variable, at an element such as {cmd:com_hlt} or the index of the equation or of a sum{p_end}
 {p2col:{it:par}{cmd:(}{it:e}{cmd:)}}a parameter at its current value: {cmd:tm}, {cmd:te}, {cmd:tq}, {cmd:ta}, {cmd:tv}, {cmd:kappa}, {cmd:pwm}, {cmd:pwe}, {cmd:ad}, {cmd:af}, {cmd:qg}, {cmd:qinv}, {cmd:trdg}, {cmd:trdr}, {cmd:trfr}, {cmd:trgr}, {cmd:trrg}, {cmd:trgg}, {cmd:tshi}, {cmd:qshi}, {cmd:trshi}, {cmd:trshir}, {cmd:rd}, {cmd:rf}, {cmd:ddebt}, {cmd:fdebt}, {cmd:qlf}, {cmd:wmin}, {cmd:wref}, {cmd:sick}, {cmd:tfy} or {cmd:hs0}, for example {cmd:tv(c)} or {cmd:trgr}{p_end}
 {p2col:{it:upar}[{cmd:(}{it:e}[{cmd:,} {it:e2}]{cmd:)}]}a user parameter defined by {helpb cge_parameter}, at its current value (from version 0.7.1){p_end}
-{p2col:{cmd:base(}{it:VAR}[{cmd:(}{it:e}{cmd:)}]{cmd:)}}the base value of a variable{p_end}
+{p2col:{cmd:base(}{it:VAR}[{cmd:(}{it:e}{cmd:)}]{cmd:)}}the base value of a variable, or from version 0.11.0 of a parameter, as {cmd:base(ad(act_agr))}{p_end}
+{p2col:{cmd:tf(}{it:f}{cmd:,} {it:a}{cmd:)}}the tax on the use of factor {it:f} in activity {it:a} (from version 0.11.0){p_end}
 {p2col:{cmd:sum(}{it:i}{cmd:,} {it:expression}{cmd:)}}the sum over the set of index {it:i}, a model set or a user set{p_end}
 {p2col:{cmd:sum((}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over every pair of elements of the sets of {it:i} and {it:j} (from version 0.9.1){p_end}
 {p2col:{cmd:sum(}{it:map}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over the pairs of a set of pairs defined by {helpb cge_set} (from version 0.9.1){p_end}
@@ -308,7 +309,9 @@ government purchases, and so on): a change to the model's own equations, as a
 GAMS modeller would edit them. An equation with an index replaces the
 elements of the block with the labels of its own, over the same sets or user
 sets within them; one without an index replaces the block without an index,
-or the element given, {opt replace(block(e))}. For example, exports of
+or the element given, {opt replace(block(e))}. From version 0.11.0 an
+equation with an index may give a label beside it, {opt replace(Q4(lab, a))}:
+the elements of {cmd:Q4} for labour and each activity. For example, exports of
 agricultural goods held at the base, and government purchases of goods 10 per
 cent above the rule of {cmd:I7}:
 

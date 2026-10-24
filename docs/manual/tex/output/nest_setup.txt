@@ -1,0 +1,22 @@
+. cge_synthetic, clear nests
+(20 vars, 19 obs)
+
+Synthetic SAM loaded (nested value-added layout): 19 accounts, total   1856.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 19 accounts, total 1856
+Largest row-column imbalance:  0.00e+00
+
+. cge_map, activities(act_agr act_man act_ser act_ene) commodities(com_agr com_man com_ser com_ene)
+> ///
+>     factors(lab_hi lab_lo cap) households(hhd) government(gov) savinv(sav) row(row)             //
+> /
+>     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab_hi)
+Accounts mapped: 4 activities, 4 commodities, 3 factors, 1 households, 0 enterprises, 0 margin accou
+> nts
+Tax on the use of lab_hi: tax_pay
+
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+Calibrated: 125 equations, 125 free variables
+Benchmark replication: largest scaled residual  3.55e-16
