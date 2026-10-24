@@ -1,0 +1,27 @@
+. cge_region select A
+Region A is in memory
+
+. cge_report, sims(fta) tables(macro)
+
+Macroeconomic aggregates
+-------------------------------------------------
+                                  base        fta
+gdp_nominal                        300      0.311
+gdp_real                           300      0.113
+gdp_deflator                         1      0.199
+consumption_real                   230      1.889
+government_real                     45      0.000
+investment_real                     50     -6.404
+insurance_fund_real                  0          .
+exports_real                        75      4.310
+imports_real                       100      4.037
+value_added_real                   262     -0.000
+cpi                                  1      0.000
+dpi                                  1      0.814
+exchange_rate                        1      0.838
+real_exchange_rate                   1      0.024
+private_savings                     32      1.873
+investment_value                    50     -7.369
+foreign_savings                     15      0.000
+-------------------------------------------------
+Percentage changes from the base (rates: changes in points)

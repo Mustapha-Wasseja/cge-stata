@@ -1,0 +1,20 @@
+. cge_region results, sim(fta) clear
+
+. format base quantity price value %9.3f
+
+. format tariff_base tariff %6.3f
+
+. list exporter importer commodity base quantity price tariff_base tariff if commodity == "com_man",
+>  ///
+>     noobs sep(0)
+
+  +--------------------------------------------------------------------------------+
+  | exporter   importer   commod~y     base   quantity   price   tariff~e   tariff |
+  |--------------------------------------------------------------------------------|
+  |        A          B    com_man   24.000     28.222   1.030      0.080    0.000 |
+  |        B          A    com_man   30.000     35.984   1.018      0.100    0.000 |
+  |     rest          A    com_man   30.000     26.422   1.000      0.100    0.100 |
+  |        A       rest    com_man   16.000     14.216   1.030      0.000    0.000 |
+  |     rest          B    com_man   96.000     93.388   1.000      0.105    0.105 |
+  |        B       rest    com_man   50.000     46.509   1.018      0.000    0.000 |
+  +--------------------------------------------------------------------------------+

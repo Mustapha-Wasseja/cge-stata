@@ -1,0 +1,173 @@
+\cgeentry{cge_region}{Link single-country models through bilateral trade}
+
+\cgesec{Description}
+
+\cmd{cge_region} (from version 0.12.0) links calibrated single-country models
+through bilateral trade, as multi-region models such as GTAP do
+\citep{hertel1997}. Each region is a model of its own, from its own SAM, with
+its own closure and shocks. \cmd{cge_region add} adds the model in memory, or
+one saved with \manref{cge_save}, as a region; \cmd{cge_region select} brings a
+region's model into memory, where \manref{cge_shock}, \manref{cge_closure},
+\manref{cge_results} and the other commands act on it. \cmd{cge_region trade}
+reads the base trade between the regions, route by route, and
+\cmd{cge_region solve} solves the regions together: for each commodity a
+region trades with the others, its world import price, average tariff and
+world export price are set by the links, with imports a CES aggregate of the
+routes into it at prices that include each route's tariff. Each region's
+solution is stored as a simulation in its own model.
+
+\cgesec{Quick start}
+
+Two calibrated models as regions, a unit of the second's SAM worth two world
+units
+\begin{stcode}
+cge_region add A
+cge_region add B using modelB.cgem, units(2)
+\end{stcode}
+The base trade between them, from data in memory; the tariffs between them
+removed; the regions solved together
+\begin{stcode}
+cge_region trade, exporter(exp) importer(imp) commodity(com) value(v) tariff(t)
+cge_region tariff, from(A B) to(A B) value(0)
+cge_region solve, name(fta)
+\end{stcode}
+The routes of the solution as data; region A in memory, to report on it
+\begin{stcode}
+cge_region results, sim(fta) clear
+cge_region select A
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_region add} \argu{name} [\cmd{using} \argu{filename}] [\texttt{,} \optarg{un}{its}{\#} \opt{}{replace}]\\
+\cmdb{cge_region select} \argu{name}\\
+\cmdb{cge_region trade} [\cmd{using} \argu{filename}]\texttt{,} \optarg{exp}{orter}{varname} \optarg{imp}{orter}{varname}
+\optarg{com}{modity}{varname} \optarg{val}{ue}{varname} [\optarg{tar}{iff}{varname} \optarg{sig}{ma}{spec} \optarg{row}{elasticity}{spec}]\\
+\cmdb{cge_region tariff} \texttt{,} [\optarg{}{from}{regions} \optarg{}{to}{regions} \optarg{com}{modities}{list}] \{\optarg{val}{ue}{\#}|\optarg{sc}{ale}{\#}\}\\
+\cmdb{cge_region world} \texttt{,} [\optarg{com}{modities}{list}] [\optarg{imp}{ort}{\#} \optarg{exp}{ort}{\#} \opt{}{reset}]\\
+\cmdb{cge_region solve} \texttt{,} \optarg{}{name}{name} [\optarg{tol}{erance}{\#} \optarg{iter}{ate}{\#} \optarg{}{start}{base|alone}]\\
+\cmdb{cge_region results} \texttt{,} \optarg{}{sim}{name} \opt{}{clear}\\
+\cmdb{cge_region list}\\
+\cmdb{cge_region clear}
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{add}
+\optarg{un}{its}{\#} & the value in world units of a unit of the region's SAM; default \texttt{1}\\
+\opt{}{replace} & replace a region of the same name\\
+\optgroup{trade}
+\optarg{exp}{orter}{varname}, \optarg{imp}{orter}{varname} & regions of each route\\
+\optarg{com}{modity}{varname} & commodity of each route\\
+\optarg{val}{ue}{varname} & base value of each route at world prices, world units\\
+\optarg{tar}{iff}{varname} & base tariff of each route; default the importer's average\\
+\optarg{sig}{ma}{spec} & elasticity among the sources of imports; default \texttt{4}\\
+\optarg{row}{elasticity}{spec} & elasticity of the rest of the world's demand; default \opt{sig}{ma()}\\
+\optgroup{tariff, world}
+\optarg{}{from}{regions}, \optarg{}{to}{regions} & exporters (with \cmd{rest}) and importers; default all\\
+\optarg{com}{modities}{list} & commodities; default all those traded\\
+\optarg{val}{ue}{\#}, \optarg{sc}{ale}{\#} & set or scale the tariffs of the routes\\
+\optarg{imp}{ort}{\#}, \optarg{exp}{ort}{\#} & the rest of the world's export price and demand price\\
+\opt{}{reset} & tariffs and prices of the rest of the world at the base\\
+\optgroup{solve}
+\optarg{}{name}{name} & name of the simulation stored in every region\\
+\optarg{tol}{erance}{\#} & tolerance; default \texttt{1e-10}\\
+\optarg{iter}{ate}{\#} & maximum number of Newton iterations; default \texttt{100}\\
+\optarg{}{start}{base|alone} & start from the base, or from each region solved on its own\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{un}{its}{\#}] is the value in world units of a unit of the
+region's SAM, so that regions with SAMs in different currencies or scales
+share one world unit; route values are in world units.
+
+\item[\optarg{exp}{orter}{varname} \optarg{imp}{orter}{varname}
+\optarg{com}{modity}{varname}] name string variables with the regions and the
+commodity of each route; each commodity must be in both regions, exported by
+the one and imported by the other. \optarg{val}{ue}{varname} names the base
+value of the route at world prices, in world units: the routes into a region
+may not exceed its imports of the commodity, nor those out of it its exports.
+\optarg{tar}{iff}{varname} gives the base tariff of a route; where it is
+missing, the importer's average. The rest of the world takes the difference
+between each region's trade of a linked commodity and its routes with the
+other regions, with the tariff that gives the importer's average.
+
+\item[\optarg{sig}{ma}{spec} \optarg{row}{elasticity}{spec}] give the elasticity
+of substitution among the sources of imports, and the elasticity of the rest
+of the world's demand for a region's exports: one number, or
+\argu{commodity}\cmd{:}\argu{\#} pairs.
+
+\item[\optarg{}{from}{regions} \optarg{}{to}{regions}
+\optarg{com}{modities}{list}] of \cmd{cge_region tariff} choose the routes,
+by exporter (\cmd{rest} for the rest of the world), importer and commodity;
+\optarg{val}{ue}{\#} sets their tariffs and \optarg{sc}{ale}{\#} multiplies
+them. They stay until changed or reset.
+
+\item[\optarg{imp}{ort}{\#} \optarg{exp}{ort}{\#}] of \cmd{cge_region world}
+set the rest of the world's export price of the commodities, and the price
+that shifts its demand for the regions' exports, relative to the base;
+\opt{}{reset} puts them and every route's tariff back at the base.
+
+\item[\optarg{}{name}{name}] names the simulation that \cmd{cge_region solve}
+stores in every region. \optarg{}{start}{alone} starts Newton's method from
+each region solved on its own at the base links.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+In a region, the world prices and tariffs of the commodities it trades with
+the other regions are set by the links: they are changed with
+\cmd{cge_region tariff} and \cmd{cge_region world}, and a shock to them with
+\manref{cge_shock} is an error. Every other shock of a region, its closure and
+its other commodities are its own. The regions and their trade last for the
+session: each region is saved with \manref{cge_save} after
+\cmd{cge_region select}, and the routes as data, to add them again. Two
+regions, the synthetic SAM and its
+institutions layout, whose SAM unit is worth two world units:
+\stlog{reg_setup}
+The base trade between them in three commodities. Manufactures from A pay a
+tariff of 8 per cent in B, below B's average of 10 per cent; the other routes pay the
+importer's average:
+\stlog{reg_trade}
+A free-trade area between the two regions:
+\stlog{reg_fta}
+The routes of manufactures:
+\stlog{reg_routes}
+Trade between the regions rises: the tariffs between them go, so routes from
+the partner become cheaper than those from the rest of the world, which lose
+trade. Region A's report:
+\cgeneed{12\baselineskip}
+\stlog{reg_report}
+The test suite checks these solutions, and others, against a reference
+implementation in Python (\chapref{chap:regions}).
+
+\cgesec{Stored results}
+
+\cmd{cge_region solve} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(iterations)} & Newton iterations\\
+\res{r(N_regions)} & regions\\
+\res{r(N_links)} & link variables\\
+\resgroup{Macros}
+\res{r(name)} & name of the simulation\\
+\end{storedres}
+\cmd{cge_region list} stores \cmd{r(regions)}, \cmd{r(current)},
+\cmd{r(N_regions)} and \cmd{r(N_routes)}; \cmd{cge_region results} stores
+\cmd{r(sim)} and \cmd{r(N_routes)}.
+
+\cgesec{Methods and formulas}
+
+\Chapref{chap:regions} gives the routes, the link variables and equations and
+the solution.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_save}{Save and load a model}
+\seeentry{cge_shock}{Change parameters and fixed variables}
+\seeentry{cge_gams}{Export the model to GAMS}
+\seechapter{chap:regions}{Linked regions}
+\end{alsosee}

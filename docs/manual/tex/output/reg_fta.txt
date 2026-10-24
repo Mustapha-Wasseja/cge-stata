@@ -1,0 +1,13 @@
+. cge_region tariff, from(A B) to(A B) value(0)
+Tariffs changed on 6 route(s)
+
+. cge_region solve, name(fta)
+Linked regions: 2 regions of 93 105 equations and 18 link variables, 216 equations in all
+Iteration 0: largest scaled residual =  1.64e-01
+Iteration 1: largest scaled residual =  5.79e-03
+Iteration 2: largest scaled residual =  2.19e-05
+Iteration 3: largest scaled residual =  3.97e-10
+Iteration 4: largest scaled residual =  1.29e-15
+Region A: largest scaled residual  1.29e-15
+Region B: largest scaled residual  1.11e-15
+Solved together in 4 iteration(s); simulation fta stored in each region

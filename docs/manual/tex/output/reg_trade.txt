@@ -1,0 +1,27 @@
+. clear
+
+. input str4 exporter str4 importer str8 commodity double value double tariff
+
+      exporter   importer  commodity       value      tariff
+  1. A B com_agr  8 .
+  2. A B com_man 24 0.08
+  3. A B com_ser  6 .
+  4. B A com_agr 10 .
+  5. B A com_man 30 .
+  6. B A com_ser  5 0
+  7. end
+
+. cge_region trade, exporter(exporter) importer(importer) commodity(commodity) value(value) tariff(t
+> ariff)
+Trade between 2 regions in 3 commodities: 18 routes, 12 of them with the rest of the world
+
+. cge_region list
+------------------------------------------------------------
+Region            Commodities    Equations Unit (world)
+A                           3           93            1
+B                           3          105            2  (in memory)
+------------------------------------------------------------
+18 route(s) in 3 commodities; elasticities among sources and of the rest of the world's demand:
+  com_agr             4      4
+  com_man             4      4
+  com_ser             4      4

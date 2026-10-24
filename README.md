@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.11.0 implements the standard single-country model described in
+Version 0.12.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,15 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.12.0 adds linked regions, `cge_region`: calibrated single-country
+models, each from its own SAM with its own closure and shocks, solved together
+with bilateral trade, as multi-region models such as GTAP are. Each region's
+imports of a commodity it trades with the others are a CES aggregate of the
+routes into it, from the other regions and the rest of the world, at prices
+that include each route's tariff; its world prices and average tariffs are
+link variables. `cge_region tariff` changes tariffs by route, so a free-trade
+area is one command. The solutions agree with a Python reference of the
+linked model to 1e-8.
 Version 0.11.0 adds `cge_nest`, which declares a nested CES or CET block as
 MPSGE's production blocks do: `cge_nest begin` with the output, its price and
 the top elasticity, `cge_nest nest` and `cge_nest input` or `output` for the

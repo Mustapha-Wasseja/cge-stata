@@ -583,6 +583,50 @@ foreach case in dyninst dynhealth dyndebt dynlag dynfore {
 }
 program drop _donor_exit _debt_relief _tariff_cut
 
+* Linked regions (version 0.12.0): a free-trade area between the synthetic
+* SAM and its institutions layout; each region's solution, with its world
+* prices and tariffs from the links as parameters, solved by GAMS on its own
+display as text _n "{hline 60}" _n "Case " as result "linked"
+capture cge_region clear
+quietly cge_synthetic, clear
+quietly cge_sam, labels(account)
+quietly cge_map, `stdmap'
+quietly cge_calibrate, `sigmas'
+quietly cge_region add A
+quietly cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, `instmap'
+quietly cge_calibrate, `sigmas'
+quietly cge_region add B, units(2)
+preserve
+clear
+input str4 exporter str4 importer str8 commodity double value double tariff
+A B com_agr 8 .
+A B com_man 24 0.08
+A B com_ser 6 .
+B A com_agr 10 .
+B A com_man 30 .
+B A com_ser 5 0
+end
+quietly cge_region trade, exporter(exporter) importer(importer) commodity(commodity) value(value) tariff(tariff)
+restore
+quietly cge_region tariff, from(A B) to(A B) value(0)
+quietly cge_region solve, name(linked) tolerance(1e-12)
+foreach r in A B {
+    quietly cge_region select `r'
+    if "`phase'" == "export" {
+        cge_gams using `"`dir'/linked_`r'"', sim(linked) replace
+    }
+    else {
+        capture confirm file `"`dir'/linked_`r'/cge_linked.csv"'
+        if _rc continue
+        cge_gams using `"`dir'/linked_`r'"', sim(linked) compare noexport
+        post `post' ("linked_`r'") ("linked") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+cge_region clear
+
 * A scenario loop (version 0.9.9): GAMS solves the scenarios in order, each
 * from the solution of the one before, as cge_loop does; a shock in place is
 * part of every scenario

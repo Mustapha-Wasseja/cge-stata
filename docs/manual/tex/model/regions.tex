@@ -1,0 +1,76 @@
+\chapter{Linked regions}\label{chap:regions}
+
+From version 0.12.0, \manref{cge_region} links calibrated single-country
+models through bilateral trade, as multi-region models such as GTAP do
+\citep{hertel1997}. Each region $r$ is a model of its own, from its own SAM,
+with its own closure, parameters and shocks; the regions share world prices
+and trade with each other and with the rest of the world.
+
+\section{Routes}
+
+The base trade between the regions is a set of routes: an exporter $s$, an
+importer $r$ and a commodity $c$, with the value $V_{src}$ at world prices in
+world units and, optionally, a tariff $t^0_{src}$, the importer's average
+$tm^0_{rc}$ where none is given. A unit of the SAM of region $r$ is worth
+$u_r$ world units, so its base imports of $c$ are worth
+$M^0_{rc} = pwm^0_c\,\V{QM}^0_c\,u_r$ and its base exports
+$E^0_{rc} = pwe^0_c\,(\V{QE}^0_c + \V{QER}^0_c)\,u_r$. The routes from the
+other regions may not exceed $M^0_{rc}$, and those to them $E^0_{sc}$; the rest
+of the world takes the difference, so that every region's trade of the
+commodity is that of its SAM. The route of imports from the rest of the world
+has the tariff that gives the importer's average:
+\begin{equation*}
+tm^0_{rc}\,M^0_{rc} = \sum_s t^0_{src}\,V_{src} + t^0_{wrc}\,V_{wrc}.
+\end{equation*}
+
+\section{Link variables and equations}
+
+For each commodity $c$ that region $r$ imports from another region, its world
+import price relative to the base, $\pi^M_{rc} = pwm_{rc}/pwm^0_{rc}$, and its
+average tariff $tm_{rc}$ are unknowns; for each commodity that region $s$
+exports to another region, its world export price relative to the base,
+$\pi^E_{sc} = pwe_{sc}/pwe^0_{sc}$. They take the place of the parameters
+$pwm_c$, $tm_c$ and $pwe_c$ in the region's equations. A route's price is the
+exporter's $\pi^E_{sc}$, or the rest of the world's export price $\pi^W_c$ (1
+at the base), and with its tariff, relative to the base,
+$x_k = \pi_k\,(1 + t_k)/(1 + t^0_k)$. The imports of region $r$ are a CES
+aggregate of the routes into it, with elasticity $\sigma_c$ and the base
+shares $\theta_k = V_k(1 + t^0_k)/\sum_j V_j(1 + t^0_j)$:
+\begin{gather*}
+P_{rc} = \Bigl[\sum_k \theta_k\,x_k^{1-\sigma_c}\Bigr]^{1/(1-\sigma_c)}, \qquad
+q_k = V_k\,\frac{\V{QM}_{rc}}{\V{QM}^0_{rc}}\,\Bigl(\frac{P_{rc}}{x_k}\Bigr)^{\sigma_c},
+\end{gather*}
+in world units at base prices. The exports of region $s$ to the rest of the
+world follow its demand, $q_k = V_k\,(\pi^E_{sc}/\pi^D_c)^{-\eta_c}$, where
+$\pi^D_c$ shifts it. The link equations are
+\begin{align*}
+\pi^M_{rc}\,(1 + tm_{rc}) &= (1 + tm^0_{rc})\,P_{rc},\\
+tm_{rc}\,\pi^M_{rc}\,M^0_{rc}\,\frac{\V{QM}_{rc}}{\V{QM}^0_{rc}} &= \sum_k t_k\,\pi_k\,q_k,\\
+E^0_{sc}\,\frac{\V{QE}_{sc} + \V{QER}_{sc}}{\V{QE}^0_{sc} + \V{QER}^0_{sc}} &= \sum_k q_k,
+\end{align*}
+the first two over the routes into $r$, the third over those out of $s$: the
+tariff-inclusive price of the imports is their CES price index, the tariff
+revenue that of the routes, and the exports of a region the sum of its
+routes. With the first two, the value of the imports at world prices is that
+of the routes. At the base every link variable holds its base value and the
+regions their base solutions.
+
+\section{Solution}
+
+The linked system has the full system of each region and the link equations.
+It is solved by Newton's method with a line search and the sparse LU
+(section~\ref{sec:sparse}): each region's Jacobian is exact; the columns of the
+link variables in a region's equations, and the link equations, are central
+differences. Newton's method starts from the base, or from each region solved
+on its own at the base links. Each region's solution is stored in its own
+model with its link variables as its parameters $pwm_c$, $tm_c$ and $pwe_c$, so
+it solves that model on its own, which the test suite checks; the routes are
+kept with the links.
+
+The test suite compares the solutions of two linked regions, the synthetic SAM
+and its institutions layout, with a reference implementation in Python
+(\texttt{reference/cge\_ref/regions.py}), which builds the routes and solves the
+linked system with the Python reference models of the two regions: at the
+base, with a free-trade area between them, with a higher price of
+manufactures from the rest of the world, and with higher productivity in one
+region, to $10^{-8}$ in every variable and route.

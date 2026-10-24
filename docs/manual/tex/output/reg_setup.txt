@@ -1,0 +1,35 @@
+. capture cge_region clear
+
+. cge_synthetic, clear
+(16 vars, 15 obs)
+
+Synthetic SAM loaded (standard layout): 15 accounts, total   1743.00
+Largest row-column imbalance:  0.00e+00
+
+. quietly cge_sam, labels(account)
+
+. quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)          ///
+>     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+
+. quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+
+. cge_region add A
+Region A: 3 commodities, a unit of its SAM worth 1 world units; 1 region(s)
+
+. cge_synthetic, clear institutions
+(18 vars, 17 obs)
+
+Synthetic SAM loaded (institutions layout): 17 accounts, total   1866.00
+Largest row-column imbalance:  0.00e+00
+
+. quietly cge_sam, labels(account)
+
+. quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd npi) enterprises(ent) government(gov)             ///
+>     savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+
+. quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+
+. cge_region add B, units(2)
+Region B: 3 commodities, a unit of its SAM worth 2 world units; 2 region(s)

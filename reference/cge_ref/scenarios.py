@@ -911,8 +911,10 @@ def write_expected(directory: Path = EXPECTED_DIR) -> list[Path]:
     solutions.update(nest_cases())
     # Output from several activities (0.5.2)
     solutions.update(output_cases())
+    from .regions import write_linked
     written = (write_dynamic(directory) + write_samtools(directory) + write_multipliers(directory)
-               + write_spa(directory) + write_regimes(solutions, directory) + write_optimize(directory))
+               + write_spa(directory) + write_regimes(solutions, directory) + write_optimize(directory)
+               + write_linked(directory))
     for name, solution in solutions.items():
         if not solution.converged:
             raise RuntimeError(f"simulation {name} did not converge")

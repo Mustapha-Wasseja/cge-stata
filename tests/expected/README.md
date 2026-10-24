@@ -18,6 +18,7 @@ relative tolerance of 1e-6.
 | `cnm_*.csv` | the five shocks on the non-imported layout (`data/cge_synthetic_sam_cnm.csv`: a non-imported commodity with sales tax) |
 | `margins_*.csv` | the five shocks on the margins layout (`data/cge_synthetic_sam_margins.csv`: margins netted out of `act_ser`) |
 | `inst_*.csv` | the five shocks above on the institutions layout (`data/cge_synthetic_sam_inst.csv`: an enterprise and a non-profit institution) |
+| `link_<case>_<region>.csv`, `link_<case>_routes.csv` | linked regions (version 0.12.0; `reference/cge_ref/regions.py`): the synthetic SAM (region A) and the institutions layout (region B, a SAM unit worth two world units) with the routes of `LINK_TRADE`; cases `base`, `fta` (no tariffs between the regions), `world` (the rest of the world's price of `com_man` up 10 per cent) and `prod` (efficiency of `act_man` in A up 5 per cent); each region's solution and the routes' quantities and prices |
 
 Settings: the synthetic SAM (`data/cge_synthetic_sam.csv`); elasticities
 `sigma_va = 0.8`, `sigma_q = 2.0` and `sigma_t = 2.0` for every sector, except in

@@ -233,7 +233,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.11.0")
+    return("0.12.0")
 }
 
 // =====================================================================
@@ -10944,6 +10944,884 @@ void _cge_fs_solve()
     _cge_store(M)
     _cge_fs_store(FS)
     printf("{txt}Solved together in {res}%f{txt} iteration(s)\n", iter)
+}
+
+// =====================================================================
+// Linked regions (from version 0.12.0; model_spec.md, Section 21)
+// =====================================================================
+//
+// cge_region links calibrated single-country models through bilateral
+// trade, as multi-region models such as GTAP do. Each region keeps its own
+// model, closure and shocks. For a commodity that it trades with other
+// regions, its world import price, its average tariff and its world export
+// price become unknowns of the linked system: imports are a CES aggregate of
+// the routes from the other regions and from the rest of the world, at
+// prices that include each route's tariff (elasticity among sources sigma),
+// and exports go to the other regions as their demand for them, and to the
+// rest of the world along a demand curve (elasticity eta). Base values of the
+// routes are in world units, one for every region; each region's SAM unit
+// is worth units() of them. The rest of the world closes each region's trade
+// at the base.
+
+struct cge_lk {
+    // the regions: name and the value in world units of a unit of its SAM;
+    // the region whose model is in memory
+    string colvector reg
+    real colvector   units
+    string scalar    cur
+    // the routes: exporter and importer (positions in reg, 0 for the rest of
+    // the world), commodity, base value at world prices (world units), base
+    // and current tariff
+    real colvector   rs, rr
+    string colvector rc
+    real colvector   rv, rt0, rt
+    // by commodity: elasticity among sources of imports, elasticity of the
+    // rest of the world's demand for exports, the rest of the world's export
+    // price and the price shifting its demand for imports (both 1 at the base)
+    string colvector ec
+    real colvector   es, eta, pwrow, pwrowe
+    // solutions: name, and the quantities (world units at base prices),
+    // prices and tariffs of the routes
+    string colvector sname
+    real matrix      sq, sp, st
+}
+
+struct cge_lk scalar _cge_lk_load()
+{
+    pointer() scalar q
+    q = findexternal("cge__lk")
+    if (q == NULL) _cge_fail("cge_region: no regions; add them with cge_region add", 198)
+    return(*q)
+}
+
+void _cge_lk_store(struct cge_lk scalar L)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__lk")) == NULL) q = crexternal("cge__lk")
+    *q = L
+}
+
+// The model of a region, a copy; and keeping one
+struct cge_model scalar _cge_rg_get(string scalar name)
+{
+    pointer() scalar q
+    q = findexternal("cge__rg_" + name)
+    if (q == NULL) _cge_fail("cge_region: no region " + name, 111)
+    return(*q)
+}
+
+void _cge_rg_put(string scalar name, struct cge_model scalar M)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__rg_" + name)) == NULL) q = crexternal("cge__rg_" + name)
+    *q = M
+}
+
+// The model in memory kept as the region it belongs to; a model of other
+// accounts is not
+void _cge_rg_sync()
+{
+    struct cge_lk scalar L
+    struct cge_model scalar M, M0
+    if (findexternal("cge__lk") == NULL) return
+    L = _cge_lk_load()
+    if (L.cur == "") return
+    M = _cge_load()
+    M0 = _cge_rg_get(L.cur)
+    if (M.calibrated != 1 | M.A != M0.A | M.C != M0.C | M.F != M0.F) {
+        printf("{txt}Note: the model in memory is not that of region {res}%s{txt}; it is not kept as the region\n", L.cur)
+        return
+    }
+    _cge_rg_put(L.cur, M)
+}
+
+// cge_region add: the model in memory, calibrated, as region name
+void _cge_region_add(string scalar name, real scalar units, real scalar repl)
+{
+    struct cge_lk scalar L
+    struct cge_model scalar M
+    real scalar k
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (!regexm(name, "^[A-Za-z][A-Za-z0-9_]*$") | strlen(name) > 16) {
+        _cge_fail("cge_region add: a region name has letters, digits and underscores, at most 16 characters, and starts with a letter", 198)
+    }
+    if (name == "rest") _cge_fail("cge_region add: rest is the rest of the world", 198)
+    if (!(units > 0 & units < .)) _cge_fail("cge_region add: units() must be positive", 198)
+    if (findexternal("cge__lk") != NULL) L = _cge_lk_load()
+    else {
+        L.reg = J(0, 1, "")
+        L.units = J(0, 1, .)
+        L.rs = L.rr = L.rv = L.rt0 = L.rt = J(0, 1, .)
+        L.rc = J(0, 1, "")
+        L.ec = J(0, 1, "")
+        L.es = L.eta = L.pwrow = L.pwrowe = J(0, 1, .)
+        L.sname = J(0, 1, "")
+        L.sq = L.sp = L.st = J(0, 0, .)
+        L.cur = ""
+    }
+    k = _cge_find(L.reg, name)
+    if (k & !repl) _cge_fail("cge_region add: region " + name + " exists; use replace", 110)
+    if (rows(L.rs)) _cge_fail("cge_region add: the trade between regions is set; add every region before cge_region trade", 198)
+    if (!k) {
+        L.reg = L.reg \ name
+        L.units = L.units \ units
+    }
+    else L.units[k] = units
+    _cge_rg_put(name, M)
+    L.cur = name
+    _cge_lk_store(L)
+    printf("{txt}Region {res}%s{txt}: %f commodities, a unit of its SAM worth {res}%g{txt} world units; %f region(s)\n",
+           name, M.nC, units, rows(L.reg))
+}
+
+// cge_region select: the model of region name in memory, the one there kept
+void _cge_region_select(string scalar name)
+{
+    struct cge_lk scalar L
+    struct cge_model scalar M
+    L = _cge_lk_load()
+    if (!_cge_find(L.reg, name)) _cge_fail("cge_region: no region " + name, 111)
+    _cge_rg_sync()
+    M = _cge_rg_get(name)
+    _cge_store(M)
+    L.cur = name
+    _cge_lk_store(L)
+    printf("{txt}Region {res}%s{txt} is in memory\n", name)
+}
+
+// cge_region trade: the base routes between regions, from the data in
+// memory; the routes from and to the rest of the world close each region's
+// imports and exports of the commodity at the base
+void _cge_region_trade(string scalar ve, string scalar vi, string scalar vc, string scalar vv, string scalar vt,
+                       string scalar sigma, string scalar eta)
+{
+    struct cge_lk scalar L
+    struct cge_model scalar M
+    string colvector ex, im, co, comm
+    real colvector v, t, sel, QMb, QEb, QERb
+    real scalar k, r, s, c, i, nR, base, tm0, mv, tv, rowv, rowt
+    L = _cge_lk_load()
+    if (rows(L.reg) < 2) _cge_fail("cge_region trade: add at least two regions first", 198)
+    _cge_rg_sync()
+    ex = strtrim(st_sdata(., ve))
+    im = strtrim(st_sdata(., vi))
+    co = strtrim(st_sdata(., vc))
+    v = st_data(., vv)
+    t = (vt != "" ? st_data(., vt) : J(rows(v), 1, .))
+    if (hasmissing(v) | any(v :< 0)) _cge_fail("cge_region trade: values must be zero or positive", 459)
+    // a missing tariff is the importer's average
+    if (vt != "") if (any((t :< 0) :& (t :< .))) _cge_fail("cge_region trade: tariffs must be zero or positive", 459)
+    nR = rows(L.reg)
+    L.rs = L.rr = L.rv = L.rt0 = J(0, 1, .)
+    L.rc = J(0, 1, "")
+    for (k = 1; k <= rows(v); k++) {
+        s = _cge_find(L.reg, ex[k])
+        r = _cge_find(L.reg, im[k])
+        if (!s) _cge_fail("cge_region trade: exporter " + ex[k] + " is not a region", 111)
+        if (!r) _cge_fail("cge_region trade: importer " + im[k] + " is not a region", 111)
+        if (s == r) _cge_fail("cge_region trade: " + ex[k] + " to itself", 198)
+        if (v[k] == 0) continue
+        L.rs = L.rs \ s
+        L.rr = L.rr \ r
+        L.rc = L.rc \ co[k]
+        L.rv = L.rv \ v[k]
+        L.rt0 = L.rt0 \ t[k]
+    }
+    if (!rows(L.rv)) _cge_fail("cge_region trade: no route has trade", 459)
+    if (rows(uniqrows((strofreal(L.rs) :+ " " :+ strofreal(L.rr) :+ " " :+ L.rc))) != rows(L.rs)) {
+        _cge_fail("cge_region trade: a route is given twice", 459)
+    }
+    // each commodity in both regions, imported by the importer and exported
+    // by the exporter
+    for (k = 1; k <= rows(L.rv); k++) {
+        M = _cge_rg_get(L.reg[L.rs[k]])
+        c = _cge_find(M.C, L.rc[k])
+        if (!c) _cge_fail("cge_region trade: " + L.rc[k] + " is not a commodity of " + L.reg[L.rs[k]], 111)
+        if (!M.ce[c] & !M.cr[c]) _cge_fail("cge_region trade: " + L.reg[L.rs[k]] + " does not export " + L.rc[k], 459)
+        if (M.ced[c]) _cge_fail("cge_region trade: " + L.reg[L.rs[k]] + " has a demand curve for its exports of " + L.rc[k] + " (exportdemand()); linked exports go to the other regions instead", 198)
+        M = _cge_rg_get(L.reg[L.rr[k]])
+        c = _cge_find(M.C, L.rc[k])
+        if (!c) _cge_fail("cge_region trade: " + L.rc[k] + " is not a commodity of " + L.reg[L.rr[k]], 111)
+        if (!M.cm[c]) _cge_fail("cge_region trade: " + L.reg[L.rr[k]] + " does not import " + L.rc[k], 459)
+    }
+    // the routes of the rest of the world: imports from it, at the tariff that
+    // gives the importer's average; exports to it
+    comm = uniqrows(L.rc)
+    for (r = 1; r <= nR; r++) {
+        M = _cge_rg_get(L.reg[r])
+        for (i = 1; i <= rows(comm); i++) {
+            sel = selectindex((L.rr :== r) :& (L.rc :== comm[i]))
+            if (rows(sel) & cols(sel)) {
+                c = _cge_find(M.C, comm[i])
+                QMb = _cge_vn(M, M.x0, "QM")
+                base = M.p0.pwm[c] * QMb[c] * L.units[r]
+                tm0 = M.p0.tm[c]
+                mv = sum(L.rv[sel])
+                rowv = base - mv
+                if (rowv < -1e-6 * base) {
+                    _cge_fail("cge_region trade: " + L.reg[r] + " imports " + _cge_gnum(base) + " world units of " + comm[i] +
+                              ", less than the " + _cge_gnum(mv) + " from the other regions", 459)
+                }
+                rowv = max((0, rowv))
+                // tariffs by route: the importer's average where none is given
+                for (k = 1; k <= rows(sel); k++) if (L.rt0[sel[k]] >= .) L.rt0[sel[k]] = tm0
+                tv = sum(L.rv[sel] :* L.rt0[sel])
+                if (rowv > 1e-9 * base) {
+                    rowt = (tm0 * base - tv) / rowv
+                    if (rowt < -1e-9) {
+                        _cge_fail("cge_region trade: the tariffs of " + L.reg[r] + " on " + comm[i] + " from the other regions exceed its average tariff on all imports", 459)
+                    }
+                    rowt = max((0, rowt))
+                    L.rs = L.rs \ 0
+                    L.rr = L.rr \ r
+                    L.rc = L.rc \ comm[i]
+                    L.rv = L.rv \ rowv
+                    L.rt0 = L.rt0 \ rowt
+                }
+                else if (abs(tm0 * base - tv) > 1e-6 * max((1, base))) {
+                    _cge_fail("cge_region trade: " + L.reg[r] + " imports all its " + comm[i] + " from the other regions, but the tariffs by route do not give its average tariff", 459)
+                }
+            }
+            sel = selectindex((L.rs :== r) :& (L.rr :> 0) :& (L.rc :== comm[i]))
+            if (rows(sel) & cols(sel)) {
+                c = _cge_find(M.C, comm[i])
+                QEb = _cge_vn(M, M.x0, "QE")
+                QERb = _cge_vn(M, M.x0, "QER")
+                base = M.p0.pwe[c] * ((M.ce[c] ? QEb[c] : 0) + (M.cr[c] ? QERb[c] : 0)) * L.units[r]
+                mv = sum(L.rv[sel])
+                rowv = base - mv
+                if (rowv < -1e-6 * base) {
+                    _cge_fail("cge_region trade: " + L.reg[r] + " exports " + _cge_gnum(base) + " world units of " + comm[i] +
+                              ", less than the " + _cge_gnum(mv) + " to the other regions", 459)
+                }
+                if (rowv > 1e-9 * base) {
+                    L.rs = L.rs \ r
+                    L.rr = L.rr \ 0
+                    L.rc = L.rc \ comm[i]
+                    L.rv = L.rv \ rowv
+                    L.rt0 = L.rt0 \ 0
+                }
+            }
+        }
+    }
+    L.rt = L.rt0
+    // elasticities by commodity
+    L.ec = comm
+    L.es = _cge_rg_values(sigma, comm, "sigma()", 4)
+    L.eta = _cge_rg_values(eta, comm, "rowelasticity()", .)
+    for (i = 1; i <= rows(comm); i++) if (L.eta[i] >= .) L.eta[i] = L.es[i]
+    L.pwrow = L.pwrowe = J(rows(comm), 1, 1)
+    L.sname = J(0, 1, "")
+    L.sq = L.sp = L.st = J(rows(L.rv), 0, .)
+    _cge_lk_store(L)
+    printf("{txt}Trade between {res}%f{txt} regions in {res}%f{txt} commodit%s: {res}%f{txt} routes, {res}%f{txt} of them with the rest of the world\n",
+           nR, rows(comm), (rows(comm) == 1 ? "y" : "ies"), rows(L.rv), sum((L.rs :== 0) :| (L.rr :== 0)))
+}
+
+// Values by commodity from "#" or "c:# c:# ...", with a default
+real colvector _cge_rg_values(string scalar spec, string colvector comm, string scalar what, real scalar dflt)
+{
+    real colvector v
+    string rowvector tok, pr
+    real scalar k, i, x
+    v = J(rows(comm), 1, dflt)
+    spec = strtrim(spec)
+    if (spec == "") return(v)
+    if (strtoreal(spec) < .) {
+        x = strtoreal(spec)
+        if (x < 0) _cge_fail(what + " must be zero or positive", 198)
+        return(J(rows(comm), 1, x))
+    }
+    tok = tokens(spec)
+    for (k = 1; k <= cols(tok); k++) {
+        pr = tokens(tok[k], ":")
+        if (cols(pr) != 3) _cge_fail(what + ": write a number, or commodity:number", 198)
+        i = _cge_find(comm, pr[1])
+        if (!i) _cge_fail(what + ": " + pr[1] + " is not a commodity traded between the regions", 111)
+        x = strtoreal(pr[3])
+        if (x >= . | x < 0) _cge_fail(what + ": " + pr[3] + " is not a number, zero or positive", 198)
+        v[i] = x
+    }
+    return(v)
+}
+
+// cge_region tariff: the tariffs of routes, set or scaled
+void _cge_region_tariff(string scalar from, string scalar to, string scalar comm, real scalar value, real scalar scale)
+{
+    struct cge_lk scalar L
+    real colvector sf, st, sc, sel
+    string rowvector f, t, c
+    real scalar k
+    L = _cge_lk_load()
+    if (!rows(L.rv)) _cge_fail("cge_region tariff: set the trade first, with cge_region trade", 198)
+    f = tokens(from)
+    t = tokens(to)
+    c = tokens(comm)
+    sf = (cols(f) == 0 | anyof(f, "all") ? J(rows(L.rs), 1, 1) : J(rows(L.rs), 1, 0))
+    for (k = 1; k <= cols(f); k++) {
+        if (f[k] == "all") continue
+        if (f[k] == "rest") sf = sf :| (L.rs :== 0)
+        else {
+            if (!_cge_find(L.reg, f[k])) _cge_fail("cge_region tariff: from(): " + f[k] + " is not a region or rest", 111)
+            sf = sf :| (L.rs :== _cge_find(L.reg, f[k]))
+        }
+    }
+    st = (cols(t) == 0 | anyof(t, "all") ? J(rows(L.rr), 1, 1) : J(rows(L.rr), 1, 0))
+    for (k = 1; k <= cols(t); k++) {
+        if (t[k] == "all") continue
+        if (!_cge_find(L.reg, t[k])) _cge_fail("cge_region tariff: to(): " + t[k] + " is not a region", 111)
+        st = st :| (L.rr :== _cge_find(L.reg, t[k]))
+    }
+    sc = (cols(c) == 0 ? J(rows(L.rc), 1, 1) : J(rows(L.rc), 1, 0))
+    for (k = 1; k <= cols(c); k++) {
+        if (!anyof(L.rc, c[k])) _cge_fail("cge_region tariff: commodities(): " + c[k] + " is not traded between the regions", 111)
+        sc = sc :| (L.rc :== c[k])
+    }
+    sel = selectindex(sf :& st :& sc :& (L.rr :> 0))
+    if (!rows(sel) | !cols(sel)) _cge_fail("cge_region tariff: no route meets from(), to() and commodities()", 459)
+    if (value < .) L.rt[sel] = J(rows(sel), 1, value)
+    else L.rt[sel] = L.rt[sel] :* scale
+    if (any(L.rt[sel] :< 0)) _cge_fail("cge_region tariff: tariffs must be zero or positive", 198)
+    _cge_lk_store(L)
+    printf("{txt}Tariffs changed on {res}%f{txt} route(s)\n", rows(sel))
+}
+
+// cge_region world: the rest of the world's prices of a commodity, relative
+// to the base: its export price, and the price that shifts its demand
+void _cge_region_world(string scalar comm, real scalar pim, real scalar pex, real scalar reset)
+{
+    struct cge_lk scalar L
+    string rowvector c
+    real colvector sel
+    real scalar k
+    L = _cge_lk_load()
+    if (!rows(L.ec)) _cge_fail("cge_region world: set the trade first, with cge_region trade", 198)
+    if (reset) {
+        L.pwrow = L.pwrowe = J(rows(L.ec), 1, 1)
+        L.rt = L.rt0
+        _cge_lk_store(L)
+        printf("{txt}Tariffs by route and the prices of the rest of the world at the base\n")
+        return
+    }
+    c = tokens(comm)
+    sel = (cols(c) == 0 ? J(rows(L.ec), 1, 1) : J(rows(L.ec), 1, 0))
+    for (k = 1; k <= cols(c); k++) {
+        if (!anyof(L.ec, c[k])) _cge_fail("cge_region world: " + c[k] + " is not traded between the regions", 111)
+        sel = sel :| (L.ec :== c[k])
+    }
+    if (pim < .) L.pwrow = L.pwrow :* (1 :- sel) + sel :* pim
+    if (pex < .) L.pwrowe = L.pwrowe :* (1 :- sel) + sel :* pex
+    _cge_lk_store(L)
+}
+
+// The linked system: pointers to the models of the regions (their
+// externals, which are not copied) and to their full systems; the import and
+// export pairs of the regions, each with its link variables; the route of
+// each pair
+struct cge_lw {
+    pointer(struct cge_model scalar) rowvector PM
+    pointer(struct cge_sys scalar) rowvector   PS
+    real colvector nf, zoff
+    // import pairs: region, commodity (in L.ec), its position in the region,
+    // link variables pwm and tm, position of QM in x, base value of imports
+    // (world units), base average tariff, base imports QM
+    real matrix    ip
+    // export pairs: region, commodity, position, link variable pwe,
+    // positions of QE and QER in x (0 when the region has none), base value
+    // of exports, base supply (QE + QER)
+    real matrix    xp
+    // for each route, its import pair and its export pair (0 for the rest of
+    // the world)
+    real colvector ki, kx
+    real scalar    nz, nu
+}
+
+// The linked system of the regions and their trade
+void _cge_lk_setup(struct cge_lk scalar L, struct cge_lw scalar W)
+{
+    struct cge_model scalar M
+    real colvector PQM, PQE, PQER, x0M, x0E, x0R
+    real scalar R, r, e, c, k, ni, nx, i
+    R = rows(L.reg)
+    W.PM = J(1, R, NULL)
+    W.PS = J(1, R, NULL)
+    W.nf = J(R, 1, .)
+    for (r = 1; r <= R; r++) {
+        W.PM[r] = findexternal("cge__rg_" + L.reg[r])
+        if (W.PM[r] == NULL) _cge_fail("cge_region: no model for region " + L.reg[r], 3498)
+        W.PS[r] = &(_cge_sys_make(*W.PM[r], 0))
+        if (rows(W.PS[r]->free) != W.PS[r]->neq) {
+            _cge_fail("cge_region: the system of region " + L.reg[r] + " is not square: " + strofreal(rows(W.PS[r]->free)) +
+                      " free variables, " + strofreal(W.PS[r]->neq) + " equations", 459)
+        }
+        W.nf[r] = rows(W.PS[r]->free)
+    }
+    W.zoff = runningsum(W.nf) - W.nf
+    W.nz = sum(W.nf)
+    // import pairs, then export pairs
+    W.ip = J(0, 9, .)
+    W.xp = J(0, 8, .)
+    for (r = 1; r <= R; r++) {
+        M = *W.PM[r]
+        PQM = _cge_vpos(M, _cge_vidx(M, "QM"))
+        PQE = _cge_vpos(M, _cge_vidx(M, "QE"))
+        PQER = _cge_vpos(M, _cge_vidx(M, "QER"))
+        x0M = _cge_vn(M, M.x0, "QM")
+        x0E = _cge_vn(M, M.x0, "QE")
+        x0R = _cge_vn(M, M.x0, "QER")
+        for (e = 1; e <= rows(L.ec); e++) {
+            c = _cge_find(M.C, L.ec[e])
+            if (!c) continue
+            if (any((L.rr :== r) :& (L.rc :== L.ec[e]))) {
+                W.ip = W.ip \ (r, e, c, ., ., PQM[c], M.p0.pwm[c] * x0M[c] * L.units[r], M.p0.tm[c], x0M[c])
+            }
+            if (any((L.rs :== r) :& (L.rr :> 0) :& (L.rc :== L.ec[e]))) {
+                W.xp = W.xp \ (r, e, c, ., (M.ce[c] ? PQE[c] : 0), (M.cr[c] ? PQER[c] : 0),
+                               M.p0.pwe[c] * ((M.ce[c] ? x0E[c] : 0) + (M.cr[c] ? x0R[c] : 0)) * L.units[r],
+                               (M.ce[c] ? x0E[c] : 0) + (M.cr[c] ? x0R[c] : 0))
+            }
+        }
+    }
+    ni = rows(W.ip)
+    nx = rows(W.xp)
+    if (ni) {
+        W.ip[., 4] = (1::ni) :* 2 :- 1
+        W.ip[., 5] = (1::ni) :* 2
+    }
+    if (nx) W.xp[., 4] = 2 * ni :+ (1::nx)
+    W.nu = 2 * ni + nx
+    // the pairs of each route
+    W.ki = W.kx = J(rows(L.rv), 1, 0)
+    for (k = 1; k <= rows(L.rv); k++) {
+        e = _cge_find(L.ec, L.rc[k])
+        for (i = 1; i <= ni; i++) if (W.ip[i, 1] == L.rr[k] & W.ip[i, 2] == e) W.ki[k] = i
+        for (i = 1; i <= nx; i++) if (W.xp[i, 1] == L.rs[k] & W.xp[i, 2] == e) W.kx[k] = i
+    }
+}
+
+// The parameters of region r with the link variables ul: its world prices,
+// relative to the base, and average tariffs of the commodities it trades
+// with the other regions
+struct cge_par scalar _cge_lk_par(struct cge_model scalar M, struct cge_lw scalar W, real scalar r, real colvector ul)
+{
+    struct cge_par scalar p
+    real scalar i, c
+    p = M.p
+    for (i = 1; i <= rows(W.ip); i++) {
+        if (W.ip[i, 1] != r) continue
+        c = W.ip[i, 3]
+        p.pwm[c] = M.p0.pwm[c] * ul[W.ip[i, 4]]
+        p.tm[c] = ul[W.ip[i, 5]]
+    }
+    for (i = 1; i <= rows(W.xp); i++) {
+        if (W.xp[i, 1] != r) continue
+        c = W.xp[i, 3]
+        p.pwe[c] = M.p0.pwe[c] * ul[W.xp[i, 4]]
+    }
+    if (rows(M.bY)) p.bxbar = M.xcur[M.bX]
+    return(p)
+}
+
+// The routes at link variables ul and quantities g (the imports of each
+// import pair, then the supply of exports, QE + QER, of each export pair):
+// the world price of each route relative to the base (pr) and its quantity
+// in world units at base prices (q); the price index of the imports of each
+// import pair (P)
+void _cge_lk_routes(struct cge_lk scalar L, struct cge_lw scalar W, real colvector ul, real colvector g,
+                    real colvector pr, real colvector q, real colvector P)
+{
+    real colvector sel, x, th
+    real scalar k, i, e, s, ni
+    ni = rows(W.ip)
+    pr = q = J(rows(L.rv), 1, .)
+    P = J(ni, 1, .)
+    // prices: of a region's exports, or of the rest of the world
+    for (k = 1; k <= rows(L.rv); k++) {
+        e = _cge_find(L.ec, L.rc[k])
+        pr[k] = (W.kx[k] ? ul[W.xp[W.kx[k], 4]] : L.pwrow[e])
+    }
+    // imports of each pair: a CES of its routes at prices with tariffs
+    for (i = 1; i <= ni; i++) {
+        sel = selectindex(W.ki :== i)
+        e = W.ip[i, 2]
+        s = L.es[e]
+        x = pr[sel] :* (1 :+ L.rt[sel]) :/ (1 :+ L.rt0[sel])
+        th = L.rv[sel] :* (1 :+ L.rt0[sel])
+        th = th / sum(th)
+        if (s == 1) P[i] = exp(sum(th :* ln(x)))
+        else P[i] = sum(th :* x :^ (1 - s)) ^ (1 / (1 - s))
+        q[sel] = L.rv[sel] :* (g[i] / W.ip[i, 9]) :* (P[i] :/ x) :^ s
+    }
+    // exports to the rest of the world, along its demand curve
+    for (k = 1; k <= rows(L.rv); k++) {
+        if (L.rr[k] != 0) continue
+        e = _cge_find(L.ec, L.rc[k])
+        q[k] = L.rv[k] * (pr[k] / L.pwrowe[e]) ^ (-L.eta[e])
+    }
+}
+
+// The link equations, scaled: for each import pair, its world price and
+// average tariff against the price index of its routes (L1), and its tariff
+// revenue against that of its routes (L2); for each export pair, its supply
+// against the routes from it (L3)
+real colvector _cge_lk_eqs(struct cge_lk scalar L, struct cge_lw scalar W, real colvector ul, real colvector g)
+{
+    real colvector pr, q, P, out, sel
+    real scalar i, j, ni, nx, pwm, tm, tm0, B, R
+    ni = rows(W.ip)
+    nx = rows(W.xp)
+    _cge_lk_routes(L, W, ul, g, pr, q, P)
+    out = J(2 * ni + nx, 1, .)
+    for (i = 1; i <= ni; i++) {
+        pwm = ul[W.ip[i, 4]]
+        tm = ul[W.ip[i, 5]]
+        tm0 = W.ip[i, 8]
+        B = W.ip[i, 7]
+        sel = selectindex(W.ki :== i)
+        R = g[i] / W.ip[i, 9]
+        out[2 * i - 1] = (pwm * (1 + tm) - (1 + tm0) * P[i]) / (1 + tm0)
+        out[2 * i] = (tm * pwm * B * R - sum(L.rt[sel] :* pr[sel] :* q[sel])) / B
+    }
+    for (j = 1; j <= nx; j++) {
+        sel = selectindex(W.kx :== j)
+        B = W.xp[j, 7]
+        out[2 * ni + j] = (g[ni + j] / W.xp[j, 8] * B - sum(q[sel])) / B
+    }
+    return(out)
+}
+
+// The quantities the link equations take from the solutions of the regions:
+// the imports of each import pair, then the supply of exports of each export
+// pair
+real colvector _cge_lk_g(struct cge_lw scalar W, real colvector u)
+{
+    real colvector g, x
+    real scalar i, j, r, ni, nx
+    ni = rows(W.ip)
+    nx = rows(W.xp)
+    g = J(ni + nx, 1, .)
+    for (r = 1; r <= rows(W.nf); r++) {
+        x = W.PM[r]->xcur
+        x[W.PS[r]->free] = u[|W.zoff[r] + 1 \ W.zoff[r] + W.nf[r]|] :* W.PM[r]->xscale[W.PS[r]->free]
+        for (i = 1; i <= ni; i++) if (W.ip[i, 1] == r) g[i] = x[W.ip[i, 6]]
+        for (j = 1; j <= nx; j++) {
+            if (W.xp[j, 1] != r) continue
+            g[ni + j] = (W.xp[j, 5] ? x[W.xp[j, 5]] : 0) + (W.xp[j, 6] ? x[W.xp[j, 6]] : 0)
+        }
+    }
+    return(g)
+}
+
+// The residuals of the linked system at u: each region's full system, then
+// the link equations
+real colvector _cge_lk_resid(struct cge_lk scalar L, struct cge_lw scalar W, real colvector u)
+{
+    struct cge_par scalar p
+    real colvector R, f, ul
+    real scalar r
+    R = J(W.nz + W.nu, 1, .)
+    ul = (W.nu ? u[|W.nz + 1 \ W.nz + W.nu|] : J(0, 1, .))
+    for (r = 1; r <= rows(W.nf); r++) {
+        p = _cge_lk_par(*W.PM[r], W, r, ul)
+        f = _cge_F(*W.PM[r], p, W.PM[r]->xcur, *W.PS[r], u[|W.zoff[r] + 1 \ W.zoff[r] + W.nf[r]|])
+        if (hasmissing(f)) return(R)
+        R[|W.zoff[r] + 1 \ W.zoff[r] + W.nf[r]|] = f
+    }
+    if (W.nu) R[|W.nz + 1 \ W.nz + W.nu|] = _cge_lk_eqs(L, W, ul, _cge_lk_g(W, u))
+    return(R)
+}
+
+// The entries of the Jacobian of the linked system at u: each region's exact
+// Jacobian; central differences for the link variables in the regions'
+// equations, and for the link equations
+real scalar _cge_lk_jac(struct cge_lk scalar L, struct cge_lw scalar W, real colvector u, real colvector ri,
+                        real colvector ci, real colvector v)
+{
+    struct cge_trip scalar T
+    struct cge_par scalar p
+    real colvector ul, z, r, c, w, fp, fm, d, sel, g, gp, gm, up, um, ks, fidx
+    real scalar R, rr, k, h, ni, nx, j, col, pos, nr, m
+    R = rows(W.nf)
+    ni = rows(W.ip)
+    nx = rows(W.xp)
+    ul = (W.nu ? u[|W.nz + 1 \ W.nz + W.nu|] : J(0, 1, .))
+    _cge_tinit(T)
+    for (rr = 1; rr <= R; rr++) {
+        z = u[|W.zoff[rr] + 1 \ W.zoff[rr] + W.nf[rr]|]
+        p = _cge_lk_par(*W.PM[rr], W, rr, ul)
+        if (!_cge_jac_trip(*W.PM[rr], p, W.PM[rr]->xcur, *W.PS[rr], z, r, c, w)) return(0)
+        _cge_tadd(T, W.zoff[rr] :+ r, W.zoff[rr] :+ c, w)
+        // the link variables of the region
+        ks = J(0, 1, .)
+        for (k = 1; k <= ni; k++) if (W.ip[k, 1] == rr) ks = ks \ W.ip[k, 4] \ W.ip[k, 5]
+        for (k = 1; k <= nx; k++) if (W.xp[k, 1] == rr) ks = ks \ W.xp[k, 4]
+        for (k = 1; k <= rows(ks); k++) {
+            h = 1e-6 * max((1, abs(ul[ks[k]])))
+            up = um = ul
+            up[ks[k]] = ul[ks[k]] + h
+            um[ks[k]] = ul[ks[k]] - h
+            fp = _cge_F(*W.PM[rr], _cge_lk_par(*W.PM[rr], W, rr, up), W.PM[rr]->xcur, *W.PS[rr], z)
+            fm = _cge_F(*W.PM[rr], _cge_lk_par(*W.PM[rr], W, rr, um), W.PM[rr]->xcur, *W.PS[rr], z)
+            if (hasmissing(fp) | hasmissing(fm)) return(0)
+            d = (fp - fm) / (2 * h)
+            sel = selectindex(d :!= 0)
+            if (rows(sel) & cols(sel)) _cge_tadd(T, W.zoff[rr] :+ sel, J(rows(sel), 1, W.nz + ks[k]), d[sel])
+        }
+    }
+    if (W.nu) {
+        g = _cge_lk_g(W, u)
+        nr = W.nz
+        // with respect to the link variables
+        for (k = 1; k <= W.nu; k++) {
+            h = 1e-6 * max((1, abs(ul[k])))
+            up = um = ul
+            up[k] = ul[k] + h
+            um[k] = ul[k] - h
+            d = (_cge_lk_eqs(L, W, up, g) - _cge_lk_eqs(L, W, um, g)) / (2 * h)
+            sel = selectindex(d :!= 0)
+            if (rows(sel) & cols(sel)) _cge_tadd(T, nr :+ sel, J(rows(sel), 1, W.nz + k), d[sel])
+        }
+        // with respect to the quantities from the regions
+        for (j = 1; j <= rows(g); j++) {
+            h = 1e-6 * max((1, abs(g[j])))
+            gp = gm = g
+            gp[j] = g[j] + h
+            gm[j] = g[j] - h
+            d = (_cge_lk_eqs(L, W, ul, gp) - _cge_lk_eqs(L, W, ul, gm)) / (2 * h)
+            sel = selectindex(d :!= 0)
+            if (!rows(sel) | !cols(sel)) continue
+            // the positions in x of quantity j, and their columns
+            if (j <= ni) {
+                rr = W.ip[j, 1]
+                pos = W.ip[j, 6]
+            }
+            else {
+                rr = W.xp[j - ni, 1]
+                pos = (W.xp[j - ni, 5], W.xp[j - ni, 6])'
+                pos = select(pos, pos :> 0)
+            }
+            fidx = J(rows(W.PM[rr]->x0), 1, 0)
+            fidx[W.PS[rr]->free] = (1::W.nf[rr])
+            for (m = 1; m <= rows(pos); m++) {
+                col = fidx[pos[m]]
+                if (!col) continue
+                _cge_tadd(T, nr :+ sel, J(rows(sel), 1, W.zoff[rr] + col), d[sel] :* W.PM[rr]->xscale[pos[m]])
+            }
+        }
+    }
+    ri = (T.n ? T.r[|1 \ T.n|] : J(0, 1, .))
+    ci = (T.n ? T.c[|1 \ T.n|] : J(0, 1, .))
+    v = (T.n ? T.v[|1 \ T.n|] : J(0, 1, .))
+    return(!hasmissing(v))
+}
+
+// Newton's method on the linked system, with a line search and the sparse LU
+real scalar _cge_lk_newton(struct cge_lk scalar L, struct cge_lw scalar W, real colvector u, real scalar tol,
+                           real scalar maxit, real scalar iter, real scalar err)
+{
+    struct cge_slu scalar SF
+    real colvector R, Rn, du, un, ri, ci, v
+    real scalar it, step, n0
+    _cge_slu_load(SF, "cge__slu_reg")
+    R = _cge_lk_resid(L, W, u)
+    iter = 0
+    err = .
+    if (hasmissing(R)) return(0)
+    for (it = 0; it <= maxit; it++) {
+        err = max(abs(R))
+        iter = it
+        printf("{txt}Iteration %f: largest scaled residual = {res}%9.3e\n", it, err)
+        displayflush()
+        if (err < tol) return(1)
+        if (it == maxit) break
+        if (!_cge_lk_jac(L, W, u, ri, ci, v)) return(0)
+        if (!_cge_slu_update(SF, ri, ci, v, rows(u), "cge__slu_reg")) return(0)
+        du = _cge_slu_solve(SF, -R)
+        if (hasmissing(du)) return(0)
+        n0 = norm(R)
+        for (step = 1; step >= 1e-8; step = step / 2) {
+            un = u + step * du
+            Rn = _cge_lk_resid(L, W, un)
+            if (!hasmissing(Rn)) if (norm(Rn) <= (1 - 1e-4 * step) * n0) break
+        }
+        if (step < 1e-8) return(0)
+        u = un
+        R = Rn
+    }
+    return(0)
+}
+
+// cge_region solve: the regions solved together, each stored as simulation
+// name in its own model, with the routes in the links
+void _cge_region_solve(string scalar name, real scalar tol, real scalar maxit, string scalar start)
+{
+    struct cge_lk scalar L
+    struct cge_lw scalar W
+    struct cge_model scalar M
+    struct cge_par scalar p, pkeep
+    pointer(struct cge_model scalar) scalar pm
+    real colvector u, ul, x, pr, q, P, xr
+    real scalar r, i, conv, iter, err, it2, e2, kk, R, c, cv, j
+    string scalar method
+    L = _cge_lk_load()
+    if (!rows(L.rv)) _cge_fail("cge_region solve: set the trade first, with cge_region trade", 198)
+    if (!anyof(("", "base", "alone"), start)) _cge_fail("cge_region solve: start() is base or alone", 198)
+    _cge_rg_sync()
+    _cge_lk_setup(L, W)
+    R = rows(L.reg)
+    // the linked commodities: their world prices and tariffs are set by the
+    // links, not shocked in the regions
+    for (i = 1; i <= rows(W.ip); i++) {
+        pm = W.PM[W.ip[i, 1]]
+        c = W.ip[i, 3]
+        if (pm->p.pwm[c] != pm->p0.pwm[c] | pm->p.tm[c] != pm->p0.tm[c]) {
+            _cge_fail("cge_region solve: in " + L.reg[W.ip[i, 1]] + ", pwm or tm of " + L.ec[W.ip[i, 2]] + " is shocked; the links set them: use cge_region tariff or cge_region world", 198)
+        }
+    }
+    for (i = 1; i <= rows(W.xp); i++) {
+        pm = W.PM[W.xp[i, 1]]
+        c = W.xp[i, 3]
+        if (pm->p.pwe[c] != pm->p0.pwe[c]) {
+            _cge_fail("cge_region solve: in " + L.reg[W.xp[i, 1]] + ", pwe of " + L.ec[W.xp[i, 2]] + " is shocked; the links set it: use cge_region world", 198)
+        }
+    }
+    printf("{txt}Linked regions: {res}%f{txt} regions of {res}%s{txt} equations and {res}%f{txt} link variables, {res}%f{txt} equations in all\n",
+           R, invtokens(strofreal(W.nf')), W.nu, W.nz + W.nu)
+    // the start: the base, or each region solved alone at the base links
+    u = J(W.nz + W.nu, 1, .)
+    ul = J(W.nu, 1, 1)
+    for (i = 1; i <= rows(W.ip); i++) ul[W.ip[i, 5]] = W.ip[i, 8]
+    for (r = 1; r <= R; r++) {
+        M = *W.PM[r]
+        x = M.x0
+        if (start == "alone") {
+            p = _cge_lk_par(M, W, r, ul)
+            xr = _cge_solve_point(M, p, M.xcur, M.x0, tol, maxit, 0, cv, it2, e2, method)
+            if (cv) x = xr
+        }
+        u[|W.zoff[r] + 1 \ W.zoff[r] + W.nf[r]|] = x[W.PS[r]->free] :/ M.xscale[W.PS[r]->free]
+    }
+    if (W.nu) u[|W.nz + 1 \ W.nz + W.nu|] = ul
+    conv = _cge_lk_newton(L, W, u, tol, maxit, iter, err)
+    if (!conv) _cge_fail("cge_region solve: the linked regions did not converge (largest scaled residual " + strofreal(err, "%9.3e") + ")", 430)
+    // each region's solution, with its link variables, in its own model
+    ul = (W.nu ? u[|W.nz + 1 \ W.nz + W.nu|] : J(0, 1, .))
+    for (r = 1; r <= R; r++) {
+        M = _cge_rg_get(L.reg[r])
+        pkeep = M.p
+        p = _cge_lk_par(M, W, r, ul)
+        x = M.xcur
+        x[W.PS[r]->free] = u[|W.zoff[r] + 1 \ W.zoff[r] + W.nf[r]|] :* M.xscale[W.PS[r]->free]
+        err = _cge_maxres(M, p, x)
+        M.p = p
+        kk = _cge_store_sim(M, name, x, 1, iter, err, "linked")
+        // the model keeps its own parameters, the simulation those with the
+        // link variables: through the external, so that they are not shared
+        _cge_rg_put(L.reg[r], M)
+        M = _cge_rg_get(L.reg[r])
+        M.p = pkeep
+        _cge_rg_put(L.reg[r], M)
+        printf("{txt}Region {res}%s{txt}: largest scaled residual {res}%9.2e\n", L.reg[r], err)
+    }
+    // the routes
+    _cge_lk_routes(L, W, ul, _cge_lk_g(W, u), pr, q, P)
+    j = _cge_find(L.sname, name)
+    if (!j) {
+        L.sname = L.sname \ name
+        L.sq = L.sq, q
+        L.sp = L.sp, pr
+        L.st = L.st, L.rt
+        j = rows(L.sname)
+    }
+    else {
+        L.sq[., j] = q
+        L.sp[., j] = pr
+        L.st[., j] = L.rt
+    }
+    _cge_lk_store(L)
+    // the region in memory, with the new simulation
+    if (L.cur != "") _cge_store(_cge_rg_get(L.cur))
+    printf("{txt}Solved together in {res}%f{txt} iteration(s); simulation {res}%s{txt} stored in each region\n", iter, name)
+    st_numscalar("r(iterations)", iter)
+    st_numscalar("r(N_regions)", R)
+    st_numscalar("r(N_links)", W.nu)
+    st_global("r(name)", name)
+}
+
+// cge_region results: the routes of a linked solution as data: exporter,
+// importer ("rest" for the rest of the world), commodity, base value and
+// tariff, and the solution's quantity (world units at base prices), world
+// price relative to the base, value and tariff
+void _cge_region_results(string scalar sim)
+{
+    struct cge_lk scalar L
+    real scalar j, n, k
+    string colvector ex, im
+    L = _cge_lk_load()
+    j = _cge_find(L.sname, sim)
+    if (!j) _cge_fail("cge_region results: no linked solution " + sim, 111)
+    n = rows(L.rv)
+    ex = im = J(n, 1, "")
+    for (k = 1; k <= n; k++) {
+        ex[k] = (L.rs[k] ? L.reg[L.rs[k]] : "rest")
+        im[k] = (L.rr[k] ? L.reg[L.rr[k]] : "rest")
+    }
+    st_dropvar(.)
+    st_addobs(n)
+    (void) st_addvar("str16", "exporter")
+    (void) st_addvar("str16", "importer")
+    (void) st_addvar("str" + strofreal(max((1, max(strlen(L.rc))))), "commodity")
+    (void) st_addvar("double", ("base", "tariff_base", "quantity", "price", "value", "tariff"))
+    st_sstore(., "exporter", ex)
+    st_sstore(., "importer", im)
+    st_sstore(., "commodity", L.rc)
+    st_store(., ("base", "tariff_base", "quantity", "price", "value", "tariff"),
+             (L.rv, L.rt0, L.sq[., j], L.sp[., j], L.sq[., j] :* L.sp[., j], L.st[., j]))
+    st_global("r(sim)", sim)
+    st_numscalar("r(N_routes)", n)
+}
+
+// cge_region list: the regions, the trade between them and the linked
+// solutions
+void _cge_region_list()
+{
+    struct cge_lk scalar L
+    struct cge_model scalar M
+    real scalar r, e
+    L = _cge_lk_load()
+    _cge_rg_sync()
+    printf("{txt}{hline 60}\n")
+    printf("{txt}%-16s %12s %12s %12s\n", "Region", "Commodities", "Equations", "Unit (world)")
+    for (r = 1; r <= rows(L.reg); r++) {
+        M = _cge_rg_get(L.reg[r])
+        printf("{res}%-16s {res}%12.0f %12.0f %12.6g%s\n", L.reg[r], M.nC, M.neq, L.units[r], (L.reg[r] == L.cur ? "  (in memory)" : ""))
+    }
+    printf("{txt}{hline 60}\n")
+    if (rows(L.rv)) {
+        printf("{txt}%f route(s) in %f commodit%s; elasticities among sources and of the rest of the world's demand:\n",
+               rows(L.rv), rows(L.ec), (rows(L.ec) == 1 ? "y" : "ies"))
+        for (e = 1; e <= rows(L.ec); e++) printf("{txt}  %-14s {res}%6.3g %6.3g\n", L.ec[e], L.es[e], L.eta[e])
+    }
+    else printf("{txt}No trade between the regions: cge_region trade\n")
+    if (rows(L.sname)) printf("{txt}Linked solutions: {res}%s\n", invtokens(L.sname'))
+    st_global("r(regions)", invtokens(L.reg'))
+    st_global("r(current)", L.cur)
+    st_numscalar("r(N_regions)", rows(L.reg))
+    st_numscalar("r(N_routes)", rows(L.rv))
+}
+
+// cge_region clear: the regions dropped; the model in memory stays
+void _cge_region_clear()
+{
+    struct cge_lk scalar L
+    real scalar r
+    if (findexternal("cge__lk") == NULL) return
+    L = _cge_lk_load()
+    for (r = 1; r <= rows(L.reg); r++) if (findexternal("cge__rg_" + L.reg[r]) != NULL) rmexternal("cge__rg_" + L.reg[r])
+    rmexternal("cge__lk")
+    if (findexternal("cge__slu_reg") != NULL) rmexternal("cge__slu_reg")
+    printf("{txt}Regions cleared; the model in memory stays\n")
 }
 
 // Keep only the stored simulations s, in that order (from version 0.6.4)

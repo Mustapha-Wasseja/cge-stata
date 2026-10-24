@@ -2034,6 +2034,51 @@ changes, a user parameter or `tf(f, a)` (`_cge_u_parbase()`, from `M.p0`);
 `tf(f, a)` compiles to a postfix row of type 3 with the element
 $(f - 1) n_A + a$, its value `_cge_u_parel(p.tf, el)`, row by row.
 
+## 21. Linked regions (from version 0.12.0)
+
+`cge_region add` keeps the model in memory, calibrated, as region *name* in
+the external `cge__rg_name`; `struct cge_lk` (`cge__lk`) holds the regions,
+their `units()` (world units per SAM unit), the region in memory, the routes
+(`rs`, `rr`: exporter and importer positions, 0 for the rest of the world;
+`rc` commodity; `rv` base value; `rt0`, `rt` base and current tariff), the
+elasticities by commodity (`es` among sources, default 4; `eta` of the rest
+of the world's demand, default `es`), the rest of the world's prices `pwrow`
+and `pwrowe`, and the stored solutions (`sname`, route quantities `sq`,
+prices `sp`, tariffs `st`). `_cge_rg_sync()` keeps the model in memory as its
+region when its activities, commodities and factors are those of the region.
+
+`cge_region trade` reads the routes; for each importer and commodity with
+routes from other regions, the base imports $M^0 = pwm^0\,QM^0\,u$ less the
+routes give the route from the rest of the world (an error if negative), with
+the tariff $(tm^0 M^0 - \sum t^0_k V_k)/V_w$; missing route tariffs are $tm^0$.
+For each exporter and commodity with routes to other regions, the base
+exports $E^0 = pwe^0\,(QE^0 + QER^0)\,u$ less the routes give the route to the
+rest of the world. Linked exports may not face a demand curve (`M.ced`).
+
+`_cge_lk_setup()` lists the import pairs (region, commodity: link variables
+$\pi^M = pwm/pwm^0$ and $tm$) and export pairs ($\pi^E = pwe/pwe^0$), and the
+full system of each region (`_cge_sys_make(M, 0)`); `_cge_lk_par()` sets the
+link variables into a copy of the region's parameters. For the routes $k$ into
+an import pair, $x_k = \pi_k (1 + t_k)/(1 + t^0_k)$ with $\pi_k = \pi^E$ of the
+exporter or `pwrow`, $\theta_k = V_k(1 + t^0_k)/\sum V(1 + t^0)$,
+$P = (\sum \theta_k x_k^{1-\sigma})^{1/(1-\sigma)}$ (geometric at $\sigma = 1$),
+$q_k = V_k (QM/QM^0)(P/x_k)^\sigma$; routes to the rest of the world
+$q_k = V_k(\pi^E/pwrowe)^{-\eta}$ (`_cge_lk_routes()`). The link equations
+(`_cge_lk_eqs()`) are $(\pi^M(1 + tm) - (1 + tm^0)P)/(1 + tm^0)$,
+$(tm\,\pi^M M^0 QM/QM^0 - \sum t_k \pi_k q_k)/M^0$ and
+$(E^0 (QE + QER)/(QE^0 + QER^0) - \sum q_k)/E^0$. `cge_region solve` stacks the
+regions' scaled full systems and the link equations, starts from the base (or
+from each region solved alone at the base links, `start(alone)`) and solves by
+Newton's method with a line search and the sparse LU (`cge__slu_reg`): exact
+Jacobians of the regions (`_cge_jac_trip()`), central differences
+($h = 10^{-6}\max(1,|v|)$) for the link variables in a region's equations and
+for the link equations with respect to the link variables and the regions'
+QM, QE and QER. Shocks of a region to `pwm`, `tm` or `pwe` of a linked
+commodity are an error (198). Each region's solution is stored in its model
+as simulation *name* with the link variables in its parameters (method
+`linked`), through the external so that it shares nothing with the model's
+own parameters; the routes are stored in `cge__lk`.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
