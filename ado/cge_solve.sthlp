@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.10.1  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt step:s(#)} {opt trace}
-{opt diag:nose} {opt full}]
+{opt diag:nose} {opt full} {opt sp:arse} {opt den:se}]
 
 
 {title:Description}
@@ -96,6 +96,12 @@ residual; the default is 1e-10.
 reduced one. Both give the same solution; {opt full} is for checks.
 
 {phang}
+{opt sparse} and {opt dense} (from version 0.10.1) choose the linear solver of
+Newton's steps for this solve, the sparse or the dense LU, in place of that of
+{helpb cge_options}. The sparse LU holds systems far larger than the dense one,
+the full system of large models among them; both give the same solution.
+
+{phang}
 {opt steps(#)} applies the shock in {it:#} equal steps. The default, 0,
 does so only after a direct solve fails; {cmd:steps(1)} never does.
 
@@ -123,6 +129,7 @@ solve stopped (from version 0.9.5).
 {p2col 5 18 22 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}simulation name{p_end}
 {synopt:{cmd:r(method)}}solution method{p_end}
+{synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}
 {p2col 5 18 22 2: Diagnostics}{p_end}

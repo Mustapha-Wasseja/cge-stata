@@ -45,6 +45,7 @@ cge_solve, name(notariff) diagnose
 \opt{diag}{nose} & display the diagnostics after a solve that converges\\
 \optgroup{Advanced}
 \opt{}{full} & solve the full system of equations instead of the reduced one\\
+\opt{sp}{arse}, \opt{den}{se} & the sparse or the dense LU for this solve (from version 0.10.1)\\
 \end{opttable}
 
 \cgesec{Options}
@@ -74,7 +75,13 @@ that converges. They are always displayed after a solve that fails.
 
 \item[\opt{}{full}] solves the full system, with every equation, instead of the
 reduced system, from which explicit definitions are left out. Both give the
-same solution; \opt{}{full} is for checks, and is much slower for large models.
+same solution; \opt{}{full} is for checks, and is much slower for large models
+with the dense LU.
+
+\item[\opt{sp}{arse}, \opt{den}{se}] (from version 0.10.1) choose the linear
+solver of Newton's steps for this solve, the sparse LU
+(section~\ref{sec:sparse}) or the dense one, in place of the setting of
+\manref{cge_options}. Both give the same solution.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -189,6 +196,7 @@ to the tolerance, and the test suite checks that they do.
 \resgroup{Macros}
 \res{r(name)} & name of the simulation\\
 \res{r(method)} & solution method: \cmd{newton} or \cmd{broydenpowell}\\
+\res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto} (from version 0.10.1)\\
 \res{r(closure)} & closure\\
 \res{r(constraints)} & the constraints and their regimes, if any\\
 \resgroup{Diagnostics (after a failure, or with \opt{diag}{nose}; \manref{cge_listing} lists every equation element)}

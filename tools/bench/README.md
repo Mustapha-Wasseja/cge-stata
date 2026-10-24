@@ -14,6 +14,50 @@ smaller ones, the full system.
 python tools/bench/run_bench.py [--sizes 40x5,80x10,120x10,160x20,200x20,250x20] [--full-up-to 120]
 ```
 
+## Result with the sparse LU (version 0.10.1, 24 October 2026; Windows laptop)
+
+```
+python tools/bench/run_bench.py --stata "C:/Program Files (x86)/Stata13/Stata-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20,400x20 --full-up-to 250 --linsolver sparse --out tools/bench/bench_results_0101_sparse.csv
+python tools/bench/run_bench.py --stata "C:/Program Files (x86)/Stata13/Stata-64.exe" --sizes 400x20 --full-up-to 400 --linsolver sparse
+python tools/bench/run_bench.py --stata "C:/Program Files (x86)/Stata13/Stata-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20,400x20 --full-up-to 0 --linsolver dense --out tools/bench/bench_results_0101_dense.csv
+```
+
+`--linsolver` sets `cge_options, linsolver()` before the solves (Reference
+Manual, *The sparse LU*). `bench_results_0101_sparse.csv` holds the runs with
+the sparse LU, the full systems included (its 400-activity row is from the
+second command, the full system of that model too), and
+`bench_results_0101_dense.csv` those with the dense LU, reduced systems only.
+Stata 13.1/IC:
+
+| Activities | Equations | Solved (reduced) | Reduced, dense LU (s) | Reduced, sparse LU (s) | Full, sparse LU (s) | Full against reduced |
+|---|---|---|---|---|---|---|
+| 40 | 1,814 | 711 | 0.3 | 0.3 | 0.5 | 5e-12 |
+| 80 | 5,446 | 1,407 | 1.3 | 1.2 | 1.8 | 3e-12 |
+| 120 | 10,555 | 2,045 | 2.7 | 2.5 | 5.2 | 4e-13 |
+| 160 | 18,483 | 2,757 | 3.3 | 3.4 | 7.2 | 1e-13 |
+| 200 | 26,858 | 3,418 | 9.6 | 9.0 | 21.0 | 2e-12 |
+| 250 | 40,190 | 4,254 | 25.0 | 19.1 | 47.4 | 4e-12 |
+| 400 | 94,000 | 6,684 | 39.8 | 41.3 | 128.9 | 2e-10 |
+
+The full systems cannot be held dense: the Jacobian of the 250-activity
+model would need 13 gigabytes, and that of the 400-activity model 71. With
+the sparse LU they are solved in 47 and 129 seconds, and agree with the
+reduced solutions to the solver's tolerance. On the reduced systems the two
+linear solvers take about the same time, since building the Jacobian and
+evaluating the equations take most of a solve.
+
+A first run of this benchmark found a fault of the first form of the sparse
+LU. In the full systems from 80 activities, rows that cancel in the
+elimination left entries of about 1e-15 of their column, which the analysis
+took as pivots: the solution of the linear system was wrong (its residual
+0.37 against a right-hand side of 0.66 at 120 activities), Newton's method
+failed, and its fallback with central differences built the Jacobian dense,
+which took 119 seconds at 120 activities and filled 19 gigabytes of memory at
+250. A column whose active entries fall below 1e-10 of its largest entry is
+now left to the dense block, and the fallbacks use the sparse LU;
+`tests/test_sparse.do` has a matrix with rows that cancel, which fails
+without the check.
+
 ## Result with the exact Jacobian and Broyden's updates (version 0.7.0, 22 October 2026; Windows laptop)
 
 ```

@@ -1754,6 +1754,25 @@ table of powers of two (`_cge_pow2()`; Mata's `2^k` is not exact); `Eps` is 0
 and the infinities, `NA` and `Undf` are missing. GAMS's labels ignore case and
 keep the case first written, so the levels come before the parameters.
 
+**Sparse LU (from version 0.10.1).** With `M.linsolver` 1 (sparse) or 2 (auto,
+from 1,000 equations), Newton's steps with the exact Jacobian use
+`_cge_jac_trip()` (the entries of the scaled Jacobian of the system) and
+`_cge_slu_update()`: rows with more than max(50, 10 x average) entries are set
+apart; on the rest, `_cge_slu_analyse()` chooses pivots by Markowitz's rule
+with threshold u = 0.1, among the active columns with the fewest entries in a
+pool of 64 refreshed every 16 steps; a column whose active entries fall to
+1e-10 of its largest entry in the rows not set apart (lost to rounding when
+rows cancel) is left over. `_cge_slu_factor()` factorises the sparse block A11
+= L U left-looking in that order and the dense block through S = A22 - A21
+inv(A11) A12 (Mata's `_lud`), with A12 and A21 kept as entries and S formed a
+group of columns at a time; `_cge_slu_solve()` solves with both. A later
+Jacobian whose entries lie within the analysed pattern is factorised in the
+same order unless a pivot falls below 1e-8 of its column of L or 1e-10 of its
+column of A11; the analysis is kept in an external for later solves. Newton's
+fallbacks with central or one-sided differences (modes 1 and 2) use the sparse
+LU with `_cge_jac_cdtrip()`; Powell's method is left out above 10,000
+equations.
+
 ## 19. User variables and equations (from version 0.6.1)
 
 `cge_variable` and `cge_equation` add variables and equations to the

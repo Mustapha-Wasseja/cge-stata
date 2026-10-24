@@ -1,0 +1,32 @@
+. cge_solve, name(dense) tolerance(1e-12)
+Simulation dense solved in 9 iteration(s) (newton)
+Largest scaled residual  1.02e-15; WALRAS =  1.44e-15
+
+. cge_options, linsolver(sparse)
+Linear solver of Newton's steps: sparse
+
+. cge_solve, name(sparse) tolerance(1e-12)
+Simulation sparse solved in 9 iteration(s) (newton)
+Largest scaled residual  1.11e-15; WALRAS =  4.05e-14
+
+. cge_solve, name(sparsefull) tolerance(1e-12) full
+Simulation sparsefull solved in 9 iteration(s) (newton)
+Largest scaled residual  1.11e-15; WALRAS =  1.23e-13
+
+. quietly cge_results, sim(dense) clear nodisplay
+
+. rename value v_dense
+
+. tempfile d
+
+. quietly save `d'
+
+. foreach s in sparse sparsefull {
+  2.     quietly cge_results, sim(`s') clear nodisplay
+  3.     quietly merge 1:1 variable element1 element2 using `d', nogenerate
+  4.     quietly generate double rel = abs(value - v_dense) / max(1, abs(v_dense))
+  5.     quietly summarize rel
+  6.     display "`s' against dense: largest relative difference " %9.2e r(max)
+  7. }
+sparse against dense: largest relative difference  3.91e-14
+sparsefull against dense: largest relative difference  1.22e-13

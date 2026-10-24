@@ -1,0 +1,87 @@
+\cgeentry{cge_options}{Settings of the solver}
+
+\cgesec{Description}
+
+\cmd{cge_options} (from version 0.10.1) sets how the model is solved, as
+GAMS's \cmd{option} statement chooses a solver; without options it displays
+the settings. They are saved with the model and apply to every solve:
+\manref{cge_solve}, \manref{cge_dynamic}, \manref{cge_sensitivity},
+\manref{cge_optimize} and \manref{cge_loop}. \opt{lin}{solver()} chooses the
+linear solver of Newton's steps: Mata's dense LU, the default, or a sparse LU,
+whose memory grows with the number of entries of the Jacobian rather than with
+the square of the number of equations.
+
+\cgesec{Quick start}
+
+The sparse LU for every later solve
+\begin{stcode}
+cge_options, linsolver(sparse)
+\end{stcode}
+The sparse LU for systems of 1,000 equations or more
+\begin{stcode}
+cge_options, linsolver(auto)
+\end{stcode}
+Display the settings
+\begin{stcode}
+cge_options
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_options} [\texttt{,} \optarg{lin}{solver}{dense|sparse|auto}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{lin}{solver}{dense|sparse|auto} & the linear solver of Newton's steps\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{lin}{solver}{dense|sparse|auto}] chooses the linear solver of
+Newton's steps: \cmd{dense}, Mata's LU factorisation with partial pivoting
+(the default); \cmd{sparse}, the sparse LU of section~\ref{sec:sparse}; or
+\cmd{auto}, the sparse LU for systems of 1,000 equations or more and the
+dense one below. \manref{cge_solve} takes \opt{sp}{arse} or \opt{den}{se} for one
+solve.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+Both linear solvers give the same solution, to the solver's tolerance; they
+differ in time and memory. The dense LU holds the Jacobian as a square matrix
+and factorises it in time proportional to the cube of its size; the sparse LU
+holds only its entries, chooses a pivot order once, which later solves of the
+same model use again, and factorises each Jacobian in that order. Its first
+solve of a model therefore costs more than its later ones. The full system of a
+large model, with tens of thousands of equations, can only be solved with it.
+
+The SAM is mapped and calibrated, and the tariffs removed:
+\stlog{opt_setup}
+
+\cgesubsec{Example 1: the sparse LU}
+
+\stlog{opt_sparse}
+The two solutions agree to the solver's tolerance, for the reduced and the
+full system.
+
+\cgesec{Stored results}
+
+\cmd{cge_options} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Macros}
+\res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto}\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+Section~\ref{sec:sparse} describes the sparse LU.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_solve}{Solve the model}
+\seechapter{chap:solution}{The solution method}
+\end{alsosee}

@@ -154,6 +154,56 @@ evaluation for each group. When Newton's method fails with the exact
 Jacobian, it is tried again from the start with central differences and
 without Broyden's updates.
 
+\section{The sparse LU}\label{sec:sparse}
+
+Each Newton step solves $J\,\Delta z = -F$. By default the Jacobian is held as
+a dense matrix and factorised by Mata's LU with partial pivoting, in time
+proportional to $n^3$ and memory to $n^2$ for $n$ equations. From version
+0.10.1, \manref{cge_options}, \cmd{linsolver(sparse)}, factorises it as a
+sparse matrix, in the manner of the analyse-and-factorise solvers of
+\citet{duff1986}; its memory grows with the number of entries.
+
+\textit{Analysis.} The rows with more than ten times the average number of
+entries, or 50, are set apart: the sums of government revenue and spending,
+the balances and the price indexes. On the others, the pivots are chosen by
+Markowitz's rule with threshold pivoting \citep{markowitz1957}: at each step,
+among the active columns with the fewest entries (from a pool of 64 chosen
+again every 16 steps, four at most), the entries $a_{ij}$ with
+$|a_{ij}| \ge 0.1 \max_k |a_{kj}|$, the one that minimises
+$(r_i - 1)(c_j - 1)$, with $r_i$ and $c_j$ the active entries of its row and
+column, is the pivot, and the elimination of its row from the others gives
+the pattern of the factors, fill included. Rows that cancel in the
+elimination leave in a column only entries lost to rounding; a column whose
+active entries are all below $10^{-10}$ of its largest entry in the rows not
+set apart is therefore left over, and its pivot comes from the rows set
+apart. A row left without a pivot joins those set apart. The analysis gives
+orders $p$ and $q$ of the rows and columns, and the patterns of $L$ and $U$
+for the sparse block.
+
+\textit{Factorisation.} With $B = A[p, q]$ partitioned into the sparse block
+$A_{11}$ and the rows set apart and columns left over,
+\begin{equation*}
+B = \begin{pmatrix} A_{11} & A_{12}\\ A_{21} & A_{22} \end{pmatrix}, \qquad
+A_{11} = L U, \qquad S = A_{22} - A_{21} A_{11}^{-1} A_{12},
+\end{equation*}
+$L U$ is computed column by column (left-looking), each column of $U$ by
+the columns of $L$ before it in the pattern of the analysis. $A_{12}$ and
+$A_{21}$ are kept as entries, and the Schur complement $S$, small and dense,
+is formed from $A_{11}^{-1} A_{12}$ a group of columns at a time, so that the
+memory stays proportional to the entries, and factorised by Mata's LU. A
+system $B y = c$ is solved as $y_2 = S^{-1}(c_2 - A_{21} A_{11}^{-1} c_1)$,
+$y_1 = A_{11}^{-1}(c_1 - A_{12} y_2)$. Each later Jacobian with the same
+pattern, or with entries only within it, is factorised in the same order;
+when a pivot falls below $10^{-8}$ times the largest entry of its column of
+$L$, or below $10^{-10}$ times the largest entry of its column of $A_{11}$,
+the analysis is made again with the current values. The analysis is kept for later solves of the same model, so
+loops, sensitivity analyses, dynamic runs and the optimiser pay it once.
+Broyden's updates apply to the sparse factors as to the dense ones, and the
+fallbacks of section~\ref{sec:continuation} with central or one-sided
+differences use the sparse LU too, with the differences of each group of
+columns as entries. Powell's hybrid method, which holds the Jacobian dense,
+is left out with the sparse LU above 10,000 equations.
+
 \section{Fallbacks and continuation}\label{sec:continuation}
 
 If Newton's method fails with the exact Jacobian and with central

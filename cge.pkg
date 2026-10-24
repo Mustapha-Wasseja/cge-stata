@@ -61,6 +61,8 @@ f ado/cge_loop.ado
 f ado/cge_loop.sthlp
 f ado/cge_gdx.ado
 f ado/cge_gdx.sthlp
+f ado/cge_options.ado
+f ado/cge_options.sthlp
 f ado/cge_macro.ado
 f ado/cge_macro.sthlp
 f ado/cge_solve.ado

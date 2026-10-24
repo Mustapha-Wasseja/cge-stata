@@ -6,7 +6,10 @@ imported into Stata, checked against the model's equations and compared with
 Stata's.
 
 Usage: python tools/bench/run_bench.py [--stata EXE] [--sizes 40x5,80x10,...] [--full-up-to N]
-    [--gams GAMS.EXE] [--out CSV]
+    [--gams GAMS.EXE] [--linsolver dense|sparse|auto] [--out CSV]
+
+From version 0.10.1, --linsolver chooses the linear solver of Newton's steps
+(cge_options, linsolver()); the dense LU by default.
 
 Writes tools/bench/bench_results.csv, or the file given with --out. The SAMs, do-files, Stata logs and GAMS
 listings go to a temporary directory; Stata logs contain the licence serial,
@@ -41,6 +44,7 @@ timer on 2
 quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
 timer off 2
 local neq = r(N_equations)
+{lin}
 cge_shock tm, value(0)
 timer on 3
 cge_solve, name(reduced)
@@ -104,6 +108,7 @@ def main() -> None:
     ap.add_argument("--sizes", default="40x5,80x10,120x10,160x20,200x20")
     ap.add_argument("--full-up-to", type=int, default=120)
     ap.add_argument("--gams", default=None, help="gams.exe: also solve each model with GAMS (PATH)")
+    ap.add_argument("--linsolver", default="", choices=("", "dense", "sparse", "auto"))
     ap.add_argument("--out", default=str(HERE / "bench_results.csv"))
     args = ap.parse_args()
     import sys
@@ -125,7 +130,8 @@ def main() -> None:
         gdir, model = work / f"gams_{n}x{h}", work / f"model_{n}x{h}.cgem"
         export = EXPORT.format(gdir=gdir.as_posix(), model=model.as_posix()) if args.gams else ""
         do.write_text(DO.format(ado=(REPO / "ado").as_posix(), sam=csvp.as_posix(), acts=acts, coms=coms,
-                                hhs=hhs, full=FULL if n <= args.full_up_to else "", export=export),
+                                hhs=hhs, full=FULL if n <= args.full_up_to else "", export=export,
+                                lin=f"quietly cge_options, linsolver({args.linsolver})" if args.linsolver else ""),
                       encoding="utf-8")
         subprocess.run([args.stata, "/e", "do", do.name], cwd=work, check=True)
         log = (work / f"bench_{n}x{h}.log").read_text(encoding="utf-8", errors="replace")

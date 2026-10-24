@@ -202,6 +202,9 @@ struct cge_model {
     real colvector   bdlp, bdlv, bdup, bduv, bdsp, bdsv, bdcp
     // scenario loops (from version 0.9.9): name, simulations and targets
     string matrix    loopdef
+    // the linear solver of Newton's steps (from version 0.10.1): 0 or missing
+    // dense LU, 1 sparse LU, 2 sparse from 1,000 equations
+    real scalar      linsolver
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -219,7 +222,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.10.0")
+    return("0.10.1")
 }
 
 // =====================================================================
@@ -4387,6 +4390,634 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
 // Solver
 // =====================================================================
 
+// =====================================================================
+// Sparse LU factorisation (from version 0.10.1)
+// =====================================================================
+//
+// For the Newton steps of large systems. The rows with many entries -- the
+// sums of government revenue, the balances, the price indexes -- are set
+// apart; on the others, a pivot order is chosen once by Markowitz's rule
+// with threshold pivoting, on the values of a first matrix
+// (_cge_slu_analyse: right-looking elimination of the pattern). With rows p
+// and columns q in that order, the sparse block A11 = A[p1, q1] = L U, by
+// columns (_cge_slu_factor: left-looking, with the patterns of L and U from
+// the analysis), and the rows set apart and the columns left over form a
+// dense block, through its Schur complement S = A22 - A21 inv(A11) A12,
+// factorised by dense LU. Each later matrix with the same pattern is
+// factorised in the same order, which is chosen again when a pivot falls
+// below the threshold.
+
+struct cge_slu {
+    real scalar     n, ns, ok, nnzl, nnzu
+    real colvector  p, q, pinv, qinv
+    // the pattern analysed, as compressed columns: starts and rows
+    real colvector  acp, ari
+    // L of the sparse block by columns, rows in the permuted order (> k)
+    real colvector  ls, ll, lr, lv
+    // U of the sparse block by columns, rows (< k), values and diagonal
+    real colvector  us, ul, ur, uv, ud
+    // the dense block: the entries of A12 (rows, columns of the block,
+    // values) and of A21 by rows, with their panels, and the LU of S with
+    // its order
+    real colvector  r12, c12, v12, r21, c21, v21
+    real matrix     i21, SL, SU
+    real colvector  sp
+}
+
+// Compressed columns of the n x n matrix of entries (r, c, v): column starts
+// (n + 1), rows and values, duplicates summed
+void _cge_slu_csc(real colvector r, real colvector c, real colvector v, real scalar n, real colvector cp,
+                  real colvector ri, real colvector vv)
+{
+    real colvector o, lin, cnt
+    real matrix info
+    lin = (c :- 1) :* n :+ r
+    o = order(lin, 1)
+    lin = lin[o]
+    vv = v[o]
+    info = panelsetup(lin, 1)
+    vv = panelsum(vv, info)
+    lin = lin[info[., 1]]
+    ri = mod(lin :- 1, n) :+ 1
+    cnt = J(n, 1, 0)
+    o = floor((lin :- 1) :/ n) :+ 1
+    info = panelsetup(o, 1)
+    cnt[o[info[., 1]]] = info[., 2] - info[., 1] :+ 1
+    cp = 1 \ (runningsum(cnt) :+ 1)
+}
+
+// The pivot order of matrix (cp, ri, vv), n x n. The rows with more entries
+// than ten times the average, or 50, are set apart; on the others, at each
+// step, among a pool of the active columns with the fewest entries (chosen
+// again every 16 steps), the columns with the fewest (four at most), the
+// entries within the threshold u of the largest in their column, the one with
+// the smallest product of its row and column counts less one. A column whose
+// active entries are all below 1e-10 of its largest entry in the rows not set
+// apart has lost them to rounding in the elimination (rows that cancel), and
+// is left over; a row left without a pivot joins those set apart. Fills the
+// order and the patterns of L and U in F; F.ok is 0 for a matrix that is
+// singular in this sense.
+void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector ri, real colvector vv,
+                      real scalar n, real scalar u)
+{
+    pointer(real colvector) colvector RC, RV, CR
+    real colvector rcnt, ccnt, clen, ract, W, mark, cols, vals, rows_, pc, pv, newc, newv, keep, extra, cand, a, ok
+    real colvector lk, li, lm, ukr, ukc, pos, cj, ab, rb, pool, dense, avail, cact, cbad, cs
+    real matrix mk, tw
+    real scalar i, j, t, best, bc, br, bv, cost, mx, c, r, piv, m, nl, nu, big, cx, age, cmin, tau, ns, nact, nlk, nuk
+    F.n = n
+    F.ok = 0
+    F.acp = cp
+    F.ari = ri
+    big = 1e300
+    // the rows of the active matrix, unsorted, with their values; the
+    // columns, the rows they hold (with room to grow, clen in use, rows
+    // since eliminated included) and their number of active rows
+    RC = RV = CR = J(n, 1, NULL)
+    rcnt = ccnt = clen = J(n, 1, 0)
+    a = J(rows(ri), 1, .)
+    for (j = 1; j <= n; j++) if (cp[j + 1] > cp[j]) a[|cp[j] \ cp[j + 1] - 1|] = J(cp[j + 1] - cp[j], 1, j)
+    keep = order((ri, a), (1, 2))
+    lk = ri[keep]
+    li = a[keep]
+    lm = vv[keep]
+    for (i = 1; i <= n; i++) {
+        RC[i] = &J(0, 1, .)
+        RV[i] = &J(0, 1, .)
+    }
+    if (rows(lk)) {
+        mk = panelsetup(lk, 1)
+        for (t = 1; t <= rows(mk); t++) {
+            i = lk[mk[t, 1]]
+            RC[i] = &(li[|mk[t, 1] \ mk[t, 2]|] :+ 0)
+            RV[i] = &(lm[|mk[t, 1] \ mk[t, 2]|] :+ 0)
+            rcnt[i] = mk[t, 2] - mk[t, 1] + 1
+        }
+    }
+    // the rows set apart
+    tau = max((50, 10 * rows(ri) / n))
+    dense = (rcnt :> tau)
+    ract = !dense
+    // the scale of each column: its largest entry in the other rows
+    cs = J(n, 1, 0)
+    for (j = 1; j <= n; j++) {
+        clen[j] = cp[j + 1] - cp[j]
+        if (clen[j]) {
+            CR[j] = &(ri[|cp[j] \ cp[j + 1] - 1|] \ J(clen[j], 1, .))
+            ccnt[j] = sum(ract[ri[|cp[j] \ cp[j + 1] - 1|]])
+            cs[j] = max(abs(vv[|cp[j] \ cp[j + 1] - 1|]) :* ract[ri[|cp[j] \ cp[j + 1] - 1|]])
+        }
+        else CR[j] = &J(4, 1, .)
+    }
+    cact = J(n, 1, 1)
+    cbad = J(n, 1, 0)
+    nact = sum(ract)
+    W = mark = J(n, 1, 0)
+    F.p = F.q = J(n, 1, .)
+    // the entries of L (row, step, multiplier) and of U (step, column,
+    // value), in vectors with room to grow: appending to a vector copies it
+    nlk = nuk = 0
+    lk = li = lm = J(rows(ri) + n, 1, .)
+    ukr = ukc = J(rows(ri) + n, 1, .)
+    F.uv = J(rows(ri) + n, 1, .)
+    pool = J(0, 1, .)
+    age = 16
+    ns = 0
+    while (nact) {
+        // the columns that can take a pivot: active, with entries in active
+        // rows, and not found to be zero there
+        if (age >= 16 | !rows(pool)) {
+            avail = ccnt :+ big :* ((ccnt :<= 0) :| !cact :| cbad)
+            minindex(avail, 64, pool, tw)
+            if (rows(pool) > 64) pool = pool[|1 \ 64|]
+            age = 0
+        }
+        age++
+        pool = select(pool, cact[pool] :& (ccnt[pool] :> 0) :& !cbad[pool])
+        if (!rows(pool) | !cols(pool)) {
+            avail = ccnt :+ big :* ((ccnt :<= 0) :| !cact :| cbad)
+            minindex(avail, 64, pool, tw)
+            if (rows(pool) > 64) pool = pool[|1 \ 64|]
+            pool = select(pool, cact[pool] :& (ccnt[pool] :> 0) :& !cbad[pool])
+            if (!rows(pool) | !cols(pool)) break
+            age = 1
+        }
+        cmin = min(ccnt[pool])
+        cand = select(pool, ccnt[pool] :== cmin)
+        if (rows(cand) > 4) cand = cand[|1 \ 4|]
+        best = .
+        bc = br = 0
+        bv = 0
+        for (t = 1; t <= rows(cand); t++) {
+            c = cand[t]
+            cj = (*CR[c])[|1 \ clen[c]|]
+            rows_ = select(cj, ract[cj])
+            if (!cols(rows_)) continue
+            a = J(rows(rows_), 1, 0)
+            for (i = 1; i <= rows(rows_); i++) {
+                pos = selectindex(*RC[rows_[i]] :== c)
+                if (rows(pos)) a[i] = (*RV[rows_[i]])[pos[1]]
+            }
+            mx = max(abs(a))
+            // entries zero, or lost to rounding: the column is left over
+            if (mx >= . | mx <= 1e-10 * cs[c]) {
+                cbad[c] = 1
+                continue
+            }
+            ok = selectindex(abs(a) :>= u * mx)
+            for (i = 1; i <= rows(ok); i++) {
+                cost = (rcnt[rows_[ok[i]]] - 1) * (ccnt[c] - 1)
+                if (cost < best | (cost == best & abs(a[ok[i]]) > abs(bv))) {
+                    best = cost
+                    bc = c
+                    br = rows_[ok[i]]
+                    bv = a[ok[i]]
+                    // the column's rows and values, for the multipliers
+                    rb = rows_
+                    ab = a
+                }
+            }
+        }
+        // no pivot in these columns: their values are zero; they go to the
+        // dense block
+        if (!bc) {
+            cbad[cand] = J(rows(cand), 1, 1)
+            continue
+        }
+        r = br
+        c = bc
+        piv = bv
+        ns++
+        F.p[ns] = r
+        F.q[ns] = c
+        pc = *RC[r]
+        pv = *RV[r]
+        // the pivot row is row ns of U
+        if (nuk + rows(pc) > rows(ukr)) {
+            ukr = ukr \ J(rows(ukr), 1, .)
+            ukc = ukc \ J(rows(ukc), 1, .)
+            F.uv = F.uv \ J(rows(F.uv), 1, .)
+        }
+        if (rows(pc)) {
+            ukr[|nuk + 1 \ nuk + rows(pc)|] = J(rows(pc), 1, ns)
+            ukc[|nuk + 1 \ nuk + rows(pc)|] = pc
+            F.uv[|nuk + 1 \ nuk + rows(pc)|] = pv
+            nuk = nuk + rows(pc)
+        }
+        // the other active rows of the pivot column are updated
+        for (i = 1; i <= rows(rb); i++) {
+            t = rb[i]
+            if (t == r) continue
+            cols = *RC[t]
+            vals = *RV[t]
+            m = ab[i] / piv
+            if (nlk == rows(lk)) {
+                lk = lk \ J(rows(lk), 1, .)
+                li = li \ J(rows(li), 1, .)
+                lm = lm \ J(rows(lm), 1, .)
+            }
+            nlk++
+            lk[nlk] = t
+            li[nlk] = ns
+            lm[nlk] = m
+            W[cols] = vals
+            mark[cols] = J(rows(cols), 1, 1)
+            W[pc] = W[pc] - m :* pv
+            // the columns that gain the row
+            extra = select(pc, !mark[pc])
+            // select() gives 0 x 0 when nothing is selected
+            if (!cols(extra)) extra = J(0, 1, .)
+            newc = cols \ extra
+            newc = select(newc, newc :!= c)
+            if (!cols(newc)) newc = J(0, 1, .)
+            newv = W[newc]
+            W[cols] = J(rows(cols), 1, 0)
+            W[pc] = J(rows(pc), 1, 0)
+            mark[cols] = J(rows(cols), 1, 0)
+            RC[t] = &(newc :+ 0)
+            RV[t] = &(newv :+ 0)
+            rcnt[t] = rows(newc)
+            for (j = 1; j <= rows(extra); j++) {
+                cx = extra[j]
+                if (clen[cx] == rows(*CR[cx])) CR[cx] = &((*CR[cx]) \ J(clen[cx] + 4, 1, .))
+                clen[cx] = clen[cx] + 1
+                (*CR[cx])[clen[cx]] = t
+                ccnt[cx] = ccnt[cx] + 1
+            }
+        }
+        // the pivot row and column leave the active matrix
+        ract[r] = 0
+        nact--
+        cact[c] = 0
+        ccnt[pc] = ccnt[pc] :- 1
+        ccnt[c] = 0
+    }
+    lk = (nlk ? lk[|1 \ nlk|] : J(0, 1, .))
+    li = (nlk ? li[|1 \ nlk|] : J(0, 1, .))
+    ukr = (nuk ? ukr[|1 \ nuk|] : J(0, 1, .))
+    ukc = (nuk ? ukc[|1 \ nuk|] : J(0, 1, .))
+    // the rows set apart, and those left without a pivot, then the columns
+    // left over, form the dense block
+    F.ns = ns
+    if (ns < n) {
+        keep = J(n, 1, 1)
+        if (ns) keep[F.p[|1 \ ns|]] = J(ns, 1, 0)
+        F.p[|ns + 1 \ n|] = selectindex(keep)
+        keep = J(n, 1, 1)
+        if (ns) keep[F.q[|1 \ ns|]] = J(ns, 1, 0)
+        F.q[|ns + 1 \ n|] = selectindex(keep)
+    }
+    F.pinv = invorder(F.p)
+    F.qinv = invorder(F.q)
+    // L of the sparse block by columns: rows in the permuted order; the rows
+    // that end in the dense block keep their entries of A21 instead
+    F.lr = F.pinv[lk]
+    keep = selectindex(F.lr :<= ns)
+    if (!cols(keep)) keep = J(0, 1, .)
+    F.lr = F.lr[keep]
+    li = li[keep]
+    nl = rows(F.lr)
+    if (nl) {
+        keep = order((li, F.lr), (1, 2))
+        li = li[keep]
+        F.lr = F.lr[keep]
+    }
+    F.ls = F.ll = J(n, 1, 0)
+    if (nl) {
+        mk = panelsetup(li, 1)
+        F.ls[li[mk[., 1]]] = mk[., 1]
+        F.ll[li[mk[., 1]]] = mk[., 2] - mk[., 1] :+ 1
+    }
+    F.lv = J(nl, 1, 0)
+    // U of the sparse block by columns: the entries of its columns, the
+    // diagonal apart; entries in the columns left over belong to A12
+    ukc = F.qinv[ukc]
+    keep = selectindex((ukc :!= ukr) :& (ukc :<= ns))
+    if (!cols(keep)) keep = J(0, 1, .)
+    ukr = ukr[keep]
+    ukc = ukc[keep]
+    nu = rows(ukr)
+    if (nu) {
+        keep = order((ukc, ukr), (1, 2))
+        ukr = ukr[keep]
+        ukc = ukc[keep]
+    }
+    F.ur = ukr
+    F.us = F.ul = J(n, 1, 0)
+    if (nu) {
+        mk = panelsetup(ukc, 1)
+        F.us[ukc[mk[., 1]]] = mk[., 1]
+        F.ul[ukc[mk[., 1]]] = mk[., 2] - mk[., 1] :+ 1
+    }
+    F.uv = J(nu, 1, 0)
+    F.ud = J(n, 1, 0)
+    F.nnzl = nl
+    F.nnzu = nu + ns
+    F.ok = 1
+}
+
+// The values of the factors for matrix (cp, ri, vv), whose pattern F was
+// analysed for, in F's order: L and U of the sparse block, column by column,
+// then the dense block. Returns 0 if a pivot of the sparse block is below tol
+// times the largest entry of its column of L, or at most 1e-10 of the largest
+// entry of its column in the sparse block (lost to rounding), or is 0, or if
+// the dense block is singular.
+real scalar _cge_slu_factor(struct cge_slu scalar F, real colvector cp, real colvector ri, real colvector vv,
+                            real scalar tol)
+{
+    real colvector W, ur, lr, rr, vk, sel, pr, pc, uc
+    real matrix S, B, Y
+    real scalar k, c, j, jj, a, b, piv, mx, n, ns, nd, c0, nb, j0, j1, g
+    n = F.n
+    ns = F.ns
+    nd = n - ns
+    W = J(n, 1, 0)
+    for (k = 1; k <= ns; k++) {
+        c = F.q[k]
+        c0 = 0
+        if (cp[c + 1] > cp[c]) {
+            rr = F.pinv[ri[|cp[c] \ cp[c + 1] - 1|]]
+            vk = vv[|cp[c] \ cp[c + 1] - 1|]
+            // the rows of the sparse block; those of the dense one go to A21
+            sel = selectindex(rr :<= ns)
+            if (cols(sel) & rows(sel)) {
+                W[rr[sel]] = vk[sel]
+                c0 = max(abs(vk[sel]))
+            }
+        }
+        // the columns of L before k that column k of U needs, in order
+        if (F.ul[k]) {
+            a = F.us[k]
+            b = a + F.ul[k] - 1
+            ur = F.ur[|a \ b|]
+            for (jj = 1; jj <= rows(ur); jj++) {
+                j = ur[jj]
+                if (W[j] == 0 | !F.ll[j]) continue
+                lr = F.lr[|F.ls[j] \ F.ls[j] + F.ll[j] - 1|]
+                W[lr] = W[lr] - F.lv[|F.ls[j] \ F.ls[j] + F.ll[j] - 1|] :* W[j]
+            }
+            F.uv[|a \ b|] = W[ur]
+            W[ur] = J(rows(ur), 1, 0)
+        }
+        piv = W[k]
+        W[k] = 0
+        if (abs(piv) <= 1e-10 * c0) return(0)
+        if (F.ll[k]) {
+            a = F.ls[k]
+            b = a + F.ll[k] - 1
+            lr = F.lr[|a \ b|]
+            mx = max(abs(W[lr]))
+            if (piv == 0 | abs(piv) < tol * mx) return(0)
+            F.lv[|a \ b|] = W[lr] :/ piv
+            W[lr] = J(rows(lr), 1, 0)
+        }
+        else if (piv == 0) return(0)
+        if (piv >= .) return(0)
+        F.ud[k] = piv
+    }
+    F.SL = F.SU = F.i21 = J(0, 0, .)
+    F.r12 = F.c12 = F.v12 = F.r21 = F.c21 = F.v21 = F.sp = J(0, 1, .)
+    if (!nd) return(1)
+    // the blocks of the rows set apart and the columns left over, A12 and A21
+    // as entries and A22 dense; the Schur complement by groups of columns of
+    // A12, so that inv(A11) A12 is not held whole
+    pr = F.pinv[ri]
+    pc = F.qinv[floor((_cge_slu_lin(cp, ri, n) :- 1) :/ n) :+ 1]
+    sel = selectindex((pr :<= ns) :& (pc :> ns))
+    if (rows(sel) & cols(sel)) {
+        F.r12 = pr[sel]
+        F.c12 = pc[sel] :- ns
+        F.v12 = vv[sel]
+    }
+    sel = selectindex((pr :> ns) :& (pc :<= ns))
+    if (rows(sel) & cols(sel)) {
+        F.r21 = pr[sel] :- ns
+        F.c21 = pc[sel]
+        F.v21 = vv[sel]
+        sel = order((F.r21, F.c21), (1, 2))
+        F.r21 = F.r21[sel]
+        F.c21 = F.c21[sel]
+        F.v21 = F.v21[sel]
+        F.i21 = panelsetup(F.r21, 1)
+    }
+    S = _cge_slu_block(pr, pc, vv, ns, ns, nd, nd, nd, nd)
+    if (ns & rows(F.v12) & rows(F.v21)) {
+        nb = max((16, min((nd, floor(2e7 / ns)))))
+        for (j0 = 0; j0 < nd; j0 = j0 + nb) {
+            j1 = min((nd, j0 + nb))
+            sel = selectindex((F.c12 :> j0) :& (F.c12 :<= j1))
+            if (!rows(sel) | !cols(sel)) continue
+            B = J(ns * (j1 - j0), 1, 0)
+            B[(F.c12[sel] :- j0 :- 1) :* ns :+ F.r12[sel]] = F.v12[sel]
+            Y = _cge_slu_solve11(F, colshape(B, ns)')
+            B = J(0, 0, .)
+            for (g = 1; g <= rows(F.i21); g++) {
+                a = F.i21[g, 1]
+                b = F.i21[g, 2]
+                uc = F.c21[|a \ b|]
+                j = F.r21[a]
+                S[|j, j0 + 1 \ j, j1|] = S[|j, j0 + 1 \ j, j1|] - F.v21[|a \ b|]' * Y[uc, .]
+            }
+        }
+    }
+    F.SL = S
+    if (hasmissing(F.SL)) return(0)
+    _lud(F.SL, F.SU, F.sp)
+    F.sp = invorder(F.sp)
+    if (any(abs(diagonal(F.SU)) :<= 1e-300) | hasmissing(F.SU)) return(0)
+    return(1)
+}
+
+// The block of rows r0 + 1 to r0 + nr and columns c0 + 1 to c0 + nc of the
+// entries at rows pr and columns pc, with values vv, as a dense matrix
+real matrix _cge_slu_block(real colvector pr, real colvector pc, real colvector vv, real scalar r0, real scalar c0,
+                           real scalar nr, real scalar nc, real scalar mr, real scalar mc)
+{
+    real colvector sel, v
+    if (!nr | !nc) return(J(nr, nc, 0))
+    sel = selectindex((pr :> r0) :& (pr :<= r0 + nr) :& (pc :> c0) :& (pc :<= c0 + nc))
+    v = J(nr * nc, 1, 0)
+    if (cols(sel) & rows(sel)) v[(pc[sel] :- c0 :- 1) :* nr :+ (pr[sel] :- r0)] = vv[sel]
+    return(colshape(v, nr)')
+}
+
+// inv(A11) B for the sparse block, B with ns rows, in the permuted order
+real matrix _cge_slu_solve11(struct cge_slu scalar F, real matrix B)
+{
+    real matrix Y
+    real colvector lr, ur
+    real scalar k, ns
+    ns = F.ns
+    Y = B
+    // rows that are zero are passed over: the columns of B are sparse
+    for (k = 1; k <= ns; k++) {
+        if (!F.ll[k]) continue
+        if (!any(Y[k, .])) continue
+        lr = F.lr[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|]
+        Y[lr, .] = Y[lr, .] - F.lv[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|] * Y[k, .]
+    }
+    for (k = ns; k >= 1; k--) {
+        if (!any(Y[k, .])) continue
+        Y[k, .] = Y[k, .] :/ F.ud[k]
+        if (!F.ul[k]) continue
+        ur = F.ur[|F.us[k] \ F.us[k] + F.ul[k] - 1|]
+        Y[ur, .] = Y[ur, .] - F.uv[|F.us[k] \ F.us[k] + F.ul[k] - 1|] * Y[k, .]
+    }
+    return(Y)
+}
+
+// The solution of A x = b with the factors in F
+real colvector _cge_slu_solve(struct cge_slu scalar F, real colvector b)
+{
+    real colvector y, x, lr, ur, y2, t
+    real scalar k, n, ns
+    n = F.n
+    ns = F.ns
+    y = b[F.p]
+    // L y1 = b1, column by column
+    for (k = 1; k <= ns; k++) {
+        if (!F.ll[k] | y[k] == 0) continue
+        lr = F.lr[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|]
+        y[lr] = y[lr] - F.lv[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|] :* y[k]
+    }
+    // U z1 = y1, from the last column
+    for (k = ns; k >= 1; k--) {
+        y[k] = y[k] / F.ud[k]
+        if (!F.ul[k] | y[k] == 0) continue
+        ur = F.ur[|F.us[k] \ F.us[k] + F.ul[k] - 1|]
+        y[ur] = y[ur] - F.uv[|F.us[k] \ F.us[k] + F.ul[k] - 1|] :* y[k]
+    }
+    // the dense block: x2 = inv(S) (b2 - A21 z1), x1 = z1 - inv(A11) A12 x2
+    if (ns < n) {
+        t = y[|ns + 1 \ n|]
+        if (ns & rows(F.v21)) t = t - _cge_sumby(F.r21, F.v21 :* y[F.c21], n - ns)
+        y2 = solveupper(F.SU, solvelower(F.SL, t[F.sp]))
+        if (ns & rows(F.v12)) y[|1 \ ns|] = y[|1 \ ns|] - _cge_slu_solve11(F, _cge_sumby(F.r12, F.v12 :* y2[F.c12], ns))
+        y[|ns + 1 \ n|] = y2
+    }
+    x = J(n, 1, .)
+    x[F.q] = y
+    return(x)
+}
+
+// The values of matrix (cp, ri, vv) on the pattern F was analysed for, 0
+// where it has no entry; none if it has an entry outside that pattern
+real colvector _cge_slu_align(struct cge_slu scalar F, real colvector cp, real colvector ri, real colvector vv)
+{
+    real colvector la, ln, L, T, V, o, prev, nxt, nz, mk
+    real scalar n, N
+    n = F.n
+    if (rows(ri) == rows(F.ari)) {
+        if (cp == F.acp & ri == F.ari) return(vv)
+    }
+    la = _cge_slu_lin(F.acp, F.ari, n)
+    ln = _cge_slu_lin(cp, ri, n)
+    L = la \ ln
+    T = J(rows(la), 1, 0) \ J(rows(ln), 1, 1)
+    V = J(rows(la), 1, 0) \ vv
+    o = order((L, T), (1, 2))
+    L = L[o]
+    T = T[o]
+    V = V[o]
+    N = rows(L)
+    if (N < 2) return(J(0, 1, .))
+    prev = 0 \ (L[|2 \ N|] :== L[|1 \ N - 1|])
+    if (any(T :& !prev)) return(J(0, 1, .))
+    nxt = (L[|1 \ N - 1|] :== L[|2 \ N|]) \ 0
+    V = (V[|2 \ N|] \ 0) :* nxt
+    return(select(V, !T))
+}
+
+// The linear indices, (column - 1) n + row, of compressed columns (cp, ri)
+real colvector _cge_slu_lin(real colvector cp, real colvector ri, real scalar n)
+{
+    real colvector cnt, nz, mk
+    if (!rows(ri)) return(J(0, 1, .))
+    cnt = cp[|2 \ n + 1|] - cp[|1 \ n|]
+    nz = selectindex(cnt)
+    mk = J(rows(ri), 1, 0)
+    mk[cp[nz]] = J(rows(nz), 1, 1)
+    return((nz[runningsum(mk)] :- 1) :* n :+ ri)
+}
+
+// The factors of the n x n matrix of entries (r, c, v): in the order of F if
+// F was analysed for its pattern and its pivots stay within the threshold,
+// otherwise in an order chosen again. Returns 0 for a singular matrix.
+real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colvector c, real colvector v,
+                            real scalar n)
+{
+    real colvector cp, ri, vv, va
+    _cge_slu_csc(r, c, v, n, cp, ri, vv)
+    if (hasmissing(vv)) return(0)
+    // the same pattern, or part of it: factorised in the order analysed
+    if (F.ok & F.n == n) {
+        va = _cge_slu_align(F, cp, ri, vv)
+        if (rows(va)) {
+            if (_cge_slu_factor(F, F.acp, F.ari, va, 1e-8)) return(1)
+        }
+    }
+    _cge_slu_analyse(F, cp, ri, vv, n, 0.1)
+    if (!F.ok) return(0)
+    if (!_cge_slu_factor(F, cp, ri, vv, 1e-12)) {
+        F.ok = 0
+        return(0)
+    }
+    // the order is used again by later solves while the pattern is the same
+    _cge_slu_keep(F)
+    return(1)
+}
+
+// The name of the linear solver setting
+string scalar _cge_lin_name(struct cge_model scalar M)
+{
+    if (M.linsolver >= . | M.linsolver == 0) return("dense")
+    return(M.linsolver == 1 ? "sparse" : "auto")
+}
+
+// cge_options (from version 0.10.1): the settings of the solver, as GAMS's
+// option statement
+void _cge_options(string scalar lin)
+{
+    struct cge_model scalar M
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (lin != "") {
+        M.linsolver = (lin == "dense" ? 0 : (lin == "sparse" ? 1 : 2))
+        _cge_store(M)
+    }
+    printf("{txt}Linear solver of Newton's steps: {res}%s{txt}%s\n", _cge_lin_name(M),
+           (M.linsolver == 2 ? " (the sparse LU from 1,000 equations)" : ""))
+    st_global("r(linsolver)", _cge_lin_name(M))
+}
+
+
+// The factors of the sparse LU kept from the last solve: an analysis is used
+// again while the pattern of the Jacobian is the same
+void _cge_slu_load(struct cge_slu scalar F)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__slu")) != NULL) F = *q
+    else F.ok = 0
+}
+
+void _cge_slu_keep(struct cge_slu scalar F)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__slu")) == NULL) q = crexternal("cge__slu")
+    *q = F
+}
+
+// H v with H the inverse of the sparse factors times the Broyden factors, as
+// _cge_hsolve
+real colvector _cge_hsolve_s(struct cge_slu scalar F, real matrix A, real matrix Sm, real scalar ns, real colvector v)
+{
+    real colvector w
+    real scalar j
+    w = _cge_slu_solve(F, v)
+    for (j = 1; j <= ns; j++) w = w + A[., j] * (Sm[., j]' * w)
+    return(w)
+}
+
 // The system the solver works on (from version 0.2.0): the free variables,
 // the equations (a mask over all equation elements) and the sparsity pattern.
 // The full system has every existing equation; the reduced system (the
@@ -4397,6 +5028,14 @@ void _cge_shock(string scalar target, string scalar elems, string scalar mode, r
 struct cge_sys {
     real colvector free, mask, jr, jc, drow, drow2
     real scalar    neq, reduced
+}
+
+// 1 if Newton's steps on system S use the sparse LU (cge_options, linsolver())
+real scalar _cge_sparse_on(struct cge_model scalar M, struct cge_sys scalar S)
+{
+    if (M.linsolver >= . | M.linsolver == 0) return(0)
+    if (M.linsolver == 1) return(1)
+    return(S.neq >= 1000)
 }
 
 struct cge_sys scalar _cge_sys_make(struct cge_model scalar M, real scalar reduced)
@@ -5295,6 +5934,71 @@ real matrix _cge_jacobian(struct cge_model scalar M, struct cge_par scalar p, re
     D = _cge_dense2(M, p, x, S.reduced)
     Jac[S.drow2, .] = (D[., S.free] :* M.xscale[S.free]') :/ esc[S.drow2]
     return(Jac)
+}
+
+// The Jacobian of _cge_jacobian as entries, rows ri and columns ci of the
+// system and values v (from version 0.10.1, for the sparse LU). Returns 0
+// at a point where the equations cannot be evaluated.
+real scalar _cge_jac_cdtrip(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                            struct cge_sys scalar S, real colvector z, struct cge_jpat scalar G,
+                            real colvector ri, real colvector ci, real colvector v, | real colvector f0)
+{
+    real colvector h, zp, zm, d, cols, rr, x, esc, isd, sel, vr
+    real matrix D, Dr, ij
+    real scalar g, k, j, fwd, nb, m
+
+    fwd = (args() >= 10 ? rows(f0) > 0 : 0)
+    ri = ci = v = J(rows(G.crow) + 1, 1, .)
+    nb = 0
+    // the rows with exact derivatives are written whole below
+    isd = J(S.neq, 1, 0)
+    isd[S.drow] = J(rows(S.drow), 1, 1)
+    isd[S.drow2] = J(rows(S.drow2), 1, 1)
+    h = (fwd ? 1e-7 : 1e-6) :* rowmax((J(rows(z), 1, 1), abs(z)))
+    for (g = 1; g <= G.ncolour; g++) {
+        cols = G.gcol[|G.gstart[g] \ G.gstart[g + 1] - 1|]
+        zp = z
+        zp[cols] = z[cols] + h[cols]
+        if (fwd) d = _cge_F(M, p, xfix, S, zp) - f0
+        else {
+            zm = z
+            zm[cols] = z[cols] - h[cols]
+            d = _cge_F(M, p, xfix, S, zp) - _cge_F(M, p, xfix, S, zm)
+        }
+        if (hasmissing(d)) return(0)
+        for (k = 1; k <= rows(cols); k++) {
+            j = cols[k]
+            if (G.cstart[j + 1] == G.cstart[j]) continue
+            rr = G.crow[|G.cstart[j] \ G.cstart[j + 1] - 1|]
+            rr = select(rr, !isd[rr])
+            if (!rows(rr) | !cols(rr)) continue
+            m = rows(rr)
+            ri[|nb + 1 \ nb + m|] = rr
+            ci[|nb + 1 \ nb + m|] = J(m, 1, j)
+            v[|nb + 1 \ nb + m|] = d[rr] :/ ((fwd ? 1 : 2) * h[j])
+            nb = nb + m
+        }
+    }
+    ri = (nb ? ri[|1 \ nb|] : J(0, 1, .))
+    ci = (nb ? ci[|1 \ nb|] : J(0, 1, .))
+    v = (nb ? v[|1 \ nb|] : J(0, 1, .))
+    x = xfix
+    x[S.free] = z :* M.xscale[S.free]
+    if (S.reduced) _cge_derive(M, p, x)
+    esc = select(M.escale, S.mask)
+    for (k = 1; k <= 2; k++) {
+        D = (k == 1 ? _cge_dense(M, p, x) : _cge_dense2(M, p, x, S.reduced))
+        vr = (k == 1 ? S.drow : S.drow2)
+        if (!rows(vr)) continue
+        Dr = (D[., S.free] :* M.xscale[S.free]') :/ esc[vr]
+        sel = selectindex(vec(Dr') :!= 0)
+        if (!rows(sel) | !cols(sel)) continue
+        ij = (floor((sel :- 1) :/ cols(Dr)) :+ 1, mod(sel :- 1, cols(Dr)) :+ 1)
+        ri = ri \ vr[ij[., 1]]
+        ci = ci \ ij[., 2]
+        v = v \ vec(Dr')[sel]
+    }
+    return(1)
 }
 
 // Column-by-column central-difference Jacobian, kept to check the grouped one
@@ -6236,20 +6940,46 @@ real colvector _cge_sumby(real colvector k, real colvector v, real scalar n)
 real matrix _cge_jacobian_exact(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                                 struct cge_sys scalar S, real colvector z)
 {
-    struct cge_trip scalar T
-    real colvector x, r, c, v, keep, dpos, drow, isdef, dnum, indef, piv, sel, dk, dc, dv, o
-    real colvector hasd, kt, vt, rt, nt, first, tt, within, src, start, len, rowsys, colmap, lin, ri, ci
+    real colvector ri, ci, v
     real matrix Jac, info
-    real scalar nd, pass, N, k, a, b, n, nfree
+    real scalar k, a, b, n, nfree
+    nfree = rows(z)
+    if (!_cge_jac_trip(M, p, xfix, S, z, ri, ci, v)) return(J(S.neq, nfree, .))
+    Jac = J(S.neq, nfree, 0)
+    if (!rows(v)) return(Jac)
+    info = panelsetup(ri, 1)
+    n = rows(info)
+    for (k = 1; k <= n; k++) {
+        a = info[k, 1]
+        b = info[k, 2]
+        Jac[ri[a], ci[|a \ b|]'] = v[|a \ b|]'
+    }
+    return(Jac)
+}
+
+// The entries of the exact Jacobian of system S at z (from version 0.10.1,
+// for the sparse LU; before, part of _cge_jacobian_exact): rows ri and
+// columns ci of the system, row by row, and values v, scaled. Returns 0 at a
+// point where the equations cannot be evaluated.
+real scalar _cge_jac_trip(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                          struct cge_sys scalar S, real colvector z, real colvector ri, real colvector ci,
+                          real colvector v)
+{
+    struct cge_trip scalar T
+    real colvector x, r, c, keep, dpos, drow, isdef, dnum, indef, piv, sel, dk, dc, dv, o
+    real colvector hasd, kt, vt, rt, nt, first, tt, within, src, start, len, rowsys, colmap, lin
+    real matrix info
+    real scalar nd, pass, N, nfree
 
     nfree = rows(z)
+    ri = ci = v = J(0, 1, .)
     x = xfix
     x[S.free] = z :* M.xscale[S.free]
     if (S.reduced) _cge_derive(M, p, x)
-    if (min(x[M.positive]) <= 0 | hasmissing(x)) return(J(S.neq, nfree, .))
+    if (min(x[M.positive]) <= 0 | hasmissing(x)) return(0)
     _cge_tinit(T)
     _cge_jtrip(M, p, x, T)
-    if (T.n == 0) return(J(S.neq, nfree, 0))
+    if (T.n == 0) return(1)
     r = T.r[|1 \ T.n|]
     c = T.c[|1 \ T.n|]
     v = T.v[|1 \ T.n|]
@@ -6331,14 +7061,17 @@ real matrix _cge_jacobian_exact(struct cge_model scalar M, struct cge_par scalar
     colmap = J(rows(x), 1, 0)
     colmap[S.free] = (1::nfree)
     keep = selectindex((rowsys[r] :> 0) :& (colmap[c] :> 0))
-    if (rows(keep) * cols(keep) == 0) return(J(S.neq, nfree, 0))
+    if (rows(keep) * cols(keep) == 0) return(1)
     r = r[keep]
     c = c[keep]
     v = v[keep] :* M.xscale[c] :/ M.escale[r]
-    if (hasmissing(v)) return(J(S.neq, nfree, .))
+    if (hasmissing(v)) {
+        v = J(0, 1, .)
+        return(0)
+    }
     ri = rowsys[r]
     ci = colmap[c]
-    // duplicates summed, then the entries written row by row
+    // duplicates summed, row by row
     lin = (ri :- 1) :* nfree :+ ci
     o = order(lin, 1)
     lin = lin[o]
@@ -6348,15 +7081,7 @@ real matrix _cge_jacobian_exact(struct cge_model scalar M, struct cge_par scalar
     lin = lin[info[., 1]]
     ri = floor((lin :- 1) :/ nfree) :+ 1
     ci = lin - (ri :- 1) :* nfree
-    Jac = J(S.neq, nfree, 0)
-    info = panelsetup(ri, 1)
-    n = rows(info)
-    for (k = 1; k <= n; k++) {
-        a = info[k, 1]
-        b = info[k, 2]
-        Jac[ri[a], ci[|a \ b|]'] = v[|a \ b|]'
-    }
-    return(Jac)
+    return(1)
 }
 
 // Test hook (from version 0.7.0): the exact Jacobian against column-by-column
@@ -6529,11 +7254,16 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
                         real scalar trace, real scalar iter, real scalar err, | real scalar mode)
 {
     struct cge_jpat scalar G
-    real colvector f, fn, dz, zn, perm, d, s, g, Hy, a
+    struct cge_slu scalar SF
+    real colvector f, fn, dz, zn, perm, d, s, g, Hy, a, jr, jc, jv
     real matrix LU, U, A, Sm
-    real scalar norm0, step, it, have, njac, nbro, ns, npol, den, ok, smin, j
+    real scalar norm0, step, it, have, njac, nbro, ns, npol, den, ok, smin, j, sp
 
     if (args() < 11) mode = 0
+    // the sparse LU (from version 0.10.1), with the exact Jacobian or, in
+    // modes 1 and 2, central or one-sided differences as entries
+    sp = _cge_sparse_on(M, S)
+    if (sp) _cge_slu_load(SF)
     f = _cge_F(M, p, xfix, S, z)
     iter = 0
     err = .
@@ -6578,7 +7308,8 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             }
             if (ok) {
                 s = step * d
-                g = _cge_hsolve(LU, U, perm, A, Sm, ns, fn)
+                if (sp) g = _cge_hsolve_s(SF, A, Sm, ns, fn)
+                else g = _cge_hsolve(LU, U, perm, A, Sm, ns, fn)
                 Hy = g + d
                 den = s' * Hy
                 z = zn
@@ -6600,7 +7331,8 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
         }
         else if (have) {
             // A step with the factors of the last Jacobian, without updates
-            dz = solveupper(U, solvelower(LU, -f[perm]))
+            if (sp) dz = _cge_slu_solve(SF, -f)
+            else dz = solveupper(U, solvelower(LU, -f[perm]))
             if (!hasmissing(dz)) {
                 zn = z + dz
                 fn = _cge_F(M, p, xfix, S, zn)
@@ -6620,15 +7352,26 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             st_numscalar("r(broyden)", nbro)
             return(1)
         }
-        if (mode == 1) LU = _cge_jacobian(M, p, xfix, S, z, G)
-        else if (mode == 2) LU = _cge_jacobian(M, p, xfix, S, z, G, f)
-        else LU = _cge_jacobian_exact(M, p, xfix, S, z)
-        njac++
-        if (hasmissing(LU)) break
-        // Mata's _lud() gives A = (L*U)[p, .], so A x = b is solved with b[invorder(p)]
-        _lud(LU, U, perm)
-        perm = invorder(perm)
-        dz = solveupper(U, solvelower(LU, -f[perm]))
+        if (sp) {
+            njac++
+            if (mode == 1) ok = _cge_jac_cdtrip(M, p, xfix, S, z, G, jr, jc, jv)
+            else if (mode == 2) ok = _cge_jac_cdtrip(M, p, xfix, S, z, G, jr, jc, jv, f)
+            else ok = _cge_jac_trip(M, p, xfix, S, z, jr, jc, jv)
+            if (!ok) break
+            if (!_cge_slu_update(SF, jr, jc, jv, rows(z))) break
+            dz = _cge_slu_solve(SF, -f)
+        }
+        else {
+            if (mode == 1) LU = _cge_jacobian(M, p, xfix, S, z, G)
+            else if (mode == 2) LU = _cge_jacobian(M, p, xfix, S, z, G, f)
+            else LU = _cge_jacobian_exact(M, p, xfix, S, z)
+            njac++
+            if (hasmissing(LU)) break
+            // Mata's _lud() gives A = (L*U)[p, .], so A x = b is solved with b[invorder(p)]
+            _lud(LU, U, perm)
+            perm = invorder(perm)
+            dz = solveupper(U, solvelower(LU, -f[perm]))
+        }
         if (hasmissing(dz)) break
         step = 1
         while (step >= 1e-8) {
@@ -6646,7 +7389,8 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             Sm = A
             ns = 0
             s = step * dz
-            g = solveupper(U, solvelower(LU, fn[perm]))
+            if (sp) g = _cge_slu_solve(SF, fn)
+            else g = solveupper(U, solvelower(LU, fn[perm]))
             Hy = g + dz
             den = s' * Hy
             have = 0
@@ -6785,7 +7529,12 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
         conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter2, err, 1)
         iter = iter + iter2
     }
-    if (!conv) {
+    // Powell's method (solvenl) holds the Jacobian dense: with the sparse LU
+    // it is left out above 10,000 equations (from version 0.10.1)
+    if (!conv & _cge_sparse_on(M, S) & S.neq > 10000) {
+        if (trace) printf("{txt}Powell's hybrid method is left out: %f equations, with the sparse LU\n", S.neq)
+    }
+    else if (!conv) {
         // Fallback: Powell's hybrid method, then Newton to polish the result
         method = "broydenpowell"
         SV = solvenl_init()
@@ -6855,18 +7604,23 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
 }
 
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
-                real scalar steps, real scalar diagnose)
+                real scalar steps, real scalar diagnose, string scalar lin)
 {
     struct cge_model scalar M
     real colvector x, x2, start
-    real scalar conv, iter, err, k, walras, nsteps, done, it2, n
+    real scalar conv, iter, err, k, walras, nsteps, done, it2, n, keeplin
     string scalar method, m2
 
     if (args() < 5) full = 0
     if (args() < 6) steps = 0
     if (args() < 7) diagnose = 0
+    if (args() < 8) lin = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
+    // the linear solver for this solve (from version 0.10.1), in place of
+    // that of cge_options
+    keeplin = M.linsolver
+    if (lin != "") M.linsolver = (lin == "sparse")
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
     // the base with the starting levels of cge_bound (from version 0.9.8)
     start = _cge_bd_start(M, M.xcur)
@@ -6898,6 +7652,8 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     walras = x[M.voff[_cge_vidx(M, "WALRAS")] + 1]
     // The largest scaled residual of every equation, the left-out ones included
     err = _cge_maxres(M, M.p, x)
+    st_global("r(linsolver)", _cge_lin_name(M))
+    M.linsolver = keeplin
 
     (void) _cge_store_sim(M, name, x, conv, iter, err, method)
     _cge_store(M)
@@ -17660,6 +18416,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "bdsv", M.bdsv)
     _cge_io_put(fh, "bdcp", M.bdcp)
     _cge_io_put(fh, "loopdef", M.loopdef)
+    _cge_io_put(fh, "linsolver", M.linsolver)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -17808,6 +18565,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "bdsv") M.bdsv = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "bdcp") M.bdcp = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "loopdef") M.loopdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "linsolver") M.linsolver = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
