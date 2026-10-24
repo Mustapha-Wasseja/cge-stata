@@ -64,6 +64,7 @@ simulation solved again under its own name keeps its place).
 {synopt:{cmd:r(ev)}}equivalent variation by household{p_end}
 {p2col 5 14 18 2: Macros}{p_end}
 {synopt:{cmd:r(sim)}}simulation name{p_end}
+{synopt:{cmd:r(model)}}the named model it solved, empty for the whole model (from version 0.17.0){p_end}
 
 
 {title:Also see}

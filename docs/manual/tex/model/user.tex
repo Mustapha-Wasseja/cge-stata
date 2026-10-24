@@ -453,6 +453,34 @@ written but not solved. The export check (\texttt{tools/gams}) solves
 problem 71 of \citet{hock1981}, a balancing by cross entropy and a frontier
 with a binding bound in GAMS with IPOPT and compares the solutions.
 
+\section{Named models}\label{sec:namedmodels}
+
+From version 0.17.0, \cmd{cge_model define} names a model over a subset of a
+standalone model's equations, as GAMS's \cmd{model} statement:
+\begin{stcode}
+cge_model define markets = DEM SUP
+cge_model define whole = markets TOT
+cge_solve, name(mk) model(markets)
+\end{stcode}
+A list names user equations, variables defined by an expression (their
+defining equations), inequalities (their constraints) and models defined
+before, or \cmd{all}. Solved on its own, the model is the system
+\begin{equation*}
+\ell_k(x) - r_k(x) = 0, \quad k \in \mathcal{K}_m, \qquad
+x_j \text{ free for } j \in \mathcal{J}_m, \quad x_j = \bar x_j \text{ otherwise},
+\end{equation*}
+with $\mathcal{K}_m$ the elements of its equations, $\mathcal{J}_m$ the free
+variables that appear in them, from the pattern of the Jacobian, and $\bar
+x$ the levels at the start: the current levels or, with \opt{}{from()},
+those of a stored simulation. Recursive and block-by-block solves, which
+GAMS programs write as sequences of \cmd{solve} statements over named
+models, follow: a block solved first, the next from its solution, with the
+variables of the first held at their levels by \opt{}{hold()}, as GAMS's
+\cmd{.fx}.
+\manref{cge_model} gives an example; the simulation records its model, and
+\manref{cge_gams} exports it with the equations of the model and the other
+variables fixed.
+
 \section{Compilation}
 
 Each equation is written out for every element of its set that meets its

@@ -725,6 +725,34 @@ foreach case in nlphs071 nlpentropy nlpfrontier {
     }
 }
 
+* A named model (version 0.17.0): two markets of a standalone model solved on
+* their own after a shock, with the value of their sales outside the model at
+* its level; GAMS solves model cgesub with the variable outside it fixed
+display as text _n "{hline 60}" _n "Case " as result "namedmodel"
+quietly cge_model new
+quietly cge_set g = g1 g2
+quietly cge_parameter a(g), values(g1:10 g2:20)
+quietly cge_variable P(g), value(1)
+quietly cge_variable Q(g), value(1)
+quietly cge_equation DEM(g): Q(g) = a(g) / sqrt(P(g))
+quietly cge_equation SUP(g): Q(g) = 2 * P(g)^2
+quietly cge_variable TOT = sum(g, P(g) * Q(g))
+quietly cge_model define markets = DEM SUP
+quietly cge_shock a, elements(g1) value(40)
+quietly cge_solve, name(namedmodel) model(markets) tolerance(1e-12)
+assert r(converged) == 1
+if "`phase'" == "export" {
+    cge_gams using `"`dir'/namedmodel"', sim(namedmodel) replace
+}
+else {
+    capture confirm file `"`dir'/namedmodel/cge_namedmodel.csv"'
+    if !_rc {
+        cge_gams using `"`dir'/namedmodel"', sim(namedmodel) compare noexport
+        post `post' ("namedmodel") ("namedmodel") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 * Linked regions (version 0.12.0): a free-trade area between the synthetic
 * SAM and its institutions layout; each region's solution, with its world
 * prices and tariffs from the links as parameters, solved by GAMS on its own

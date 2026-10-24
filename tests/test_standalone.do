@@ -265,7 +265,10 @@ capture noisily cge_equation BAD(f,a): W(f) = sum(f, QF(f,a))
 assert _rc == 198
 capture noisily cge_model nothing
 assert _rc == 198
+* from version 0.17.0 describe takes a named model: one not defined is 111
 capture noisily cge_model describe extra
+assert _rc == 111
+capture noisily cge_model describe extra more
 assert _rc == 198
 
 mata: mata drop _ts_val() _ts_upval()

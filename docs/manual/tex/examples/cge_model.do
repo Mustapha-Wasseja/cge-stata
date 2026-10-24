@@ -27,3 +27,23 @@ cge_shock e, elements(h1.g1) value(15)
 cge_solve, name(more)
 cge_results, sim(more)
 *<<
+
+*>> model_named
+cge_model new
+cge_set g = g1 g2
+cge_parameter a(g), values(g1:10 g2:20)
+cge_variable P(g), value(1)
+cge_variable Q(g), value(1)
+cge_equation DEM(g): Q(g) = a(g) / sqrt(P(g))
+cge_equation SUP(g): Q(g) = 2 * P(g)^2
+cge_variable TOT = sum(g, P(g) * Q(g))
+cge_model define markets = DEM SUP
+cge_model define total = TOT
+cge_model describe markets
+cge_solve, name(mk) model(markets)
+cge_results, sim(mk)
+display (10 / 2)^(2/5) "  " (20 / 2)^(2/5)
+cge_solve, name(tt) model(total) from(mk) hold(P Q)
+cge_solve, name(full)
+cge_results, sim(full)
+*<<

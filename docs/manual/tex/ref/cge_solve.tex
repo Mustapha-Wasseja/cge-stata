@@ -52,6 +52,9 @@ cge_solve, name(ls) minimize(sum(i, X(i)^2))
 \optarg{tol}{erance}{\#} & tolerance on the largest scaled residual; default \texttt{1e-10}\\
 \optarg{iter}{ate}{\#} & maximum number of Newton iterations; default \texttt{100}\\
 \optarg{time}{limit}{\#} & time limit in seconds; default none\\
+\optarg{mod}{el}{name} & solve named model \argu{name} of a standalone model\\
+\optarg{}{from}{sim} & start from the levels of simulation \argu{sim}\\
+\optarg{}{hold}{varlist} & hold variables at their levels for this solve\\
 \optarg{step}{s}{\#} & apply the shocks in \argu{\#} equal steps; default \texttt{0}, only after a direct solve fails\\
 \optgroup{Nonlinear programmes of standalone models}
 \optarg{min}{imize}{expression} & minimise \argu{expression} subject to the equations\\
@@ -80,6 +83,23 @@ base magnitude, so the tolerance applies alike to every block of the model.
 default is 100, or the limit set by \manref{cge_options}. From version 0.16.0,
 a solve whose Newton iterations reach the limit stops there, with solver
 status 2, without the fallbacks and continuation that follow other failures.
+
+\item[\optarg{mod}{el}{name}] (from version 0.17.0) solves named model
+\argu{name} of a standalone model, defined by \manref{cge_model}, as GAMS's
+\cmd{solve} \argu{name}: its equations, in the free variables that appear in
+them, with the other variables at their levels. The simulation records the
+model.
+
+\item[\optarg{}{from}{sim}] (from version 0.17.0) starts the solve of a
+standalone model from the levels of stored simulation \argu{sim}: its free
+variables, and those outside a named model, take their levels there; the
+variables the closure fixes keep their current values.
+
+\item[\optarg{}{hold}{varlist}] (from version 0.17.0) holds variables of a
+standalone model at their levels for this solve, as GAMS's \cmd{x.fx = x.l}:
+whole variables, \cmd{hold(P Q)}, or elements, \cmd{hold(P(g1))}, with
+\cmd{P(e1,e2)} for two indexes. With \opt{}{from()}, the levels are those of
+the simulation.
 
 \item[\optarg{time}{limit}{\#}] (from version 0.16.0) sets a time limit in
 seconds, as GAMS's \cmd{reslim}; by default there is none, or the limit set by
@@ -291,6 +311,9 @@ to the tolerance, and the test suite checks that they do.
 \res{r(name)} & name of the simulation\\
 \res{r(method)} & solution method: \cmd{newton}, \cmd{broydenpowell}, with constraints \cmd{semismooth}, or \cmd{nlp}\\
 \res{r(objective_expr)} & the objective of a nonlinear programme\\
+\res{r(model)} & the named model solved, if any (from version 0.17.0)\\
+\res{r(from)} & the simulation the solve started from, if any\\
+\res{r(hold)} & the variables held, if any\\
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto} (from version 0.10.1)\\
 \res{r(closure)} & closure\\
 \res{r(constraints)} & the constraints and their regimes, if any\\

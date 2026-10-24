@@ -1,0 +1,87 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set g = g1 g2
+User set g: 2 element(s): g1 g2
+
+. cge_parameter a(g), values(g1:10 g2:20)
+User parameter a(g): 2 value(s), from 10 to 20
+
+. cge_variable P(g), value(1)
+User variable P(g): 2 element(s), base values 1 1
+Add the equations that determine it with cge_equation
+
+. cge_variable Q(g), value(1)
+User variable Q(g): 2 element(s), base values 1 1
+Add the equations that determine it with cge_equation
+
+. cge_equation DEM(g): Q(g) = a(g) / sqrt(P(g))
+User equation DEM: 2 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  9.50e-01)
+
+. cge_equation SUP(g): Q(g) = 2 * P(g)^2
+User equation SUP: 2 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  5.00e-01)
+
+. cge_variable TOT = sum(g, P(g) * Q(g))
+User variable TOT: 1 element(s), base value 2
+and its definition, equation TOT
+
+. cge_model define markets = DEM SUP
+Model markets: 2 equation(s): DEM SUP
+
+. cge_model define total = TOT
+Model total: 1 equation(s): TOT
+
+. cge_model describe markets
+Model statistics: model markets of a standalone model
+  Blocks of equations            2     Single equations            4
+  Blocks of variables            3     Single variables            5
+                                        Fixed                       1
+  Non-zero elements              8     Free                        4
+  User sets 1, user parameters 1, macros 0, constraints 0
+  The system is square: 4 free variables and 4 equations
+
+. cge_solve, name(mk) model(markets)
+Simulation mk of model markets solved in 12 iteration(s) (newton)
+Largest scaled residual  2.66e-15; 4 equation(s), 4 free variable(s)
+
+. cge_results, sim(mk)
+
+Simulation mk of model markets of a standalone model (solved, 12 iteration(s), largest scaled residu
+> al  2.66e-15)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+P(g1)                                       1      1.90365   90.365
+P(g2)                                       1      2.51189  151.189
+Q(g1)                                       1       7.2478  624.780
+Q(g2)                                       1      12.6191 1161.915
+TOT                                         2            2    0.000
+-------------------------------------------------------------------
+
+. display (10 / 2)^(2/5) "  " (20 / 2)^(2/5)
+1.9036539  2.5118864
+
+. cge_solve, name(tt) model(total) from(mk) hold(P Q)
+Simulation tt of model total solved in 1 iteration(s) (newton)
+Largest scaled residual  0.00e+00; 1 equation(s), 1 free variable(s), from simulation mk
+
+. cge_solve, name(full)
+Simulation full solved in 13 iteration(s) (newton)
+Largest scaled residual  2.66e-15
+
+. cge_results, sim(full)
+
+Simulation full of a standalone model (solved, 13 iteration(s), largest scaled residual  2.66e-15)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+P(g1)                                       1      1.90365   90.365
+P(g2)                                       1      2.51189  151.189
+Q(g1)                                       1       7.2478  624.780
+Q(g2)                                       1      12.6191 1161.915
+TOT                                         2      45.4952 2174.758
+-------------------------------------------------------------------

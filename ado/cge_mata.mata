@@ -235,6 +235,11 @@ struct cge_model {
     // the model status and solver status of each stored simulation, in GAMS's
     // codes (from version 0.16.0); missing where unknown
     real matrix      simstat
+    // named models (from version 0.17.0), as GAMS's model statement: each
+    // name and its list of equations, models or all; and the model each
+    // stored simulation solved, empty for the whole model
+    string matrix    mdef
+    string colvector simmodel
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -252,7 +257,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.16.0")
+    return("0.17.0")
 }
 
 // =====================================================================
@@ -8305,6 +8310,7 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
         M.simcons = M.simcons \ _cge_cons_text(M, M.p, x)
         _cge_set_simobj(M, rows(M.simname), "")
         _cge_set_simstat(M, rows(M.simname), (conv ? (_cge_cons_on(M) ? 1 : 16) : 5), (conv ? 1 : 4))
+        _cge_set_simmodel(M, rows(M.simname), "")
         return(rows(M.simname))
     }
     M.simclosure[k] = _cge_closure_text(M)
@@ -8320,7 +8326,23 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
     M.simcons[k] = _cge_cons_text(M, M.p, x)
     _cge_set_simobj(M, k, "")
     _cge_set_simstat(M, k, (conv ? (_cge_cons_on(M) ? 1 : 16) : 5), (conv ? 1 : 4))
+    _cge_set_simmodel(M, k, "")
     return(k)
+}
+
+// The named model that stored simulation k solved (from version 0.17.0):
+// empty for the whole model
+string scalar _cge_simmodel(struct cge_model scalar M, real scalar k)
+{
+    if (k > rows(M.simmodel)) return("")
+    return(M.simmodel[k])
+}
+
+void _cge_set_simmodel(struct cge_model scalar M, real scalar k, string scalar mname)
+{
+    if (rows(M.simmodel) < rows(M.simname)) M.simmodel = M.simmodel \ J(rows(M.simname) - rows(M.simmodel), 1, "")
+    if (rows(M.simmodel) > rows(M.simname)) M.simmodel = M.simmodel[|1 \ rows(M.simname)|]
+    M.simmodel[k] = mname
 }
 
 // 1 if constraints are in the current system (from version 0.16.0)
@@ -8346,7 +8368,8 @@ void _cge_set_simobj(struct cge_model scalar M, real scalar k, string scalar obj
 }
 
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
-                real scalar steps, real scalar diagnose, string scalar lin, string scalar obj, real scalar tlim)
+                real scalar steps, real scalar diagnose, string scalar lin, string scalar obj, real scalar tlim,
+                string scalar mname, string scalar from, string scalar hold)
 {
     struct cge_model scalar M
     real colvector x, x2, start
@@ -8359,6 +8382,9 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     if (args() < 8) lin = ""
     if (args() < 9) obj = ""
     if (args() < 10) tlim = -1
+    if (args() < 11) mname = ""
+    if (args() < 12) from = ""
+    if (args() < 13) hold = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
     // the options of cge_options where the command gives none, and the
@@ -8369,7 +8395,14 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     _cge_deadline_set(_cge_opttime(M, tlim))
     // a nonlinear programme (from version 0.15.0)
     if (obj != "") {
-        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin)
+        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold)
+        _cge_deadline_set(.)
+        return
+    }
+    // a named model, a start from a stored simulation or variables held at
+    // their levels (from version 0.17.0)
+    if (mname != "" | from != "" | hold != "") {
+        _cge_solve_named(M, name, mname, from, tol, maxit, trace, mode, lin, hold)
         _cge_deadline_set(.)
         return
     }
@@ -9370,11 +9403,13 @@ void _cge_results_show(string scalar sim)
     si = _cge_sim_index(M, sim)
     x = M.simx[., si]
     p = M.simp[si]
-    // the statuses (from version 0.16.0)
+    // the statuses (from version 0.16.0) and the named model (from version
+    // 0.17.0)
     _cge_simstat(M, si, ms, ss)
     st_numscalar("r(modelstat)", ms)
     st_numscalar("r(solvestat)", ss)
     st_numscalar("r(converged)", M.simconv[si])
+    st_global("r(model)", _cge_simmodel(M, si))
     if (_cge_sa(M)) {
         _cge_results_sa(M, si)
         return
@@ -9419,8 +9454,10 @@ void _cge_results_sa(struct cge_model scalar M, real scalar si)
     real colvector pos, x
     real scalar k, i, n, b, s
     x = M.simx[., si]
-    printf("\n{txt}Simulation {res}%s{txt} of a standalone model (%s, %f iteration(s), largest scaled residual %9.3e)\n",
-           M.simname[si], (M.simconv[si] ? "solved" : "not solved"), M.simiter[si], M.simres[si])
+    // the named model it solved (from version 0.17.0)
+    printf("\n{txt}Simulation {res}%s{txt} of %s (%s, %f iteration(s), largest scaled residual %9.3e)\n",
+           M.simname[si], (_cge_simmodel(M, si) != "" ? "model " + _cge_simmodel(M, si) + " of a standalone model" :
+           "a standalone model"), (M.simconv[si] ? "solved" : "not solved"), M.simiter[si], M.simres[si])
     printf("{txt}{hline 67}\n")
     printf("{txt}%-32s %12s %12s %8s\n", "", "start", "solution", "% change")
     printf("{txt}{hline 67}\n")
@@ -12654,6 +12691,7 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
         M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
         M.simx = J(rows(M.simx), 0, .)
         M.simstat = J(0, 2, .)
+        M.simmodel = J(0, 1, "")
         return
     }
     M.simname = M.simname[s]
@@ -12674,6 +12712,9 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
     if (cols(M.simstat) != 2) M.simstat = J(0, 2, .)
     if (rows(M.simstat) < max(s)) M.simstat = M.simstat \ J(max(s) - rows(M.simstat), 2, .)
     M.simstat = M.simstat[s, .]
+    // the named models (from version 0.17.0)
+    if (rows(M.simmodel) < max(s)) M.simmodel = M.simmodel \ J(max(s) - rows(M.simmodel), 1, "")
+    M.simmodel = M.simmodel[s]
 }
 
 // Names of the simulations of a dynamic run, in period order
@@ -16407,16 +16448,18 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
 void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string scalar sim, string scalar solver,
                          string scalar type)
 {
-    struct cge_model scalar M2
+    struct cge_model scalar M2, M3
     struct cge_par scalar p
-    real colvector x, fixed, fx, fr
-    string colvector lab
+    real colvector x, fixed, fx, fr, usel, idx
+    string colvector lab, fxl
     string rowvector cl
-    string scalar name, gobj
-    real scalar k, n, nc, fh, big, sgn
+    string scalar name, gobj, subeqs, gn, gi
+    real scalar k, n, nc, fh, big, sgn, j
     if (!rows(M.uelab)) _cge_fail("the model has no equations to export", 459)
     gobj = ""
     sgn = 1
+    subeqs = ""
+    fxl = J(0, 1, "")
     if (sim == "") {
         name = "current"
         p = M.p
@@ -16446,6 +16489,20 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
         if (type != "nlp") _cge_fail("simulation " + sim + " is a nonlinear programme: export it with type(nlp) and an NLP solver", 198)
         (void) _cge_nlp_tok(M, _cge_simobj(M, k), sgn, gobj)
     }
+    // a simulation of a named model (from version 0.17.0): the model's
+    // equations, with the other free variables fixed at their levels
+    if (sim != "") if (_cge_simmodel(M, k) != "") {
+        if (type == "mcp") _cge_fail("simulation " + sim + " solved named model " + _cge_simmodel(M, k) + ": export it as cns or nlp", 198)
+        _cge_submodel(M, _cge_simmodel(M, k), M3, usel)
+        if (rows(M3.bY)) _cge_fail("simulation " + sim + " solved a named model with inequalities; cge_gams exports such a model whole", 198)
+        idx = _cge_which(usel)
+        subeqs = invtokens(("UE" :+ strofreal(idx))', ", ")
+        fr = _cge_which(M.exists :& (fixed :== 0) :& (M3.fixed :== 1))
+        for (j = 1; j <= rows(fr); j++) {
+            _cge_gams_ref(M, fr[j], gn, gi)
+            fxl = fxl \ (gn + ".fx" + gi + " = " + _cge_gnum(x[fr[j]]) + ";")
+        }
+    }
     lab = _cge_us_alllabels(M)
     fh = _cge_gopen(dir + "/cge_data.inc")
     fput(fh, "* The labels of a standalone model (cge_model new), written by cge_gams")
@@ -16459,8 +16516,9 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
     _cge_gams_bounds(M, fixed, dir + "/cge_bounds.inc", (type == "mcp"))
     _cge_gams_user(M, dir + "/cge_user.inc", dir + "/cge_user_write.inc")
     big = (rows(M.x0) ? max((1, max(abs(select(M.x0, M.exists))))) : 1)
-    _cge_gams_driver_sa(dir, name, solver, type, big, gobj, sgn)
+    _cge_gams_driver_sa(dir, name, solver, type, big, gobj, sgn, subeqs, fxl)
     st_numscalar("r(standalone)", 1)
+    st_global("r(model)", (sim != "" ? _cge_simmodel(M, k) : ""))
     st_numscalar("r(nlp)", (gobj != ""))
     st_numscalar("r(N_constraints)", nc)
     st_global("r(name)", name)
@@ -16477,12 +16535,16 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
 // objective in gobj, minimised (sgn 1) or maximised (-1); its base is the
 // starting levels, which GAMS does not solve
 void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar solver, string scalar type, real scalar big,
-                         | string scalar gobj, real scalar sgn)
+                         | string scalar gobj, real scalar sgn, string scalar subeqs, string colvector fxl)
 {
-    real scalar fh, isnlp
+    real scalar fh, isnlp, j
     string scalar d
     d = char(36)
     if (args() < 6) gobj = ""
+    // a named model (from version 0.17.0): its equations as a GAMS list, and
+    // the levels of the free variables outside it
+    if (args() < 8) subeqs = ""
+    if (args() < 9) fxl = J(0, 1, "")
     isnlp = (gobj != "")
     fh = _cge_gopen(dir + "/cge_sa_write.inc")
     fput(fh, "* Results of a standalone model: scenario, variable, element1, element2, value")
@@ -16553,7 +16615,7 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
         fput(fh, "variable OBJV " + char(34) + "objective of the nonlinear programme" + char(34) + ";")
         fput(fh, "equation EOBJV;")
         fput(fh, "EOBJV..  OBJV =e= " + gobj + ";")
-        fput(fh, "model cgeprog / cge, EOBJV /;")
+        fput(fh, "model cgeprog / " + (subeqs != "" ? subeqs : "cge") + ", EOBJV /;")
         fput(fh, "cgeprog.optfile = cge.optfile;")
         fput(fh, "* The base: the starting levels, not solved (model status 0)")
         fput(fh, "mstat = 0;")
@@ -16568,10 +16630,29 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
     fput(fh, d + "include cge_shock_var.inc")
     fput(fh, d + "include cge_constraints.inc")
     fput(fh, d + "include cge_bounds.inc")
+    if (subeqs != "") {
+        fput(fh, "* A named model: its equations; the free variables outside it at their levels")
+        for (j = 1; j <= rows(fxl); j++) fput(fh, fxl[j])
+    }
     if (isnlp) {
         fput(fh, "option nlp = %cgesolver%;")
         fput(fh, "solve cgeprog using nlp " + (sgn < 0 ? "maximizing" : "minimizing") + " OBJV;")
         fput(fh, "mstat = cgeprog.modelstat;")
+    }
+    else if (subeqs != "") {
+        fput(fh, "model cgesub / " + subeqs + " /;")
+        fput(fh, "model cgesubn / " + subeqs + ", EOBJ /;")
+        fput(fh, "cgesub.optfile = cge.optfile;")
+        fput(fh, "cgesubn.optfile = cge.optfile;")
+        fput(fh, d + "ifthen.cgetype %cgetype% == nlp")
+        fput(fh, "option nlp = %cgesolver%;")
+        fput(fh, "solve cgesubn using nlp minimizing OBJ;")
+        fput(fh, "mstat = cgesubn.modelstat;")
+        fput(fh, d + "else.cgetype")
+        fput(fh, "option cns = %cgesolver%;")
+        fput(fh, "solve cgesub using cns;")
+        fput(fh, "mstat = cgesub.modelstat;")
+        fput(fh, d + "endif.cgetype")
     }
     else fput(fh, d + "batinclude cge_solve.gms cgecon")
     fput(fh, "file rescen / 'cge_" + name + ".csv' /;")
@@ -22295,6 +22376,8 @@ void _cge_model_new()
     M.x0 = M.xcur = M.xscale = M.exists = M.fixed = M.nominal = M.positive = J(0, 1, .)
     M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = M.simobj = J(0, 1, "")
     M.simstat = J(0, 2, .)
+    M.simmodel = J(0, 1, "")
+    M.mdef = J(0, 2, "")
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
@@ -22310,14 +22393,21 @@ void _cge_model_new()
 // statistics: blocks and single equations and variables, the non-zero
 // entries of the Jacobian at the current point, and whether the system that
 // cge_solve solves is square
-void _cge_model_describe()
+void _cge_model_describe(| string scalar mname)
 {
-    struct cge_model scalar M
+    struct cge_model scalar M, M2
     struct cge_sys scalar S, SR
-    real colvector bo, ri, ci, v, z
+    real colvector bo, ri, ci, v, z, usel
     real scalar k, nbe, nbv, nse, nsv, nfx, nnz, ok, sq
+    if (args() < 1) mname = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
+    // a named model (from version 0.17.0): its equations and the variables
+    // that appear in them
+    if (mname != "") {
+        _cge_submodel(M, mname, M2, usel)
+        M = M2
+    }
     bo = runningsum(M.elen) - M.elen
     // blocks of equations: built-in blocks with elements in the system, user
     // equations by name and the constraints
@@ -22326,7 +22416,8 @@ void _cge_model_describe()
         if (M.ename[k] == "U" | !M.elen[k]) continue
         if (any(M.emask[|bo[k] + 1 \ bo[k] + M.elen[k]|])) nbe++
     }
-    for (k = 1; k <= rows(M.uedef); k++) if (substr(M.uedef[k, 1], 1, 1) != "_") nbe++
+    if (mname != "") nbe = nbe + rows(_cge_mdef_expand(M, mname))
+    else for (k = 1; k <= rows(M.uedef); k++) if (substr(M.uedef[k, 1], 1, 1) != "_") nbe++
     nse = M.neq
     nbv = 0
     for (k = 1; k <= rows(M.vname); k++) {
@@ -22341,8 +22432,8 @@ void _cge_model_describe()
     ok = (rows(S.free) ? _cge_jac_trip(M, M.p, M.xcur, S, z, ri, ci, v) : 1)
     nnz = (ok ? (rows(v) ? sum(v :!= 0) : 0) : .)
     sq = (rows(S.free) == S.neq)
-    printf("{txt}Model statistics: %s\n", (_cge_sa(M) ? "standalone model" :
-           "model from a SAM of " + strofreal(rows(M.labels)) + " accounts"))
+    printf("{txt}Model statistics: %s\n", (mname != "" ? "model " + mname + " of a standalone model" :
+           (_cge_sa(M) ? "standalone model" : "model from a SAM of " + strofreal(rows(M.labels)) + " accounts")))
     printf("{txt}  Blocks of equations   {res}%10.0f{txt}     Single equations   {res}%10.0f\n", nbe, nse)
     printf("{txt}  Blocks of variables   {res}%10.0f{txt}     Single variables   {res}%10.0f\n", nbv, nsv)
     printf("{txt}  %-22s %10s{txt}     Fixed              {res}%10.0f\n", "", "", nfx)
@@ -22369,6 +22460,340 @@ void _cge_model_describe()
     st_numscalar("r(N_parameters)", rows(M.updef))
     st_numscalar("r(N_constraints)", rows(M.bY))
     st_numscalar("r(square)", sq)
+    st_global("r(model)", mname)
+    // the named models (from version 0.17.0)
+    st_numscalar("r(N_models)", (cols(M.mdef) == 2 ? rows(M.mdef) : 0))
+}
+
+// =====================================================================
+// Named models (from version 0.17.0; model_spec.md, Section 26)
+// =====================================================================
+
+// The row of named model name in M.mdef, or 0
+real scalar _cge_mdef_find(struct cge_model scalar M, string scalar name)
+{
+    if (!rows(M.mdef) | cols(M.mdef) != 2) return(0)
+    return(_cge_find(M.mdef[., 1], name))
+}
+
+// The name of the equation of element label lab, the text before its index,
+// with the prefix of an inequality's slack (_S_) or of the adjusters of a
+// bounded variable (_L_, _U_) removed
+string scalar _cge_mdef_base(string scalar lab)
+{
+    string scalar s
+    real scalar k
+    k = strpos(lab, "(")
+    s = (k ? substr(lab, 1, k - 1) : lab)
+    if (substr(s, 1, 3) == "_S_" | substr(s, 1, 3) == "_L_" | substr(s, 1, 3) == "_U_") s = substr(s, 4, .)
+    return(s)
+}
+
+// The index of the variable that holds position pos
+real scalar _cge_pos_vidx(struct cge_model scalar M, real scalar pos)
+{
+    real scalar k
+    for (k = rows(M.voff); k > 1; k--) if (M.voff[k] < pos) break
+    return(k)
+}
+
+// The names a model may list: user equations, defined variables and
+// inequalities, in the order of their elements
+string colvector _cge_mdef_eqnames(struct cge_model scalar M)
+{
+    string colvector out
+    string scalar nm
+    real scalar k
+    out = J(0, 1, "")
+    for (k = 1; k <= rows(M.uelab); k++) {
+        nm = _cge_mdef_base(M.uelab[k])
+        if (!anyof(out, nm)) out = out \ nm
+    }
+    return(out)
+}
+
+// The equations of a list of equations, models and all, expanded
+string colvector _cge_mdef_expand(struct cge_model scalar M, string scalar list, | real scalar depth)
+{
+    string rowvector t
+    string colvector out, eqs, sub
+    real scalar k, j, m
+    if (args() < 3) depth = 0
+    if (depth > 20) _cge_fail("cge_model: the definitions of the models refer to each other in a cycle", 198)
+    eqs = _cge_mdef_eqnames(M)
+    t = tokens(subinstr(subinstr(subinstr(list, ",", " "), "/", " "), ";", " "))
+    out = J(0, 1, "")
+    for (k = 1; k <= cols(t); k++) {
+        m = _cge_mdef_find(M, t[k])
+        if (t[k] == "all") sub = eqs
+        else if (m) sub = _cge_mdef_expand(M, M.mdef[m, 2], depth + 1)
+        else if (anyof(eqs, t[k])) sub = t[k]
+        else _cge_fail("cge_model: " + t[k] + " is not a user equation, defined variable, inequality or model", 111)
+        for (j = 1; j <= rows(sub); j++) if (!anyof(out, sub[j])) out = out \ sub[j]
+    }
+    return(out)
+}
+
+// The system of named model mname (from version 0.17.0): M2, a copy of M with
+// the constraints and user equation elements of the model's equations, and
+// the free variables that appear in none of them fixed, at their levels in
+// the start of the solve; usel marks the elements of block U in the model
+void _cge_submodel(struct cge_model scalar M, string scalar mname, struct cge_model scalar M2, real colvector usel)
+{
+    string colvector names
+    real colvector keepc, bo, used, k
+    real scalar j, g
+    if (!_cge_sa(M)) _cge_fail("named models are models of a standalone model (cge_model new)", 198)
+    if (!_cge_mdef_find(M, mname)) _cge_fail("model " + mname + " not found; define it with cge_model define", 111)
+    names = _cge_mdef_expand(M, mname)
+    M2 = M
+    // the constraints of the model's inequalities and bounded variables
+    keepc = J(rows(M.bY), 1, 0)
+    for (j = 1; j <= rows(M.bY); j++) keepc[j] = anyof(names, _cge_mdef_base(M.vname[_cge_pos_vidx(M, M.bY[j])]))
+    k = _cge_which(keepc)
+    M2.bY = (rows(k) ? M.bY[k] : J(0, 1, .))
+    M2.bX = (rows(k) ? M.bX[k] : J(0, 1, .))
+    M2.btype = (rows(k) ? M.btype[k] : J(0, 1, .))
+    M2.bdir = (rows(k) ? M.bdir[k] : J(0, 1, .))
+    if (rows(M.p.bmode) == rows(M.bY)) {
+        M2.p.bmode = (rows(k) ? M.p.bmode[k] : J(0, 1, .))
+        M2.p.bval = (rows(k) ? M.p.bval[k] : J(0, 1, .))
+        if (rows(M.p.bxbar) == rows(M.bY)) M2.p.bxbar = (rows(k) ? M.p.bxbar[k] : J(0, 1, .))
+    }
+    if (rows(M.p0.bmode) == rows(M.bY)) {
+        M2.p0.bmode = (rows(k) ? M.p0.bmode[k] : J(0, 1, .))
+        M2.p0.bval = (rows(k) ? M.p0.bval[k] : J(0, 1, .))
+        if (rows(M.p0.bxbar) == rows(M.bY)) M2.p0.bxbar = (rows(k) ? M.p0.bxbar[k] : J(0, 1, .))
+    }
+    // the elements of the model's user equations
+    usel = J(rows(M.uelab), 1, 0)
+    for (j = 1; j <= rows(M.uelab); j++) usel[j] = anyof(names, _cge_mdef_base(M.uelab[j]))
+    _cge_u_refresh(M2)
+    g = _cge_find(M2.ename, "U")
+    bo = runningsum(M2.elen) - M2.elen
+    if (rows(usel)) M2.emask[bo[g] :+ (1::rows(usel))] = M2.emask[bo[g] :+ (1::rows(usel))] :* usel
+    M2.neq = sum(M2.emask)
+    _cge_pattern(M2, M2.p0)
+    // the variables that appear in the model's equations
+    used = J(rows(M.x0), 1, 0)
+    if (rows(M2.jc)) used[M2.jc] = J(rows(M2.jc), 1, 1)
+    k = _cge_which(M.exists :& (M.fixed :== 0) :& (used :== 0))
+    if (rows(k)) M2.fixed[k] = J(rows(k), 1, 1)
+}
+
+// Variables held at their levels for one solve (from version 0.17.0), as
+// GAMS's x.fx = x.l: hold() lists variables, whole or as NAME(element), with
+// e1,e2 for two indexes
+void _cge_hold(struct cge_model scalar M2, string scalar hold)
+{
+    string rowvector t
+    string scalar nm, el
+    real colvector pos
+    real scalar k, a, v
+    if (strtrim(hold) == "") return
+    t = tokens(hold)
+    for (k = 1; k <= cols(t); k++) {
+        a = strpos(t[k], "(")
+        if (a) {
+            nm = substr(t[k], 1, a - 1)
+            el = subinstr(subinstr(substr(t[k], a + 1, .), ")", ""), ",", ".")
+        }
+        else {
+            nm = t[k]
+            el = ""
+        }
+        v = _cge_vidx(M2, nm)
+        if (!v) _cge_fail("hold(): " + nm + " is not a variable of the model", 111)
+        if (el == "") pos = _cge_vpos(M2, v)
+        else {
+            pos = _cge_u_vpos(M2, nm, el)
+            if (!pos) _cge_fail("hold(): " + t[k] + " is not an element of " + nm, 111)
+        }
+        pos = select(pos, M2.exists[pos, 1])
+        if (rows(pos)) M2.fixed[pos] = J(rows(pos), 1, 1)
+    }
+}
+
+// The start of a solve (from version 0.17.0): the current levels, with the
+// free variables at their levels in stored simulation from, if given; the
+// variables the closure fixes keep their current values
+real colvector _cge_named_start(struct cge_model scalar M, string scalar from)
+{
+    real colvector xs, fr
+    real scalar k
+    xs = M.xcur
+    if (from == "") return(xs)
+    k = _cge_sim_index(M, from)
+    fr = _cge_which(M.exists :& (M.fixed :== 0))
+    if (rows(fr)) xs[fr] = M.simx[fr, k]
+    return(xs)
+}
+
+// The starting levels of a solve from the levels xs (from version 0.17.0):
+// those of cge_bound, or, with from(), the levels of the simulation for the
+// free variables
+real colvector _cge_named_from(struct cge_model scalar M2, real colvector xs, string scalar from)
+{
+    real colvector start, fr
+    start = _cge_bd_start(M2, xs)
+    if (from == "") return(start)
+    fr = _cge_which(M2.exists :& (M2.fixed :== 0))
+    if (rows(fr)) start[fr] = xs[fr]
+    return(start)
+}
+
+// cge_solve, model() or from() (from version 0.17.0): named model mname, or
+// the whole model, solved as a system from the current levels or from those
+// of simulation from, and stored as simulation name with its model
+void _cge_solve_named(struct cge_model scalar M, string scalar name, string scalar mname, string scalar from,
+                      real scalar tol, real scalar maxit, real scalar trace, real scalar mode, string scalar lin,
+                      | string scalar hold)
+{
+    struct cge_model scalar M2
+    struct cge_sys scalar S
+    real colvector xs, start, x, usel
+    real scalar conv, iter, err, k, ms, ss, keeplin
+    string scalar method
+    if (!_cge_sa(M) & mname != "") _cge_fail("model() solves a named model of a standalone model (cge_model new and define)", 198)
+    if (!_cge_sa(M)) _cge_fail("from() and hold() apply to standalone models", 198)
+    if (args() < 10) hold = ""
+    if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
+    xs = _cge_named_start(M, from)
+    if (mname != "") _cge_submodel(M, mname, M2, usel)
+    else M2 = M
+    _cge_hold(M2, hold)
+    keeplin = M2.linsolver
+    if (lin != "") M2.linsolver = (lin == "sparse")
+    S = _cge_sys_make(M2, 0)
+    if (rows(S.free) != S.neq) {
+        _cge_fail((mname != "" ? "model " + mname : "the model") + " has " + strofreal(S.neq) + " equation(s) and " +
+                  strofreal(rows(S.free)) + " free variable(s) that appear in them; solved as a system it must be square" +
+                  " (a nonlinear programme, with minimize() or maximize(), may have more variables)", 459)
+    }
+    start = _cge_named_from(M2, xs, from)
+    x = _cge_solve_point(M2, M2.p, xs, start, tol, maxit, trace, conv, iter, err, method, 0, mode)
+    err = _cge_maxres(M2, M2.p, x)
+    k = _cge_store_sim(M, name, x, conv, iter, err, method)
+    _cge_set_simmodel(M, k, mname)
+    _cge_status(conv, _cge_cons_on(M2), 0, 0, err, ms, ss)
+    _cge_set_simstat(M, k, ms, ss)
+    _cge_store(M)
+    if (conv) printf("{txt}Simulation {res}%s{txt}%s solved in {res}%f{txt} iteration(s) ({res}%s{txt})\n", name,
+                     (mname != "" ? " of model {res}" + mname + "{txt}" : ""), iter, method)
+    else {
+        printf("{err}Simulation %s%s did not converge (largest scaled residual %9.3e)\n", name,
+               (mname != "" ? " of model " + mname : ""), err)
+        _cge_status_show(ms, ss)
+    }
+    printf("{txt}Largest scaled residual {res}%9.3e{txt}; {res}%f{txt} equation(s), {res}%f{txt} free variable(s)%s\n",
+           err, S.neq, rows(S.free), (from != "" ? ", from simulation " + from : ""))
+    st_numscalar("r(converged)", conv)
+    st_numscalar("r(iterations)", iter)
+    st_numscalar("r(max_residual)", err)
+    st_numscalar("r(modelstat)", ms)
+    st_numscalar("r(solvestat)", ss)
+    st_numscalar("r(N_solved)", S.neq)
+    st_numscalar("r(N_free)", rows(S.free))
+    st_numscalar("r(tolerance)", tol)
+    st_numscalar("r(iterate)", maxit)
+    st_numscalar("r(steps)", 0)
+    st_global("r(name)", name)
+    st_global("r(method)", method)
+    st_global("r(model)", mname)
+    st_global("r(from)", from)
+    st_global("r(hold)", hold)
+    st_global("r(linsolver)", _cge_lin_name(M2))
+    st_global("r(closure)", _cge_closure_text(M))
+}
+
+// cge_model define (from version 0.17.0): named model name with its list of
+// equations, defined variables, inequalities, models or all, as GAMS's model
+// statement; a model of the same name is replaced
+void _cge_mdef_add(string scalar spec)
+{
+    struct cge_model scalar M
+    string rowvector t
+    string colvector names
+    string scalar name, list
+    real scalar k, rep
+    M = _cge_load()
+    if (!_cge_sa(M)) _cge_fail("cge_model define: named models are models of a standalone model (cge_model new)", 198)
+    spec = strtrim(spec)
+    k = strpos(spec, "=")
+    if (k) {
+        name = strtrim(substr(spec, 1, k - 1))
+        list = strtrim(substr(spec, k + 1, .))
+    }
+    else {
+        t = tokens(spec)
+        if (!cols(t)) _cge_fail("cge_model define: give a name and its equations, as cge_model define m1 = e1 e2", 198)
+        name = t[1]
+        list = (cols(t) > 1 ? invtokens(t[|2 \ cols(t)|]) : "")
+    }
+    if (name == "" | cols(tokens(name)) != 1 | !st_isname(name)) _cge_fail("cge_model define: " + name + " is not a valid name", 198)
+    if (strtrim(list) == "") _cge_fail("cge_model define: model " + name + " lists no equations", 198)
+    if (name == "all") _cge_fail("cge_model define: all names every equation and cannot name a model", 198)
+    if (anyof(_cge_mdef_eqnames(M), name)) _cge_fail("cge_model define: " + name + " is the name of an equation", 110)
+    // a model may refer to a model only if it was defined before
+    if (cols(M.mdef) != 2) M.mdef = J(0, 2, "")
+    rep = _cge_mdef_find(M, name)
+    if (anyof(tokens(subinstr(subinstr(list, ",", " "), "/", " ")), name)) _cge_fail("cge_model define: model " + name + " cannot list itself", 198)
+    names = _cge_mdef_expand(M, list)
+    if (rep) M.mdef[rep, 2] = list
+    else M.mdef = M.mdef \ (name, list)
+    _cge_store(M)
+    printf("{txt}Model {res}%s{txt}%s: {res}%f{txt} equation(s): %s\n", name, (rep ? " (replaced)" : ""), rows(names),
+           invtokens(names'))
+    st_global("r(name)", name)
+    st_global("r(equations)", invtokens(names'))
+    st_numscalar("r(N_eq_blocks)", rows(names))
+}
+
+// cge_model drop name|_all and cge_model list (from version 0.17.0)
+void _cge_mdef_drop(string scalar name)
+{
+    struct cge_model scalar M
+    real scalar k, j
+    M = _cge_load()
+    if (cols(M.mdef) != 2) M.mdef = J(0, 2, "")
+    if (name == "_all") {
+        M.mdef = J(0, 2, "")
+        _cge_store(M)
+        printf("{txt}All named models dropped\n")
+        return
+    }
+    k = _cge_mdef_find(M, name)
+    if (!k) _cge_fail("model " + name + " not found", 111)
+    // a model that another lists stays
+    for (j = 1; j <= rows(M.mdef); j++) {
+        if (j != k & anyof(tokens(subinstr(subinstr(M.mdef[j, 2], ",", " "), "/", " ")), name)) {
+            _cge_fail("model " + name + " is listed by model " + M.mdef[j, 1] + "; drop that first", 459)
+        }
+    }
+    M.mdef = (rows(M.mdef) > 1 ? select(M.mdef, (1::rows(M.mdef)) :!= k) : J(0, 2, ""))
+    _cge_store(M)
+    printf("{txt}Model {res}%s{txt} dropped\n", name)
+}
+
+void _cge_mdef_list()
+{
+    struct cge_model scalar M
+    string colvector names
+    real scalar k
+    M = _cge_load()
+    if (cols(M.mdef) != 2 | !rows(M.mdef)) {
+        printf("{txt}No named models; define one with cge_model define\n")
+        st_numscalar("r(N_models)", 0)
+        st_global("r(models)", "")
+        return
+    }
+    printf("{txt}Named models\n")
+    for (k = 1; k <= rows(M.mdef); k++) {
+        names = _cge_mdef_expand(M, M.mdef[k, 2])
+        printf("{txt}  {res}%-16s{txt} / %s /: {res}%f{txt} equation(s)\n", M.mdef[k, 1], M.mdef[k, 2], rows(names))
+    }
+    st_numscalar("r(N_models)", rows(M.mdef))
+    st_global("r(models)", invtokens(M.mdef[., 1]'))
 }
 
 // =====================================================================
@@ -22382,13 +22807,18 @@ void _cge_model_describe()
 // solved by the interior-point method of _cge_nlp_solve and stored as a
 // simulation, with the multipliers of the equations
 void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar obj, real scalar tol,
-                  real scalar maxit, real scalar trace, string scalar lin)
+                  real scalar maxit, real scalar trace, string scalar lin, | string scalar mname, string scalar from,
+                  string scalar hold)
 {
     struct cge_sys scalar S
+    struct cge_model scalar M2
     real matrix tok
-    real colvector x, lam, start
+    real colvector x, lam, start, xs, usel
     real scalar sgn, conv, iter, err, fobj, k, keeplin, feas, ms, ss
     string scalar g
+    if (args() < 8) mname = ""
+    if (args() < 9) from = ""
+    if (args() < 10) hold = ""
     if (!_cge_sa(M)) _cge_fail("minimize() and maximize() solve a nonlinear programme of a standalone model (cge_model new); optimise a model from a SAM with cge_optimize", 198)
     if (rows(M.bY)) {
         _cge_fail("constraints and inequalities paired with variables are complementarity conditions; a nonlinear programme takes equations and the bounds of cge_bound: write an inequality as an equation with a slack variable bounded at zero", 459)
@@ -22396,12 +22826,19 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     keeplin = M.linsolver
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
     tok = _cge_nlp_tok(M, obj, sgn, g)
-    start = _cge_bd_start(M, M.xcur)
+    // a named model and a start from a stored simulation (from version
+    // 0.17.0): the model's equations, the other free variables at their levels
+    xs = _cge_named_start(M, from)
+    if (mname != "") _cge_submodel(M, mname, M2, usel)
+    else M2 = M
+    _cge_hold(M2, hold)
+    start = _cge_named_from(M2, xs, from)
     feas = 0
-    x = _cge_nlp_solve(M, M.p, M.xcur, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas)
+    x = _cge_nlp_solve(M2, M2.p, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas)
     M.linsolver = keeplin
     k = _cge_store_sim(M, name, x, conv, iter, err, "nlp")
     _cge_set_simobj(M, k, obj)
+    _cge_set_simmodel(M, k, mname)
     // the statuses, in GAMS's codes (from version 0.16.0)
     _cge_status(conv, 0, 1, feas, err, ms, ss)
     _cge_set_simstat(M, k, ms, ss)
@@ -22419,8 +22856,9 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     st_numscalar("r(objective)", fobj)
     st_numscalar("r(modelstat)", ms)
     st_numscalar("r(solvestat)", ss)
-    S = _cge_sys_make(M, 0)
+    S = _cge_sys_make(M2, 0)
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
+    st_global("r(model)", mname)
     if (rows(lam)) st_matrix("r(marginals)", lam')
     st_global("r(name)", name)
     st_global("r(method)", "nlp")
@@ -23120,6 +23558,8 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "opttime", M.opttime)
     _cge_io_put(fh, "optjac", M.optjac)
     _cge_io_put(fh, "simstat", M.simstat)
+    _cge_io_put(fh, "mdef", M.mdef)
+    _cge_io_put(fh, "simmodel", M.simmodel)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -23278,6 +23718,8 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "opttime") M.opttime = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "optjac") M.optjac = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "simstat") M.simstat = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "mdef") M.mdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "simmodel") M.simmodel = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

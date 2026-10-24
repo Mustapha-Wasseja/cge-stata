@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.16.0  25oct2026}{...}
+{* *! version 0.17.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -11,7 +11,8 @@
 
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt step:s(#)} {opt trace}
-{opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}]
+{opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}
+{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)}]
 
 
 {title:Description}
@@ -155,6 +156,24 @@ applies to the scaled conditions for an optimum. A start outside a
 variable's bounds is moved within them.
 
 {phang}
+{opt model(name)} (from version 0.17.0) solves named model {it:name} of a
+standalone model, defined by {helpb cge_model}, as GAMS's {cmd:solve}
+{it:name}: its equations, in the free variables that appear in them, with the
+other variables at their levels. Solved as a system it must be square; with
+{opt minimize()} or {opt maximize()} it is a nonlinear programme over its
+variables.
+
+{phang}
+{opt from(sim)} (from version 0.17.0) starts the solve of a standalone model
+from the levels of stored simulation {it:sim}, as GAMS's levels carry over
+from one solve to the next.
+
+{phang}
+{opt hold(varlist)} (from version 0.17.0) holds variables of a standalone
+model at their levels for this solve, as GAMS's {cmd:x.fx = x.l}: whole
+variables, {cmd:hold(P Q)}, or elements, {cmd:hold(P(g1))}.
+
+{phang}
 {opt diagnose} displays the diagnostics after a solve that converges too.
 {helpb cge_listing} lists every equation element at the solution, or where a
 solve stopped (from version 0.9.5).
@@ -185,6 +204,9 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(name)}}simulation name{p_end}
 {synopt:{cmd:r(method)}}solution method ({cmd:nlp} for a nonlinear programme){p_end}
 {synopt:{cmd:r(objective_expr)}}the objective of a nonlinear programme{p_end}
+{synopt:{cmd:r(model)}}the named model solved, if any (from version 0.17.0){p_end}
+{synopt:{cmd:r(from)}}the simulation the solve started from, if any{p_end}
+{synopt:{cmd:r(hold)}}the variables held, if any{p_end}
 {synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}

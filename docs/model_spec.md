@@ -2364,6 +2364,52 @@ after 2 iterations, 7/2 after 15 (primal error 4e-12, dual not yet), 6/3
 after `timelimit(0)`; 13/5 for $\ln$ of a negative start; the optimiser
 2/1; errors.
 
+## 26. Named models (from version 0.17.0)
+
+`cge_model define NAME = list` keeps (NAME, list) in `M.mdef`, as GAMS's
+`model NAME / list /`; the list (spaces, commas or slashes) names user
+equations, defined variables, inequalities, earlier models and `all`, and is
+expanded when it is used (`_cge_mdef_expand`, recursively, cycles stopped at
+depth 20), so that a model follows equations added later. A name may not be
+an equation's or `all`, a model may not list itself, and a model another
+lists cannot be dropped. Each element of block U belongs to the equation of
+its label (`_cge_mdef_base`: the text before its index, without the prefixes
+`_S_`, `_L_`, `_U_` of slacks and adjusters), each constraint to the equation
+of the variable it limits.
+
+`_cge_submodel(M, name, M2, usel)` builds the model's system: a copy `M2`
+with the constraints of its inequalities only (`bY`, `bX`, `btype`, `bdir`
+and the constraint states of `p` and `p0`), the masks and pattern recomputed
+(`_cge_u_refresh`), the elements of U outside the model removed from `emask`
+and the pattern made again (`_cge_pattern`); the free variables that appear
+in no row of the pattern are fixed. `cge_solve, model()` (`_cge_solve_named`)
+starts from the current levels or, with `from(sim)`, those of a stored
+simulation for the free variables (`_cge_named_start`, `_cge_named_from`),
+holds the variables of `hold()` at those levels (`_cge_hold`: whole
+variables or `NAME(e)`, `NAME(e1,e2)`), requires a square system (459
+otherwise) and solves it with `_cge_solve_point`; the simulation keeps the
+model (`M.simmodel`, aligned as `simobj` and `simstat`) and its residual is
+that of the model's equations. `minimize()` or `maximize()` with `model()`
+solves the nonlinear programme of the model. `from()` and `hold()` also apply
+to the whole model. `cge_model describe NAME` gives the statistics of the
+model's system.
+
+`cge_gams` exports a simulation of a named model with `model cgesub / UEk,
+... /` (and `cgesubn` with `EOBJ` for type nlp), the free variables outside
+it fixed at their levels (`.fx`); a named model with inequalities, or type
+mcp, is refused.
+
+Tests (`tests/test_models.do`): two markets with supply $2P^2$ and demand
+$a/\sqrt P$ and the value of their sales as a defined variable; the markets
+model gives the closed form $P = (a/2)^{2/5}$ to 9e-16 with the total at its
+starting level; the total alone from the markets' solution with the prices
+and quantities held gives the whole model's total; models that list models
+and `all`; `from()` of a solution converges in no iteration; a shock; demand
+alone with the quantities held gives $P = a^2$; non-square systems; save and
+load; dropping; HS071 as a nonlinear programme of a submodel with an
+equation outside it at its level; errors. GAMS (export check case
+namedmodel) to 4.2e-16.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

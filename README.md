@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.16.0 implements the standard single-country model described in
+Version 0.17.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,11 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.17.0 adds named models over subsets of the equations of a
+standalone model, as GAMS's model statement (`cge_model define`), solved on
+their own with `cge_solve, model()`, from the levels of a stored simulation
+(`from()`) and with variables held at their levels (`hold()`), so that a
+model can be solved block by block.
 Version 0.16.0 adds solver options as GAMS's option statement (`cge_options`:
 tolerance, iteration and time limits, the Jacobian of Newton's method,
 saved with the model) and reports GAMS's model and solver statuses for every

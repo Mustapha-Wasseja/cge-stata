@@ -1,9 +1,9 @@
 {smcl}
-{* *! version 0.13.0  24oct2026}{...}
+{* *! version 0.17.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
-{p2col:{bf:cge_model} {hline 2}}A standalone model, written whole in the user language; model statistics{p_end}
+{p2col:{bf:cge_model} {hline 2}}A standalone model, written whole in the user language; model statistics; named models{p_end}
 {p2colreset}{...}
 
 
@@ -13,7 +13,16 @@
 {cmd:cge_model new}
 
 {p 8 12 2}
-{cmd:cge_model} {cmdab:d:escribe}
+{cmd:cge_model} {cmdab:d:escribe} [{it:model}]
+
+{p 8 12 2}
+{cmd:cge_model define} {it:model} {cmd:=} {it:list}
+
+{p 8 12 2}
+{cmd:cge_model drop} {it:model}|{cmd:_all}
+
+{p 8 12 2}
+{cmd:cge_model list}
 
 
 {title:Description}
@@ -56,6 +65,20 @@ the equations.
 standalone or from a SAM, as GAMS's model statistics: the blocks and single
 equations and variables, the fixed and free variables, the non-zero entries
 of the Jacobian at the current point, and whether the system is square.
+With a model name, it describes that named model.
+
+{pstd}
+{cmd:cge_model define} (from version 0.17.0) names a model over a subset of
+the equations of a standalone model, as GAMS's {cmd:model} statement: its
+{it:list} names user equations, variables defined by an expression (their
+defining equations), inequalities and models defined before, or {cmd:all},
+separated by spaces or commas. A model of the same name is replaced.
+{helpb cge_solve}, {opt model()}, solves it on its own: its equations, in the
+free variables that appear in them, with the other variables at their
+levels. {opt from()} starts a solve from the levels of a stored simulation
+and {opt hold()} holds variables at their levels, as GAMS's {cmd:x.fx = x.l},
+so that a model can be solved block by block. {cmd:cge_model drop} drops a
+model, or all of them, and {cmd:cge_model list} lists them.
 
 
 {title:Examples}
@@ -75,6 +98,11 @@ of the Jacobian at the current point, and whether the system is square.
 {phang2}{cmd:. cge_model describe}{p_end}
 {phang2}{cmd:. cge_solve, name(eq)}{p_end}
 {phang2}{cmd:. cge_results, sim(eq)}{p_end}
+
+{pstd}A named model: incomes and demands at the equilibrium prices, with the prices held{p_end}
+{phang2}{cmd:. cge_model define demand = Y X}{p_end}
+{phang2}{cmd:. cge_solve, name(dem) model(demand) from(eq) hold(P)}{p_end}
+{phang2}{cmd:. cge_model list}{p_end}
 
 {pstd}
 The standard model of the package, written in the user language from the

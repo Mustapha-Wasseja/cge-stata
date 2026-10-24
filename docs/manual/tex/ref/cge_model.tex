@@ -12,7 +12,9 @@ model, its variables with \manref{cge_variable}, at starting levels given by
 expressions, and its equations with \manref{cge_equation}.
 \manref{cge_solve} solves it. \cmd{cge_model describe} displays the
 statistics of the model in memory, standalone or built from a SAM, as GAMS's
-model statistics do.
+model statistics do. From version 0.17.0, \cmd{cge_model define} names a
+model over a subset of the equations, as GAMS's \cmd{model} statement does,
+which \manref{cge_solve}, \opt{}{model()}, solves on its own.
 
 \cgesec{Quick start}
 
@@ -27,13 +29,27 @@ The statistics of the model in memory
 \begin{stcode}
 cge_model describe
 \end{stcode}
+A model of the equations \cmd{DEM} and \cmd{SUP}, solved on its own, and the
+named models defined (from version 0.17.0)
+\begin{stcode}
+cge_model define markets = DEM SUP
+cge_solve, name(mk) model(markets)
+cge_model list
+\end{stcode}
 
 \cgesec{Syntax}
 
 \begin{stsyntax}
 \cmdb{cge_model new}\\
-\cmdb{cge_model} \textbf{\opt{d}{escribe}}
+\cmdb{cge_model} \textbf{\opt{d}{escribe}} [\argu{model}]\\
+\cmdb{cge_model define} \argu{model} \texttt{=} \argu{list}\\
+\cmdb{cge_model drop} \argu{model}|\cmd{_all}\\
+\cmdb{cge_model list}
 \end{stsyntax}
+
+\noindent A \argu{list} names user equations, variables defined by an
+expression, inequalities and models defined before, or \cmd{all}, every
+equation, separated by spaces or commas.
 
 \cgesec{Remarks and examples}
 
@@ -72,7 +88,23 @@ The market equations use the endowments themselves. Had they used a
 parameter assigned from them, \cmd{cge_parameter etot(g) = sum(h,
 e(h,g))}, the shock would not reach it: an assignment is evaluated once.
 
-\cgesubsec{Example 3: the standard model}
+\cgesubsec{Example 3: named models}
+
+From version 0.17.0, a named model is a subset of the equations, as in GAMS:
+\cmd{model markets / DEM, SUP /}. Two markets with supply $2P^2$ and demand
+$a/\sqrt{P}$, and the value of their sales as a defined variable; the
+markets alone determine the prices and quantities, whose closed form is $P =
+(a/2)^{2/5}$:
+\stlog{model_named}
+Solved on its own, a model takes its equations and the free variables that
+appear in them; the other variables keep their levels, here \cmd{TOT} its
+starting level of 2. \opt{}{from()} starts a solve from the levels of a
+stored simulation, as GAMS's levels carry over from one solve to the next,
+and \opt{}{hold()} holds variables at their levels for one solve, as GAMS's
+\cmd{P.fx = P.l}: the total solved from the markets' solution, with the prices
+and quantities held, is that of the whole model.
+
+\cgesubsec{Example 4: the standard model}
 
 The example \cmd{examples/standard_model.do} of the package repository
 writes the standard model of Part~\ref{part:model} for the synthetic SAM as a
@@ -101,7 +133,13 @@ stores the following in \cmd{r()}:
 \res{r(N_constraints)} & constraints\\
 \res{r(square)} & 1 if the system is square\\
 \res{r(N_reduced)} & equations of the reduced system (a model from a SAM)\\
+\res{r(N_models)} & named models defined (from version 0.17.0)\\
+\resgroup{Macros}
+\res{r(model)} & the named model described, if any\\
 \end{storedres}
+\cmd{cge_model define} stores \cmd{r(name)}, \cmd{r(equations)}, the equations of
+the model after models and \cmd{all} are expanded, and \cmd{r(N_eq_blocks)};
+\cmd{cge_model list} stores \cmd{r(models)} and \cmd{r(N_models)}.
 
 \cgesec{Methods and formulas}
 
@@ -114,6 +152,17 @@ swaps. \manref{cge_gams} writes it as a GAMS program of its own: its labels
 as the set \cmd{AC}, its parameters, variables and equations, and a driver
 that solves the starting levels, with the gaps of the equations there, and
 then the scenario.
+
+A named model (from version 0.17.0) is kept as its list, expanded when it is
+solved, so that it follows later equations. Its system has the elements of
+its user equations and defined variables, the constraints of its
+inequalities and the free variables that appear in them, found from the
+pattern of the Jacobian; the other free variables are fixed at their levels
+at the start of the solve. Solved as a system, it must be square; with
+\opt{min}{imize()} or \opt{max}{imize()} it is a nonlinear programme over its
+variables. \manref{cge_gams} exports a simulation of a named model with
+\cmd{model cgesub / UE}$k$\cmd{, ... /} and the variables outside it fixed at
+their levels (\cmd{.fx}).
 
 \cgesec{Also see}
 
