@@ -2308,6 +2308,62 @@ cross entropy against RAS, to $1.1 \times 10^{-11}$; errors. GAMS (IPOPT,
 NLP; export check cases nlphs071, nlpentropy and nlpfrontier) to 6.8e-13,
 3.1e-13 and 3.9e-12.
 
+## 25. Solver options and status codes (from version 0.16.0)
+
+**Options.** `cge_options` sets, as GAMS's `option` statement, members of
+the model saved with it: `M.opttol`, `M.optit` and `M.opttime`, the
+tolerance, iteration limit and time limit (seconds) of `cge_solve`, and
+`M.optjac`, the Jacobian of Newton's method (1 for central differences,
+mode 1 of `_cge_newton`); missing means the default (1e-10, 100, none,
+exact), and `reset` sets every option, `linsolver` and `mcpsolver` included,
+to missing. `cge_solve` passes -1 for an option it is not given;
+`_cge_opttol`, `_cge_optit` and `_cge_opttime` resolve the command's value,
+then the model's, then the default, and `_cge_optmode` the mode, which
+`_cge_solve_point` and `_cge_continue` pass on. A new model starts with the
+defaults.
+
+**Limits.** `_cge_deadline_set(t)` keeps the deadline, now plus $t$ seconds
+by `clock(c("current_date") + " " + c("current_time"))` (to the second), in
+the external `cge__deadline`, and clears `cge__stop`; `_cge_timeup()`, which
+the loops of `_cge_newton`, `_cge_ssnewton` and `_cge_nlp_solve` call at each
+iteration, returns 1 once it has passed and records code 3 in `cge__stop`;
+a loop that reaches its iteration limit records 2 (`_cge_stop_set` keeps the
+larger). `cge_solve` sets the deadline before the solve and clears it after,
+also after an error (`capture` in the ado), so that it never reaches later
+solves. A solve stopped by its time limit, or whose Newton iterations reach
+the limit, takes none of the fallbacks of `_cge_solve_sys` (central
+differences, Powell's method), the active-set method after the semismooth
+one, or the continuation of `cge_solve`.
+
+**Statuses.** GAMS's codes, from `_cge_status(conv, cons, nlp, feas, err)`:
+converged, model status 16 (solved), 1 (optimal) with constraints in the
+system (`_cge_cons_on`: any `bmode > 0`, as PATH reports an MCP) or 2
+(locally optimal) for a nonlinear programme, solver status 1; a residual
+that cannot be evaluated, 13 and 5; otherwise solver status 3 (time), 2
+(iterations) or 4 (terminated by the solver), with model status 6
+(intermediate infeasible) after a limit, 7 (feasible solution) for a
+nonlinear programme stopped at a point whose scaled residuals are below
+$\max(\text{tol}, 10^{-8})$, and 5 (locally infeasible) otherwise. The
+optimiser gives 2 (16 for targets alone) when it converges, else 7 at a
+solution of the model and 6 without one, with solver status 4. Each
+simulation keeps its pair in `M.simstat` (`_cge_set_simstat`, defaults from
+convergence in `_cge_store_sim`, aligned by `_cge_sims_keep`; missing for
+simulations stored before 0.16.0), returned by `cge_solve`, `cge_optimize`,
+`cge_results` (`r(modelstat)`, `r(solvestat)`) and, for the simulation
+compared, `cge_gams, compare` (`r(stata_modelstat)`). Failures display
+them.
+
+Tests (`tests/test_status.do`): defaults and reset; statuses 16/1 after a
+solve, 6/2 after `iterate(1)` from the command and from the options (Powell
+no longer rescues it), 6/3 after `timelimit(0)` with no continuation, no
+deadline left for a later solve or the optimiser; tolerance and differenced
+Jacobian from the options (the same solution to 2.7e-14); 1/1 with a binding
+quota; options and statuses saved and loaded, a model of version 0.3.0 with
+the defaults, statuses kept when simulations are dropped; HS071 2/1, 6/2
+after 2 iterations, 7/2 after 15 (primal error 4e-12, dual not yet), 6/3
+after `timelimit(0)`; 13/5 for $\ln$ of a negative start; the optimiser
+2/1; errors.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

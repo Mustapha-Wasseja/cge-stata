@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.15.0  25oct2026}{...}
+{* *! version 0.16.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt step:s(#)} {opt trace}
+{cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt step:s(#)} {opt trace}
 {opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}]
 
 
@@ -78,6 +78,18 @@ zero. {helpb cge_gams} exports such a simulation as an NLP, solved with IPOPT
 by default.
 
 {pstd}
+From version 0.16.0, every solve reports GAMS's model status and solver
+status in {cmd:r(modelstat)} and {cmd:r(solvestat)}, stores them with the
+simulation and displays them after a failure. Model status 16 (solved) is a
+solution of a system, 1 (optimal) one of a system with constraints, 2
+(locally optimal) that of a nonlinear programme, 5 (locally infeasible) a
+failure, 6 (intermediate infeasible) a solve stopped by a limit, 7 (feasible
+solution) a nonlinear programme stopped at a feasible point and 13 (error, no
+solution) equations that cannot be evaluated at the start. Solver status 1 is
+normal completion, 2 an iteration interrupt, 3 a resource (time) interrupt,
+4 termination by the solver and 5 an evaluation error.
+
+{pstd}
 A solution of the equations need not make economic sense. From version
 0.7.0, after a solve that converges, {cmd:cge_solve} notes any quantity,
 price, income or scaling factor of demand that is negative or below one
@@ -102,11 +114,19 @@ to the largest, with the variable it belongs to.
 
 {phang}
 {opt tolerance(#)} sets the convergence tolerance on the largest scaled
-residual; the default is 1e-10.
+residual; the default is 1e-10, or that of {helpb cge_options} (from version
+0.16.0).
 
 {phang}
 {opt iterate(#)} sets the maximum number of Newton iterations; the default is
-100.
+100, or that of {helpb cge_options}. From version 0.16.0, a solve that reaches
+it stops there, without the fallbacks and continuation that follow other
+failures.
+
+{phang}
+{opt timelimit(#)} (from version 0.16.0) sets a time limit in seconds, as
+GAMS's {cmd:reslim}; by default there is none, or that of {helpb cge_options}.
+The solvers check it at each iteration, to the second.
 
 {phang}
 {opt trace} displays the largest scaled residual at each iteration.
@@ -155,6 +175,10 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(steps)}}steps of continuation (0 for a direct solve){p_end}
 {synopt:{cmd:r(N_constraints)}}number of constraints, if any{p_end}
 {synopt:{cmd:r(N_binding)}}number of constraints that bind{p_end}
+{synopt:{cmd:r(modelstat)}}GAMS's model status (from version 0.16.0){p_end}
+{synopt:{cmd:r(solvestat)}}GAMS's solver status{p_end}
+{synopt:{cmd:r(tolerance)}}the tolerance applied{p_end}
+{synopt:{cmd:r(iterate)}}the iteration limit applied{p_end}
 {synopt:{cmd:r(objective)}}the objective at the optimum, for a nonlinear programme{p_end}
 {synopt:{cmd:r(N_dof)}}free variables less equations, for a nonlinear programme{p_end}
 {p2col 5 18 22 2: Macros}{p_end}

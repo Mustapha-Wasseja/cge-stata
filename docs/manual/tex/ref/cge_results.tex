@@ -108,9 +108,13 @@ memory unchanged:
 
 \cgesec{Stored results}
 
-\cmd{cge_results} stores the following in \cmd{r()}, unless
-\opt{nod}{isplay} is specified:
+\cmd{cge_results} stores the following in \cmd{r()}, with or without
+\opt{nod}{isplay}:
 \begin{storedres}
+\resgroup{Scalars}
+\res{r(converged)} & 1 if the simulation converged (from version 0.16.0)\\
+\res{r(modelstat)} & GAMS's model status of the simulation (\manref{cge_solve}); missing for one solved before version 0.16.0\\
+\res{r(solvestat)} & GAMS's solver status of the simulation\\
 \resgroup{Macros}
 \res{r(sim)} & name of the simulation\\
 \resgroup{Matrices}

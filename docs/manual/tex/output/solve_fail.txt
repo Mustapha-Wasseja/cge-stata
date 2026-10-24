@@ -11,6 +11,7 @@ Closure
 Not solved directly; trying again in 4 steps
 Not solved directly; trying again in 16 steps
 Simulation qg10fixed did not converge (largest scaled residual  2.26e+00)
+Model status 5 (locally infeasible); solver status 4 (terminated by solver)
 Largest scaled residual  2.26e+00; WALRAS =  4.32e-02
 Diagnostics
   Largest scaled residuals

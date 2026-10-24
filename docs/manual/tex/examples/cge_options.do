@@ -52,3 +52,17 @@ quietly summarize rel
 display "semismooth against active set: largest relative difference " %9.2e r(max)
 cge_options, mcp(semismooth)
 *<<
+
+*>> opt_limits
+cge_constraint, clear
+cge_shock, reset
+cge_shock tm, value(0)
+cge_options, iterate(2)
+capture noisily cge_solve, name(two) steps(1)
+display "model status " r(modelstat) ", solver status " r(solvestat)
+capture noisily cge_solve, name(none) timelimit(0)
+display "model status " r(modelstat) ", solver status " r(solvestat)
+cge_options, reset
+cge_solve, name(solved)
+display "model status " r(modelstat) ", solver status " r(solvestat)
+*<<

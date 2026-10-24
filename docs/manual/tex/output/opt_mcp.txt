@@ -4,6 +4,10 @@ All shocks removed
 . cge_options, linsolver(dense)
 Linear solver of Newton's steps: dense
 Method for constraints:          semismooth
+Jacobian of Newton's method:     exact
+Tolerance of cge_solve:          1.00e-10
+Iteration limit of cge_solve:    100
+Time limit of cge_solve:         none
 
 . foreach a in act_agr act_man act_ser {
   2.     quietly cge_constraint QA, elements(`a') upper(1) scale adjust(RA `a') up
@@ -34,6 +38,10 @@ Constraints
 . cge_options, mcp(activeset)
 Linear solver of Newton's steps: dense
 Method for constraints:          activeset
+Jacobian of Newton's method:     exact
+Tolerance of cge_solve:          1.00e-10
+Iteration limit of cge_solve:    100
+Time limit of cge_solve:         none
 
 . quietly cge_solve, name(activeset)
 
@@ -62,3 +70,7 @@ semismooth against active set: largest relative difference  2.55e-13
 . cge_options, mcp(semismooth)
 Linear solver of Newton's steps: dense
 Method for constraints:          semismooth
+Jacobian of Newton's method:     exact
+Tolerance of cge_solve:          1.00e-10
+Iteration limit of cge_solve:    100
+Time limit of cge_solve:         none

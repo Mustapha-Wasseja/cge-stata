@@ -55,10 +55,14 @@ simulation solved again under its own name keeps its place).
 
 {title:Stored results}
 
-{synoptset 12 tabbed}{...}
-{p2col 5 12 16 2: Matrices}{p_end}
+{synoptset 14 tabbed}{...}
+{p2col 5 14 18 2: Scalars}{p_end}
+{synopt:{cmd:r(converged)}}1 if the simulation converged (from version 0.16.0){p_end}
+{synopt:{cmd:r(modelstat)}}its GAMS model status ({helpb cge_solve}); missing if solved before version 0.16.0{p_end}
+{synopt:{cmd:r(solvestat)}}its GAMS solver status{p_end}
+{p2col 5 14 18 2: Matrices}{p_end}
 {synopt:{cmd:r(ev)}}equivalent variation by household{p_end}
-{p2col 5 12 16 2: Macros}{p_end}
+{p2col 5 14 18 2: Macros}{p_end}
 {synopt:{cmd:r(sim)}}simulation name{p_end}
 
 

@@ -227,6 +227,14 @@ struct cge_model {
     // programme (from version 0.15.0): min: or max: and its expression; empty
     // for the others, and missing rows are empty
     string colvector simobj
+    // the options of the solver (from version 0.16.0), as GAMS's option
+    // statement, saved with the model: the tolerance, iteration limit and time
+    // limit (seconds) of cge_solve, and the Jacobian of Newton's method (0 or
+    // missing exact, 1 central differences); missing for the defaults
+    real scalar      opttol, optit, opttime, optjac
+    // the model status and solver status of each stored simulation, in GAMS's
+    // codes (from version 0.16.0); missing where unknown
+    real matrix      simstat
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -244,7 +252,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.15.0")
+    return("0.16.0")
 }
 
 // =====================================================================
@@ -5171,21 +5179,204 @@ string scalar _cge_lin_name(struct cge_model scalar M)
 }
 
 // cge_options (from version 0.10.1): the settings of the solver, as GAMS's
-// option statement; from version 0.14.0 the method for constraints
-void _cge_options(string scalar lin, | string scalar mcp)
+// option statement; from version 0.14.0 the method for constraints; from
+// version 0.16.0 the tolerance, iteration limit and time limit of cge_solve
+// and the Jacobian of Newton's method (negative: unchanged; missing: the
+// default), and reset, which restores every default
+void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real scalar it, real scalar tlim,
+                  string scalar jac, real scalar reset)
 {
     struct cge_model scalar M
+    real scalar ch
     if (args() < 2) mcp = ""
+    if (args() < 3) tol = -1
+    if (args() < 4) it = -1
+    if (args() < 5) tlim = -1
+    if (args() < 6) jac = ""
+    if (args() < 7) reset = 0
     M = _cge_load()
     _cge_need(M, "calibrated")
+    ch = 0
+    if (reset) {
+        M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = .
+        ch = 1
+    }
     if (lin != "") M.linsolver = (lin == "dense" ? 0 : (lin == "sparse" ? 1 : 2))
     if (mcp != "") M.mcpsolver = (mcp == "activeset")
-    if (lin != "" | mcp != "") _cge_store(M)
+    if (tol > 0 & tol < .) M.opttol = tol
+    if (it >= 1 & it < .) M.optit = it
+    if (tlim >= 0 & tlim < .) M.opttime = tlim
+    if (jac != "") M.optjac = (jac == "differences")
+    if (lin != "" | mcp != "" | (tol > 0 & tol < .) | (it >= 1 & it < .) | (tlim >= 0 & tlim < .) | jac != "") ch = 1
+    if (ch) _cge_store(M)
     printf("{txt}Linear solver of Newton's steps: {res}%s{txt}%s\n", _cge_lin_name(M),
            (M.linsolver == 2 ? " (the sparse LU from 1,000 equations)" : ""))
     printf("{txt}Method for constraints:          {res}%s\n", _cge_mcp_name(M))
+    printf("{txt}Jacobian of Newton's method:     {res}%s\n", (M.optjac == 1 ? "differences" : "exact"))
+    printf("{txt}Tolerance of cge_solve:          {res}%s\n", strtrim(sprintf("%9.0g", _cge_opttol(M, -1))))
+    printf("{txt}Iteration limit of cge_solve:    {res}%g\n", _cge_optit(M, -1))
+    printf("{txt}Time limit of cge_solve:         {res}%s\n", (_cge_opttime(M, -1) >= . ? "none" :
+           strtrim(sprintf("%12.0g", _cge_opttime(M, -1))) + " second(s)"))
     st_global("r(linsolver)", _cge_lin_name(M))
     st_global("r(mcp)", _cge_mcp_name(M))
+    st_global("r(jacobian)", (M.optjac == 1 ? "differences" : "exact"))
+    st_numscalar("r(tolerance)", _cge_opttol(M, -1))
+    st_numscalar("r(iterate)", _cge_optit(M, -1))
+    st_numscalar("r(timelimit)", _cge_opttime(M, -1))
+}
+
+// The tolerance, iteration limit and time limit of a solve (from version
+// 0.16.0): those given to the command when not negative, else those of
+// cge_options, else the defaults (1e-10, 100 and none)
+real scalar _cge_opttol(struct cge_model scalar M, real scalar tol)
+{
+    if (tol >= 0 & tol < .) return(tol)
+    return(M.opttol > 0 & M.opttol < . ? M.opttol : 1e-10)
+}
+
+real scalar _cge_optit(struct cge_model scalar M, real scalar it)
+{
+    if (it >= 0 & it < .) return(it)
+    return(M.optit >= 1 & M.optit < . ? M.optit : 100)
+}
+
+real scalar _cge_opttime(struct cge_model scalar M, real scalar t)
+{
+    if (t >= 0 & t < .) return(t)
+    return(M.opttime >= 0 & M.opttime < . ? M.opttime : .)
+}
+
+// The mode of Newton's method that cge_options sets (from version 0.16.0):
+// 0 the exact Jacobian with Broyden's updates, 1 central differences
+real scalar _cge_optmode(struct cge_model scalar M)
+{
+    return(M.optjac == 1)
+}
+
+// The clock in milliseconds, to the second
+real scalar _cge_now()
+{
+    return(clock(c("current_date") + " " + c("current_time"), "DMYhms"))
+}
+
+// The deadline of a solve (from version 0.16.0), secs from now, or none
+// (missing); the reason the last solve stopped short is cleared
+void _cge_deadline_set(real scalar secs)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__deadline")) == NULL) q = crexternal("cge__deadline")
+    *q = (secs >= 0 & secs < . ? _cge_now() + 1000 * secs : .)
+    _cge_stop_clear()
+}
+
+// 1 once the deadline of a solve has passed, which the loops of the solvers
+// check at each iteration
+real scalar _cge_timeup()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__deadline")) == NULL) return(0)
+    if (*q >= .) return(0)
+    if (_cge_now() < *q) return(0)
+    _cge_stop_set(3)
+    return(1)
+}
+
+// Why the last solve stopped short (from version 0.16.0): 0 it did not, 2 an
+// iteration limit, 3 the time limit, which outranks the other
+void _cge_stop_set(real scalar code)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__stop")) == NULL) {
+        q = crexternal("cge__stop")
+        *q = 0
+    }
+    if (code > *q) *q = code
+}
+
+void _cge_stop_clear()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__stop")) == NULL) q = crexternal("cge__stop")
+    *q = 0
+}
+
+real scalar _cge_stop()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__stop")) == NULL) return(0)
+    return(*q)
+}
+
+// The model status and solver status of stored simulation k (from version
+// 0.16.0), in GAMS's codes; missing where unknown
+void _cge_simstat(struct cge_model scalar M, real scalar k, real scalar ms, real scalar ss)
+{
+    ms = ss = .
+    if (k > rows(M.simstat) | cols(M.simstat) < 2) return
+    ms = M.simstat[k, 1]
+    ss = M.simstat[k, 2]
+}
+
+void _cge_set_simstat(struct cge_model scalar M, real scalar k, real scalar ms, real scalar ss)
+{
+    real scalar n
+    n = rows(M.simname)
+    if (cols(M.simstat) != 2) M.simstat = J(0, 2, .)
+    if (rows(M.simstat) < n) M.simstat = M.simstat \ J(n - rows(M.simstat), 2, .)
+    if (rows(M.simstat) > n) M.simstat = M.simstat[|1, 1 \ n, 2|]
+    M.simstat[k, .] = (ms, ss)
+}
+
+// The statuses of a solve from its outcome: conv, whether constraints are in
+// the system (cons), whether it is a nonlinear programme (nlp) and, for one
+// that stopped short, whether its point satisfies the equations (feas)
+void _cge_status(real scalar conv, real scalar cons, real scalar nlp, real scalar feas, real scalar err,
+                 real scalar ms, real scalar ss)
+{
+    real scalar st
+    if (conv) {
+        ss = 1
+        ms = (nlp ? 2 : (cons ? 1 : 16))
+        return
+    }
+    if (err >= .) {
+        ms = 13
+        ss = 5
+        return
+    }
+    st = _cge_stop()
+    ss = (st == 3 ? 3 : (st == 2 ? 2 : 4))
+    ms = (nlp & feas ? 7 : (ss == 4 ? 5 : 6))
+}
+
+// GAMS's names of the model statuses and solver statuses
+string scalar _cge_mstat_name(real scalar ms)
+{
+    if (ms == 1) return("optimal")
+    if (ms == 2) return("locally optimal")
+    if (ms == 5) return("locally infeasible")
+    if (ms == 6) return("intermediate infeasible")
+    if (ms == 7) return("feasible solution")
+    if (ms == 13) return("error, no solution")
+    if (ms == 16) return("solved")
+    return("unknown")
+}
+
+string scalar _cge_sstat_name(real scalar ss)
+{
+    if (ss == 1) return("normal completion")
+    if (ss == 2) return("iteration interrupt")
+    if (ss == 3) return("resource interrupt")
+    if (ss == 4) return("terminated by solver")
+    if (ss == 5) return("evaluation error limit")
+    return("unknown")
+}
+
+// The statuses of a failed solve, displayed (from version 0.16.0)
+void _cge_status_show(real scalar ms, real scalar ss)
+{
+    printf("{txt}Model status {res}%g{txt} (%s); solver status {res}%g{txt} (%s)\n", ms, _cge_mstat_name(ms),
+           ss, _cge_sstat_name(ss))
 }
 
 // The name of the method for constraints (from version 0.14.0)
@@ -7594,7 +7785,12 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             }
             npol++
         }
-        else if (it >= maxit) break
+        // the iteration limit and the time limit (from version 0.16.0)
+        else if (it >= maxit) {
+            _cge_stop_set(2)
+            break
+        }
+        else if (_cge_timeup()) break
         norm0 = norm(f)
         if (have & mode == 0) {
             // A Broyden step along d: full, or halved at most twice; when
@@ -7788,6 +7984,9 @@ real colvector _cge_solve_point(struct cge_model scalar M, struct cge_par scalar
             }
             return(x)
         }
+        // no fallback once the time limit has passed or the iteration limit
+        // has been used (from version 0.16.0)
+        if (_cge_stop() == 3 | iter >= maxit) return(x)
         if (trace) printf("{txt}The semismooth Newton method did not converge; the active-set method\n")
         iss = iter
     }
@@ -7882,7 +8081,11 @@ real scalar _cge_ssnewton(struct cge_model scalar M, struct cge_par scalar p, re
             st_numscalar("r(gradient_steps)", nsd)
             return(1)
         }
-        if (it == maxit) break
+        if (it == maxit) {
+            _cge_stop_set(2)
+            break
+        }
+        if (_cge_timeup()) break
         if (!_cge_jac_trip(M, p, xfix, S, z, jr, jc, jv)) break
         psi = 0.5 * (f' * f)
         // the reference of the non-monotone line search
@@ -7971,7 +8174,8 @@ void _cge_bgaps(struct cge_model scalar M, struct cge_par scalar p, real colvect
 real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                               real colvector start, real scalar tol, real scalar maxit,
                               real scalar trace, real scalar conv, real scalar iter,
-                              real scalar err, string scalar method, real scalar full, | real scalar mode)
+                              real scalar err, string scalar method, real scalar full, | real scalar mode,
+                              real scalar force)
 {
     struct cge_sys scalar S
     real colvector z, z2, x, isfree
@@ -7990,6 +8194,8 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     z = start[S.free] :/ M.xscale[S.free]
     method = "newton"
     if (args() < 13) mode = 0
+    // force: the fallbacks even after the iteration limit (_cge_fallbackcheck)
+    if (args() < 14) force = 0
     // constraints in Fischer-Burmeister form (from version 0.14.0): the
     // semismooth Newton method, without the fallbacks for smooth systems
     if (rows(p.bmode)) if (any(p.bmode :== 4)) {
@@ -8001,6 +8207,15 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
         return(x)
     }
     conv = _cge_newton(M, p, xfix, S, z, tol, maxit, trace, iter, err, mode)
+    // no fallback once the time limit has passed or Newton has used the
+    // iteration limit (from version 0.16.0), as a GAMS solver stops at its
+    // limits
+    if (!conv & !force & (_cge_stop() == 3 | iter >= maxit)) {
+        x = xfix
+        x[S.free] = z :* M.xscale[S.free]
+        if (S.reduced) _cge_derive(M, p, x)
+        return(x)
+    }
     if (!conv) {
         // Newton again from the start, with a Jacobian from central
         // differences and without Broyden's updates
@@ -8011,10 +8226,10 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     }
     // Powell's method (solvenl) holds the Jacobian dense: with the sparse LU
     // it is left out above 10,000 equations (from version 0.10.1)
-    if (!conv & _cge_sparse_on(M, S) & S.neq > 10000) {
+    if (!conv & _cge_stop() != 3 & _cge_sparse_on(M, S) & S.neq > 10000) {
         if (trace) printf("{txt}Powell's hybrid method is left out: %f equations, with the sparse LU\n", S.neq)
     }
-    else if (!conv) {
+    else if (!conv & _cge_stop() != 3) {
         // Fallback: Powell's hybrid method, then Newton to polish the result
         method = "broydenpowell"
         SV = solvenl_init()
@@ -8047,6 +8262,27 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     return(x)
 }
 
+// A test of the fallbacks of _cge_solve_sys (from version 0.16.0): the
+// current shocks solved from the base with no Newton iterations, so that
+// Powell's hybrid method must find the solution, stored as simulation name;
+// r(converged) and r(method)
+void _cge_fallbackcheck(string scalar name, real scalar tol)
+{
+    struct cge_model scalar M
+    real colvector x
+    real scalar conv, iter, err
+    string scalar method
+    M = _cge_load()
+    _cge_deadline_set(.)
+    x = _cge_solve_sys(M, M.p, M.xcur, _cge_bd_start(M, M.xcur), tol, 0, 0, conv, iter, err, method, 0, 0, 1)
+    (void) _cge_store_sim(M, name, x, conv, iter, _cge_maxres(M, M.p, x), method)
+    _cge_store(M)
+    printf("{txt}Fallback solve: converged {res}%f{txt}, method {res}%s{txt}, largest scaled residual {res}%9.3e\n",
+           conv, method, _cge_maxres(M, M.p, x))
+    st_numscalar("r(converged)", conv)
+    st_global("r(method)", method)
+}
+
 // Store a solution as a named simulation (replacing one of the same name);
 // returns its index
 real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real colvector x, real scalar conv,
@@ -8068,6 +8304,7 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
         M.simlam = M.simlam \ .
         M.simcons = M.simcons \ _cge_cons_text(M, M.p, x)
         _cge_set_simobj(M, rows(M.simname), "")
+        _cge_set_simstat(M, rows(M.simname), (conv ? (_cge_cons_on(M) ? 1 : 16) : 5), (conv ? 1 : 4))
         return(rows(M.simname))
     }
     M.simclosure[k] = _cge_closure_text(M)
@@ -8082,7 +8319,15 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
     M.simlam[k] = .
     M.simcons[k] = _cge_cons_text(M, M.p, x)
     _cge_set_simobj(M, k, "")
+    _cge_set_simstat(M, k, (conv ? (_cge_cons_on(M) ? 1 : 16) : 5), (conv ? 1 : 4))
     return(k)
+}
+
+// 1 if constraints are in the current system (from version 0.16.0)
+real scalar _cge_cons_on(struct cge_model scalar M)
+{
+    if (!rows(M.bY) | rows(M.p.bmode) != rows(M.bY)) return(0)
+    return(any(M.p.bmode :> 0))
 }
 
 // The objective of stored simulation k (from version 0.15.0): "" unless it
@@ -8101,11 +8346,11 @@ void _cge_set_simobj(struct cge_model scalar M, real scalar k, string scalar obj
 }
 
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
-                real scalar steps, real scalar diagnose, string scalar lin, string scalar obj)
+                real scalar steps, real scalar diagnose, string scalar lin, string scalar obj, real scalar tlim)
 {
     struct cge_model scalar M
     real colvector x, x2, start
-    real scalar conv, iter, err, k, walras, nsteps, done, it2, n, keeplin
+    real scalar conv, iter, err, k, walras, nsteps, done, it2, n, keeplin, mode, ms, ss
     string scalar method, m2
 
     if (args() < 5) full = 0
@@ -8113,11 +8358,19 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     if (args() < 7) diagnose = 0
     if (args() < 8) lin = ""
     if (args() < 9) obj = ""
+    if (args() < 10) tlim = -1
     M = _cge_load()
     _cge_need(M, "calibrated")
+    // the options of cge_options where the command gives none, and the
+    // deadline of the time limit (from version 0.16.0)
+    tol = _cge_opttol(M, tol)
+    maxit = _cge_optit(M, maxit)
+    mode = _cge_optmode(M)
+    _cge_deadline_set(_cge_opttime(M, tlim))
     // a nonlinear programme (from version 0.15.0)
     if (obj != "") {
         _cge_nlp_run(M, name, obj, tol, maxit, trace, lin)
+        _cge_deadline_set(.)
         return
     }
     // the linear solver for this solve (from version 0.10.1), in place of
@@ -8132,16 +8385,19 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     // steps; by default (steps 0) a failed solve is tried again in 4, then 16
     nsteps = 0
     if (steps > 1) {
-        x = _cge_continue(M, steps, tol, maxit, trace, conv, iter, err, method, full, done)
+        x = _cge_continue(M, steps, tol, maxit, trace, conv, iter, err, method, full, done, mode)
         nsteps = (conv ? steps : done)
     }
     else {
-        x = _cge_solve_point(M, M.p, M.xcur, start, tol, maxit, trace, conv, iter, err, method, full)
-        if (!conv & steps == 0) {
+        x = _cge_solve_point(M, M.p, M.xcur, start, tol, maxit, trace, conv, iter, err, method, full, mode)
+        // no continuation once the time limit has passed or the iteration
+        // limit has been used (from version 0.16.0)
+        if (!conv & steps == 0 & _cge_stop() != 3 & iter < maxit) {
             for (k = 1; k <= 2; k++) {
+                if (_cge_stop() == 3) break
                 n = (k == 1 ? 4 : 16)
                 printf("{txt}Not solved directly; trying again in %f steps\n", n)
-                x2 = _cge_continue(M, n, tol, maxit, trace, conv, it2, err, m2, full, done)
+                x2 = _cge_continue(M, n, tol, maxit, trace, conv, it2, err, m2, full, done, mode)
                 iter = iter + it2
                 if (conv) {
                     x = x2
@@ -8159,13 +8415,18 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     st_global("r(linsolver)", _cge_lin_name(M))
     M.linsolver = keeplin
 
-    (void) _cge_store_sim(M, name, x, conv, iter, err, method)
+    k = _cge_store_sim(M, name, x, conv, iter, err, method)
+    // the statuses, in GAMS's codes (from version 0.16.0)
+    _cge_status(conv, _cge_cons_on(M), 0, 0, err, ms, ss)
+    _cge_set_simstat(M, k, ms, ss)
     _cge_store(M)
+    _cge_deadline_set(.)
 
     if (conv & nsteps > 1) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} steps, {res}%f{txt} iteration(s) ({res}%s{txt})\n",
                                   name, nsteps, iter, method)
     else if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) ({res}%s{txt})\n", name, iter, method)
     else printf("{err}Simulation %s did not converge (largest scaled residual %9.3e)\n", name, err)
+    if (!conv) _cge_status_show(ms, ss)
     if (_cge_sa(M)) printf("{txt}Largest scaled residual {res}%9.3e\n", err)
     else printf("{txt}Largest scaled residual {res}%9.3e{txt}; WALRAS = {res}%9.3e\n", err, walras)
     _cge_bd_note(M, x, conv)
@@ -8177,6 +8438,10 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     st_numscalar("r(iterations)", iter)
     st_numscalar("r(max_residual)", err)
     st_numscalar("r(walras)", walras)
+    st_numscalar("r(modelstat)", ms)
+    st_numscalar("r(solvestat)", ss)
+    st_numscalar("r(tolerance)", tol)
+    st_numscalar("r(iterate)", maxit)
     st_numscalar("r(N_solved)", (full ? M.neq : sum(M.rmask)))
     // Constraints (Section 16): regimes
     if (rows(M.bY)) {
@@ -9099,11 +9364,17 @@ void _cge_results_show(string scalar sim)
     real matrix b, s
     real scalar k, si
 
+    real scalar ms, ss
     M = _cge_load()
     _cge_need(M, "calibrated")
     si = _cge_sim_index(M, sim)
     x = M.simx[., si]
     p = M.simp[si]
+    // the statuses (from version 0.16.0)
+    _cge_simstat(M, si, ms, ss)
+    st_numscalar("r(modelstat)", ms)
+    st_numscalar("r(solvestat)", ss)
+    st_numscalar("r(converged)", M.simconv[si])
     if (_cge_sa(M)) {
         _cge_results_sa(M, si)
         return
@@ -12382,6 +12653,7 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
         M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = M.simobj = J(0, 1, "")
         M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
         M.simx = J(rows(M.simx), 0, .)
+        M.simstat = J(0, 2, .)
         return
     }
     M.simname = M.simname[s]
@@ -12398,6 +12670,10 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
     // the objectives of nonlinear programmes (from version 0.15.0)
     if (rows(M.simobj) < max(s)) M.simobj = M.simobj \ J(max(s) - rows(M.simobj), 1, "")
     M.simobj = M.simobj[s]
+    // the statuses (from version 0.16.0)
+    if (cols(M.simstat) != 2) M.simstat = J(0, 2, .)
+    if (rows(M.simstat) < max(s)) M.simstat = M.simstat \ J(max(s) - rows(M.simstat), 2, .)
+    M.simstat = M.simstat[s, .]
 }
 
 // Names of the simulations of a dynamic run, in period order
@@ -15484,12 +15760,13 @@ struct cge_par scalar _cge_par_interp(struct cge_par scalar p0, struct cge_par s
 // the number of steps solved
 real colvector _cge_continue(struct cge_model scalar M, real scalar n, real scalar tol, real scalar maxit,
                              real scalar trace, real scalar conv, real scalar iter, real scalar err,
-                             string scalar method, real scalar full, real scalar done)
+                             string scalar method, real scalar full, real scalar done, | real scalar mode)
 {
     struct cge_par scalar q
     real colvector x, xf
     real scalar k, it, lam
     string scalar m
+    if (args() < 12) mode = 0
     x = M.x0
     iter = 0
     done = 0
@@ -15500,9 +15777,9 @@ real colvector _cge_continue(struct cge_model scalar M, real scalar n, real scal
             lam = k / n
             q = _cge_par_interp(M.p0, M.p, lam)
             xf = M.x0 + lam :* (M.xcur - M.x0)
-            x = _cge_solve_point(M, q, xf, x, tol, maxit, trace, conv, it, err, m, full)
+            x = _cge_solve_point(M, q, xf, x, tol, maxit, trace, conv, it, err, m, full, mode)
         }
-        else x = _cge_solve_point(M, M.p, M.xcur, x, tol, maxit, trace, conv, it, err, m, full)
+        else x = _cge_solve_point(M, M.p, M.xcur, x, tol, maxit, trace, conv, it, err, m, full, mode)
         iter = iter + it
         if (!conv) return(x)
         done = k
@@ -16601,7 +16878,7 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     string colvector key, e1, e2
     real colvector val, x, pos
     string scalar name, vb, vs
-    real scalar k, i, status, bstatus, db, ds, nb, ns, walras, dm, nm
+    real scalar k, i, status, bstatus, db, ds, nb, ns, walras, dm, nm, ms, ss
 
     M = _cge_load()
     A = asarray_create()
@@ -16645,6 +16922,11 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     st_numscalar("r(maxdiff)", ds)
     st_numscalar("r(N_compared)", ns)
     st_numscalar("r(walras)", walras)
+    // the statuses of the Stata solution (from version 0.16.0), in the same
+    // codes
+    _cge_simstat(M, k, ms, ss)
+    st_numscalar("r(stata_modelstat)", ms)
+    st_numscalar("r(stata_solvestat)", ss)
     st_global("r(compared_with)", sim)
 }
 
@@ -21248,7 +21530,7 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     string scalar spec, rel, lhs, rhs
     real colvector z, v, r, x, val, v0, r0, re, s, cv
     real colvector tsc, csc, tv, cb, tmg, cmg, img
-    real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2, nt, nc, viol, ex, rx, sc
+    real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2, nt, nc, viol, ex, rx, sc, ms, ss
     string scalar pn
     if (args() < 11) s_con = ""
     if (args() < 12) s_grad = ""
@@ -21453,6 +21735,18 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     // The optimum becomes the current shocks and is stored as a simulation
     _cge_opt_apply(M, O, v, M.p, M.xcur)
     k = _cge_store_sim(M, name, x, (conv & !hasmissing(x)), O.nevals, _cge_maxres(M, M.p, x), "newton")
+    // the statuses, in GAMS's codes (from version 0.16.0): an optimum is
+    // locally optimal; one not reached, at a solution of the model, a feasible
+    // solution
+    if (conv & !hasmissing(x)) {
+        ms = (O.hasobj ? 2 : 16)
+        ss = 1
+    }
+    else {
+        ms = (hasmissing(x) ? 6 : (O.hasobj ? 7 : 6))
+        ss = 4
+    }
+    _cge_set_simstat(M, k, ms, ss)
     _cge_store(M)
     _cge_opt_rows(M, M.p, x, keys, val)
     v0 = O.start
@@ -21492,6 +21786,8 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
                (rows(cmg) ? "; marginal {res}" + strtrim(sprintf("%12.6g", cmg[k])) : ""))
     }
     st_numscalar("r(converged)", conv)
+    st_numscalar("r(modelstat)", ms)
+    st_numscalar("r(solvestat)", ss)
     st_numscalar("r(N_evaluations)", O.nevals)
     st_numscalar("r(N_failed)", O.nfail)
     st_numscalar("r(iterations)", iter)
@@ -21998,6 +22294,7 @@ void _cge_model_new()
     _cge_layout(M)
     M.x0 = M.xcur = M.xscale = M.exists = M.fixed = M.nominal = M.positive = J(0, 1, .)
     M.simname = M.simclosure = M.simmethod = M.simrun = M.simcons = M.simobj = J(0, 1, "")
+    M.simstat = J(0, 2, .)
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
@@ -22090,7 +22387,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     struct cge_sys scalar S
     real matrix tok
     real colvector x, lam, start
-    real scalar sgn, conv, iter, err, fobj, k, keeplin
+    real scalar sgn, conv, iter, err, fobj, k, keeplin, feas, ms, ss
     string scalar g
     if (!_cge_sa(M)) _cge_fail("minimize() and maximize() solve a nonlinear programme of a standalone model (cge_model new); optimise a model from a SAM with cge_optimize", 198)
     if (rows(M.bY)) {
@@ -22100,19 +22397,28 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
     tok = _cge_nlp_tok(M, obj, sgn, g)
     start = _cge_bd_start(M, M.xcur)
-    x = _cge_nlp_solve(M, M.p, M.xcur, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam)
+    feas = 0
+    x = _cge_nlp_solve(M, M.p, M.xcur, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas)
     M.linsolver = keeplin
     k = _cge_store_sim(M, name, x, conv, iter, err, "nlp")
     _cge_set_simobj(M, k, obj)
+    // the statuses, in GAMS's codes (from version 0.16.0)
+    _cge_status(conv, 0, 1, feas, err, ms, ss)
+    _cge_set_simstat(M, k, ms, ss)
     _cge_store(M)
     if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) (interior point)\n", name, iter)
-    else printf("{err}Simulation %s did not converge (largest scaled error %9.3e)\n", name, err)
+    else {
+        printf("{err}Simulation %s did not converge (largest scaled error %9.3e)\n", name, err)
+        _cge_status_show(ms, ss)
+    }
     printf("{txt}%s %s: {res}%16.10g\n", (sgn < 0 ? "Maximised" : "Minimised"), substr(obj, 5, .), fobj)
     printf("{txt}Largest scaled error of the optimality conditions {res}%9.3e\n", err)
     st_numscalar("r(converged)", conv)
     st_numscalar("r(iterations)", iter)
     st_numscalar("r(max_residual)", err)
     st_numscalar("r(objective)", fobj)
+    st_numscalar("r(modelstat)", ms)
+    st_numscalar("r(solvestat)", ss)
     S = _cge_sys_make(M, 0)
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
     if (rows(lam)) st_matrix("r(marginals)", lam')
@@ -22192,7 +22498,7 @@ real scalar _cge_nlp_eval(struct cge_model scalar M, struct cge_par scalar p, re
 real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                               real colvector start, real matrix tok, real scalar sgn, real scalar tol,
                               real scalar maxit, real scalar trace, real scalar conv, real scalar iter,
-                              real scalar err, real scalar fobj, real colvector lam)
+                              real scalar err, real scalar fobj, real colvector lam, | real scalar feas)
 {
     struct cge_sys scalar S
     real colvector map, z, L, U, il, iu, gf, c, sl, su, zl, zu, rd, dz, dzl, dzu, zn, cn, gfn, e, gp, gm
@@ -22279,11 +22585,18 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
         err = max((ed, ep, ec))
         if (trace) printf("{txt}Iteration %f: objective {res}%14.8g{txt}, dual {res}%9.2e{txt}, primal {res}%9.2e{txt}, complementarity {res}%9.2e{txt}, mu %9.2e\n",
                           it, sgn * f * osc, ed, ep, ec, mu)
+        // whether the point satisfies the equations, to the tolerance or to
+        // 1e-8 of the scaled residuals, for the statuses (from version 0.16.0)
+        feas = (ep < max((tol, 1e-8)))
         if (err < tol) {
             conv = 1
             break
         }
-        if (it == maxit) break
+        if (it == maxit) {
+            _cge_stop_set(2)
+            break
+        }
+        if (_cge_timeup()) break
         // the barrier parameter, decreased while each barrier problem is solved
         while (mu > tol / 10) {
             emu = max((ed, ep))
@@ -22802,6 +23115,11 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "standalone", M.standalone)
     _cge_io_put(fh, "mcpsolver", M.mcpsolver)
     _cge_io_put(fh, "simobj", M.simobj)
+    _cge_io_put(fh, "opttol", M.opttol)
+    _cge_io_put(fh, "optit", M.optit)
+    _cge_io_put(fh, "opttime", M.opttime)
+    _cge_io_put(fh, "optjac", M.optjac)
+    _cge_io_put(fh, "simstat", M.simstat)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -22955,6 +23273,11 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "standalone") M.standalone = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "mcpsolver") M.mcpsolver = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "simobj") M.simobj = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "opttol") M.opttol = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "optit") M.optit = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "opttime") M.opttime = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "optjac") M.optjac = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "simstat") M.simstat = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

@@ -1,0 +1,65 @@
+. cge_constraint, clear
+All constraints removed
+
+. cge_shock, reset
+All shocks removed
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_options, iterate(2)
+Linear solver of Newton's steps: dense
+Method for constraints:          semismooth
+Jacobian of Newton's method:     exact
+Tolerance of cge_solve:          1.00e-10
+Iteration limit of cge_solve:    2
+Time limit of cge_solve:         none
+
+. cge_solve, name(two) steps(1)
+Simulation two did not converge (largest scaled residual  1.10e-03)
+Model status 6 (intermediate infeasible); solver status 2 (iteration interrupt)
+Largest scaled residual  1.10e-03; WALRAS =  2.05e-03
+Diagnostics
+  Largest scaled residuals
+    T5   import demand                          com_man                -1.104e-03
+    T5   import demand                          com_agr                -5.808e-04
+    T5   import demand                          com_ser                -2.871e-04
+    T2   export supply                          com_ser                -1.271e-04
+    P3   composite supply price                 com_man                -9.318e-05
+  (cge_listing, sim() lists every equation element at this point)
+  Smallest pivot of the Jacobian, relative to the largest:  1.30e-03 (WALRAS)
+
+. display "model status " r(modelstat) ", solver status " r(solvestat)
+model status 6, solver status 2
+
+. cge_solve, name(none) timelimit(0)
+Simulation none did not converge (largest scaled residual  2.10e-01)
+Model status 6 (intermediate infeasible); solver status 3 (resource interrupt)
+Largest scaled residual  2.10e-01; WALRAS =  0.00e+00
+Diagnostics
+  Largest scaled residuals
+    T5   import demand                          com_man                -2.100e-01
+    T5   import demand                          com_agr                -2.100e-01
+    I8   government revenue                                             1.270e-01
+    P3   composite supply price                 com_man                 3.614e-02
+    P3   composite supply price                 com_agr                 1.961e-02
+  (cge_listing, sim() lists every equation element at this point)
+  Smallest pivot of the Jacobian, relative to the largest:  1.29e-03 (WALRAS)
+
+. display "model status " r(modelstat) ", solver status " r(solvestat)
+model status 6, solver status 3
+
+. cge_options, reset
+Linear solver of Newton's steps: dense
+Method for constraints:          semismooth
+Jacobian of Newton's method:     exact
+Tolerance of cge_solve:          1.00e-10
+Iteration limit of cge_solve:    100
+Time limit of cge_solve:         none
+
+. cge_solve, name(solved)
+Simulation solved solved in 7 iteration(s) (newton)
+Largest scaled residual  4.49e-14; WALRAS = -1.56e-14
+
+. display "model status " r(modelstat) ", solver status " r(solvestat)
+model status 16, solver status 1

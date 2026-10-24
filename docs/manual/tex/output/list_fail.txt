@@ -1,6 +1,7 @@
 . cge_solve, name(stopped) iterate(1) steps(1) tolerance(1e-30)
 Simulation stopped did not converge (largest scaled residual  1.19e-02)
-Largest scaled residual  1.19e-02; WALRAS = -2.30e-09
+Model status 6 (intermediate infeasible); solver status 2 (iteration interrupt)
+Largest scaled residual  1.19e-02; WALRAS =  9.36e-14
 Diagnostics
   Largest scaled residuals
     T5   import demand                          com_man                -1.189e-02
@@ -17,39 +18,39 @@ Equations at simulation stopped: 93 in the system
 Block                                       Elements      Largest  at                   Infeasible
 --------------------------------------------------------------------------------------------------
 P1    import price                                 3    0.000e+00  com_agr                       0
-P2    export price                                 3    0.000e+00  com_man                       0
+P2    export price                                 3    0.000e+00  com_agr                       0
 P3    composite supply price                       3    8.387e-04  com_agr                       3
 P4    producer price of output                     3    9.186e-04  com_man                       3
 P5    activity price                               3    0.000e+00  act_man                       0
-P6    price of intermediate input                  3    0.000e+00  act_man                       0
-P7    zero profit                                  3    2.700e-14  act_man                       0
-P8    consumer price index                         1    0.000e+00                                0
-P9    producer price index                         1    0.000e+00                                0
-Q1    value added (Leontief)                       3    1.219e-12  act_man                       0
-Q2    intermediate input (Leontief)                3    3.355e-13  act_agr                       0
+P6    price of intermediate input                  3    0.000e+00  act_ser                       0
+P7    zero profit                                  3    1.895e-16  act_ser                       0
+P8    consumer price index                         1    2.220e-16                                0
+P9    producer price index                         1    2.220e-16                                0
+Q1    value added (Leontief)                       3    2.584e-16  act_ser                       0
+Q2    intermediate input (Leontief)                3    2.186e-16  act_man                       0
 Q3    value added                                  3    2.665e-07  act_man                       3
 Q4    factor demand                                6    3.675e-05  lab,act_man                   6
-Q5    intermediate demand                          9    0.000e+00  com_man,act_ser               0
-Q6    commodity output                             3    0.000e+00  com_man                       0
+Q5    intermediate demand                          9    0.000e+00  com_agr,act_ser               0
+Q6    commodity output                             3    0.000e+00  com_agr                       0
 T1    CET transformation                           3    4.621e-04  com_man                       3
 T2    export supply                                3    1.558e-03  com_man                       3
 T4    Armington aggregation                        3    6.735e-04  com_agr                       3
 T5    import demand                                3    1.189e-02  com_man                       3
 I1    factor income                                2    0.000e+00  lab                           0
-I2    factor income of institutions                6    0.000e+00  hhd,cap                       0
-I3    income of households and enterprises         1    7.817e-13  hhd                           0
-I4    consumption spending                         1    1.698e-12  hhd                           0
+I2    factor income of institutions                6    0.000e+00  gov,cap                       0
+I3    income of households and enterprises         1    1.981e-16  hhd                           0
+I4    consumption spending                         1    2.471e-16  hhd                           0
 I5    household demand                             3    0.000e+00  com_ser,hhd                   0
 I6    investment demand                            3    0.000e+00  com_ser                       0
-I7    government demand                            3    0.000e+00  com_ser                       0
+I7    government demand                            3    0.000e+00  com_man                       0
 I8    government revenue                           1    1.749e-05                                1
-I9    government spending                          1    0.000e+00                                0
+I9    government spending                          1    1.184e-16                                0
 I10   direct tax rate                              1    0.000e+00  hhd                           0
 I11   savings rate                                 1    0.000e+00  hhd                           0
-S1    factor market                                2    0.000e+00  lab                           0
+S1    factor market                                2    1.119e-16  cap                           0
 S2    commodity market                             3    4.817e-04  com_man                       3
 S3    balance of payments                          1    1.421e-16                                0
-S4    government budget                            1    2.195e-11                                0
+S4    government budget                            1    0.000e+00                                0
 S5    savings-investment balance                   1    1.744e-03                                1
 --------------------------------------------------------------------------------------------------
 

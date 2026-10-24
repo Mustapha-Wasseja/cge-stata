@@ -281,6 +281,8 @@ changes it is exported with a note.
 \res{r(N_periods)} & periods exported or compared (\cmd{dynamic()})\\
 \res{r(modelstat)} & GAMS model status of the scenario (\opt{}{compare}, \cmd{import()}); 1, 2, 15 and 16 mean solved\\
 \res{r(base_modelstat)} & GAMS model status of the base (\opt{}{compare})\\
+\res{r(stata_modelstat)} & model status of the Stata simulation compared, in GAMS's codes (\opt{}{compare}; from version 0.16.0)\\
+\res{r(stata_solvestat)} & solver status of the Stata simulation compared\\
 \res{r(maxdiff)} & largest relative difference from the simulation, or from any period (\opt{}{compare})\\
 \res{r(base_maxdiff)} & largest relative difference from the Stata base (\opt{}{compare})\\
 \res{r(N_compared)} & values compared, over the scenario or every period (\opt{}{compare})\\

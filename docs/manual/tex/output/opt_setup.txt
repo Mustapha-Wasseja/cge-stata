@@ -20,3 +20,7 @@ Parameter tm changed for 3 element(s)
 . cge_options
 Linear solver of Newton's steps: dense
 Method for constraints:          semismooth
+Jacobian of Newton's method:     exact
+Tolerance of cge_solve:          1.00e-10
+Iteration limit of cge_solve:    100
+Time limit of cge_solve:         none

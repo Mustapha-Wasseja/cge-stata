@@ -261,6 +261,8 @@ starting values, set with \manref{cge_shock}, can be tried.
 \begin{storedres}
 \resgroup{Scalars}
 \res{r(converged)} & 1 if the optimisation converged, 0 otherwise\\
+\res{r(modelstat)} & GAMS's model status: 2 (locally optimal) with an objective, 16 (solved) for targets alone, 7 or 6 if not converged (from version 0.16.0)\\
+\res{r(solvestat)} & GAMS's solver status: 1 if converged, 4 otherwise\\
 \res{r(objective)} & the objective at the optimum, with an objective\\
 \res{r(N_evaluations)} & number of solves of the model\\
 \res{r(N_failed)} & number of trial values at which the model did not solve\\

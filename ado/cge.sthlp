@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.15.0  25oct2026}{...}
+{* *! version 0.16.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -62,7 +62,7 @@ debt with interest.
 {p2col:{helpb cge_nest}}declare a nested CES or CET block, as MPSGE's production blocks{p_end}
 {p2col:{helpb cge_model}}a standalone model, written whole in the user language; model statistics{p_end}
 {p2col:{helpb cge_solve}}solve and store a simulation{p_end}
-{p2col:{helpb cge_options}}settings of the solver: the dense or sparse LU{p_end}
+{p2col:{helpb cge_options}}settings of the solver: LU, limits, Jacobian{p_end}
 {p2col:{helpb cge_optimize}}choose instruments to maximise an outcome or reach targets{p_end}
 {p2col:{helpb cge_loop}}solve the model for a list or grid of scenarios{p_end}
 {p2col:{helpb cge_dynamic}}solve a dynamic run, recursive or with perfect foresight{p_end}

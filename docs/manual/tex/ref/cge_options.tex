@@ -12,7 +12,12 @@ whose memory grows with the number of entries of the Jacobian rather than with
 the square of the number of equations. From version 0.14.0,
 \opt{}{mcp()} chooses the method for constraints and inequalities: the
 semismooth Newton method, the default, or the active-set method of earlier
-versions.
+versions. From version 0.16.0, \opt{tol}{erance()}, \opt{iter}{ate()} and
+\opt{time}{limit()} set the defaults of \manref{cge_solve}, as GAMS's
+\cmd{option iterlim} and \cmd{reslim} do, \opt{jac}{obian()} chooses the
+Jacobian of Newton's method, and \opt{}{reset} restores every default. A
+solve then reports GAMS's model and solver statuses
+(\manref{cge_solve}).
 
 \cgesec{Quick start}
 
@@ -28,6 +33,15 @@ The active-set method for constraints
 \begin{stcode}
 cge_options, mcp(activeset)
 \end{stcode}
+At most 30 iterations and 60 seconds for each later solve, with a tolerance of
+$10^{-12}$
+\begin{stcode}
+cge_options, iterate(30) timelimit(60) tolerance(1e-12)
+\end{stcode}
+Every default again
+\begin{stcode}
+cge_options, reset
+\end{stcode}
 Display the settings
 \begin{stcode}
 cge_options
@@ -36,13 +50,19 @@ cge_options
 \cgesec{Syntax}
 
 \begin{stsyntax}
-\cmdb{cge_options} [\texttt{,} \optarg{lin}{solver}{dense|sparse|auto} \optarg{}{mcp}{semismooth|activeset}]
+\cmdb{cge_options} [\texttt{,} \argu{options}]
 \end{stsyntax}
 
 \begin{opttable}
 \optgroup{Main}
 \optarg{lin}{solver}{dense|sparse|auto} & the linear solver of Newton's steps\\
 \optarg{}{mcp}{semismooth|activeset} & the method for constraints and inequalities\\
+\optarg{jac}{obian}{exact|differences} & the Jacobian of Newton's method\\
+\optgroup{Defaults of cge\_solve}
+\optarg{tol}{erance}{\#} & tolerance on the largest scaled residual; default \texttt{1e-10}\\
+\optarg{iter}{ate}{\#} & iteration limit; default \texttt{100}\\
+\optarg{time}{limit}{\#} & time limit in seconds; default none\\
+\opt{}{reset} & restore every default\\
 \end{opttable}
 
 \cgesec{Options}
@@ -63,6 +83,25 @@ default), with the active-set method if it fails; or \cmd{activeset}, the
 smoothed conditions, then the model solved in the regimes they give, a
 constraint whose other condition fails changing regime
 (\secref{sec:cons-solution}).
+
+\item[\optarg{jac}{obian}{exact|differences}] (from version 0.16.0) chooses
+the Jacobian of Newton's method in \manref{cge_solve}: \cmd{exact}, the exact
+derivatives with Broyden's updates (the default), or \cmd{differences},
+central differences over groups of columns at each step, the fallback of
+section~\ref{sec:newton}. Both give the same solution; differences are slower
+and serve as a check.
+
+\item[\optarg{tol}{erance}{\#}], \optarg{iter}{ate}{\#} and
+\optarg{time}{limit}{\#} (from version 0.16.0) set the tolerance, the
+iteration limit and the time limit, in seconds, of \manref{cge_solve} when
+it is not given them, as GAMS's \cmd{option iterlim} and \cmd{reslim} apply
+to every later solve. The defaults are $10^{-10}$, 100 iterations and no time
+limit. A solve that reaches its iteration limit or its time limit stops
+there, without the fallbacks and continuation that follow other failures,
+and reports solver status 2 or 3.
+
+\item[\opt{}{reset}] (from version 0.16.0) restores every setting to its
+default.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -92,13 +131,28 @@ Both methods find the same regimes and solution, the semismooth Newton method
 in fewer iterations:
 \stlog{opt_mcp}
 
+\cgesubsec{Example 3: limits and statuses}
+
+From version 0.16.0, an iteration limit set with \cmd{cge_options} applies to
+every later solve. After two iterations the tariff removal has not converged;
+a time limit of 0 seconds stops the solve at its first check. Each failure
+reports its model status, 6 (intermediate infeasible), and its solver status,
+2 (iteration interrupt) or 3 (resource interrupt), as a GAMS solver would;
+after \opt{}{reset}, the solve converges with model status 16 (solved):
+\stlog{opt_limits}
+
 \cgesec{Stored results}
 
 \cmd{cge_options} stores the following in \cmd{r()}:
 \begin{storedres}
+\resgroup{Scalars}
+\res{r(tolerance)} & the tolerance of \manref{cge_solve} (from version 0.16.0)\\
+\res{r(iterate)} & its iteration limit\\
+\res{r(timelimit)} & its time limit in seconds, missing for none\\
 \resgroup{Macros}
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto}\\
 \res{r(mcp)} & the method for constraints: \cmd{semismooth} or \cmd{activeset}\\
+\res{r(jacobian)} & the Jacobian of Newton's method: \cmd{exact} or \cmd{differences}\\
 \end{storedres}
 
 \cgesec{Methods and formulas}

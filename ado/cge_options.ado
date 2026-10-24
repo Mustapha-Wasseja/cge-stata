@@ -1,4 +1,4 @@
-*! cge_options.ado  v0.14.0  2026-10-24
+*! cge_options.ado  v0.16.0  2026-10-25
 *! cge-stata: settings of the solver, as GAMS's option statement
 *! (Reference Manual, cge_options)
 *!
@@ -7,7 +7,8 @@
 
 program define cge_options, rclass
     version 13.0
-    syntax [, LINsolver(name) MCP(name)]
+    syntax [, LINsolver(name) MCP(name) TOLerance(real -1) ITERate(integer -1) TIMElimit(real -1) ///
+        JACobian(name) RESET]
     if "`linsolver'" != "" & !inlist("`linsolver'", "dense", "sparse", "auto") {
         display as error "linsolver() takes dense, sparse or auto"
         exit 198
@@ -17,7 +18,25 @@ program define cge_options, rclass
         display as error "mcp() takes semismooth or activeset"
         exit 198
     }
+    * the tolerance, iteration limit and time limit of cge_solve and the
+    * Jacobian of Newton's method (from version 0.16.0)
+    if `tolerance' != -1 & !(`tolerance' > 0) {
+        display as error "tolerance() must be positive"
+        exit 198
+    }
+    if `iterate' != -1 & `iterate' < 1 {
+        display as error "iterate() must be 1 or more"
+        exit 198
+    }
+    if `timelimit' != -1 & !(`timelimit' >= 0) {
+        display as error "timelimit() must be 0 or more seconds"
+        exit 198
+    }
+    if "`jacobian'" != "" & !inlist("`jacobian'", "exact", "differences") {
+        display as error "jacobian() takes exact or differences"
+        exit 198
+    }
     _cge_load
-    mata: _cge_options("`linsolver'", "`mcp'")
+    mata: _cge_options("`linsolver'", "`mcp'", `tolerance', `iterate', `timelimit', "`jacobian'", ("`reset'" != ""))
     return add
 end

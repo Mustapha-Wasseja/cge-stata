@@ -5,6 +5,10 @@ Largest scaled residual  1.02e-15; WALRAS =  1.44e-15
 . cge_options, linsolver(sparse)
 Linear solver of Newton's steps: sparse
 Method for constraints:          semismooth
+Jacobian of Newton's method:     exact
+Tolerance of cge_solve:          1.00e-10
+Iteration limit of cge_solve:    100
+Time limit of cge_solve:         none
 
 . cge_solve, name(sparse) tolerance(1e-12)
 Simulation sparse solved in 9 iteration(s) (newton)

@@ -1,4 +1,4 @@
-*! cge.ado  v0.15.0  2026-10-25
+*! cge.ado  v0.16.0  2026-10-25
 *! cge-stata: computable general equilibrium modelling in Stata
 *! Displays the package version and the available commands
 *!
@@ -9,7 +9,7 @@ program define cge, rclass
     version 13.0
     syntax
 
-    local version "0.15.0"
+    local version "0.16.0"
 
     display as text _n "cge-stata " as result "`version'"
     display as text "Computable general equilibrium modelling in Stata"
@@ -37,7 +37,7 @@ program define cge, rclass
     display as text "  {help cge_nest}        declare a nested CES or CET block, as MPSGE's production blocks"
     display as text "  {help cge_model}       a standalone model, written whole in the user language; model statistics"
     display as text "  {help cge_solve}       solve and store a simulation"
-    display as text "  {help cge_options}     settings of the solver: the dense or sparse LU"
+    display as text "  {help cge_options}     settings of the solver: LU, limits, Jacobian"
     display as text "  {help cge_optimize}    choose instruments to maximise an outcome or reach targets"
     display as text "  {help cge_loop}        solve the model for a list or grid of scenarios"
     display as text "  {help cge_dynamic}     solve a dynamic run, recursive or with perfect foresight"

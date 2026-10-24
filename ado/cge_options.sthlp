@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.14.0  24oct2026}{...}
+{* *! version 0.16.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -10,7 +10,8 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto)} {opt mcp(semismooth|activeset)}]
+{cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto)} {opt mcp(semismooth|activeset)}
+{opt jac:obian(exact|differences)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
 
 
 {title:Description}
@@ -56,6 +57,23 @@ model solved in their regimes, a constraint whose other condition fails
 changing regime. The active-set method also follows a failure of the
 semismooth one.
 
+{pstd}
+{opt jacobian()} (from version 0.16.0) chooses the Jacobian of Newton's
+method: {cmd:exact}, the exact derivatives with Broyden's updates (the
+default), or {cmd:differences}, central differences over groups of columns
+at each step. Both give the same solution.
+
+{pstd}
+{opt tolerance(#)}, {opt iterate(#)} and {opt timelimit(#)} (from version
+0.16.0) set the tolerance, iteration limit and time limit in seconds of
+{helpb cge_solve} when it is not given them, as GAMS's {cmd:option iterlim}
+and {cmd:reslim} apply to every later solve; the defaults are 1e-10, 100 and
+none. A solve that reaches its iteration limit or time limit stops there,
+without the fallbacks and continuation that follow other failures, and
+reports GAMS's solver status 2 (iteration interrupt) or 3 (resource
+interrupt) with model status 6 (intermediate infeasible). {opt reset}
+restores every setting to its default.
+
 
 {title:Examples}
 
@@ -64,12 +82,17 @@ semismooth one.
 {phang2}{cmd:. cge_options}{p_end}
 {phang2}{cmd:. cge_options, mcp(activeset)}{p_end}
 {phang2}{cmd:. cge_options, mcp(semismooth)}{p_end}
+{phang2}{cmd:. cge_options, iterate(30) timelimit(60) tolerance(1e-12)}{p_end}
+{phang2}{cmd:. cge_options, reset}{p_end}
 
 
 {title:Stored results}
 
 {pstd}
-{cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver, and {cmd:r(mcp)}, the method for constraints.
+{cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver, {cmd:r(mcp)},
+the method for constraints, and {cmd:r(jacobian)}, the Jacobian, as macros, and
+{cmd:r(tolerance)}, {cmd:r(iterate)} and {cmd:r(timelimit)} (missing for none),
+the defaults of {helpb cge_solve}, as scalars.
 
 
 {title:Also see}

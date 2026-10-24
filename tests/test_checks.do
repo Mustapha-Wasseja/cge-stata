@@ -40,10 +40,12 @@ cge_shock tm, value(0)
 quietly cge_solve, name(notariff)
 
 * The fallback solver: with no Newton iterations allowed, Powell's hybrid method
-* (solvenl, at most three extra arguments in Stata 13) must find the solution
+* (solvenl, at most three extra arguments in Stata 13) must find the solution.
+* From version 0.16.0 cge_solve stops at its iteration limit, as GAMS's solvers
+* do, so a test hook forces the fallbacks
 quietly do setup_synthetic.do
 cge_shock tm, value(0)
-cge_solve, name(fallback) iterate(0) tolerance(1e-6)
+mata: _cge_fallbackcheck("fallback", 1e-6)
 assert r(converged) == 1 & "`r(method)'" == "broydenpowell"
 quietly cge_results, sim(fallback) clear nodisplay
 tempfile fallback

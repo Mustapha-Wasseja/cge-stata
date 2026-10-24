@@ -2,6 +2,10 @@
 
 scalars:
            r(N_solved) =  69
+            r(iterate) =  100
+          r(tolerance) =  1.00000000000e-12
+          r(solvestat) =  1
+          r(modelstat) =  16
              r(walras) =  1.44286592302e-15
        r(max_residual) =  1.01506105109e-15
          r(iterations) =  9

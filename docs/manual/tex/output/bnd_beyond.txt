@@ -5,6 +5,7 @@ Variable QM: upper bound 61 for 1 element(s)
 Not solved directly; trying again in 4 steps
 Not solved directly; trying again in 16 steps
 Simulation beyond did not converge (largest scaled residual  8.46e-02)
+Model status 5 (locally infeasible); solver status 4 (terminated by solver)
 Largest scaled residual  8.46e-02; WALRAS = -4.10e-03
 Bounds of cge_bound nearest the last point, with the distance relative to the scale:
   QM(com_man)                   5.70e-07
@@ -28,8 +29,8 @@ Variable QM: upper bound removed for 1 element(s)
 Constraint QM(com_man) <= 61, RM(com_man) up, rents to gov: not solved
 
 . cge_solve, name(quota)
-Simulation quota solved in 10 iteration(s) (newton)
-Largest scaled residual  8.88e-16; WALRAS =  6.10e-14
+Simulation quota solved in 7 iteration(s) (semismooth)
+Largest scaled residual  8.88e-16; WALRAS =  1.18e-13
 Constraints
   QM(com_man) <= 61, RM(com_man) up, rents to gov: binding
       QM(com_man) =           61;  RM(com_man) =  .0452721508

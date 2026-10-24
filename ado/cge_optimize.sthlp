@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.15.0  25oct2026}{...}
+{* *! version 0.16.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -154,6 +154,8 @@ differences of solves of the model. {cmd:r(gradient)} returns the choice.
 {synoptset 22 tabbed}{...}
 {p2col 5 22 26 2: Scalars}{p_end}
 {synopt:{cmd:r(converged)}}1 if the optimisation converged{p_end}
+{synopt:{cmd:r(modelstat)}}GAMS's model status: 2 with an objective, 16 for targets alone, 7 or 6 if not converged (from version 0.16.0){p_end}
+{synopt:{cmd:r(solvestat)}}GAMS's solver status: 1 if converged, 4 otherwise{p_end}
 {synopt:{cmd:r(objective)}}the objective at the optimum{p_end}
 {synopt:{cmd:r(N_evaluations)}}solves of the model{p_end}
 {synopt:{cmd:r(N_failed)}}trial values at which the model did not solve{p_end}

@@ -24,9 +24,9 @@ Constraints: 1, of which 1 bind
 ---- EQU T5  import demand
 
                                     LOWER          LEVEL          UPPER       MARGINAL
-  com_agr                               .   1.776357e-14              .              .
-  com_man                               .  -7.105427e-15              .              .
-  com_ser                               .   3.552714e-15              .              .
+  com_agr                               .              .              .              .
+  com_man                               .              .              .              .
+  com_ser                               .              .              .              .
 
 ---- EQU B1  constraint: room within the bound; marginal, the move of the adjusting variable
 
