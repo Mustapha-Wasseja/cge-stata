@@ -1,0 +1,19 @@
+. cge_variable X = ces(QD(com_man), QM(com_man))
+macro ces takes 4 argument(s); 2 given
+
+r(198);
+
+. cge_variable X = rel
+macro rel needs its arguments, as rel(v)
+
+r(198);
+
+. cge_macro loop(x) = loop(x) + 1
+cge_macro: macro loop uses itself
+
+r(198);
+
+. cge_macro, clear
+macro rel is used by user variables or equations: remove them first
+
+r(459);

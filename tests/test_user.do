@@ -1132,3 +1132,177 @@ assert _rc == 459
 capture noisily cge_equation e1: QG(com_man) <= 1, perp(GADJ) replace(I7(com_man))
 assert _rc == 198
 cge_equation, clear
+
+* ---------------------------------------------------------------------
+* 13. Functions and macros (version 0.9.7)
+* ---------------------------------------------------------------------
+quietly cge_synthetic, clear institutions
+quietly cge_sam, labels(account)
+quietly cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+    factors(lab cap) households(hhd npi) enterprises(ent) government(gov)                ///
+    savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_set goods = c, except(com_ser)
+cge_variable F1 = max(QA(act_agr), QA(act_man), 120)
+cge_variable F2 = min(QA(act_agr), QA(act_man))
+cge_variable F3 = abs(QA(act_agr) - 120)
+cge_variable F4 = sqr(PQ(com_man))
+cge_variable F5 = log10(QA(act_ser))
+cge_variable F6 = ifthen(tm(com_man) > 0.05 & tm(com_agr) > 0, QM(com_man), 0) + ifthen(tm(com_man) == 0, 1, 0)
+cge_variable F7 = prod(c, PQ(c))
+cge_variable F8 = smax(c, QE(c))
+cge_variable F9 = smin(c$(goods(c)), QA(act_man) / QE(c))
+cge_variable F10 = card(c) + card(goods) + card(h)
+cge_set map(a,c) = act_agr.com_agr act_man.com_man
+cge_variable F11 = prod((c,h)$(base(QH(c, h)) > 0), QH(c, h) / base(QH(c, h))) + card(map)
+cge_variable F12 = smax(map(a,c), QA(a) + QE(c))
+cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+assert r(N_macros) == 1
+cge_macro rel(v) = v / CPI
+cge_macro half = 0.5
+cge_macro cesq(c) = ces(QD(c), QM(c), half, half)
+cge_variable CQ(goods) = cesq(goods)
+cge_variable RP(c) = rel(PQ(c))
+cge_macro, list
+assert r(N_macros) == 4
+* a function in an equation that determines a free variable
+cge_variable LAM, value(1)
+cge_equation lam: LAM * max(base(QG(com_ser)), QG(com_agr)) = QG(com_ser)
+* the exact derivatives at the base, where no function is at a kink
+mata: _cge_jexall()
+assert r(maxdiff) < 1e-6
+cge_shock tm, value(0)
+quietly cge_solve, name(fn) tolerance(1e-12)
+quietly cge_results, sim(fn) clear nodisplay
+foreach v in QA PQ QE QM QD QH QG PA CPI {
+    quietly levelsof element1 if variable == "`v'", local(els) clean
+    foreach e of local els {
+        quietly levelsof element2 if variable == "`v'" & element1 == "`e'", local(e2s) clean
+        if `"`e2s'"' == "" {
+            quietly summarize value if variable == "`v'" & element1 == "`e'"
+            scalar `v'_`e' = r(mean)
+            quietly summarize base if variable == "`v'" & element1 == "`e'"
+            scalar `v'0_`e' = r(mean)
+        }
+        else foreach f of local e2s {
+            quietly summarize value if variable == "`v'" & element1 == "`e'" & element2 == "`f'"
+            scalar `v'_`e'_`f' = r(mean)
+            quietly summarize base if variable == "`v'" & element1 == "`e'" & element2 == "`f'"
+            scalar `v'0_`e'_`f' = r(mean)
+        }
+    }
+    if "`v'" == "CPI" {
+        quietly summarize value if variable == "CPI"
+        scalar CPI = r(mean)
+    }
+}
+capture program drop _fval
+program define _fval
+    args v e
+    if "`e'" == "" quietly summarize value if variable == "`v'"
+    else quietly summarize value if variable == "`v'" & element1 == "`e'"
+    assert r(N) == 1
+    scalar fv = r(mean)
+end
+_fval F1
+assert reldif(fv, max(QA_act_agr, QA_act_man, 120)) < 1e-12
+_fval F2
+assert reldif(fv, min(QA_act_agr, QA_act_man)) < 1e-12
+_fval F3
+assert reldif(fv, abs(QA_act_agr - 120)) < 1e-12
+_fval F4
+assert reldif(fv, PQ_com_man^2) < 1e-12
+_fval F5
+assert reldif(fv, log10(QA_act_ser)) < 1e-12
+_fval F6
+assert fv == 1
+_fval F7
+assert reldif(fv, PQ_com_agr * PQ_com_man * PQ_com_ser) < 1e-12
+_fval F8
+assert reldif(fv, max(QE_com_agr, QE_com_man, QE_com_ser)) < 1e-12
+_fval F9
+assert reldif(fv, min(QA_act_man / QE_com_agr, QA_act_man / QE_com_man)) < 1e-12
+_fval F10
+assert fv == 3 + 2 + 2
+_fval F11
+assert reldif(fv, QH_com_agr_hhd / QH0_com_agr_hhd * QH_com_man_hhd / QH0_com_man_hhd * QH_com_ser_hhd / QH0_com_ser_hhd * QH_com_ser_npi / QH0_com_ser_npi + 2) < 1e-12
+_fval F12
+assert reldif(fv, max(QA_act_agr + QE_com_agr, QA_act_man + QE_com_man)) < 1e-12
+foreach c in com_agr com_man {
+    _fval CQ `c'
+    assert reldif(fv, (0.5 * QD_`c'^(-0.5) + 0.5 * QM_`c'^(-0.5))^(-2)) < 1e-12
+}
+foreach c in com_agr com_man com_ser {
+    _fval RP `c'
+    assert reldif(fv, PQ_`c' / CPI) < 1e-12
+}
+_fval LAM
+assert reldif(fv * max(QG0_com_ser, QG_com_agr), QG_com_ser) < 1e-12
+program drop _fval
+* the base values: ifthen() and the functions at the base
+quietly summarize base if variable == "F6"
+assert r(mean) == QM0_com_man
+quietly summarize base if variable == "F1"
+assert r(mean) == 140
+cge_shock, reset
+* saved, loaded and calibrated again, the macros stay
+tempfile s5
+quietly cge_save using "`s5'", replace
+quietly cge_use using "`s5'"
+cge_macro, list
+assert r(N_macros) == 4
+quietly cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+quietly cge_solve, name(fn2) tolerance(1e-12)
+quietly cge_results, sim(fn2) clear nodisplay
+quietly summarize value if variable == "CQ" & element1 == "com_man"
+assert reldif(r(mean), (0.5 * QD_com_man^(-0.5) + 0.5 * QM_com_man^(-0.5))^(-2)) < 1e-10
+* the GAMS program writes the functions as GAMS does, ifthen() with GAMS's
+* relations, and the macros written out
+tempfile g5
+cge_gams using "`g5'_f", sim(fn2) replace
+mata:
+u = cat(st_local("g5") + "_f/cge_user.inc")
+st_numscalar("ok5", (sum(strpos(u, "max(QA('act_agr'), QA('act_man'), 120)") :> 0) == 1) +
+             (sum(strpos(u, "ifthen(tm('com_man') > 0.05 and tm('com_agr') > 0") :> 0) == 1) +
+             (sum(strpos(u, "ifthen(tm('com_man') eq 0") :> 0) == 1) + (sum(strpos(u, "log10(") :> 0) == 1) +
+             (sum(strpos(u, "ces") :> 0) == 0))
+end
+assert scalar(ok5) == 5
+cge_shock, reset
+* errors
+capture noisily cge_variable X1 = ifthen(QA(act_agr) > 100, 1, 0)
+assert _rc == 198
+capture noisily cge_variable X1 = abs(QA(act_agr), 2)
+assert _rc == 198
+capture noisily cge_variable X1 = max()
+assert _rc == 198
+capture noisily cge_variable X1 = ifthen(tm(com_man) > 0, 1)
+assert _rc == 198
+capture noisily cge_variable X1 = smax(c$(tm(c) > 5), PQ(c))
+assert _rc == 459
+capture noisily cge_variable X1 = card(zz)
+assert _rc == 198
+capture noisily cge_variable X1 = ces(QD(com_man), QM(com_man))
+assert _rc == 198
+capture noisily cge_variable X1 = rel
+assert _rc == 198
+capture noisily cge_macro max(a) = a
+assert _rc == 198
+capture noisily cge_macro rel(v) = v
+assert _rc == 110
+capture noisily cge_macro loop1(a) = loop1(a) + 1
+assert _rc == 198
+capture noisily cge_macro bad(a, a) = a
+assert _rc == 198
+capture noisily cge_macro bad2(a,) = a
+assert _rc == 198
+capture noisily cge_macro bad3(a) = (a
+assert _rc == 198
+capture noisily cge_variable max = 1
+assert _rc == 198
+capture noisily cge_macro, clear
+assert _rc == 459
+cge_equation, clear
+cge_macro, clear
+cge_set, clear

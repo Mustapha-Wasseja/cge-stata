@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions inequalities pairs replace
+    nests nestvat outces user usersets conditions inequalities pairs replace functions
 local ncase : word count `cases'
 
 tempname post
@@ -393,6 +393,27 @@ foreach case of local cases {
         quietly cge_calibrate, `sigmas' vatcredit(act_agr:0 act_ser:0.5) nests(km: cap com_man) sigmanest(0.5)
         quietly cge_closure, factors(cap:specific)
         cge_shock tv, scale(1.2)
+    }
+    * functions and macros of the user language (version 0.9.7), in user
+    * variables and in an equation that determines a free variable
+    else if "`case'" == "functions" {
+        quietly cge_synthetic, clear institutions
+        quietly cge_sam, labels(account)
+        quietly cge_map, `instmap'
+        quietly cge_calibrate, `sigmas'
+        cge_set goods = c, except(com_ser)
+        cge_set map(a,c) = act_agr.com_agr act_man.com_man
+        cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+        cge_macro rel(v) = v / CPI
+        cge_variable F1 = max(QA(act_agr), QA(act_man), 120) + min(QA(act_agr), QA(act_man)) + abs(QA(act_agr) - 120)
+        cge_variable F2 = sqr(PQ(com_man)) + log10(QA(act_ser)) + ifthen(tm(com_man) > 0.05 & tm(com_agr) > 0, QM(com_man), 1)
+        cge_variable F3 = prod(c, PQ(c)) + smax(c, QE(c)) + smin(c$(goods(c)), QA(act_man) / QE(c)) + card(c) + card(map)
+        cge_variable F4 = smax(map(a,c), QA(a) + QE(c)) * prod((c,h)$(base(QH(c, h)) > 0), QH(c, h) / base(QH(c, h)))
+        cge_variable CQ(goods) = ces(QD(goods), QM(goods), 0.5, 0.5)
+        cge_variable RP(c) = rel(PQ(c))
+        cge_variable LAM, value(1)
+        cge_equation lam: LAM * max(base(QG(com_ser)), QG(com_agr)) = QG(com_ser)
+        cge_shock tm, value(0)
     }
     quietly cge_solve, name(`case') tolerance(1e-12)
     assert r(converged) == 1

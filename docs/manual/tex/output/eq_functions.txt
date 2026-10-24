@@ -1,0 +1,64 @@
+. cge_shock, reset
+All shocks removed
+
+. cge_equation, clear
+User variables and equations removed
+
+. cge_set goods = c, except(com_ser)
+User set goods: 2 element(s): com_agr com_man
+
+. cge_variable QEMAX = smax(c, QE(c))
+User variable QEMAX: 1 element(s), base value 40
+and its definition, equation QEMAX
+
+. cge_variable QAMIN = min(QA(act_agr), QA(act_man), QA(act_ser))
+User variable QAMIN: 1 element(s), base value 100
+and its definition, equation QAMIN
+
+. cge_variable PPROD = prod(c, PQ(c))
+User variable PPROD: 1 element(s), base value 1
+and its definition, equation PPROD
+
+. cge_variable MSW = ifthen(tm(com_man) > 0, QM(com_man), 0)
+User variable MSW: 1 element(s), base value 60
+and its definition, equation MSW
+
+. cge_variable NG = card(goods)
+User variable NG: 1 element(s), base value 2
+and its definition, equation NG
+
+. cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+Macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+
+. cge_variable CQ(goods) = ces(QD(goods), QM(goods), 0.5, 0.5)
+User variable CQ(goods): 2 element(s), base values 35.5556 76.21
+and its definition, equation CQ
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(functions)
+Simulation functions solved in 7 iteration(s) (newton)
+Largest scaled residual  3.75e-14; WALRAS = -2.03e-13
+
+. quietly cge_results, sim(functions) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "QEMAX", "QAMIN", "PPROD", ///
+>     "MSW", "NG", "CQ"), noobs sepby(variable)
+
+  +---------------------------------------------+
+  | variable   element1        base       value |
+  |---------------------------------------------|
+  |    QEMAX                     40   42.241051 |
+  |---------------------------------------------|
+  |    QAMIN                    100   99.590677 |
+  |---------------------------------------------|
+  |    PPROD                      1   .99948476 |
+  |---------------------------------------------|
+  |      MSW                     60           0 |
+  |---------------------------------------------|
+  |       NG                      2           2 |
+  |---------------------------------------------|
+  |       CQ    com_agr   35.555556   37.899037 |
+  |       CQ    com_man   76.209992   76.817918 |
+  +---------------------------------------------+

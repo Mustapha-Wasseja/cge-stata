@@ -191,6 +191,8 @@ struct cge_model {
     // user sets (name, labels) and parameters (name, set of each index), from
     // version 0.7.1
     string matrix    usdef, updef
+    // user macros (from version 0.9.7): name, parameters and expression
+    string matrix    umac
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -208,7 +210,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.9.6")
+    return("0.9.7")
 }
 
 // =====================================================================
@@ -6061,7 +6063,8 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
     real colvector st
     real matrix G, v
     real rowvector ga, gb
-    real scalar i, sp, a, b, c, nv, op, val
+    real scalar i, sp, a, b, c, nv, op, val, na, j
+    real colvector av
     nv = rows(vpos)
     st = J(rows(tok), 1, .)
     G = J(rows(tok), nv, 0)
@@ -6138,6 +6141,22 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
         else if (c == 8) {
             st[sp] = (st[sp] >= . ? . : st[sp] == 0)
             G[sp, .] = J(1, nv, 0)
+        }
+        // a function of several arguments (from version 0.9.7): the
+        // derivative of the argument that min(), max() or ifthen() takes
+        else if (c == 10) {
+            na = tok[i, 3]
+            op = tok[i, 2]
+            sp = sp - na + 1
+            av = st[|sp \ sp + na - 1|]
+            st[sp] = _cge_u_fn(op, av)
+            if (op <= 2 | op == 6) {
+                j = _cge_u_fnarg(op, av)
+                G[sp, .] = (j ? G[sp + j - 1, .] : J(1, nv, 0))
+            }
+            else if (op == 3) G[sp, .] = sign(av[1]) :* G[sp, .]
+            else if (op == 4) G[sp, .] = (2 * av[1]) :* G[sp, .]
+            else G[sp, .] = G[sp, .] :/ (av[1] * ln(10))
         }
         else {
             a = st[sp]
@@ -12409,7 +12428,10 @@ void _cge_u_newname(struct cge_model scalar M, string scalar name, string scalar
     if (!regexm(name, "^[A-Za-z_][A-Za-z_0-9]*$") | strlen(name) > 24) {
         _cge_fail(what + " " + name + ": a name has letters, digits and underscores, at most 24 characters, and starts with a letter", 198)
     }
-    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all", "ord", "sameas", "lag"), name)) _cge_fail(name + " is a reserved word", 198)
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "all", "ord", "sameas", "lag", "prod", "smax", "smin", "card", "min", "max", "abs", "sqr", "log10", "ifthen"), name)) {
+        _cge_fail(name + " is a reserved word", 198)
+    }
+    if (_cge_um_find(M, name)) _cge_fail(name + " is the name of a macro", 110)
     if (regexm(name, "^[acfhdin][0-9]*$")) _cge_fail(name + " is the index of a model set", 198)
     if (_cge_vidx(M, name)) _cge_fail(name + " is the name of a variable", 110)
     if (_cge_find(_cge_gams_params()[., 1], name) | anyof(("mort", "tf"), name)) _cge_fail(name + " is the name of a model parameter", 110)
@@ -12573,6 +12595,8 @@ real scalar _cge_us_used(struct cge_model scalar M, string scalar name)
     // conditions (from version 0.7.2)
     if (cols(M.uvdef) >= 7) for (k = 1; k <= rows(M.uvdef); k++) if (anyof(_cge_u_tokens(M.uvdef[k, 7]), name)) return(1)
     if (cols(M.uedef) >= 6) for (k = 1; k <= rows(M.uedef); k++) if (anyof(_cge_u_tokens(M.uedef[k, 6]), name)) return(1)
+    // macros (from version 0.9.7)
+    if (rows(M.umac) & cols(M.umac) >= 3) for (k = 1; k <= rows(M.umac); k++) if (anyof(_cge_u_tokens(M.umac[k, 3]), name)) return(1)
     return(0)
 }
 
@@ -12788,6 +12812,8 @@ real scalar _cge_up_used(struct cge_model scalar M, string scalar name)
     }
     if (cols(M.uvdef) >= 7) for (k = 1; k <= rows(M.uvdef); k++) if (anyof(_cge_u_tokens(M.uvdef[k, 7]), name)) return(1)
     if (cols(M.uedef) >= 6) for (k = 1; k <= rows(M.uedef); k++) if (anyof(_cge_u_tokens(M.uedef[k, 6]), name)) return(1)
+    // macros (from version 0.9.7)
+    if (rows(M.umac) & cols(M.umac) >= 3) for (k = 1; k <= rows(M.umac); k++) if (anyof(_cge_u_tokens(M.umac[k, 3]), name)) return(1)
     return(0)
 }
 
@@ -12989,16 +13015,23 @@ string rowvector _cge_u_subst(string rowvector t, string scalar idx, string scal
 string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar p, real colvector x0,
                                string rowvector t)
 {
-    string rowvector out, body, els, cond
-    string scalar idx
-    real scalar k, e, j, c, d, n, m
+    string rowvector out, body, els, cond, terms, piece
+    string scalar idx, fn
+    real scalar k, e, j, c, d, n, m, inner
     out = J(1, 0, "")
     k = 1
     while (k <= cols(t)) {
-        if (t[k] == "sum" & k < cols(t)) {
+        // sum(), and from version 0.9.7 prod(), smax() and smin(): the terms
+        // joined by +, by *, or as the arguments of max() or min()
+        if (anyof(("sum", "prod", "smax", "smin", "smax#", "smin#"), t[k]) & k < cols(t)) {
             if (t[k + 1] == "(") {
+                // smax# and smin#: the inner maximum or minimum of one over
+                // two indexes, empty for an element of the outer index that
+                // has no pair
+                inner = (t[k] == "smax#" | t[k] == "smin#")
+                fn = subinstr(t[k], "#", "")
                 e = _cge_u_close(t, k + 1)
-                if (e < k + 5 | (t[k + 3] != "," & t[k + 3] != "$")) _cge_fail("sum(): write sum(i, expression), with i the index of a set", 198)
+                if (e < k + 5 | (t[k + 3] != "," & t[k + 3] != "$")) _cge_fail(fn + "(): write " + fn + "(i, expression), with i the index of a set", 198)
                 idx = t[k + 2]
                 els = _cge_setlab(M, _cge_u_set(M, idx))'
                 cond = J(1, 0, "")
@@ -13011,25 +13044,37 @@ string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar 
                         else if (t[c] == ")") d--
                         else if (t[c] == "," & d == 0) break
                     }
-                    if (c >= e | c == k + 4) _cge_fail("sum(): write sum(i" + char(36) + "(condition), expression)", 198)
+                    if (c >= e | c == k + 4) _cge_fail(fn + "(): write " + fn + "(i" + char(36) + "(condition), expression)", 198)
                     cond = t[|k + 4 \ c - 1|]
                 }
-                if (c + 1 > e - 1) _cge_fail("sum(): write sum(i, expression), with i the index of a set", 198)
+                if (c + 1 > e - 1) _cge_fail(fn + "(): write " + fn + "(i, expression), with i the index of a set", 198)
                 body = t[|c + 1 \ e - 1|]
-                out = out, "("
+                terms = J(1, 0, "")
                 n = 0
                 for (j = 1; j <= cols(els); j++) {
                     if (cols(cond)) {
                         if (!_cge_u_condval(M, p, x0, _cge_u_subst(("(", cond, ")"), idx, els[j], j))) continue
                     }
-                    if (n) out = out, "+"
                     // the element first, then the sums within: their
                     // conditions may use this index
-                    out = out, "(", _cge_u_expand(M, p, x0, _cge_u_subst(body, idx, els[j], j)), ")"
+                    piece = _cge_u_expand(M, p, x0, _cge_u_subst(body, idx, els[j], j))
+                    if (piece == "#empty") continue
+                    if (n) terms = terms, (fn == "sum" ? "+" : (fn == "prod" ? "*" : ","))
+                    terms = terms, "(", piece, ")"
                     n++
                 }
-                if (!n) out = out, "0"
-                out = out, ")"
+                if (!n & inner) {
+                    out = out, "#empty"
+                    k = e + 1
+                    continue
+                }
+                if (!n) {
+                    if (fn == "smax" | fn == "smin") _cge_fail(fn + "(): no element of the set meets the condition", 459)
+                    terms = (fn == "prod" ? "1" : "0")
+                }
+                // one term is the term itself: GAMS's max() needs two
+                if ((fn == "smax" | fn == "smin") & n > 1) out = out, (fn == "smax" ? "max" : "min"), "(", terms, ")"
+                else out = out, "(", terms, ")"
                 k = e + 1
                 continue
             }
@@ -13045,7 +13090,7 @@ string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar 
 string rowvector _cge_u_written(struct cge_model scalar M, struct cge_par scalar p, real colvector x0,
                                 string rowvector t)
 {
-    return(_cge_u_done(M, _cge_u_rdollar(M, p, x0, _cge_u_expand(M, p, x0, _cge_u_sumpairs(M, t)))))
+    return(_cge_u_done(M, _cge_u_rdollar(M, p, x0, _cge_u_expand(M, p, x0, _cge_u_sumpairs(M, _cge_u_pre(M, t))))))
 }
 
 // Conditional terms written out: expr$cond is expr where cond holds at the
@@ -13128,7 +13173,7 @@ real colvector _cge_u_domain(struct cge_model scalar M, struct cge_par scalar p,
     _cge_u_els(M, set, e1, e2, o1, o2)
     m = J(rows(e1), 1, 1)
     if (cond == "") return(m)
-    tc = _cge_u_tokens(cond)
+    tc = _cge_u_pre(M, _cge_u_tokens(cond))
     for (j = 1; j <= rows(e1); j++) m[j] = _cge_u_condval(M, p, x0, _cge_u_subst2(("(", tc, ")"), idx, e1[j], e2[j], o1[j], o2[j]))
     return(m)
 }
@@ -13205,7 +13250,7 @@ string rowvector _cge_u_sumpairs(struct cge_model scalar M, string rowvector t)
     k = 1
     while (k <= cols(t)) {
         pair = 0
-        if (t[k] == "sum" & k + 8 <= cols(t)) {
+        if (anyof(("sum", "prod", "smax", "smin"), t[k]) & k + 8 <= cols(t)) {
             if (t[k + 1] == "(" & t[k + 2] == "(" & t[k + 4] == "," & t[k + 6] == ")") {
                 pair = 1
                 i = t[k + 3]
@@ -13244,7 +13289,7 @@ string rowvector _cge_u_sumpairs(struct cge_model scalar M, string rowvector t)
         if (pair == 2) {
             cond = (cols(cond) ? (t[k + 2], "(", i, ",", j, ")", "&", "(", cond, ")") : (t[k + 2], "(", i, ",", j, ")"))
         }
-        out = out, "sum", "(", i, ",", "sum", "(", j
+        out = out, t[k], "(", i, ",", t[k] + ((t[k] == "smax" | t[k] == "smin") ? "#" : ""), "(", j
         if (cols(cond)) out = out, char(36), "(", cond, ")"
         out = out, ",", body, ")", ")"
         k = e + 1
@@ -13323,7 +13368,10 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     string colvector lab
     string scalar tk, nm, g
     real matrix out, opst
-    real scalar k, e, prev, pos, pi, el, j, pr, code, n, lk
+    real scalar k, e, prev, pos, pi, el, j, pr, code, n, lk, na
+    real colvector a1, a2
+    real matrix sub
+    string rowvector gp
     if (args() < 5) condmode = 0
     P = _cge_gams_params()
     out = J(0, 3, .)
@@ -13361,7 +13409,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                     }
                 }
                 out = out \ (1, t[k + 2] == t[k + 4], .)
-                gtok = gtok, "1"
+                gtok = gtok, strofreal(t[k + 2] == t[k + 4])
                 prev = 1
                 k = k + 6
                 continue
@@ -13371,7 +13419,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             if (condmode & k + 5 <= cols(t) & _cge_us_find(M, nm)) {
                 if (_cge_us_pairs(M, _cge_us_find(M, nm)) & t[k + 1] == "(" & t[k + 3] == "," & t[k + 5] == ")") {
                     out = out \ (1, anyof(_cge_us_labels(M, _cge_us_find(M, nm)), t[k + 2] + "." + t[k + 4]), .)
-                    gtok = gtok, "1"
+                    gtok = gtok, strofreal(out[rows(out), 2])
                     prev = 1
                     k = k + 6
                     continue
@@ -13385,7 +13433,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                         _cge_fail(nm + "(" + t[k + 2] + "): " + t[k + 2] + " is not the label of an element of the model", 111)
                     }
                     out = out \ (1, anyof(lab, t[k + 2]), .)
-                    gtok = gtok, "1"
+                    gtok = gtok, strofreal(out[rows(out), 2])
                     prev = 1
                     k = k + 4
                     continue
@@ -13393,6 +13441,34 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             }
             if (k < cols(t)) {
                 if (t[k + 1] == "(") {
+                    // min(), max(), abs(), sqr(), log10() and ifthen() (from
+                    // version 0.9.7): each argument compiled, then the
+                    // function of their values
+                    if (anyof(("min", "max", "abs", "sqr", "log10", "ifthen"), nm)) {
+                        e = _cge_u_close(t, k + 1)
+                        _cge_u_args(t, k + 1, e, a1, a2)
+                        na = rows(a1)
+                        code = _cge_find(("min", "max", "abs", "sqr", "log10", "ifthen")', nm)
+                        if (code <= 2 & na < 1) _cge_fail(nm + "(): give one argument or more", 198)
+                        if (code >= 3 & code <= 5 & na != 1) _cge_fail(nm + "(): give one argument", 198)
+                        if (code == 6 & na != 3) _cge_fail("ifthen(): write ifthen(condition, value if true, value if false)", 198)
+                        gp = J(1, 0, "")
+                        for (j = 1; j <= na; j++) {
+                            sub = _cge_u_compile(M, t[|a1[j] \ a2[j]|], x0, g, (code == 6 & j == 1 ? 1 : condmode))
+                            // a condition of parameters, which the GAMS models
+                            // of type CNS and MCP accept
+                            if (code == 6 & j == 1) {
+                                if (any(sub[., 1] :== 2)) _cge_fail("ifthen(): the condition may use parameters, lags and numbers, not variables; use an inequality for a switch on variables", 198)
+                            }
+                            out = out \ sub
+                            gp = gp, g
+                        }
+                        out = out \ (10, code, na)
+                        gtok = gtok, nm + "(" + invtokens(gp, ", ") + ")"
+                        prev = 1
+                        k = e + 1
+                        continue
+                    }
                     // a function: its argument follows as an expression
                     if (anyof(("exp", "ln", "log", "sqrt"), nm)) {
                         code = (nm == "exp" ? 1 : (nm == "sqrt" ? 3 : 2))
@@ -13540,7 +13616,8 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                 out = out \ _cge_u_pop(opst)
             }
             opst = opst \ (1, code)
-            gtok = gtok, tk
+            // as GAMS writes them (from version 0.9.7, for ifthen())
+            gtok = gtok, (tk == "==" ? "eq" : (tk == "!=" ? "ne" : (tk == "&" ? "and" : (tk == "|" ? "or" : tk))))
             prev = 0
             k++
             continue
@@ -13720,6 +13797,11 @@ real scalar _cge_u_value(struct cge_model scalar M, struct cge_par scalar p, rea
             sp = sp + 1
             st[sp] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
         }
+        // a function of several arguments (from version 0.9.7)
+        else if (c == 10) {
+            sp = sp - tok[i, 3] + 1
+            st[sp] = _cge_u_fn(tok[i, 2], st[|sp \ sp + tok[i, 3] - 1|])
+        }
         else if (c == 4) {
             b = st[sp]
             sp = sp - 1
@@ -13735,6 +13817,290 @@ real scalar _cge_u_value(struct cge_model scalar M, struct cge_par scalar p, rea
         else st[sp] = (tok[i, 2] == 1 ? exp(st[sp]) : (tok[i, 2] == 2 ? ln(st[sp]) : sqrt(st[sp])))
     }
     return(st[1])
+}
+
+// min() (1), max() (2), abs() (3), sqr() (4), log10() (5) and ifthen() (6) of
+// the values a (from version 0.9.7); missing when an argument is, except the
+// branch that ifthen() does not take
+real scalar _cge_u_fn(real scalar code, real colvector a)
+{
+    if (code == 6) {
+        if (a[1] >= .) return(.)
+        return(a[1] != 0 ? a[2] : a[3])
+    }
+    if (hasmissing(a)) return(.)
+    if (code == 1) return(min(a))
+    if (code == 2) return(max(a))
+    if (code == 3) return(abs(a[1]))
+    if (code == 4) return(a[1]^2)
+    return(log10(a[1]))
+}
+
+// The argument whose value min(), max() or ifthen() takes, 0 if none (from
+// version 0.9.7): the first of equal ones
+real scalar _cge_u_fnarg(real scalar code, real colvector a)
+{
+    real scalar j, v
+    if (code == 6) return(a[1] >= . ? 0 : (a[1] != 0 ? 2 : 3))
+    if (hasmissing(a)) return(0)
+    v = (code == 1 ? min(a) : max(a))
+    for (j = 1; j <= rows(a); j++) if (a[j] == v) return(j)
+    return(0)
+}
+
+// The arguments of a function or macro whose parenthesis opens at k and
+// closes at e, as their first and last positions (from version 0.9.7)
+void _cge_u_args(string rowvector t, real scalar k, real scalar e, real colvector a1, real colvector a2)
+{
+    real scalar j, d, s
+    a1 = J(0, 1, .)
+    a2 = J(0, 1, .)
+    if (e == k + 1) return
+    d = 0
+    s = k + 1
+    for (j = k + 1; j < e; j++) {
+        if (t[j] == "(") d++
+        else if (t[j] == ")") d--
+        else if (t[j] == "," & d == 0) {
+            if (j == s) _cge_fail("an argument is missing before a comma", 198)
+            a1 = a1 \ s
+            a2 = a2 \ (j - 1)
+            s = j + 1
+        }
+    }
+    if (s > e - 1) _cge_fail("an argument is missing after a comma", 198)
+    a1 = a1 \ s
+    a2 = a2 \ (e - 1)
+}
+
+// Macros and card() replaced in tokens t, before the indexes are written out
+// (from version 0.9.7)
+string rowvector _cge_u_pre(struct cge_model scalar M, string rowvector t)
+{
+    return(_cge_u_card(M, _cge_u_macros(M, t)))
+}
+
+// card(i): the number of elements of the set of index i, or of pairs of a
+// set of pairs (from version 0.9.7)
+string rowvector _cge_u_card(struct cge_model scalar M, string rowvector t)
+{
+    string rowvector out
+    real scalar k, ks
+    if (!anyof(t, "card")) return(t)
+    out = J(1, 0, "")
+    k = 1
+    while (k <= cols(t)) {
+        if (t[k] == "card") {
+            if (k + 3 > cols(t)) _cge_fail("card(): write card(i), with i a set or an index", 198)
+            if (t[k + 1] != "(" | t[k + 3] != ")") _cge_fail("card(): write card(i), with i a set or an index", 198)
+            ks = _cge_us_find(M, t[k + 2])
+            if (ks) {
+                if (_cge_us_pairs(M, ks)) {
+                    out = out, strofreal(cols(tokens(M.usdef[ks, 2])))
+                    k = k + 4
+                    continue
+                }
+            }
+            out = out, strofreal(_cge_setsize(M, _cge_u_set(M, t[k + 2])))
+            k = k + 4
+            continue
+        }
+        out = out, t[k]
+        k++
+    }
+    return(out)
+}
+
+// Macros (from version 0.9.7), as GAMS's $macro: name(x, y) is replaced by
+// the macro's expression in parentheses, each parameter replaced by its
+// argument (in parentheses unless it is a single name or number); macros may
+// use macros
+string rowvector _cge_u_macros(struct cge_model scalar M, string rowvector t)
+{
+    string rowvector out, body, par, nb
+    real colvector a1, a2
+    real scalar k, e, m, pass, j, s, changed
+    if (rows(M.umac) == 0 | cols(M.umac) < 3) return(t)
+    for (pass = 1; pass <= 30; pass++) {
+        out = J(1, 0, "")
+        changed = 0
+        k = 1
+        while (k <= cols(t)) {
+            m = _cge_um_find(M, t[k])
+            if (!m) {
+                out = out, t[k]
+                k++
+                continue
+            }
+            par = tokens(M.umac[m, 2])
+            body = _cge_u_tokens(M.umac[m, 3])
+            if (!cols(par)) {
+                out = out, "(", body, ")"
+                k++
+                changed = 1
+                continue
+            }
+            if (k == cols(t)) _cge_fail("macro " + t[k] + " needs its arguments, as " + t[k] + "(" + invtokens(par, ", ") + ")", 198)
+            if (t[k + 1] != "(") _cge_fail("macro " + t[k] + " needs its arguments, as " + t[k] + "(" + invtokens(par, ", ") + ")", 198)
+            e = _cge_u_close(t, k + 1)
+            _cge_u_args(t, k + 1, e, a1, a2)
+            if (rows(a1) != cols(par)) {
+                _cge_fail("macro " + t[k] + " takes " + strofreal(cols(par)) + " argument(s); " + strofreal(rows(a1)) + " given", 198)
+            }
+            nb = J(1, 0, "")
+            for (j = 1; j <= cols(body); j++) {
+                s = _cge_find(par', body[j])
+                if (!s) nb = nb, body[j]
+                else if (a1[s] == a2[s]) nb = nb, t[a1[s]]
+                else nb = nb, "(", t[|a1[s] \ a2[s]|], ")"
+            }
+            out = out, "(", nb, ")"
+            k = e + 1
+            changed = 1
+        }
+        t = out
+        if (!changed) return(t)
+    }
+    _cge_fail("macros use each other without end", 198)
+}
+
+// The row of macro name, 0 if none (from version 0.9.7)
+real scalar _cge_um_find(struct cge_model scalar M, string scalar name)
+{
+    real scalar k
+    if (rows(M.umac) == 0 | cols(M.umac) < 3) return(0)
+    for (k = 1; k <= rows(M.umac); k++) if (M.umac[k, 1] == name) return(k)
+    return(0)
+}
+
+// 1 if user variables, equations or other macros use macro name (from version
+// 0.9.7)
+real scalar _cge_um_used(struct cge_model scalar M, string scalar name)
+{
+    real scalar k
+    for (k = 1; k <= rows(M.uvdef); k++) {
+        if (anyof(_cge_u_tokens(M.uvdef[k, 3]), name)) return(1)
+        if (cols(M.uvdef) >= 7) if (anyof(_cge_u_tokens(M.uvdef[k, 7]), name)) return(1)
+    }
+    for (k = 1; k <= rows(M.uedef); k++) {
+        if (anyof(_cge_u_tokens(M.uedef[k, 4]), name) | anyof(_cge_u_tokens(M.uedef[k, 5]), name)) return(1)
+        if (cols(M.uedef) >= 6) if (anyof(_cge_u_tokens(M.uedef[k, 6]), name)) return(1)
+    }
+    if (rows(M.umac) & cols(M.umac) >= 3) {
+        for (k = 1; k <= rows(M.umac); k++) {
+            if (M.umac[k, 1] != name & anyof(_cge_u_tokens(M.umac[k, 3]), name)) return(1)
+        }
+    }
+    return(0)
+}
+
+// cge_macro name[(a, b, ...)] = expression (from version 0.9.7)
+void _cge_um_add(string scalar spec)
+{
+    struct cge_model scalar M
+    string scalar head, body, name, pars, rest, one
+    string rowvector par, bt
+    real scalar c, d, j, k
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    // the = outside parentheses, not part of == <= >= !=
+    d = 0
+    c = 0
+    for (k = 1; k <= strlen(spec); k++) {
+        if (substr(spec, k, 1) == "(") d++
+        else if (substr(spec, k, 1) == ")") d--
+        else if (substr(spec, k, 1) == "=" & d == 0) {
+            if (substr(spec, k + 1, 1) != "=" & !(k > 1 & strpos("=<>!", substr(spec, k - 1, 1)))) {
+                c = k
+                break
+            }
+        }
+    }
+    if (!c) _cge_fail("cge_macro: write cge_macro name(a, b) = expression", 198)
+    head = strtrim(substr(spec, 1, c - 1))
+    body = strtrim(substr(spec, c + 1, .))
+    if (body == "") _cge_fail("cge_macro: the expression is missing", 198)
+    if (!regexm(head, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*(\((.*)\))?$")) _cge_fail("cge_macro: write cge_macro name(a, b) = expression", 198)
+    name = regexs(1)
+    pars = (strpos(head, "(") ? strtrim(regexs(3)) : "")
+    _cge_u_newname(M, name, "macro")
+    par = J(1, 0, "")
+    if (strpos(head, "(")) {
+        if (pars == "") _cge_fail("cge_macro: give the parameters, or leave out the parentheses", 198)
+        // the parameters, separated by commas
+        rest = pars + ","
+        while (strlen(rest)) {
+            k = strpos(rest, ",")
+            one = strtrim(substr(rest, 1, k - 1))
+            if (one == "") _cge_fail("cge_macro: a parameter is missing", 198)
+            par = par, one
+            rest = substr(rest, k + 1, .)
+        }
+        for (j = 1; j <= cols(par); j++) {
+            if (!regexm(par[j], "^[A-Za-z_][A-Za-z_0-9]*$")) _cge_fail("cge_macro: " + par[j] + " is not a name for a parameter", 198)
+            if (j > 1) if (anyof(par[|1 \ j - 1|], par[j])) _cge_fail("cge_macro: parameter " + par[j] + " is given twice", 198)
+        }
+    }
+    bt = _cge_u_tokens(body)
+    d = 0
+    for (k = 1; k <= cols(bt); k++) {
+        if (bt[k] == "(") d++
+        else if (bt[k] == ")") d--
+        if (d < 0) break
+    }
+    if (d != 0) _cge_fail("cge_macro: the parentheses of the expression do not match", 198)
+    if (anyof(bt, name)) _cge_fail("cge_macro: macro " + name + " uses itself", 198)
+    if (rows(M.umac) == 0 | cols(M.umac) < 3) M.umac = J(0, 3, "")
+    M.umac = M.umac \ (name, invtokens(par), body)
+    _cge_store(M)
+    printf("{txt}Macro {res}%s%s{txt} = %s\n", name, (cols(par) ? "(" + invtokens(par, ", ") + ")" : ""), body)
+    st_global("r(name)", name)
+    st_numscalar("r(N_macros)", rows(M.umac))
+}
+
+void _cge_um_list()
+{
+    struct cge_model scalar M
+    real scalar k, n
+    M = _cge_load()
+    n = (cols(M.umac) >= 3 ? rows(M.umac) : 0)
+    st_numscalar("r(N_macros)", n)
+    if (!n) {
+        printf("{txt}No macros\n")
+        return
+    }
+    for (k = 1; k <= n; k++) {
+        printf("{txt}macro {res}%s%s{txt} = %s\n", M.umac[k, 1],
+               (M.umac[k, 2] != "" ? "(" + invtokens(tokens(M.umac[k, 2]), ", ") + ")" : ""), M.umac[k, 3])
+    }
+}
+
+// Removes every macro; macros that user variables or equations use must be
+// removed with them first
+void _cge_um_clear()
+{
+    struct cge_model scalar M
+    real scalar k
+    M = _cge_load()
+    if (cols(M.umac) >= 3) {
+        for (k = 1; k <= rows(M.umac); k++) {
+            if (_cge_um_used(M, M.umac[k, 1]) & !_cge_um_onlymacros(M, M.umac[k, 1])) {
+                _cge_fail("macro " + M.umac[k, 1] + " is used by user variables or equations: remove them first", 459)
+            }
+        }
+    }
+    M.umac = J(0, 3, "")
+    _cge_store(M)
+    printf("{txt}Macros removed\n")
+}
+
+// 1 if only other macros use macro name (from version 0.9.7)
+real scalar _cge_um_onlymacros(struct cge_model scalar M, string scalar name)
+{
+    struct cge_model scalar N
+    N = M
+    N.umac = J(0, 3, "")
+    return(!_cge_um_used(N, name))
 }
 
 // Comparisons and & | of conditions (codes 6 to 13): 1 or 0, missing when
@@ -13844,7 +14210,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
                 pb.xlag[pos[j], .] = J(1, _cge_maxlag(), 0)
                 continue
             }
-            tl = _cge_u_tokens(M.uvdef[k, 3])
+            tl = _cge_u_pre(M, _cge_u_tokens(M.uvdef[k, 3]))
             if (idx != "") tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
             tl = _cge_u_written(M, pb, x0, tl)
             tok = _cge_u_compile(M, tl, x0, gtl)
@@ -13877,8 +14243,8 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
         dom = (idx == "" ? 1 : _cge_u_domain(M, pb, x0, idx, set, M.uedef[k, 6]))
         for (j = 1; j <= rows(e1); j++) {
             if (!dom[j]) continue
-            tl = _cge_u_tokens(M.uedef[k, 4])
-            tr = _cge_u_tokens(M.uedef[k, 5])
+            tl = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 4]))
+            tr = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 5]))
             if (idx != "") {
                 tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
                 tr = _cge_u_subst2(("(", tr, ")"), idx, e1[j], e2[j], o1[j], o2[j])
@@ -14017,7 +14383,10 @@ void _cge_u_addvar(string scalar spec)
         if (strtoreal(lo) > strtoreal(up)) _cge_fail("cge_variable: lower() cannot exceed upper()", 198)
     }
     if (_cge_vidx(M, name)) _cge_fail(name + " is already a variable of the model", 110)
-    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas", "lag"), name)) _cge_fail(name + " is a reserved word", 198)
+    if (anyof(("sum", "base", "exp", "ln", "log", "sqrt", "ord", "sameas", "lag", "prod", "smax", "smin", "card", "min", "max", "abs", "sqr", "log10", "ifthen"), name)) {
+        _cge_fail(name + " is a reserved word", 198)
+    }
+    if (_cge_um_find(M, name)) _cge_fail(name + " is the name of a macro", 110)
     if (_cge_find(_cge_gams_params()[., 1], name)) _cge_fail(name + " is the name of a parameter", 110)
     if (_cge_up_find(M, name) | _cge_us_find(M, name)) _cge_fail(name + " is the name of a user parameter or set", 110)
     if (rows(M.uedef) & expr != "") {
@@ -15816,6 +16185,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "uegams", M.uegams)
     _cge_io_put(fh, "usdef", M.usdef)
     _cge_io_put(fh, "updef", M.updef)
+    _cge_io_put(fh, "umac", M.umac)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -15954,6 +16324,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "uegams") M.uegams = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "usdef") M.usdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "updef") M.updef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "umac") M.umac = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

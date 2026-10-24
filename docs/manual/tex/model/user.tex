@@ -3,15 +3,17 @@
 \manref{cge_variable} and \manref{cge_equation} add variables and equations to
 the calibrated model, written in a small language; \manref{cge_set} and
 \manref{cge_parameter} add the sets and parameters they may use (from
-version 0.7.1), and conditions restrict sums, terms and domains (from version
-0.7.2).
+version 0.7.1), conditions restrict sums, terms and domains (from version
+0.7.2), and \manref{cge_macro} adds macros (from version 0.9.7).
 
 \section{The language}
 
 An expression is made of
 \begin{itemize}
 \item numbers, the operators \cmd{+ - * / ^}, parentheses, and the functions
-\cmd{exp()}, \cmd{ln()} (or \cmd{log()}) and \cmd{sqrt()};
+\cmd{exp()}, \cmd{ln()} (or \cmd{log()}) and \cmd{sqrt()}, and from version
+0.9.7 \cmd{max()}, \cmd{min()}, \cmd{abs()}, \cmd{sqr()}, \cmd{log10()} and
+\cmd{ifthen()} (section~\ref{sec:userfunctions});
 \item model and user variables, \cmd{VAR}, \cmd{VAR(e)} or \cmd{VAR(e1, e2)},
 at an element or at the index of the equation or of a sum;
 \item parameters that \manref{cge_shock} changes, \cmd{par(e)}, and user
@@ -26,6 +28,11 @@ or \cmd{goods2};
 \item \cmd{sum((i,j), expression)}, a sum over every pair of elements of two
 sets, and \cmd{sum(map(i,j), expression)}, a sum over the pairs of a set of
 pairs (from version 0.9.1);
+\item \cmd{prod()}, \cmd{smax()} and \cmd{smin()}, the product, the largest
+and the smallest value over a set, with the domains of \cmd{sum()}, and
+\cmd{card(set)}, the number of its elements (from version 0.9.7);
+\item macros, \cmd{name(x, y)}, defined by \manref{cge_macro} (from version
+0.9.7);
 \item \cmd{ord(i)}, the position of the element of index \cmd{i} in its set,
 from 1;
 \item \cmd{lag(VAR)} and \cmd{lag(VAR(e), k)}, the value of a variable in the
@@ -122,6 +129,42 @@ is written \cmd{cge_equation s: S = (1 - 0.05) * lag(S) + ...}, with \cmd{S}
 a user variable given a value. Each period stores the lagged values it used,
 and the GAMS program declares them as parameters, \cmd{LAG1_U_S} for
 \cmd{lag(S)}, which each period of a dynamic run sets before it is solved.
+
+\section{Functions and macros}\label{sec:userfunctions}
+
+From version 0.9.7, the language has the functions of GAMS that a square
+system solves, as GAMS writes them: \cmd{max(x, y, ...)} and
+\cmd{min(x, y, ...)} of two or more arguments, \cmd{abs(x)}, \cmd{sqr(x)},
+\cmd{log10(x)} and \cmd{ifthen(condition, x, y)}; the products and extremes
+over sets, \cmd{prod()}, \cmd{smax()} and \cmd{smin()}; and \cmd{card()}, the
+number of elements of a set. The sums of GAMS have the same domains here:
+one index, two indexes, a set of pairs, each with a condition. A product over
+no element is 1; a maximum or minimum over none is an error, since GAMS's
+$\mp\infty$ is no value for a model.
+
+The condition of \cmd{ifthen()} uses parameters, lags and numbers, which are
+given within a simulation; a shock to the parameter switches the branch.
+GAMS's CNS and MCP models refuse relations between endogenous variables, which
+make the system discontinuous. A regime switch on endogenous variables is an
+inequality with its paired variable (section~\ref{sec:userineq}), the
+complementarity form in which GAMS solves it too.
+
+The derivatives remain exact. \cmd{max()}, \cmd{min()} and the branch of
+\cmd{ifthen()} pass on the derivatives of the argument they take, the first of
+equal arguments at a kink; \cmd{abs()} multiplies by the sign of its argument,
+\cmd{sqr()} by $2x$ and \cmd{log10()} by $1/(x \ln 10)$. A model whose
+solution lies at a kink of \cmd{max()}, \cmd{min()} or \cmd{abs()} may need
+more Newton iterations, in Stata as in GAMS.
+
+A macro (\manref{cge_macro}), as GAMS's \cmd{\$macro}, names an expression with
+parameters: \cmd{cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) *
+y^(-r))^(-1 / r)} makes \cmd{ces(QD(c), QM(c), 0.5, 0.5)} a CES aggregate of
+domestic goods and imports. Macros are replaced by their expressions, with the
+arguments in parentheses, before the indexes and sums are written out, so
+indexes may be arguments and a macro adds nothing to the system. In the GAMS
+program the expressions are written out, and the functions keep their GAMS
+names, with \cmd{eq}, \cmd{ne}, \cmd{and}, \cmd{or} and \cmd{not} in the
+conditions of \cmd{ifthen()}.
 
 \section{Replacing built-in equations}\label{sec:userreplace}
 

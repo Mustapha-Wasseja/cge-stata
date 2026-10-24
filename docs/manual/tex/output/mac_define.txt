@@ -1,0 +1,57 @@
+. cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+Macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+
+. cge_macro rel(v) = v / CPI
+Macro rel(v) = v / CPI
+
+. cge_macro half = 0.5
+Macro half = 0.5
+
+. cge_macro cesq(c) = ces(QD(c), QM(c), half, half)
+Macro cesq(c) = ces(QD(c), QM(c), half, half)
+
+. cge_macro, list
+macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+macro rel(v) = v / CPI
+macro half = 0.5
+macro cesq(c) = ces(QD(c), QM(c), half, half)
+
+. cge_variable CQ(c)$(base(QM(c)) > 0) = cesq(c)
+User variable CQ(c)$(base(QM(c)) > 0): 3 element(s), base values 35.5556 76.21 41.7112
+and its definition, equation CQ
+
+. cge_variable RP(c) = rel(PQ(c))
+User variable RP(c): 3 element(s), base values 1 1 1
+and its definition, equation RP
+
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_solve, name(notariff)
+Simulation notariff solved in 7 iteration(s) (newton)
+Largest scaled residual  3.96e-14; WALRAS = -2.72e-13
+
+. quietly cge_results, sim(notariff) clear nodisplay
+
+. list variable element1 base value if inlist(variable, "QD", "QM", "CQ", "RP"), ///
+>     noobs sepby(variable)
+
+  +---------------------------------------------+
+  | variable   element1        base       value |
+  |---------------------------------------------|
+  |       QD    com_agr          80   78.575158 |
+  |       QD    com_man         100   95.730222 |
+  |       QD    com_ser         135   135.85348 |
+  |---------------------------------------------|
+  |       QM    com_agr          20   22.236866 |
+  |       QM    com_man          60   63.002825 |
+  |       QM    com_ser          20   18.993677 |
+  |---------------------------------------------|
+  |       CQ    com_agr   35.555556   37.899037 |
+  |       CQ    com_man   76.209992   76.817918 |
+  |       CQ    com_ser   41.711235   40.248652 |
+  |---------------------------------------------|
+  |       RP    com_agr           1   .99948068 |
+  |       RP    com_man           1   .97900528 |
+  |       RP    com_ser           1   1.0214491 |
+  +---------------------------------------------+

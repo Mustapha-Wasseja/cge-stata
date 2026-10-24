@@ -1,0 +1,135 @@
+\cgeentry{cge_macro}{Macros of the language of user variables and equations}
+
+\cgesec{Description}
+
+\cmd{cge_macro} (from version 0.9.7) defines a macro of the language of
+\manref{cge_variable} and \manref{cge_equation}, as GAMS's \cmd{\$macro} does:
+a name with parameters that stands for an expression. A CES aggregate, a
+price deflated by the consumer price index or a constant written once can then
+be used wherever an expression may be, with the arguments in place of the
+parameters. \cmd{cge_macro, list} displays the macros, and
+\cmd{cge_macro, clear} removes them.
+
+\cgesec{Quick start}
+
+A CES aggregate of two quantities
+\begin{stcode}
+cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+\end{stcode}
+Use it in a user variable over the commodities that are imported
+\begin{stcode}
+cge_variable CQ(c)$(base(QM(c)) > 0) = ces(QD(c), QM(c), 0.5, 0.5)
+\end{stcode}
+A macro without parameters, and one that uses others
+\begin{stcode}
+cge_macro half = 0.5
+cge_macro cesq(c) = ces(QD(c), QM(c), half, half)
+\end{stcode}
+Display the macros; remove them
+\begin{stcode}
+cge_macro, list
+cge_macro, clear
+\end{stcode}
+
+\cgesec{Syntax}
+
+Define a macro
+\begin{stsyntax}
+\cmdb{cge_macro} \argu{name}[\cmd{(}\argu{a}[\cmd{,} \argu{b} \dots]\cmd{)}] \cmd{=} \argu{expression}
+\end{stsyntax}
+Display or remove the macros
+\begin{stsyntax}
+\cmdb{cge_macro} \texttt{,} \opt{}{list}\\
+\cmdb{cge_macro} \texttt{,} \opt{}{clear}
+\end{stsyntax}
+\argu{name} is a new name: not a variable, a parameter, an element, a set, a
+user equation, a function of the language or another macro. The parameters
+\argu{a}, \argu{b}, \dots\ are names, each given once. \argu{expression} is an
+expression of the language of \manref{cge_equation}, in which the parameters
+stand for the arguments.
+
+\begin{opttable}
+\optgroup{Main}
+\opt{}{list} & display the macros\\
+\opt{}{clear} & remove the macros\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\opt{}{list}] displays the macros with their parameters and expressions.
+
+\item[\opt{}{clear}] removes every macro. A macro that a user variable or
+equation uses cannot be removed until they are.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+In an expression, \argu{name}\cmd{(}\argu{x}\cmd{,} \argu{y}\cmd{)} is replaced by
+the macro's expression, in parentheses, with \argu{x} in place of \argu{a}
+and \argu{y} in place of \argu{b}. An argument that is more than a name or a
+number is itself put in parentheses, so that with \cmd{sq(x) = x * x},
+\cmd{sq(QA(a) + 1)} is \cmd{((QA(a) + 1) * (QA(a) + 1))}, not
+\cmd{QA(a) + 1 * QA(a) + 1}. A macro without parameters stands for its
+expression. The expression may use variables, parameters, user sets and
+parameters, sums, conditions, the functions of the language and other macros,
+which are replaced in turn; a macro may not use itself, directly or through
+others. Arguments may be indexes: in the definition of a variable over
+\cmd{c}, \cmd{cesq(c)} is written out for every commodity.
+
+Macros are replaced when a variable or equation is added, before its indexes
+are written out, and again each time the model is calibrated. They are saved
+with the model (\manref{cge_save}) and kept when it is calibrated again. In
+the GAMS program, \manref{cge_gams} writes the expressions out, so it needs no
+\cmd{\$macro}.
+
+The SYNTHETIC SAM is mapped and calibrated:
+\stlog{mac_setup}
+
+\cgesubsec{Example 1: macros and their use}
+
+A CES aggregate, a price relative to the consumer price index, a constant,
+and a macro that uses the others; then variables defined with them, after the
+tariffs are removed:
+\stlog{mac_define}
+\cmd{CQ} is $\big(0.5\,\V{QD}^{-0.5} + 0.5\,\V{QM}^{-0.5}\big)^{-2}$ for each
+commodity with imports at the base, and \cmd{RP} the composite price
+deflated by the consumer price index.
+
+\cgesubsec{Example 2: errors}
+
+A macro needs its arguments, as many as its parameters; a macro may not use
+itself; and a macro that variables use cannot be removed:
+\stlog{mac_err}
+
+\cgesec{Stored results}
+
+\cmd{cge_macro} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_macros)} & number of macros\\
+\resgroup{Macros}
+\res{r(name)} & name of the macro defined\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+The tokens of an expression are scanned for the names of macros. Each use,
+\argu{name}\cmd{(}$x_1$\cmd{,} \dots\cmd{,} $x_m$\cmd{)}, is replaced by the
+tokens of the macro's expression, with each parameter replaced by its
+argument, in parentheses unless the argument is a single token, and the
+whole in parentheses. The scan is repeated while macros remain, up to 30
+times; a chain of macros that does not end within that is an error. The
+macros are replaced before \cmd{card()} and before the indexes and sums are
+written out (\manref{cge_equation}), so that the indexes in a macro's
+arguments are written out with the others. A macro therefore adds no
+variables, equations or derivatives of its own.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_equation}{User equations: new relations among the model's variables}
+\seeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+\seeentry{cge_set}{User sets of elements, for indexes and sums}
+\seechapter{chap:user}{User variables and equations}
+\end{alsosee}

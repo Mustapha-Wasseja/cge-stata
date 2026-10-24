@@ -150,3 +150,21 @@ foreach s in original rewritten {
     display "`s'" _col(12) "QA(act_man) = " %14.10f r(mean)
 }
 *<<
+
+*>> eq_functions
+cge_shock, reset
+cge_equation, clear
+cge_set goods = c, except(com_ser)
+cge_variable QEMAX = smax(c, QE(c))
+cge_variable QAMIN = min(QA(act_agr), QA(act_man), QA(act_ser))
+cge_variable PPROD = prod(c, PQ(c))
+cge_variable MSW = ifthen(tm(com_man) > 0, QM(com_man), 0)
+cge_variable NG = card(goods)
+cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)
+cge_variable CQ(goods) = ces(QD(goods), QM(goods), 0.5, 0.5)
+cge_shock tm, value(0)
+cge_solve, name(functions)
+quietly cge_results, sim(functions) clear nodisplay
+list variable element1 base value if inlist(variable, "QEMAX", "QAMIN", "PPROD", ///
+    "MSW", "NG", "CQ"), noobs sepby(variable)
+*<<

@@ -108,6 +108,8 @@ numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
 \cmd{+ - * /} and \cmd{^} & arithmetic; \cmd{^} is the power\\
 \cmd{( )} & grouping\\
 \cmd{exp()}, \cmd{ln()} or \cmd{log()}, \cmd{sqrt()} & functions\\
+\cmd{max()}, \cmd{min()}, \cmd{abs()}, \cmd{sqr()}, \cmd{log10()} & functions of GAMS: the largest and smallest of two or more arguments, the absolute value, the square and the logarithm to base 10 (from version 0.9.7)\\
+\cmd{ifthen(}\argu{condition}\cmd{,} \argu{x}\cmd{,} \argu{y}\cmd{)} & \argu{x} where the condition holds, else \argu{y}; the condition uses parameters, lags and numbers (from version 0.9.7)\\
 \argu{VAR}, \argu{VAR}\cmd{(}\argu{e}\cmd{)}, \argu{VAR}\cmd{(}\argu{e1}\cmd{,} \argu{e2}\cmd{)}
   & a model or user variable at an element, given by its label, such as
     \cmd{com_hlt}, or by the index of the equation or of a sum\\
@@ -117,6 +119,10 @@ numbers & such as \cmd{2}, \cmd{0.5} or \cmd{1e-3}\\
 \cmd{sum(}\argu{i}\cmd{,} \argu{expression}\cmd{)} & the sum over the elements of the set of index \argu{i}\\
 \cmd{sum((}\argu{i}\cmd{,}\argu{j}\cmd{),} \argu{expression}\cmd{)} & the sum over every pair of elements of the sets of \argu{i} and \argu{j} (from version 0.9.1)\\
 \cmd{sum(}\argu{map}\cmd{(}\argu{i}\cmd{,}\argu{j}\cmd{),} \argu{expression}\cmd{)} & the sum over the pairs of a set of pairs (\manref{cge_set}; from version 0.9.1)\\
+\cmd{prod(}\argu{i}\cmd{,} \argu{expression}\cmd{)} & the product over the set of index \argu{i}, with the domains of \cmd{sum()} (from version 0.9.7)\\
+\cmd{smax(}\argu{i}\cmd{,} \argu{expression}\cmd{)}, \cmd{smin()} & the largest or smallest value over the set, with the domains of \cmd{sum()} (from version 0.9.7)\\
+\cmd{card(}\argu{set}\cmd{)} & the number of elements of a set, or of pairs of a set of pairs (from version 0.9.7)\\
+\argu{macro}\cmd{(}\argu{x}\cmd{,} \dots\cmd{)} & a macro defined by \manref{cge_macro}, written out (from version 0.9.7)\\
 \cmd{ord(}\argu{i}\cmd{)} & the position of the element of index \argu{i} in its set, from 1\\
 \cmd{lag(}\argu{VAR}[\cmd{(}\argu{e}\cmd{)}][\cmd{,} \argu{k}]\cmd{)} & the value of a variable $k$ periods before, $k$ from 1 to 4, 1 if omitted (from version 0.9.2)\\
 \cmd{sum(}\argu{i}\cmd{$(}\argu{condition}\cmd{),} \argu{expression}\cmd{)} & the sum over the elements for which the condition holds\\
@@ -239,6 +245,33 @@ with derivatives coded in the package cannot be: equations \eqref{eq:P7},
 the model consistent: Walras's law, whose residual \cmd{WALRAS} every
 simulation reports, shows when it does not (Example 9).
 
+\cgesubsec{Functions and macros}
+
+From version 0.9.7, expressions may use the functions of GAMS that a square
+system solves, \cmd{max()}, \cmd{min()}, \cmd{abs()}, \cmd{sqr()},
+\cmd{log10()} and \cmd{ifthen()}, the products and extremes over sets,
+\cmd{prod()}, \cmd{smax()} and \cmd{smin()}, the size of a set, \cmd{card()},
+and macros (\manref{cge_macro}), as GAMS's \cmd{\$macro}. \cmd{prod()},
+\cmd{smax()} and \cmd{smin()} take the domains of \cmd{sum()}: one index, two
+indexes, a set of pairs, and a condition. A product over a set that no element
+meets is 1, as an empty sum is 0; a maximum or minimum over one is an error
+(459), since GAMS's would be $-\infty$ or $+\infty$, no number a model can
+use. Over two indexes or a set of pairs, the elements of the first index
+without a pair are left out.
+
+The condition of \cmd{ifthen()} is a condition as above, evaluated at the
+current values of the parameters and lags, so that a shock to a parameter
+switches it. It may not use variables: a switch on endogenous variables makes
+the system discontinuous, and GAMS's CNS and MCP models refuse it. Such a
+switch is an inequality paired with a variable (\emph{Inequalities} above),
+which GAMS solves as a complementarity problem.
+
+\cmd{max()}, \cmd{min()} and \cmd{abs()} are continuous with a kink where two
+arguments are equal, or the argument of \cmd{abs()} is zero. The solver uses
+the derivative of the first of the equal arguments there, and 0 for
+\cmd{abs()}; a model whose solution lies on a kink may need more iterations,
+as it may in GAMS. Example 10 uses each function and a macro.
+
 \cgesubsec{Equations and the closure}
 
 Each equation element needs a free variable, so that the closure stays square:
@@ -345,6 +378,18 @@ of intermediates in \eqref{eq:P6} and \eqref{eq:P7} at the old coefficients, and
 a block itself leaves the solution as it was:
 \stlog{eq_replace_same}
 
+\cgesubsec{Example 10: functions and macros}
+
+From version 0.9.7, the largest export, the smallest output, the product of
+the composite prices, the imports of manufactures while they carry a tariff,
+the number of goods, and a CES aggregate of domestic goods and imports defined
+by a macro, after the tariffs are removed:
+\stlog{eq_functions}
+\cmd{MSW} is the imports of manufactures at the base, where the tariff is
+positive, and 0 once the tariff is removed: the condition switches with the
+parameter. \cmd{CQ} is $\big(0.5\,\V{QD}^{-0.5} + 0.5\,\V{QM}^{-0.5}\big)^{-2}$
+for each good.
+
 \cgesec{Stored results}
 
 \cmd{cge_equation} stores the following in \cmd{r()}:
@@ -422,6 +467,25 @@ removes the row $B_e$ from the system, $\ell_B(x)_e - r_B(x)_e = 0$, and adds it
 own; in the GAMS program, the parameter \cmd{XRP(}$B$\cmd{, }$e$\cmd{)} is 1, and
 the equations of block $B$ leave out the element.
 
+A product, maximum or minimum over a set (from version 0.9.7) is written out
+as the sum is, with $*$ or as the arguments of \cmd{max()} or \cmd{min()},
+\begin{equation*}
+\texttt{prod(}j\texttt{,}\ g\texttt{)} = \prod_{k \in J} g\,[\,j = k\,], \qquad
+\texttt{smax(}j\texttt{,}\ g\texttt{)} = \max_{k \in J} g\,[\,j = k\,],
+\end{equation*}
+and \cmd{card(}$J$\cmd{)} is the number $|J|$. A function $\phi$ of the
+arguments $a_1, \dots, a_m$ has the derivative
+\begin{equation*}
+\frac{\partial \phi}{\partial x} = \sum_{l} \frac{\partial \phi}{\partial a_l}\,\frac{\partial a_l}{\partial x},
+\end{equation*}
+with $\partial \max / \partial a_l$ equal to 1 for the first argument at the
+maximum and 0 for the others (likewise for \cmd{min()} and the branch that
+\cmd{ifthen()} takes), $\partial |a| / \partial a = \mathrm{sign}(a)$,
+$\partial a^2 / \partial a = 2a$ and $\partial \log_{10} a / \partial a = 1 /
+(a \ln 10)$. A macro is replaced by its expression, each argument substituted
+for its parameter, before the indexes are written out, so a macro adds nothing
+to the system; \manref{cge_macro} gives the rules.
+
 \Chapref{chap:user} describes the compilation and the GAMS program, in which
 GAMS differentiates the same equations itself.
 
@@ -429,6 +493,7 @@ GAMS differentiates the same equations itself.
 
 \begin{alsosee}
 \seeentry{cge_variable}{User variables, defined by an expression or determined by user equations}
+\seeentry{cge_macro}{Macros of the language of user variables and equations}
 \seeentry{cge_closure}{Choose the model closure}
 \seeentry{cge_shock}{Change a parameter or a fixed variable}
 \seeentry{cge_gams}{Write the model as a GAMS program, and solve it in GAMS}

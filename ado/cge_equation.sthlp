@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.3  23oct2026}{...}
+{* *! version 0.9.7  24oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -79,7 +79,8 @@ of elements of the two sets, or for the pairs that meet its condition; see
 
 {pstd}
 Expressions use numbers, {cmd:+ - * /}, {cmd:^} (power), parentheses, the
-functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, and:
+functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, those of
+{it:Functions and macros} below (from version 0.9.7), and:
 
 {p2colset 9 34 36 2}{...}
 {p2col:{it:VAR} or {it:VAR}{cmd:(}{it:e}[{cmd:,} {it:e2}]{cmd:)}}a model or user variable, at an element such as {cmd:com_hlt} or the index of the equation or of a sum{p_end}
@@ -91,6 +92,7 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, and:
 {p2col:{cmd:sum(}{it:map}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over the pairs of a set of pairs defined by {helpb cge_set} (from version 0.9.1){p_end}
 {p2col:{cmd:ord(}{it:i}{cmd:)}}the position of the element of index {it:i} in its set, from 1 (from version 0.7.2){p_end}
 {p2col:{cmd:lag(}{it:VAR}[{cmd:(}{it:e}{cmd:)}][{cmd:,} {it:k}]{cmd:)}}the value of a variable {it:k} periods before, 1 to 4, 1 if omitted; the base outside dynamic runs (from version 0.9.2){p_end}
+{p2col:{cmd:card(}{it:set}{cmd:)}}the number of elements of a model or user set, or of pairs of a set of pairs (from version 0.9.7){p_end}
 {p2colreset}{...}
 
 
@@ -220,6 +222,55 @@ values are stored with each period, and {helpb cge_gams} writes them as
 parameters, {cmd:LAG1_}{it:VAR}, that each period of a dynamic run sets.
 
 
+{title:Functions and macros}
+
+{pstd}
+From version 0.9.7, expressions may use the functions of GAMS that a
+square system solves, and macros, as GAMS's {cmd:$macro}:
+
+{p2colset 9 40 42 2}{...}
+{p2col:{cmd:max(}{it:x}{cmd:,} {it:y}[{cmd:,} ...]{cmd:)}, {cmd:min()}}the largest or smallest of two or more arguments{p_end}
+{p2col:{cmd:abs(}{it:x}{cmd:)}, {cmd:sqr(}{it:x}{cmd:)}, {cmd:log10(}{it:x}{cmd:)}}the absolute value, the square and the logarithm to base 10{p_end}
+{p2col:{cmd:ifthen(}{it:condition}{cmd:,} {it:x}{cmd:,} {it:y}{cmd:)}}{it:x} where the condition holds, else {it:y}; the condition uses parameters, lags and numbers{p_end}
+{p2col:{cmd:prod(}{it:i}[{cmd:$(}{it:condition}{cmd:)}]{cmd:,} {it:expression}{cmd:)}}the product over a set, 1 if no element meets the condition{p_end}
+{p2col:{cmd:smax(}{it:i}[{cmd:$(}{it:condition}{cmd:)}]{cmd:,} {it:expression}{cmd:)}, {cmd:smin()}}the largest or smallest value over a set{p_end}
+{p2col:{cmd:card(}{it:set}{cmd:)}}the number of elements or pairs of a set{p_end}
+{p2colreset}{...}
+
+{pstd}
+{cmd:prod()}, {cmd:smax()} and {cmd:smin()} take the domains of {cmd:sum()}:
+two indexes, {cmd:smax((c,h),} ...{cmd:)}, a set of pairs,
+{cmd:smax(map(a,c),} ...{cmd:)}, and a condition. A maximum or minimum over a
+set that no element meets stops the command with error 459; over a set of
+pairs, the elements of the first index that have no pair are left out.
+
+{pstd}
+The derivatives are exact. {cmd:max()}, {cmd:min()} and {cmd:abs()} have a
+kink where two arguments are equal, or the argument of {cmd:abs()} is 0;
+there the solver takes the derivative of the first of the equal arguments, and
+that of {cmd:abs()} is 0. A model that settles on a kink may
+need more iterations, as it does in GAMS. The condition of {cmd:ifthen()} is
+evaluated at the current values of parameters and lags, so a shock to the
+parameter switches it; a switch on endogenous variables is an inequality
+(see {it:Inequalities}), which GAMS solves as a complementarity problem.
+
+{pstd}
+{helpb cge_macro} {it:name}{cmd:(}{it:a}{cmd:,} {it:b}{cmd:) =} {it:expression}
+defines a macro: {it:name}{cmd:(}{it:x}{cmd:,} {it:y}{cmd:)} in an expression
+is replaced by the expression with {it:x} for {it:a} and {it:y} for {it:b}, each
+argument in parentheses. Macros may use other macros and the indexes of the
+equation or of a sum, and a macro without parameters stands for its
+expression. For example, a CES aggregate of domestic goods and imports:
+
+{phang2}{cmd:. cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)}{p_end}
+{phang2}{cmd:. cge_variable CQ(c)$(base(QM(c)) > 0) = ces(QD(c), QM(c), 0.5, 0.5)}{p_end}
+
+{pstd}
+{helpb cge_gams} writes the functions as GAMS's, {cmd:ifthen()} with
+{cmd:eq}, {cmd:ne}, {cmd:and} and {cmd:or}, and the macros written out; GAMS
+solves such a model with PATH as CNS or MCP.
+
+
 {title:Replacing built-in equations}
 
 {pstd}
@@ -337,6 +388,17 @@ all.
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
 {phang2}{cmd:. cge_solve}{p_end}
 
+{pstd}The largest export, the product of prices, a tariff switch and a CES aggregate defined by a macro (from version 0.9.7); the earlier user equations are removed first{p_end}
+{phang2}{cmd:. cge_shock, reset}{p_end}
+{phang2}{cmd:. cge_equation, clear}{p_end}
+{phang2}{cmd:. cge_variable QEMAX = smax(c, QE(c))}{p_end}
+{phang2}{cmd:. cge_variable PPROD = prod(c, PQ(c))}{p_end}
+{phang2}{cmd:. cge_variable MSW = ifthen(tm(com_man) > 0, QM(com_man), 0)}{p_end}
+{phang2}{cmd:. cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)}{p_end}
+{phang2}{cmd:. cge_variable CQ(c)$(base(QM(c)) > 0) = ces(QD(c), QM(c), 0.5, 0.5)}{p_end}
+{phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+{phang2}{cmd:. cge_solve}{p_end}
+
 
 {title:Remarks}
 
@@ -359,5 +421,5 @@ simulation, dynamic run and sensitivity draw. Their derivatives are exact
 {title:Also see}
 
 {psee}
-{helpb cge_closure}, {helpb cge_shock}, {helpb cge_solve}, {helpb cge_gams}, {helpb cge}
+{helpb cge_macro}, {helpb cge_set}, {helpb cge_closure}, {helpb cge_shock}, {helpb cge_solve}, {helpb cge_gams}, {helpb cge}
 {p_end}

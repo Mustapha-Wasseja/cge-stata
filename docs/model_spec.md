@@ -1712,7 +1712,10 @@ calibrated model, written in a small language:
 - `sum(i, expression)`, over the set of index `i`: `a` activities, `c`
   commodities, `f` factors, `h` households, `d` households and enterprises,
   `i` institutions receiving factor income, `n` nests, or a user set by its
-  name (from version 0.7.1), with digits allowed, as in `c2` or `goods2`.
+  name (from version 0.7.1), with digits allowed, as in `c2` or `goods2`;
+- from version 0.9.7, `max()`, `min()`, `abs()`, `sqr()`, `log10()`,
+  `ifthen()`, `prod()`, `smax()`, `smin()`, `card()` and macros (see
+  *Functions and macros* below).
 
 `cge_variable NAME(i) = expression` adds the variable $U_i$ and the equation
 $U_i = e_i(x)$ for every element; its base value is $e_i(x^0)$.
@@ -1821,6 +1824,33 @@ mask to 0 in every evaluation, so they leave the system, the pattern and the
 reduced system. `cge_model.gms` declares `XRP(*, *, *)`, and every equation
 that may be replaced leaves out the elements with `XRP(block, e1, e2) = 1`
 (`'0'` for an index the block does not have), which `cge_user.inc` sets.
+
+**Functions and macros (from version 0.9.7).** `max(a1, ..., am)` and
+`min()` (two or more arguments), `abs(a)`, `sqr(a)`, `log10(a)` and
+`ifthen(q, a, b)` compile to a postfix row of type 10 with the function's code
+(1 min, 2 max, 3 abs, 4 sqr, 5 log10, 6 ifthen) and its number of arguments,
+each argument compiled before it (`_cge_u_args()`). The condition of
+`ifthen()` is compiled as a condition and may not contain variables (error
+198): it uses parameters, user parameters, lags and numbers, so the branch is
+given within a simulation. `_cge_u_fn()` gives the value, missing when an
+argument is (except the branch `ifthen()` does not take), and `_cge_u_dvalue()`
+the derivative: that of the argument `_cge_u_fnarg()` selects for min, max and
+ifthen (the first of equal ones), `sign(a)` times that of `a` for abs, `2a`
+for sqr and `1/(a ln 10)` for log10. `prod(i, g)`, `smax(i, g)` and
+`smin(i, g)` are written out by `_cge_u_expand()` as `sum()` is, joined by `*`
+or as the arguments of `max()` or `min()`, with the domains of `sum()`; an
+empty product is 1, an empty maximum or minimum error 459, and a single term
+is the term itself. Over two indexes or a set of pairs (`_cge_u_sumpairs()`),
+the inner `smax#`/`smin#` is left out for an element of the first index without
+a pair. `card(i)` is replaced by the number of elements of the set of `i`, or
+of pairs (`_cge_u_card()`). Macros are stored in `M.umac` (name, parameters,
+body) by `cge_macro` (`_cge_um_add()`); `_cge_u_macros()` replaces each use by
+the body in parentheses, with each argument substituted for its parameter (in
+parentheses unless it is one token), repeated up to 30 times, before `card()`
+and before the indexes are written out (`_cge_u_pre()`), in `_cge_u_written()`,
+`_cge_u_build()` and the domains. In the GAMS program the functions keep their
+names, comparisons in `ifthen()` are written `eq`, `ne`, `and`, `or` and `not`,
+and the macros are written out.
 
 **Compilation.** Each equation is written out for every element of its set,
 and each sum over the elements of its set, then compiled to postfix order:
