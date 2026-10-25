@@ -3,7 +3,7 @@
 *! describe the model in memory, and define named models over subsets of
 *! its equations, as GAMS's model statement (Reference Manual, cge_model)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_model, rclass

@@ -2,7 +2,7 @@
 *! cge-stata: sensitivity of a scenario's results to the elasticities
 *! Monte Carlo draws of the elasticities; the model is recalibrated for each
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_sensitivity, rclass

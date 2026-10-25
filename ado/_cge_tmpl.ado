@@ -1,7 +1,7 @@
 *! _cge_tmpl.ado  v0.3.0  2026-10-18
 *! cge-stata: read a mapping template into Mata (docs/sam_tools.md, Section 3)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define _cge_tmpl

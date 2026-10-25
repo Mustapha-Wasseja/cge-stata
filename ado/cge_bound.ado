@@ -2,7 +2,7 @@
 *! cge-stata: attributes of model and user variables, as GAMS's .lo, .up,
 *! .scale, .l and .fx (Reference Manual, cge_bound)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_bound, rclass

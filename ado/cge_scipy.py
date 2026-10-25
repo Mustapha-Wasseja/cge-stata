@@ -6,7 +6,7 @@ programmes of standalone models (cge_solve, solver(highs)). Mata writes the
 data to binary files of little-endian doubles and reads the results back
 the same way; return codes and statistics go back as Stata scalars.
 
-Author: Mustapha Wasseja
+Author: Mustapha Wasseja Mohammed
 """
 import numpy as np
 import sfi

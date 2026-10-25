@@ -2,7 +2,7 @@
 *! cge-stata: user parameters with values, for user variables and equations;
 *! cge_shock changes them (Reference Manual, User variables and equations)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_parameter, rclass

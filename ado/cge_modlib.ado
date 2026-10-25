@@ -2,7 +2,7 @@
 *! cge-stata: a library of ready-to-run models written in the user language,
 *! as GAMS's model library (Reference Manual, cge_modlib)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_modlib, rclass

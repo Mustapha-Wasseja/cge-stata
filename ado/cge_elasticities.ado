@@ -3,7 +3,7 @@
 *! Lists or loads entries of the elasticity library, or turns them into
 *! option values for cge_calibrate
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_elasticities, rclass

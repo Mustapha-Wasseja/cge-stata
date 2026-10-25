@@ -3,7 +3,7 @@
 *! Macroeconomic aggregates, government, institutions, factors, activities,
 *! commodities, health and welfare (model_spec.md, Section 9)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_report, rclass

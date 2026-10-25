@@ -3,7 +3,7 @@
 *! paired with a variable that adjusts when it binds (docs/model_spec.md,
 *! Section 16)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_constraint, rclass

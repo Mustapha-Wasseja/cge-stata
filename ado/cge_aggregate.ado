@@ -1,7 +1,7 @@
 *! cge_aggregate.ado  v0.3.0  2026-10-18
 *! cge-stata: merge SAM accounts into groups (docs/sam_tools.md, Section 4)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_aggregate, rclass

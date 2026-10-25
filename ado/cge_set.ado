@@ -3,7 +3,7 @@
 *! equations, sums and parameters (Reference Manual, User variables and
 *! equations)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_set, rclass

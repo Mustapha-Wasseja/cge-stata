@@ -2,7 +2,7 @@
 *! cge-stata: macros of the language of user variables and equations, as
 *! GAMS's $macro (Reference Manual, User variables and equations)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_macro, rclass

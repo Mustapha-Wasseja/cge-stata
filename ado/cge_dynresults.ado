@@ -2,7 +2,7 @@
 *! cge-stata: the results of a dynamic run as a dataset, one observation per
 *! period and variable element, optionally compared with a baseline run
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_dynresults, rclass

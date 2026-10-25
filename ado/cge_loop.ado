@@ -2,7 +2,7 @@
 *! cge-stata: solve the model for a list or grid of scenarios, as a GAMS loop
 *! over a set of scenarios or GUSS does (Reference Manual, cge_loop)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_loop, rclass

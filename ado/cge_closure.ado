@@ -3,7 +3,7 @@
 *! Sets closures for the external account, government, savings-investment,
 *! the numeraire and each factor (model_spec.md, Section 6)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_closure, rclass
