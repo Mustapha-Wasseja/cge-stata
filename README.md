@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.26.0 implements the standard single-country model described in
+Version 0.27.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,12 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.27.0 is an experimental prototype of links to solvers through
+Stata's Python, on Stata 16 and later with SciPy only: `cge_options,
+linsolver(python)` factorises Newton's Jacobians with SuperLU (2 to 2.5 times
+faster solves of the largest benchmark models), and `cge_solve,
+solver(highs)` solves linear and mixed-integer programmes with HiGHS. Stata
+13 to 15 keep the package's own solvers.
 Version 0.26.0 adds lags and leads on ordered sets, as in GAMS: `K(t-1)`,
 `K(t+1)` and the circular `t++1` and `t--1`, 0 beyond the set.
 Version 0.25.0 lets user sets, parameters, variables and equations have

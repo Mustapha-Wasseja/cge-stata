@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt step:s(#)} {opt trace}
 {opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}
-{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)} {opt starts(#)}]
+{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)} {opt starts(#)} {opt sol:ver(highs)}]
 
 
 {title:Description}
@@ -197,6 +197,15 @@ random numbers alone. Multi-start makes a global optimum of a nonconvex
 problem more likely, not certain; the default is 1.
 
 {phang}
+{opt solver(highs)} (from version 0.27.0, an experimental prototype) solves
+a linear or mixed-integer linear programme with HiGHS, through SciPy and
+Stata's Python integration ({helpb python}), in place of the interior point
+and branch and bound. The equations and the objective must be linear
+(error 459 otherwise); a linear programme returns the marginals of its
+equations. {bf:Caution:} it works only on Stata 16 and later with Python and
+SciPy; Stata 13 to 15 stop with an error.
+
+{phang}
 {opt diagnose} displays the diagnostics after a solve that converges too.
 {helpb cge_listing} lists every equation element at the solution, or where a
 solve stopped (from version 0.9.5).
@@ -237,6 +246,7 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(starts)}}starts of the interior point (from version 0.24.0){p_end}
 {synopt:{cmd:r(best_start)}}the start of the best solution, with starts() and no integers{p_end}
 {synopt:{cmd:r(N_starts_converged)}}the starts that converged{p_end}
+{synopt:{cmd:r(solver)}}{cmd:ipm}, {cmd:bb} or {cmd:highs} (from version 0.27.0){p_end}
 {synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}

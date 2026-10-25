@@ -14,6 +14,30 @@ smaller ones, the full system.
 python tools/bench/run_bench.py [--sizes 40x5,80x10,120x10,160x20,200x20,250x20] [--full-up-to 120]
 ```
 
+## SciPy's SuperLU through Python (version 0.27.0, 25 October 2026; StataNow 19.5)
+
+An experimental prototype for Stata 16 and later with Python and SciPy
+(Reference Manual, *cge_options*):
+
+```
+python tools/bench/run_bench.py --stata "C:/Program Files/StataNow19/StataMP-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20,400x20 --full-up-to 400 --linsolver sparse --out tools/bench/bench_results_0270_sparse_statanow19.csv
+python tools/bench/run_bench.py --stata "C:/Program Files/StataNow19/StataMP-64.exe" --sizes 40x5,80x10,120x10,160x20,200x20,250x20,400x20 --full-up-to 400 --linsolver python --out tools/bench/bench_results_0270_python_statanow19.csv
+```
+
+| Activities | Equations | Reduced, package (s) | Reduced, SuperLU (s) | Full, package (s) | Full, SuperLU (s) |
+|---|---|---|---|---|---|
+| 40 | 1,814 | 0.5 | 0.7 | 0.7 | 1.5 |
+| 80 | 5,446 | 1.3 | 2.0 | 2.0 | 1.8 |
+| 120 | 10,555 | 2.5 | 2.0 | 4.9 | 3.7 |
+| 160 | 18,483 | 3.3 | 2.6 | 6.7 | 3.5 |
+| 200 | 26,858 | 10.1 | 5.1 | 19.4 | 12.3 |
+| 250 | 40,190 | 20.8 | 10.6 | 43.0 | 31.4 |
+| 400 | 94,000 | 39.6 | 15.6 | 111.9 | 44.9 |
+
+Both take the same iterations, and the full and reduced solutions agree to
+5.5e-11 or less. Below about 100 activities the calls to Python cost more
+than they save.
+
 ## Result with the sparse LU (version 0.10.1, 24 October 2026; Windows laptop)
 
 ```

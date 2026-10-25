@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.26.0")
+    return("0.27.0")
 }
 
 // =====================================================================
@@ -5097,6 +5097,8 @@ real colvector _cge_slu_solve(struct cge_slu scalar F, real colvector b)
 {
     real colvector y, x, lr, ur, y2, t
     real scalar k, n, ns
+    // factors held in Python (from version 0.27.0)
+    if (F.ok == 2) return(_cge_pylu_solve(F, b))
     n = F.n
     ns = F.ns
     y = b[F.p]
@@ -5173,6 +5175,10 @@ real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colv
                             real scalar n, | string scalar ext)
 {
     real colvector cp, ri, vv, va
+    if (args() < 6) ext = "cge__slu"
+    // SciPy's SuperLU (from version 0.27.0, linsolver(python))
+    if (_cge_pylu_on()) return(_cge_pylu_update(F, r, c, v, n, ext))
+    if (F.ok == 2) F.ok = 0
     _cge_slu_csc(r, c, v, n, cp, ri, vv)
     if (hasmissing(vv)) return(0)
     // the same pattern, or part of it: factorised in the order analysed
@@ -5189,7 +5195,6 @@ real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colv
         return(0)
     }
     // the order is used again by later solves while the pattern is the same
-    if (args() < 6) ext = "cge__slu"
     _cge_slu_keep(F, ext)
     return(1)
 }
@@ -5198,6 +5203,7 @@ real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colv
 string scalar _cge_lin_name(struct cge_model scalar M)
 {
     if (M.linsolver >= . | M.linsolver == 0) return("dense")
+    if (M.linsolver == 3) return("python")
     return(M.linsolver == 1 ? "sparse" : "auto")
 }
 
@@ -5224,7 +5230,11 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
         M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = .
         ch = 1
     }
-    if (lin != "") M.linsolver = (lin == "dense" ? 0 : (lin == "sparse" ? 1 : 2))
+    // SciPy's SuperLU through Python (from version 0.27.0, Stata 16 and later)
+    if (lin == "python" & !_cge_py_ready()) {
+        _cge_fail("linsolver(python) needs Stata 16 or later with Python and SciPy (help python); Stata 13 to 15 use the package's dense or sparse LU", 198)
+    }
+    if (lin != "") M.linsolver = (lin == "dense" ? 0 : (lin == "sparse" ? 1 : (lin == "python" ? 3 : 2)))
     if (mcp != "") M.mcpsolver = (mcp == "activeset")
     if (tol > 0 & tol < .) M.opttol = tol
     if (it >= 1 & it < .) M.optit = it
@@ -5377,6 +5387,9 @@ string scalar _cge_mstat_name(real scalar ms)
 {
     if (ms == 1) return("optimal")
     if (ms == 2) return("locally optimal")
+    // of HiGHS (from version 0.27.0)
+    if (ms == 3) return("unbounded")
+    if (ms == 4) return("infeasible")
     if (ms == 5) return("locally infeasible")
     if (ms == 6) return("intermediate infeasible")
     if (ms == 7) return("feasible solution")
@@ -5457,8 +5470,11 @@ struct cge_sys {
 // 1 if Newton's steps on system S use the sparse LU (cge_options, linsolver())
 real scalar _cge_sparse_on(struct cge_model scalar M, struct cge_sys scalar S)
 {
+    // the factors in SciPy's SuperLU (from version 0.27.0): linsolver(python),
+    // code 3, the sparse LU's place
+    _cge_pylu_set(M.linsolver == 3)
     if (M.linsolver >= . | M.linsolver == 0) return(0)
-    if (M.linsolver == 1) return(1)
+    if (M.linsolver == 1 | M.linsolver == 3) return(1)
     return(S.neq >= 1000)
 }
 
@@ -8394,7 +8410,7 @@ void _cge_set_simobj(struct cge_model scalar M, real scalar k, string scalar obj
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
                 real scalar steps, real scalar diagnose, string scalar lin, string scalar obj, real scalar tlim,
                 string scalar mname, string scalar from, string scalar hold, real scalar nodes, real scalar optcr,
-                real scalar starts)
+                real scalar starts, string scalar solver)
 {
     struct cge_model scalar M
     real colvector x, x2, start
@@ -8416,6 +8432,8 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     if (args() < 15) optcr = -1
     // multi-start (from version 0.24.0)
     if (args() < 16) starts = 1
+    // the solver of a programme (from version 0.27.0): "" or highs
+    if (args() < 17) solver = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
     if (obj == "" & _cge_sa(M)) if (rows(_cge_int_pos(M))) {
@@ -8429,7 +8447,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     _cge_deadline_set(_cge_opttime(M, tlim))
     // a nonlinear programme (from version 0.15.0)
     if (obj != "") {
-        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold, nodes, optcr, starts)
+        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold, nodes, optcr, starts, solver)
         _cge_deadline_set(.)
         return
     }
@@ -22936,6 +22954,308 @@ string scalar _cge_pystr(string scalar s)
     return(char(34) + subinstr(s, char(92), char(92) + char(92)) + char(34))
 }
 
+// =====================================================================
+// Links to SciPy through Stata's Python (from version 0.27.0; Stata 16 and
+// later with Python and SciPy; model_spec.md, Section 36). An experimental
+// prototype: SuperLU factorises Newton's Jacobians, HiGHS solves linear and
+// mixed-integer programmes. Data pass through binary files of doubles.
+// =====================================================================
+
+// 1 if Stata's Python, SciPy and the package's module cge_scipy.py can
+// serve, found out once per session; Stata 13 to 15 have no Python. The
+// module's folder is kept for _cge_py_pre.
+real scalar _cge_py_ready()
+{
+    pointer() scalar q, qd
+    string scalar fn, d, b
+    real scalar ok
+    if ((q = findexternal("cge__pyok")) != NULL) return(*q)
+    ok = 0
+    d = ""
+    if (c("stata_version") >= 16) {
+        fn = findfile("cge_scipy.py")
+        if (fn != "") {
+            pathsplit(fn, d, b)
+            if ((qd = findexternal("cge__pydir")) == NULL) qd = crexternal("cge__pydir")
+            *qd = d
+            ok = !_stata("quietly python: " + _cge_py_pre() + "import scipy.sparse.linalg, scipy.optimize", 1)
+        }
+    }
+    q = crexternal("cge__pyok")
+    *q = ok
+    return(ok)
+}
+
+// The statements that put the module within reach of a Python call: Python
+// called from an ado-file runs in a namespace of its own each time, so each
+// call imports it again (Python keeps the module, and its factors, once
+// loaded)
+string scalar _cge_py_pre()
+{
+    pointer() scalar qd
+    string scalar d
+    qd = findexternal("cge__pydir")
+    d = (qd == NULL ? "" : _cge_pystr(*qd))
+    return("import sys; sys.path.insert(0, " + d + ") if " + d + " not in sys.path else None; import cge_scipy; ")
+}
+
+// The number of factorisations SuperLU has made in this session (a test hook)
+real scalar _cge_py_count()
+{
+    real scalar n
+    if (!_cge_py_ready()) return(0)
+    if (_stata("python: " + _cge_py_pre() + "cge_scipy.lu_count()", 1)) return(.)
+    n = st_numscalar("CGE_PYNF")
+    st_numscalar("CGE_PYNF", J(0, 0, .))
+    return(n)
+}
+
+// Temporary file k of the links (1 to 3), named once per session after the
+// stem of a temporary file of Stata's, which is unique to the process, with
+// a suffix of its own (Stata hands out its own names again once a command
+// ends); each is removed after use
+string scalar _cge_py_tmp(real scalar k)
+{
+    pointer() scalar q
+    string scalar t
+    if ((q = findexternal("cge__pytmp")) == NULL) {
+        q = crexternal("cge__pytmp")
+        t = st_tempfilename()
+        if (substr(t, -4, 4) == ".tmp") t = substr(t, 1, strlen(t) - 4)
+        *q = t + "_cgepy"
+    }
+    return(*q + strofreal(k) + ".bin")
+}
+
+// The temporary files of the links removed
+void _cge_py_clean()
+{
+    real scalar k
+    for (k = 1; k <= 3; k++) if (fileexists(_cge_py_tmp(k))) unlink(_cge_py_tmp(k))
+}
+
+// A column of doubles written to file fn, little-endian, 8 bytes each
+void _cge_binwrite(string scalar fn, real colvector v)
+{
+    transmorphic C
+    string scalar buf
+    real scalar fh
+    C = bufio()
+    bufbyteorder(C, 2)
+    buf = (8 * rows(v)) * " "
+    if (rows(v)) bufput(C, buf, 0, "%8z", v)
+    if (fileexists(fn)) unlink(fn)
+    fh = fopen(fn, "w")
+    fwrite(fh, buf)
+    fclose(fh)
+}
+
+// n doubles read from file fn, as _cge_binwrite writes them
+real colvector _cge_binread(string scalar fn, real scalar n)
+{
+    transmorphic C
+    string scalar buf
+    real scalar fh
+    if (!n) return(J(0, 1, .))
+    C = bufio()
+    bufbyteorder(C, 2)
+    fh = fopen(fn, "r")
+    buf = fread(fh, 8 * n)
+    fclose(fh)
+    if (strlen(buf) != 8 * n) return(J(n, 1, .))
+    return(bufget(C, buf, 0, "%8z", n, 1))
+}
+
+// The return code that cge_scipy.py leaves in scalar CGE_PYRC, which is
+// dropped; missing if it left none
+real scalar _cge_py_rc()
+{
+    real scalar rc
+    rc = st_numscalar("CGE_PYRC")
+    st_numscalar("CGE_PYRC", J(0, 0, .))
+    return(rc)
+}
+
+// The factors of Newton's steps in SciPy's SuperLU, cge_options,
+// linsolver(python): on while the system solved asks for them (set by
+// _cge_sparse_on); without Python and SciPy, the package's sparse LU, with a
+// note once a session
+void _cge_pylu_set(real scalar on)
+{
+    pointer() scalar q, qn
+    real scalar v
+    if ((q = findexternal("cge__pylu")) == NULL) q = crexternal("cge__pylu")
+    v = on
+    if (v & !_cge_py_ready()) {
+        if ((qn = findexternal("cge__pynote")) == NULL) {
+            printf("{txt}Note: linsolver(python) needs Stata 16 or later with Python and SciPy; the sparse LU of the package is used\n")
+            qn = crexternal("cge__pynote")
+            *qn = 1
+        }
+        v = 0
+    }
+    *q = v
+}
+
+real scalar _cge_pylu_on()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__pylu")) == NULL) return(0)
+    if (rows(*q) * cols(*q) != 1) return(0)
+    return(*q == 1)
+}
+
+// The n x n matrix of entries (r, c, v) factorised by SuperLU, held in
+// Python under the key of ext: F.ok is 2 and F.ns the key; 0 if it is
+// singular or Python fails
+real scalar _cge_pylu_update(struct cge_slu scalar F, real colvector r, real colvector c, real colvector v,
+                             real scalar n, string scalar ext)
+{
+    real scalar key
+    if (hasmissing(v)) return(0)
+    key = (ext == "cge__slu" ? 1 : (ext == "cge__slu_fs" ? 2 : (ext == "cge__slu_reg" ? 3 : 4)))
+    _cge_binwrite(_cge_py_tmp(1), r \ c \ v)
+    if (_stata("python: " + _cge_py_pre() + "cge_scipy.lu_factor(" + strofreal(key) + ", " + _cge_pystr(_cge_py_tmp(1)) + ", " +
+               strofreal(n, "%12.0f") + ", " + strofreal(rows(v), "%12.0f") + ")", 1)) {
+        _cge_py_clean()
+        return(0)
+    }
+    _cge_py_clean()
+    if (_cge_py_rc() != 0) return(0)
+    F.n = n
+    F.ok = 2
+    F.ns = key
+    _cge_slu_keep(F, ext)
+    return(1)
+}
+
+// The solution of the system factorised in Python for the right side b
+real colvector _cge_pylu_solve(struct cge_slu scalar F, real colvector b)
+{
+    real colvector x
+    _cge_binwrite(_cge_py_tmp(2), b)
+    if (_stata("python: " + _cge_py_pre() + "cge_scipy.lu_solve(" + strofreal(F.ns) + ", " + _cge_pystr(_cge_py_tmp(2)) + ", " +
+               _cge_pystr(_cge_py_tmp(3)) + ")", 1)) x = J(rows(b), 1, .)
+    else x = _cge_binread(_cge_py_tmp(3), rows(b))
+    _cge_py_clean()
+    return(x)
+}
+
+// cge_solve, solver(highs): a linear or mixed-integer programme of a
+// standalone model by HiGHS through SciPy. The equations and the objective
+// must be linear: their values at a second point equal their values at the
+// start plus the derivatives times the step. In the variables' own units,
+// A x = b with b = A x0 - c(x0), c the scaled residuals, and the objective
+// g'x; integer and binary variables are flagged. Returns the solution, the
+// marginals lam of the equations (a linear programme), the statuses ms and
+// ss, the iterations (nodes nn of a mixed-integer programme) and its best
+// bound
+real colvector _cge_highs(struct cge_model scalar M, real colvector xfix, real colvector start, real matrix tok,
+                          real scalar sgn, real colvector ipos, real scalar conv, real scalar iter, real scalar err,
+                          real scalar fobj, real colvector lam, real scalar ms, real scalar ss, real scalar nn,
+                          real scalar bnd)
+{
+    struct cge_sys scalar S
+    real colvector map, sc, z0, z1, d, L, U, g0, g1, c0, c1, jr, jc, jv, jr1, jc1, jv1, b, cx, isint, out, x, x1, esc
+    real scalar n, m, k, f0, f1, rc, nint, hobj
+    if (!_cge_py_ready()) {
+        _cge_fail("solver(highs) needs Stata 16 or later with Python and SciPy (help python); without them, solve with the interior point and branch and bound", 198)
+    }
+    S = _cge_sys_make(M, 0)
+    n = rows(S.free)
+    m = S.neq
+    if (!n) _cge_fail("solver(highs): the programme has no free variables", 459)
+    map = J(rows(M.x0), 1, 0)
+    map[S.free] = (1::n)
+    sc = M.xscale[S.free]
+    // the bounds in the variables' units, +-1e300 where none
+    L = J(n, 1, -1e300)
+    U = J(n, 1, 1e300)
+    for (k = 1; k <= rows(M.bdlp); k++) if (map[M.bdlp[k]]) L[map[M.bdlp[k]]] = M.bdlv[k]
+    for (k = 1; k <= rows(M.bdup); k++) if (map[M.bdup[k]]) U[map[M.bdup[k]]] = M.bduv[k]
+    // the start and a second point, within the bounds where they are finite
+    z0 = start[S.free] :/ sc
+    // the second point: a step of each variable, the other way, or to the
+    // middle of its range, where the step leaves its bounds (the equations
+    // are not evaluated outside them)
+    d = J(n, 1, .)
+    for (k = 1; k <= n; k++) {
+        d[k] = (mod(k, 2) ? 1 : -1) * (0.3 + 0.1 * mod(k, 7)) * max((1, abs(z0[k])))
+        if (z0[k] + d[k] < L[k] / sc[k] | z0[k] + d[k] > U[k] / sc[k]) d[k] = -d[k]
+        if (z0[k] + d[k] < L[k] / sc[k] | z0[k] + d[k] > U[k] / sc[k]) {
+            d[k] = (L[k] > -1e299 & U[k] < 1e299 ? (L[k] + U[k]) / (2 * sc[k]) - z0[k] : 0)
+        }
+    }
+    z1 = z0 + d
+    x = x1 = xfix
+    x[S.free] = z0 :* sc
+    x1[S.free] = z1 :* sc
+    f0 = _cge_nlp_f(M, M.p, x, tok, n, map, g0)
+    f1 = _cge_nlp_f(M, M.p, x1, tok, n, map, g1)
+    if (f0 >= . | f1 >= . | hasmissing(g0)) _cge_fail("solver(highs): the objective cannot be evaluated at the start", 459)
+    if (abs(f1 - f0 - g0' * d) > 1e-8 * max((1, abs(f0), abs(f1)))) {
+        _cge_fail("solver(highs) solves linear and mixed-integer linear programmes: the objective is not linear", 459)
+    }
+    jr = jc = jv = J(0, 1, .)
+    b = J(0, 1, .)
+    if (m) {
+        c0 = _cge_F(M, M.p, xfix, S, z0)
+        c1 = _cge_F(M, M.p, xfix, S, z1)
+        if (hasmissing(c0) | hasmissing(c1)) _cge_fail("solver(highs): the equations cannot be evaluated at the start", 459)
+        if (!_cge_jac_trip(M, M.p, xfix, S, z0, jr, jc, jv)) _cge_fail("solver(highs): the derivatives of the equations cannot be found", 459)
+        if (max(abs(c1 - c0 - _cge_sumby(jr, jv :* d[jc], m))) > 1e-8 * max((1, max(abs(c0)), max(abs(c1))))) {
+            _cge_fail("solver(highs) solves linear and mixed-integer linear programmes: the equations are not linear", 459)
+        }
+        b = _cge_sumby(jr, jv :* z0[jc], m) - c0
+        // in the variables' own units
+        jv = jv :/ sc[jc]
+    }
+    cx = sgn * g0 :/ sc
+    isint = J(n, 1, 0)
+    for (k = 1; k <= rows(ipos); k++) if (map[ipos[k]]) isint[map[ipos[k]]] = 1
+    nint = sum(isint)
+    _cge_binwrite(_cge_py_tmp(1), jr \ jc \ jv \ b \ cx \ L \ U \ isint)
+    if (_stata("python: " + _cge_py_pre() + "cge_scipy.highs(" + _cge_pystr(_cge_py_tmp(1)) + ", " + _cge_pystr(_cge_py_tmp(3)) + ", " +
+               strofreal(n, "%12.0f") + ", " + strofreal(m, "%12.0f") + ", " + strofreal(rows(jv), "%12.0f") + ", " +
+               strofreal(nint, "%12.0f") + ")", 1)) {
+        _cge_py_clean()
+        _cge_fail("solver(highs): the call of SciPy failed", 459)
+    }
+    rc = _cge_py_rc()
+    hobj = st_numscalar("CGE_HOBJ")
+    iter = st_numscalar("CGE_HIT")
+    bnd = st_numscalar("CGE_HBND")
+    st_numscalar("CGE_HOBJ", J(0, 0, .))
+    st_numscalar("CGE_HIT", J(0, 0, .))
+    st_numscalar("CGE_HGAP", J(0, 0, .))
+    st_numscalar("CGE_HBND", J(0, 0, .))
+    out = _cge_binread(_cge_py_tmp(3), n + m)
+    _cge_py_clean()
+    x = xfix
+    x[S.free] = out[|1 \ n|]
+    conv = (rc == 0)
+    nn = (nint ? iter : 0)
+    // the statuses, in GAMS's codes
+    ss = (rc == 1 ? 2 : (rc >= 4 ? 13 : 1))
+    if (rc == 0) ms = 1
+    else if (rc == 1) ms = 14
+    else if (rc == 2) ms = (nint ? 10 : 4)
+    else if (rc == 3) ms = 3
+    else ms = 13
+    fobj = (rc == 0 | rc == 1 ? _cge_u_value(M, M.p, x, tok) : .)
+    // the best bound, in the objective's units: HiGHS's leaves out the
+    // constant of the objective
+    if (nint & bnd < . & fobj < . & hobj < .) bnd = sgn * bnd + (fobj - sgn * hobj)
+    else bnd = .
+    err = (fobj < . ? _cge_maxres(M, M.p, x) : .)
+    lam = J(0, 1, .)
+    if (m & !nint & rc == 0) {
+        esc = select(M.escale, S.mask)
+        lam = sgn :* out[|n + 1 \ n + m|] :/ esc
+    }
+    return(x)
+}
+
 // The simulations of loop name, in order; 0 if none
 real colvector _cge_loop_sims(struct cge_model scalar M, string scalar name)
 {
@@ -24335,7 +24655,7 @@ real colvector _cge_bb(struct cge_model scalar M, real colvector xfix, real colv
 // simulation, with the multipliers of the equations
 void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar obj, real scalar tol,
                   real scalar maxit, real scalar trace, string scalar lin, | string scalar mname, string scalar from,
-                  string scalar hold, real scalar nodes, real scalar optcr, real scalar starts)
+                  string scalar hold, real scalar nodes, real scalar optcr, real scalar starts, string scalar solver)
 {
     struct cge_sys scalar S
     struct cge_model scalar M2
@@ -24351,6 +24671,8 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     // multi-start (from version 0.24.0)
     if (args() < 13) starts = 1
     if (starts < 1 | starts >= .) starts = 1
+    // HiGHS through SciPy (from version 0.27.0)
+    if (args() < 14) solver = ""
     if (nodes < 0 | nodes >= .) nodes = 10000
     if (optcr < 0 | optcr >= .) optcr = 0
     if (!_cge_sa(M)) _cge_fail("minimize() and maximize() solve a nonlinear programme of a standalone model (cge_model new); optimise a model from a SAM with cge_optimize", 198)
@@ -24372,7 +24694,10 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     ipos = _cge_int_pos(M2)
     nn = 0
     bnd = .
-    if (rows(ipos)) {
+    if (solver == "highs") {
+        x = _cge_highs(M2, xs, start, tok, sgn, ipos, conv, iter, err, fobj, lam, ms, ss, nn, bnd)
+    }
+    else if (rows(ipos)) {
         x = _cge_bb(M2, xs, start, tok, sgn, tol, maxit, trace, ipos, nodes, optcr, conv, iter, err, fobj, lam, nn, bnd, ms, ss, starts)
     }
     else x = _cge_nlp_multi(M2, M2.p, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas, 0, starts, best, nconv)
@@ -24381,10 +24706,19 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     _cge_set_simobj(M, k, obj)
     _cge_set_simmodel(M, k, mname)
     // the statuses, in GAMS's codes (from version 0.16.0)
-    if (!rows(ipos)) _cge_status(conv, 0, 1, feas, err, ms, ss)
+    if (!rows(ipos) & solver != "highs") _cge_status(conv, 0, 1, feas, err, ms, ss)
     _cge_set_simstat(M, k, ms, ss)
     _cge_store(M)
-    if (rows(ipos)) {
+    if (solver == "highs") {
+        if (conv) printf("{txt}Simulation {res}%s{txt} solved by HiGHS (SciPy): {res}%f{txt} %s\n", name, iter,
+                         (rows(ipos) ? "node(s)" : "iteration(s)"))
+        else {
+            printf("{err}Simulation %s: HiGHS found no optimum\n", name)
+            _cge_status_show(ms, ss)
+        }
+        if (bnd < .) printf("{txt}Best bound {res}%16.10g\n", bnd)
+    }
+    else if (rows(ipos)) {
         if (conv) printf("{txt}Simulation {res}%s{txt} solved by branch and bound: {res}%f{txt} node(s), {res}%f{txt} iteration(s)\n",
                          name, nn, iter)
         else {
@@ -24403,7 +24737,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     if (!rows(ipos) & starts > 1) printf("{txt}Multi-start: {res}%f{txt} of {res}%f{txt} start(s) converged; the best from start {res}%f\n",
                                          nconv, starts, best)
     printf("{txt}%s %s: {res}%16.10g\n", (sgn < 0 ? "Maximised" : "Minimised"), substr(obj, 5, .), fobj)
-    printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) ? "residual of the equations" : "error of the optimality conditions"), err)
+    printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) | solver == "highs" ? "residual of the equations" : "error of the optimality conditions"), err)
     st_numscalar("r(converged)", conv)
     st_numscalar("r(iterations)", iter)
     st_numscalar("r(max_residual)", err)
@@ -24413,6 +24747,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     S = _cge_sys_make(M2, 0)
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
     st_global("r(model)", mname)
+    st_global("r(solver)", (solver == "highs" ? "highs" : (rows(ipos) ? "bb" : "ipm")))
     st_numscalar("r(starts)", starts)
     if (!rows(ipos) & starts > 1) {
         st_numscalar("r(best_start)", best)

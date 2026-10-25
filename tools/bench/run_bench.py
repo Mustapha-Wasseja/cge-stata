@@ -108,7 +108,7 @@ def main() -> None:
     ap.add_argument("--sizes", default="40x5,80x10,120x10,160x20,200x20")
     ap.add_argument("--full-up-to", type=int, default=120)
     ap.add_argument("--gams", default=None, help="gams.exe: also solve each model with GAMS (PATH)")
-    ap.add_argument("--linsolver", default="", choices=("", "dense", "sparse", "auto"))
+    ap.add_argument("--linsolver", default="", choices=("", "dense", "sparse", "auto", "python"))
     ap.add_argument("--out", default=str(HERE / "bench_results.csv"))
     args = ap.parse_args()
     import sys

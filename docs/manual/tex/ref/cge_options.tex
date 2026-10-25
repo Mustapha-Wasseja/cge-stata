@@ -55,7 +55,7 @@ cge_options
 
 \begin{opttable}
 \optgroup{Main}
-\optarg{lin}{solver}{dense|sparse|auto} & the linear solver of Newton's steps\\
+\optarg{lin}{solver}{dense|sparse|auto|python} & the linear solver of Newton's steps\\
 \optarg{}{mcp}{semismooth|activeset} & the method for constraints and inequalities\\
 \optarg{jac}{obian}{exact|differences} & the Jacobian of Newton's method\\
 \optgroup{Defaults of cge\_solve}
@@ -68,11 +68,18 @@ cge_options
 \cgesec{Options}
 
 \begin{optdesc}
-\item[\optarg{lin}{solver}{dense|sparse|auto}] chooses the linear solver of
+\item[\optarg{lin}{solver}{dense|sparse|auto|python}] chooses the linear solver of
 Newton's steps: \cmd{dense}, Mata's LU factorisation with partial pivoting
-(the default); \cmd{sparse}, the sparse LU of section~\ref{sec:sparse}; or
+(the default); \cmd{sparse}, the sparse LU of section~\ref{sec:sparse};
 \cmd{auto}, the sparse LU for systems of 1,000 equations or more and the
-dense one below. \manref{cge_solve} takes \opt{sp}{arse} or \opt{den}{se} for one
+dense one below; or, from version 0.27.0, \cmd{python}, SciPy's SuperLU
+through Stata's Python integration, an experimental prototype that works
+only on Stata 16 and later with Python and SciPy (Stata 13 to 15 stop with
+an error). SuperLU factorised the 40,190-equation Jacobian of the
+250-activity benchmark model in 2.8 seconds against 16.4 for the sparse LU,
+and whole solves of the largest benchmark models took 2 to 2.5 times less
+time; below about 100 activities the calls to Python cost more than they
+save. \manref{cge_solve} takes \opt{sp}{arse} or \opt{den}{se} for one
 solve.
 
 \item[\optarg{}{mcp}{semismooth|activeset}] (from version 0.14.0) chooses the
@@ -150,7 +157,7 @@ after \opt{}{reset}, the solve converges with model status 16 (solved):
 \res{r(iterate)} & its iteration limit\\
 \res{r(timelimit)} & its time limit in seconds, missing for none\\
 \resgroup{Macros}
-\res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto}\\
+\res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse}, \cmd{auto} or \cmd{python}\\
 \res{r(mcp)} & the method for constraints: \cmd{semismooth} or \cmd{activeset}\\
 \res{r(jacobian)} & the Jacobian of Newton's method: \cmd{exact} or \cmd{differences}\\
 \end{storedres}

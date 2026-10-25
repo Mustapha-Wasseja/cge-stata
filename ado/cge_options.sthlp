@@ -10,7 +10,7 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto)} {opt mcp(semismooth|activeset)}
+{cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto|python)} {opt mcp(semismooth|activeset)}
 {opt jac:obian(exact|differences)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
 
 
@@ -31,6 +31,7 @@ the system of the Jacobian at each step:
 {p2col:{cmd:dense}}the dense LU factorisation of Mata, the default{p_end}
 {p2col:{cmd:sparse}}a sparse LU factorisation{p_end}
 {p2col:{cmd:auto}}the sparse LU for systems of 1,000 equations or more{p_end}
+{p2col:{cmd:python}}SciPy's SuperLU through Python (from version 0.27.0), Stata 16 and later only{p_end}
 {p2colreset}{...}
 
 {pstd}
@@ -43,6 +44,16 @@ far larger than the dense LU can hold, the full system of large models among
 them; the order is kept for later solves of the same model. Both give the
 same solution, to the solver's tolerance. {helpb cge_solve} takes
 {opt sparse} or {opt dense} for one solve.
+
+{pstd}
+{cmd:linsolver(python)} (from version 0.27.0) is an experimental prototype:
+SciPy's SuperLU factorises the Jacobians in the sparse LU's place, through
+Stata's Python integration ({helpb python}) and the module
+{cmd:cge_scipy.py}, installed with the package. {bf:Caution:} it works only
+on Stata 16 and later with Python and SciPy; Stata 13 to 15 stop with an
+error, and a model saved with it falls back to the sparse LU with a note.
+It solves the largest models 2 to 2.5 times faster and is slower below
+about 100 activities, where the calls to Python cost more than they save.
 
 
 {pstd}
@@ -89,7 +100,7 @@ restores every setting to its default.
 {title:Stored results}
 
 {pstd}
-{cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver, {cmd:r(mcp)},
+{cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver ({cmd:python} for SuperLU), {cmd:r(mcp)},
 the method for constraints, and {cmd:r(jacobian)}, the Jacobian, as macros, and
 {cmd:r(tolerance)}, {cmd:r(iterate)} and {cmd:r(timelimit)} (missing for none),
 the defaults of {helpb cge_solve}, as scalars.

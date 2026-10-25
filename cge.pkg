@@ -20,6 +20,7 @@ f ado/cge.ado
 f ado/cge.sthlp
 f ado/_cge_load.ado
 F ado/cge_mata.mata
+F ado/cge_scipy.py
 f ado/cge_sam.ado
 f ado/cge_sam.sthlp
 f ado/cge_template.ado

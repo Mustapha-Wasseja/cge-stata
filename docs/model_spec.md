@@ -2776,6 +2776,70 @@ recursion $K_t = 0.9K_{t-1} + 10(t - 1)$; two indexes; base() of a lag in a
 domain's condition; errors); `tests/test_modlib.do` (the Ramsey model's
 Euler equation); the export case `lagindex`.
 
+## 36. Links to SciPy through Python (from version 0.27.0; an experimental prototype)
+
+On Stata 16 and later with Python and SciPy, the package can hand two tasks
+to SciPy, through Stata's Python integration and the module
+`ado/cge_scipy.py`, installed with the ado-files. Stata 13 to 15 have no
+Python, and keep the package's own solvers: the options stop there with
+error 198, and a model saved with `linsolver(python)` falls back to the
+package's sparse LU with a note.
+
+Data. Mata writes the data to binary files of little-endian doubles
+(`bufio`, `_cge_binwrite`) and reads the results back (`_cge_binread`);
+return codes and statistics come back as Stata scalars. sfi's `Mata.get` and
+`Mata.toNPArray` took 2.8 s for the 161,000 entries of the Jacobian of a
+40,190-equation model, the files 0.02 s. Python called from an ado-file
+runs in a namespace of its own each time, so every call imports the module
+again (`_cge_py_pre`); Python keeps the module, and the factors it holds,
+once loaded.
+
+`cge_options, linsolver(python)`: SciPy's SuperLU (Li 2005) factorises the
+Jacobians of Newton's method in place of the package's sparse LU (Section
+22): `_cge_slu_update` passes the entries to `cge_scipy.lu_factor`, which
+keeps the factors under the key of the system (the model, the stacked
+periods of a run with foresight, linked regions), and `_cge_slu_solve`
+solves through them, the factors marked by `F.ok = 2`. On the 40,190
+equations of the full system of the 250-activity benchmark SAM, one
+factorisation took 16.4 s in Mata and 2.8 s in SuperLU, and the solutions
+agreed to $10^{-15}$. Whole solves on StataNow 19.5
+(`tools/bench/bench_results_0270_*_statanow19.csv`), the same iterations:
+
+| Activities | Equations | Reduced, package (s) | Reduced, SuperLU (s) | Full, package (s) | Full, SuperLU (s) |
+|---|---|---|---|---|---|
+| 40 | 1,814 | 0.5 | 0.7 | 0.7 | 1.5 |
+| 120 | 10,555 | 2.5 | 2.0 | 4.9 | 3.7 |
+| 200 | 26,858 | 10.1 | 5.1 | 19.4 | 12.3 |
+| 250 | 40,190 | 20.8 | 10.6 | 43.0 | 31.4 |
+| 400 | 94,000 | 39.6 | 15.6 | 111.9 | 44.9 |
+
+Below about 100 activities the calls to Python cost more than they save;
+from 200 activities whole solves take 1.4 to 2.5 times less time, and what
+remains is the Jacobian and the residuals, evaluated in Mata.
+
+`cge_solve, minimize()|maximize() solver(highs)`: a linear or
+mixed-integer linear programme of a standalone model by HiGHS (Huangfu and
+Hall 2018), SciPy's `linprog` and `milp`. The equations and the objective
+must be linear: their values at a second point, within the bounds, must
+equal those at the start plus the derivatives times the step, to $10^{-8}$,
+else error 459. In the variables' own units the programme is $\min
+s\,g'x$ subject to $Ax = b$, $b = Ax_0 - c(x_0)$ with $c$ the scaled
+residuals, $l \le x \le u$, and integer and binary variables flagged. A
+linear programme returns the marginals of the equations,
+$s\,y_k/e_k$ for HiGHS's dual $y_k$ and the scale $e_k$ of equation $k$, the
+units of the interior point's. Statuses in GAMS's codes: 1 optimal, 3
+unbounded, 4 infeasible, 10 integer infeasible, 14 no solution returned at
+a limit. The simulation keeps the method `nlp` or `minlp`, so that
+`cge_gams` exports it as before; `r(solver)` is `highs`.
+
+Tests: `tests/test_scipy.do` (on Stata 16 and later: the synthetic model's
+solutions with SuperLU against the package's sparse LU, reduced and full,
+to $10^{-9}$, and the factorisations counted; a linear programme against
+its closed form, 11 with marginal 2; the transportation problem against the
+interior point, its optimum 153.675 and its marginals; a knapsack and an
+assignment of six workers against enumeration; infeasible, unbounded and
+nonlinear programmes; on Stata 13 to 15, the errors).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
@@ -2819,3 +2883,9 @@ outcomes in Africa. *African Development Review* 21(2): 400-433.
 
 Bokhari, F. A. S., Y. Gai and P. Gottret (2007). Government health
 expenditures and health outcomes. *Health Economics* 16(3): 257-273.
+
+Li, X. S. (2005). An overview of SuperLU: algorithms, implementation, and
+user interface. *ACM Transactions on Mathematical Software* 31(3): 302-325.
+
+Huangfu, Q. and J. A. J. Hall (2018). Parallelizing the dual revised simplex
+method. *Mathematical Programming Computation* 10(1): 119-142.

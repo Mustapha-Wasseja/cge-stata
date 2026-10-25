@@ -1,4 +1,4 @@
-*! cge_options.ado  v0.16.0  2026-10-25
+*! cge_options.ado  v0.27.0  2026-10-25
 *! cge-stata: settings of the solver, as GAMS's option statement
 *! (Reference Manual, cge_options)
 *!
@@ -9,8 +9,9 @@ program define cge_options, rclass
     version 13.0
     syntax [, LINsolver(name) MCP(name) TOLerance(real -1) ITERate(integer -1) TIMElimit(real -1) ///
         JACobian(name) RESET]
-    if "`linsolver'" != "" & !inlist("`linsolver'", "dense", "sparse", "auto") {
-        display as error "linsolver() takes dense, sparse or auto"
+    * python (from version 0.27.0): SciPy's SuperLU, Stata 16 and later
+    if "`linsolver'" != "" & !inlist("`linsolver'", "dense", "sparse", "auto", "python") {
+        display as error "linsolver() takes dense, sparse, auto or python"
         exit 198
     }
     * the method for constraints (from version 0.14.0)

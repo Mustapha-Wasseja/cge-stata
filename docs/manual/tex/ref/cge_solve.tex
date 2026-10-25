@@ -58,6 +58,7 @@ cge_solve, name(ls) minimize(sum(i, X(i)^2))
 \optarg{nod}{es}{\#} & node limit of branch and bound; default \texttt{10000}\\
 \optarg{}{optcr}{\#} & relative gap of branch and bound; default \texttt{0}\\
 \optarg{}{starts}{\#} & points the interior point starts from; default \texttt{1}\\
+\optarg{sol}{ver}{highs} & HiGHS through SciPy, Stata 16 and later\\
 \optarg{step}{s}{\#} & apply the shocks in \argu{\#} equal steps; default \texttt{0}, only after a direct solve fails\\
 \optgroup{Nonlinear programmes of standalone models}
 \optarg{min}{imize}{expression} & minimise \argu{expression} subject to the equations\\
@@ -120,6 +121,17 @@ node whose relaxation has a poor local optimum is less likely to be pruned.
 The points come from a generator of the package's own and repeat from run
 to run; Stata's random numbers are left alone. Multi-start makes a global
 optimum of a nonconvex problem more likely, not certain.
+
+\item[\optarg{sol}{ver}{highs}] (from version 0.27.0, an experimental
+prototype) solves a linear or mixed-integer linear programme with HiGHS
+(Huangfu and Hall 2018), through SciPy's \cmd{linprog} and \cmd{milp} and
+Stata's Python integration, in place of the interior point and branch and
+bound. The equations and the objective must be linear, which the command
+checks at a second point within the bounds (error 459 otherwise). A linear
+programme returns the marginals of its equations, in the units of the
+interior point's; the statuses follow GAMS's codes, 3 for an unbounded and 4
+for an infeasible programme. It works only on Stata 16 and later with Python
+and SciPy; Stata 13 to 15 stop with an error.
 
 \item[\optarg{time}{limit}{\#}] (from version 0.16.0) sets a time limit in
 seconds, as GAMS's \cmd{reslim}; by default there is none, or the limit set by
@@ -354,6 +366,7 @@ to the tolerance, and the test suite checks that they do.
 \res{r(starts)} & starts of the interior point (from version 0.24.0)\\
 \res{r(best_start)} & the start of the best solution, with \opt{}{starts} and no integers\\
 \res{r(N_starts_converged)} & the starts that converged\\
+\res{r(solver)} & \cmd{ipm}, \cmd{bb} or \cmd{highs} (from version 0.27.0)\\
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto} (from version 0.10.1)\\
 \res{r(closure)} & closure\\
 \res{r(constraints)} & the constraints and their regimes, if any\\
