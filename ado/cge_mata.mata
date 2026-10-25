@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.22.0")
+    return("0.22.1")
 }
 
 // =====================================================================
@@ -18428,10 +18428,18 @@ void _cge_u_els(struct cge_model scalar M, string scalar set, string colvector e
 string rowvector _cge_u_subst2(string rowvector t, string scalar idx, string scalar e1, string scalar e2,
                                real scalar o1, real scalar o2)
 {
-    real scalar k
+    string rowvector u
+    string scalar ph
+    real scalar k, j
     k = strpos(idx, ",")
     if (!k) return(_cge_u_subst(t, idx, e1, o1))
-    return(_cge_u_subst(_cge_u_subst(t, substr(idx, 1, k - 1), e1, o1), substr(idx, k + 1, .), e2, o2))
+    // the first element goes in through a placeholder (from version 0.22.1):
+    // a label that is the name of the second index, as t2 for the alias t2,
+    // was replaced again by the second element
+    ph = char(1) + "cge_e1"
+    u = _cge_u_subst(_cge_u_subst(t, substr(idx, 1, k - 1), ph, o1), substr(idx, k + 1, .), e2, o2)
+    for (j = 1; j <= cols(u); j++) if (u[j] == ph) u[j] = e1
+    return(u)
 }
 
 // 1 if user set k is a set of pairs (from version 0.9.1)

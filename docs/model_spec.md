@@ -2574,9 +2574,14 @@ capital accumulation over the pairs of consecutive years (a set of pairs
 of $\ln C$; the Euler equation $C_{t+1}/C_t = \beta(1 - \delta + \alpha
 K_{t+1}^{\alpha - 1})$ holds in every year to 1.7e-11.
 
-Known limitation: element labels equal to the names of indexes (labels `t2`
-in a set whose alias index is `t2`) are substituted wrongly in conditions on
-sets of pairs; the model's years are named `y1` to `y30`.
+Element labels equal to the names of indexes (labels `t2` in a set whose
+alias index is `t2`) were substituted wrongly in equations over two indexes:
+the first index was replaced by its label, which the second index's
+substitution replaced again. From version 0.22.1 `_cge_u_subst2` puts the
+first element in through a placeholder (`tests/test_models.do`, pairs of
+consecutive years t1 to t3). Sums over an alias inside an equation can meet
+the same collision, so labels that differ from the names of indexes remain
+the safer choice; the model's years are named `y1` to `y30`.
 
 Tests: `tests/test_optimize.do` (a start on a bound reaches the optimum of a
 start within it); `tests/test_modlib.do` (the Euler equation to 1e-8 and

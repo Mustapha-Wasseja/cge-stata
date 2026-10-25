@@ -195,5 +195,21 @@ assert _rc == 198
 capture noisily cge_solve, model(m)
 assert _rc == 198
 
+* ---------------------------------------------------------------------
+* Labels that are the names of indexes (from version 0.22.1): years t1 to t3
+* with the alias t2 of their index; the pairs of consecutive years give two
+* elements, which before lost the one whose first label was t2
+* ---------------------------------------------------------------------
+cge_model new
+cge_set t = t1 t2 t3
+cge_set nx(t,t2) = t1.t2 t2.t3
+cge_variable K(t), value(1)
+cge_equation K0: K(t1) = 1
+cge_equation ACC(t,t2)$(nx(t,t2)): K(t2) = 2 * K(t)
+assert r(N_elements) == 2
+cge_solve, name(acc)
+mata: st_numscalar("tm_d", abs(_tm_val("K", "t3", 1) - 4))
+assert scalar(tm_d) < 1e-12
+
 mata: mata drop _tm_val()
 scalar drop tm_t tm_d tm_w
