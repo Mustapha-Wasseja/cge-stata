@@ -116,10 +116,17 @@ Stata in batch mode, which loads the model and runs \cmd{cge_loop} on it,
 each scenario from the solution of the one before within its group; their
 simulations are merged into the model in memory, with the same names and
 results as one run. The processes run in the folder of Stata's temporary
-files, whose files are removed afterwards. On Windows, Stata running in batch
-mode cannot start other processes, so the scenarios are then solved in the
-session, with a note. Each process starts Stata and loads the model, some
-seconds, so that parallel runs pay when the scenarios take longer than that.
+files, whose files are removed afterwards. In batch mode on Windows, where
+Stata ignores \cmd{winexec}, Stata 16 and later start the processes through
+Python's \cmd{subprocess} module (from version 0.24.0; Stata's \cmd{python}
+command, which needs a Python installation). This works only on some
+versions of Stata: Stata 13 to 15 cannot start other processes from batch
+mode, nor can Stata 16 or later without Python, and the scenarios are then
+solved in the session, one after another, with a note that names the
+version. Interactive Stata of any version starts the processes. Each process
+starts Stata and loads the model, some seconds (about 14 on the machine of
+the tests), so that parallel runs pay when the scenarios take longer than
+that.
 
 \item[\optarg{stata}{exe}{path}] gives the Stata executable of the parallel
 processes; by default, that of the running edition in Stata's folder.

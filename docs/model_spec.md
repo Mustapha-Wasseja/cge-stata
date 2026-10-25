@@ -2621,6 +2621,75 @@ index); `tests/test_optimize.do` (starts of $10^{-4}$, $10^{-7}$ and
 $10^{-10}$ within bounds and $10^{-7}$ without, to the optimum of the
 base start within $10^{-6}$); the export case `labalias`.
 
+## 33. Newton's method for Nash equilibria, multi-start and parallel runs from batch mode (from version 0.24.0)
+
+`cge_nash solve, method(newton)` solves the players' first-order conditions
+together. For instrument $i$ of player $p(i)$, with sense $s_p$ ($+1$ to
+maximise) and objective $f_p$ scaled by its size at the start (at least 1),
+$G_i(z) = s_{p(i)}\,\partial f_{p(i)}/\partial z_i$ in the scaled
+instruments $z$ of `cge_optimize`. `_cge_optimize(..., setup)` sets up the
+instruments and bounds of all the players and takes their objectives as
+targets ($f_p = 0$), whose exact derivatives (Section 24) give every $G_i$
+from one factorisation of the model's Jacobian at each point; central
+differences of solved models replace them where they cannot be found. With
+bounds $l \le z \le h$ the conditions are
+$$F(z) = z - \mathrm{mid}(l, z + G(z), h) = 0,$$
+which a semismooth Newton method solves: the Jacobian of $G$ by forward
+differences of $G$ (step $10^{-5}$, backward at an upper bound), the rows
+of $F$'s generalised Jacobian $-\partial G_i/\partial z$ where $z_i + G_i$
+lies within the bounds and $e_i'$ where it does not, the step projected on
+the bounds and halved until $\|F\|_2$ falls by a factor $1 - 10^{-4}t$. It
+converges when $\max|F| <$ `tolerance()` (default $10^{-8}$). At the
+equilibrium each player's block of $\partial G/\partial z$ over its
+instruments within their bounds must be negative semidefinite (largest
+eigenvalue of its symmetric part at most $10^{-4}$ of its size), as at a
+maximum; otherwise a note says the point meets the first-order conditions
+but may not be a best response, and `r(second_order)` is 0. A game whose
+best responses $x_1 = 1 + 1.5x_2$ and $x_2 = 1 - 1.5x_1$ diverge when taken
+in turn (each round multiplies the distance by 2.25) is solved in two
+iterations to $(10/13, -2/13)$; the standard model's game of the direct tax
+factor and the manufactures tariff in 9 iterations (47 solves), with the
+tariff at its bound. `damping(#)` moves each player the share $\#$ of the
+way to its best response, $u_p \leftarrow u_p + \#(BR_p - u_p)$; the game
+above converges with damping 0.5 in 28 rounds. A leader's followers are
+solved by the method given.
+
+`cge_solve, starts(#)` runs the interior point from the start and from
+$\# - 1$ other points of the free variables, drawn uniformly within their
+bounds, or within $\max(1, |x|)$ of the start where a bound is missing, and
+keeps the best solution that converges (`_cge_nlp_multi`). The points come
+from a generator of its own (MINSTD, $x \leftarrow 48271x \bmod (2^{31} -
+1)$, seed 20261025), so that Stata's random numbers are left alone and a
+run repeats. With integer variables every relaxation of branch and bound is
+multi-started. $f(x) = (x^2 - 1)^2 + 0.3x$ with $x = k/2$, $k \in [-4, 4]$
+has a local minimum at 0.96, which the interior point reaches from $k = 2$,
+and its global minimum at $-1.036$, which five starts find; with $k$ an
+integer, branch and bound from $k = 2$ prunes the node $k \le 1$, whose
+local minimum at its bound ($x = 0.5$, 0.71) exceeds the incumbent 0.3, and
+five starts find $k = -2$ with $-0.3$.
+
+`cge_loop, parallel()` in batch mode on Windows, where Stata ignores
+`winexec`, starts the processes through Python's `subprocess` module on
+Stata 16 and later (`python:`, which needs a Python installation; Stata's
+`help python`), with no window. Stata 13 to 15 cannot start other processes
+from batch mode, and solve the scenarios in the session with a note that
+names the version and the requirement; so does Stata 16 or later without
+Python. Parallel runs from batch mode therefore work only on some Stata
+versions; interactive Stata of any version starts them as before. Each
+process starts Stata and loads the model, about 14 seconds here, which no
+change in the package removes.
+
+Tests: `tests/test_nash.do` (the diverging game by Newton's method to
+$10^{-10}$ and by damping to $10^{-6}$, best responses failing; a duopoly
+with a firm at its bound by Newton's method; a leader with Newton's method
+for its followers; the standard model's game against the Gauss-Seidel
+equilibrium; errors); `tests/test_nlp.do` (the global minimum against the
+roots of $4x^3 - 4x + 0.3$, to $10^{-8}$); `tests/test_mip.do` (one start
+stops at $k = 2$, five find the best of the nine integers);
+`tests/test_parallel.do` (two and three processes from batch mode on Stata
+16 and later with Python, the sequential results to $10^{-10}$; the note
+and the session's results on Stata 13).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

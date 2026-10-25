@@ -1,4 +1,4 @@
-*! cge_loop.ado  v0.19.0  2026-10-25
+*! cge_loop.ado  v0.24.0  2026-10-25
 *! cge-stata: solve the model for a list or grid of scenarios, as a GAMS loop
 *! over a set of scenarios or GUSS does (Reference Manual, cge_loop)
 *!

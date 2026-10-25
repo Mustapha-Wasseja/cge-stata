@@ -3,7 +3,8 @@
 * least-squares problem against enumeration of every integer point; an
 * equation among integers, whose nodes are square systems; a mixed problem
 * with continuous variables; node limits, integer infeasibility and the
-* statuses; saving and loading; errors.
+* statuses; saving and loading; multi-start of the relaxations (from
+* version 0.24.0) against enumeration; errors.
 
 version 13.0
 
@@ -187,6 +188,31 @@ assert _rc == 198
 quietly do setup_synthetic.do
 capture noisily cge_bound QA, integer
 assert _rc == 198
+
+* ---------------------------------------------------------------------
+* Multi-start of the relaxations (from version 0.24.0): min (x^2 - 1)^2 +
+* 0.3 x with x = k / 2 and k an integer in [-4, 4]. From k = 2, the node k
+* <= 1 has its local minimum at its bound, x = 0.5 (0.71, above the
+* incumbent 0.3 at k = 2), and is pruned; with five starts at each node it
+* finds the basin of x = -1, and branch and bound the best of the nine
+* integers, k = -2 with -0.3
+* ---------------------------------------------------------------------
+cge_model new
+cge_variable x, value(1)
+cge_variable k, value(2)
+cge_equation E: x = 0.5 * k
+cge_bound k, lower(-4) upper(4)
+cge_bound k, integer
+cge_solve, name(nc1) minimize((x^2 - 1)^2 + 0.3 * x)
+assert r(converged) == 1
+mata: st_numscalar("ti_d", _ti_val("k", ""))
+assert scalar(ti_d) == 2
+cge_solve, name(nc5) minimize((x^2 - 1)^2 + 0.3 * x) starts(5)
+assert r(converged) == 1 & r(starts) == 5
+mata: ti_k = (-4::4) / 2; ti_f = (ti_k :^ 2 :- 1) :^ 2 + 0.3 * ti_k
+mata: st_numscalar("ti_d", abs(st_numscalar("r(objective)") - min(ti_f)) + abs(_ti_val("k", "") - 2 * select(ti_k, ti_f :== min(ti_f))))
+assert scalar(ti_d) < 1e-10
+mata: mata drop ti_k ti_f
 
 mata: mata drop _ti_val() _ti_knap()
 scalar drop ti_best ti_s ti_d

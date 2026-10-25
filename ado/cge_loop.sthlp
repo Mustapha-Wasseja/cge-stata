@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.19.0  25oct2026}{...}
+{* *! version 0.24.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -104,10 +104,14 @@ are kept.
 {opt parallel(#)} (from version 0.19.0) solves the scenarios in # Stata
 processes at once: the model is saved, the scenarios split into contiguous
 groups, each solved by Stata in batch mode, and the simulations merged back
-with the same names and results as one run. On Windows, Stata in batch mode
-cannot start other processes, so the scenarios are then solved in the
-session, with a note. {opt stataexe(path)} gives the executable of the
-processes; by default that of the running edition.
+with the same names and results as one run. In batch mode on Windows, from
+version 0.24.0, Stata 16 and later start the processes through Python
+({helpb python}, which needs a Python installation). {bf:Caution:} this works
+only on some versions of Stata: Stata 13 to 15 cannot start other processes
+from batch mode, nor can Stata 16 or later without Python, so the scenarios
+are then solved in the session, one after another, with a note. Interactive
+Stata of any version starts the processes. {opt stataexe(path)} gives the
+executable of the processes; by default that of the running edition.
 
 {phang}
 {opt first(#)} (from version 0.19.0) numbers the scenarios from #, so that

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.18.0  25oct2026}{...}
+{* *! version 0.24.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt step:s(#)} {opt trace}
 {opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}
-{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)}]
+{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)} {opt starts(#)}]
 
 
 {title:Description}
@@ -188,6 +188,15 @@ relaxations are convex, as linear and convex quadratic ones are, and a
 heuristic otherwise.
 
 {phang}
+{opt starts(#)} (from version 0.24.0) solves a nonlinear programme from #
+points: the start and # - 1 points of the free variables drawn within their
+bounds (within max(1, |x|) of the start where a bound is missing), keeping
+the best solution that converges; with integer variables, every relaxation
+of branch and bound. The points repeat from run to run and leave Stata's
+random numbers alone. Multi-start makes a global optimum of a nonconvex
+problem more likely, not certain; the default is 1.
+
+{phang}
 {opt diagnose} displays the diagnostics after a solve that converges too.
 {helpb cge_listing} lists every equation element at the solution, or where a
 solve stopped (from version 0.9.5).
@@ -225,6 +234,9 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(nodes)}}nodes of branch and bound{p_end}
 {synopt:{cmd:r(bestbound)}}its best bound{p_end}
 {synopt:{cmd:r(gap)}}its relative gap{p_end}
+{synopt:{cmd:r(starts)}}starts of the interior point (from version 0.24.0){p_end}
+{synopt:{cmd:r(best_start)}}the start of the best solution, with starts() and no integers{p_end}
+{synopt:{cmd:r(N_starts_converged)}}the starts that converged{p_end}
 {synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}

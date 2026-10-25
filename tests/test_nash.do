@@ -2,7 +2,10 @@
 * docs/model_spec.md, Section 29): Cournot duopoly and oligopoly against
 * their closed forms; a Stackelberg leader against its closed form; a game of
 * two instruments on the standard model, whose equilibrium each player's
-* optimum confirms; saving and loading the players; errors.
+* optimum confirms; saving and loading the players; errors. From version
+* 0.24.0 (Section 33): Newton's method on the standard model's game, on a
+* game whose best responses diverge in turn, on a duopoly with a firm at its
+* bound and for a leader's followers; damped best responses.
 
 version 13.0
 
@@ -94,6 +97,13 @@ matrix v = r(instruments)
 * highest given the direct tax rates that keep revenue at its target; the
 * government's own optimum from the equilibrium changes nothing
 assert abs(v[1, 2]) < 1e-12
+* Newton's method on the players' first-order conditions (from version
+* 0.24.0), from the base, finds the same equilibrium, the tariff at its bound
+quietly cge_shock, reset
+cge_nash solve, name(gamen) method(newton)
+assert r(converged) == 1 & "`r(method)'" == "newton" & r(second_order) == 1
+matrix vn = r(instruments)
+assert abs(vn[1, 1] - v[1, 1]) < 1e-6 & abs(vn[1, 2]) < 1e-12
 quietly cge_optimize, instruments(TINSADJ) minimize((YG - 1.02 * base(YG))^2) lower(TINSADJ:0.2) upper(TINSADJ:3)
 matrix w = r(instruments)
 assert abs(w[1, 1] - v[1, 1]) < 1e-6
@@ -123,6 +133,62 @@ capture noisily cge_nash solve, name(x)
 assert _rc == 459
 capture noisily cge_nash nothing
 assert _rc == 198
+capture noisily cge_nash solve, name(x) method(jacobi)
+assert _rc == 198
+capture noisily cge_nash solve, name(x) damping(0)
+assert _rc == 198
+capture noisily cge_nash solve, name(x) damping(0.5) method(newton)
+assert _rc == 198
+
+* ---------------------------------------------------------------------
+* 6. Newton's method and damping (from version 0.24.0). Best responses x1 =
+*    1 + 1.5 x2 and x2 = 1 - 1.5 x1 diverge when taken in turn (each round
+*    multiplies the distance by 2.25); the equilibrium is (10/13, -2/13),
+*    which Newton's method finds and best responses halved in each step
+*    reach
+* ---------------------------------------------------------------------
+cge_model new
+cge_variable X1, value(0) fixed
+cge_variable X2, value(0) fixed
+cge_variable D = X1 + X2
+cge_nash player p1, instruments(X1) maximize(-(X1 - 1 - 1.5 * X2)^2)
+cge_nash player p2, instruments(X2) maximize(-(X2 - 1 + 1.5 * X1)^2)
+capture noisily cge_nash solve, name(gs) iterate(10)
+assert _rc == 430
+quietly cge_shock, reset
+cge_nash solve, name(nw) method(newton)
+assert r(converged) == 1 & r(second_order) == 1
+matrix v = r(instruments)
+assert abs(v[1, 1] - 10/13) < 1e-10 & abs(v[1, 2] + 2/13) < 1e-10
+quietly cge_shock, reset
+cge_nash solve, name(dm) damping(0.5)
+assert r(converged) == 1
+matrix v = r(instruments)
+assert abs(v[1, 1] - 10/13) < 1e-6 & abs(v[1, 2] + 2/13) < 1e-6
+* a duopoly in which firm 2's unit cost of 9 keeps it at its bound, 0, and
+* firm 1 sets the monopoly output (a - c1) / (2b) = 4.5
+cge_model new
+cge_parameter a = 10
+cge_parameter b = 1
+cge_variable Q1, value(1) fixed
+cge_variable Q2, value(1) fixed
+cge_variable P = a - b * (Q1 + Q2)
+cge_nash player f1, instruments(Q1) maximize((P - 1) * Q1) lower(Q1:0)
+cge_nash player f2, instruments(Q2) maximize((P - 9) * Q2) lower(Q2:0)
+cge_nash solve, name(corner) method(newton)
+assert r(converged) == 1
+matrix v = r(instruments)
+assert abs(v[1, 1] - 4.5) < 1e-8 & v[1, 2] == 0
+* a leader whose followers' equilibria come from Newton's method: the
+* Stackelberg outputs 4.5 and 2.25
+cge_nash player f2, instruments(Q2) maximize((P - 1) * Q2) lower(Q2:0)
+quietly cge_shock, reset
+cge_nash solve, name(stackn) leader(f1) method(newton)
+assert r(converged) == 1
+matrix u = r(leader_instruments)
+assert abs(u[1, 1] - 4.5) < 1e-4
+mata: st_numscalar("tn_q2", _tn_val("Q2", "stackn"))
+assert abs(scalar(tn_q2) - 2.25) < 1e-4
 
 program drop _cournot
 mata: mata drop _tn_val()

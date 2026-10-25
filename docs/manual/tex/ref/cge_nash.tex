@@ -28,7 +28,7 @@ cge_nash solve, name(stackelberg) leader(firm1)
 
 \begin{stsyntax}
 \cmdb{cge_nash player} \argu{name} \texttt{,} \optarg{inst}{ruments}{list} \{\optarg{max}{imize}{objective} $|$ \optarg{min}{imize}{objective}\} [\optarg{low}{er}{spec} \optarg{up}{per}{spec}]\\
-\cmdb{cge_nash solve} \texttt{,} \optarg{}{name}{name} [\optarg{lead}{er}{player} \optarg{tol}{erance}{\#} \optarg{iter}{ate}{\#} \opt{}{trace}]\\
+\cmdb{cge_nash solve} \texttt{,} \optarg{}{name}{name} [\optarg{lead}{er}{player} \optarg{meth}{od}{gs$|$newton} \optarg{damp}{ing}{\#} \optarg{tol}{erance}{\#} \optarg{iter}{ate}{\#} \opt{}{trace}]\\
 \cmdb{cge_nash list}\\
 \cmdb{cge_nash clear} [\argu{player}]
 \end{stsyntax}
@@ -42,6 +42,8 @@ cge_nash solve, name(stackelberg) leader(firm1)
 \optgroup{Solve}
 \optarg{}{name}{name} & the simulation of the equilibrium\\
 \optarg{lead}{er}{player} & the leader, who anticipates the others' equilibrium\\
+\optarg{meth}{od}{gs$|$newton} & best responses in turn, or Newton's method; default \texttt{gs}\\
+\optarg{damp}{ing}{\#} & share of the way to each best response; default \texttt{1}\\
 \optarg{tol}{erance}{\#} & largest change of an instrument in a round; default \texttt{1e-8}\\
 \optarg{iter}{ate}{\#} & rounds of best responses; default 50\\
 \opt{}{trace} & display each round\\
@@ -66,8 +68,19 @@ starts the next one just inside it.
 are chosen to maximise its objective at the equilibrium of the other players
 that each choice gives.
 
+\item[\optarg{meth}{od}{gs$|$newton}] (from version 0.24.0) chooses best
+responses in turn (\cmd{gs}, the default) or a semismooth Newton method on
+the players' first-order conditions (\cmd{newton}). With a leader, it is the
+method of the followers' equilibria.
+
+\item[\optarg{damp}{ing}{\#}] (from version 0.24.0), above 0 and at most 1,
+moves each player that share of the way to its best response; with
+\cmd{method(gs)}.
+
 \item[\optarg{tol}{erance}{\#}] ends the rounds of best responses when none
-changes an instrument by more than \# relative to its size.
+changes an instrument by more than \# relative to its size; with
+\cmd{method(newton)}, the iterations when the largest gap in the first-order
+conditions is below \#.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -77,7 +90,20 @@ instruments, by \manref{cge_optimize} with exact derivatives, and leaves it in
 place for the next (a Gauss--Seidel iteration). At a Nash equilibrium no
 player can do better given the others' choices, and a round changes nothing.
 The iteration converges when the players' responses are not too strongly
-interdependent, as in the examples; it may cycle otherwise.
+interdependent, as in the examples; it may cycle or diverge otherwise.
+Damping, \cmd{damping(0.5)}, moves each player half of the way to its best
+response, which slows the iteration but can make it converge. From version
+0.24.0, \cmd{method(newton)} solves the players' first-order conditions
+together instead: each instrument's derivative of its player's objective,
+from the exact derivatives of \manref{cge_optimize}, is set to zero, or
+pushes against a bound. It converges quadratically near the equilibrium,
+where best responses in turn may diverge, and solves the model fewer times,
+since it needs no optimisation of each player. It finds points that meet the
+first-order conditions; when a player's objective is not concave in its
+instruments there, a note says that the point may not be its best response.
+Best responses from \cmd{x1 = 1 + 1.5 x2} and \cmd{x2 = 1 - 1.5 x1} diverge
+in turn, while Newton's method reaches $(10/13, -2/13)$ in two iterations and
+\cmd{damping(0.5)} in 28 rounds.
 
 \cgesubsec{Example 1: Cournot and Stackelberg}
 
@@ -93,13 +119,16 @@ The leader's profit, $(a - c)^2/8b = 10.125$, exceeds its Cournot profit of 9.
 \begin{storedres}
 \resgroup{Scalars}
 \res{r(converged)} & 1 if the equilibrium was found\\
-\res{r(rounds)} & rounds of best responses (without a leader)\\
+\res{r(rounds)} & rounds of best responses, or Newton iterations (without a leader)\\
+\res{r(N_solves)} & points of the model solved, with \cmd{method(newton)}\\
+\res{r(second_order)} & 1 if each player's objective is concave in its instruments at the equilibrium, with \cmd{method(newton)}\\
 \res{r(N_players)} & players\\
 \res{r(objective)} & the leader's objective (with a leader)\\
 \res{r(N_equilibria)} & the followers' equilibria solved (with a leader)\\
 \resgroup{Macros}
 \res{r(name)} & the simulation of the equilibrium\\
 \res{r(leader)} & the leader, if any\\
+\res{r(method)} & \cmd{gs} or \cmd{newton}\\
 \resgroup{Matrices}
 \res{r(instruments)} & the players' instruments at the equilibrium\\
 \res{r(objectives)} & their objectives\\
@@ -117,6 +146,23 @@ $\ell$ chooses $u_\ell$ to maximise $F(u_\ell) = f_\ell(x, u_\ell, u_{-\ell}^*(u
 with $u_{-\ell}^*(u_\ell)$ the followers' equilibrium, by a projected Newton
 method with central differences of $F$ (steps $10^{-3}$ times the scale of
 each instrument), each evaluation solving the followers' equilibrium.
+
+Newton's method (from version 0.24.0) works in the scaled instruments $z$
+of \manref{cge_optimize}. With $G_i(z) = s_{p(i)}\,\partial f_{p(i)}/\partial
+z_i$, the derivative of the objective of the player $p(i)$ who holds
+instrument $i$, with its sense $s_p$ and scaled by its size at the start,
+and bounds $l \le z \le h$, the equilibrium solves
+\begin{equation*}
+F(z) = z - \mathrm{mid}\bigl(l,\ z + G(z),\ h\bigr) = 0.
+\end{equation*}
+Each step solves $J_F\,d = -F$, with the rows of $J_F$ equal to
+$-\partial G_i/\partial z$ where $z_i + G_i$ lies within the bounds and to
+$e_i'$ elsewhere, $\partial G/\partial z$ from forward differences of $G$;
+the step is projected on the bounds and halved until $\|F\|$ falls. $G$
+comes from the exact derivatives of the model's solution with respect to the
+instruments, by the implicit function theorem, for every player at once.
+Damped best responses set $u_p \leftarrow u_p + \delta\,(\mathrm{BR}_p(u_{-p})
+- u_p)$, with $\delta$ the damping.
 
 \cgesec{Also see}
 

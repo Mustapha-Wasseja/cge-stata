@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.23.0")
+    return("0.24.0")
 }
 
 // =====================================================================
@@ -8382,7 +8382,8 @@ void _cge_set_simobj(struct cge_model scalar M, real scalar k, string scalar obj
 
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
                 real scalar steps, real scalar diagnose, string scalar lin, string scalar obj, real scalar tlim,
-                string scalar mname, string scalar from, string scalar hold, real scalar nodes, real scalar optcr)
+                string scalar mname, string scalar from, string scalar hold, real scalar nodes, real scalar optcr,
+                real scalar starts)
 {
     struct cge_model scalar M
     real colvector x, x2, start
@@ -8402,6 +8403,8 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     // gap
     if (args() < 14) nodes = -1
     if (args() < 15) optcr = -1
+    // multi-start (from version 0.24.0)
+    if (args() < 16) starts = 1
     M = _cge_load()
     _cge_need(M, "calibrated")
     if (obj == "" & _cge_sa(M)) if (rows(_cge_int_pos(M))) {
@@ -8415,7 +8418,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     _cge_deadline_set(_cge_opttime(M, tlim))
     // a nonlinear programme (from version 0.15.0)
     if (obj != "") {
-        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold, nodes, optcr)
+        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold, nodes, optcr, starts)
         _cge_deadline_set(.)
         return
     }
@@ -21753,7 +21756,7 @@ string rowvector _cge_opt_key(string scalar spec, string scalar what)
 
 void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min, string scalar s_tar,
                    string scalar s_lo, string scalar s_up, string scalar name, real scalar tol, real scalar maxit,
-                   real scalar trace, | string scalar s_con, string scalar s_grad)
+                   real scalar trace, | string scalar s_con, string scalar s_grad, real scalar setup)
 {
     struct cge_model scalar M
     struct cge_opt scalar O
@@ -21768,6 +21771,10 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     string scalar pn
     if (args() < 11) s_con = ""
     if (args() < 12) s_grad = ""
+    // the instruments, objective, targets and bounds set up and stored, for
+    // cge_nash's Newton method, which takes the players' objectives as
+    // targets (from version 0.24.0)
+    if (args() < 13) setup = 0
 
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -21888,7 +21895,7 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
         csc = csc \ sc
     }
     if (rows(O.cval) & !O.hasobj) _cge_fail("constraints() need an objective, maximize() or minimize()", 198)
-    if (!O.hasobj & rows(O.tval) != n) _cge_fail("without an objective, give one target for each instrument", 198)
+    if (!O.hasobj & rows(O.tval) != n & !setup) _cge_fail("without an objective, give one target for each instrument", 198)
     if (!O.hasobj & rows(O.tval) == 0) _cge_fail("give maximize(), minimize() or targets()", 198)
     O.tscale = tsc
     O.cscale = csc
@@ -21916,6 +21923,7 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     for (k = 1; k <= rows(O.tval); k++) (void) _cge_opt_item(M, O, M.p, x, keys, val, O.tkeys[k, .], O.tex[k], 1)
     for (k = 1; k <= rows(O.cval); k++) (void) _cge_opt_item(M, O, M.p, x, keys, val, O.ckeys[k, .], O.cex[k], 1)
     _cge_opt_store(O)
+    if (setup) return
 
     z = _cge_opt_z(O, O.start)
     conv = 0
@@ -22195,7 +22203,7 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     real scalar T, S, k, j, s, conv, iter, err, nm, kd, pi, st, it2, done, haskey, nr, w, kk
     string scalar method, m2, pn
     pointer() scalar q
-    real scalar parrun, kr
+    real scalar parrun, kr, pyok
 
     // parallel runs across Stata processes and the number of the first
     // scenario (from version 0.19.0)
@@ -22273,10 +22281,21 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     // groups, each solved by another Stata process in batch mode from the
     // saved model, and their simulations merged back
     parrun = 0
+    // in batch mode on Windows, from version 0.24.0, Stata 16 and later start
+    // the processes through Python, which batch mode allows; Stata 13 to 15
+    // cannot start them
+    pyok = 0
     if (par > 1 & S > 1 & c("os") == "Windows" & c("mode") == "batch") {
-        printf("{txt}Note: Stata in batch mode cannot start other Stata processes on Windows; the scenarios are solved in this session\n")
+        if (c("stata_version") >= 16) pyok = !_stata("quietly python: import subprocess", 1)
+        if (!pyok & c("stata_version") >= 16) {
+            printf("{txt}Note: parallel() in batch mode needs Stata's Python integration (help python), which is not available; the scenarios are solved in this session\n")
+        }
+        else if (!pyok) {
+            printf("{txt}Note: Stata %s in batch mode cannot start other Stata processes on Windows (parallel() in batch mode needs Stata 16 or later); the scenarios are solved in this session\n",
+                   strofreal(floor(c("stata_version"))))
+        }
     }
-    else if (par > 1 & S > 1) {
+    if (par > 1 & S > 1 & (pyok | !(c("os") == "Windows" & c("mode") == "batch"))) {
         _cge_loop_par(M, name, tg, V, cold, tol, maxit, par, exe, store, first, conv_v, it_v, res_v, X, simn)
         parrun = 1
         psave = M.p
@@ -22501,7 +22520,7 @@ void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvect
     string scalar pre, dir, base, fm, adop, spec, cwd, q, line, nm
     string colvector fw, fr, fd
     real colvector a, b
-    real scalar S, P, T, k, j, fh, t0, done, rc, kr, ks, ms, ss
+    real scalar S, P, T, k, j, fh, t0, done, rc, kr, ks, ms, ss, py
     q = char(34)
     S = rows(V)
     T = cols(V)
@@ -22551,12 +22570,20 @@ void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvect
     // logs are written
     cwd = c("pwd")
     stata("quietly cd " + q + dir + q)
+    py = (c("os") == "Windows" & c("mode") == "batch")
     for (k = 1; k <= P; k++) {
-        if (c("os") == "Windows") stata("winexec " + q + exe + q + " /e do " + q + fw[k] + q)
+        // in batch mode, which ignores winexec, through Python's subprocess
+        // (from version 0.24.0; Stata 16 and later)
+        if (py) {
+            stata("quietly python: import subprocess; subprocess.Popen([" + _cge_pystr(exe) + ", " + _cge_pystr("/e") + ", " +
+                  _cge_pystr("do") + ", " + _cge_pystr(fw[k]) + "], cwd=" + _cge_pystr(dir) +
+                  ", stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)")
+        }
+        else if (c("os") == "Windows") stata("winexec " + q + exe + q + " /e do " + q + fw[k] + q)
         else stata("shell " + q + exe + q + " -b do " + q + fw[k] + q + " &")
     }
     stata("quietly cd " + q + cwd + q)
-    printf("{txt}Started {res}%f{txt} Stata process(es) for {res}%f{txt} scenario(s); waiting\n", P, S)
+    printf("{txt}Started {res}%f{txt} Stata process(es) for {res}%f{txt} scenario(s)%s; waiting\n", P, S, (py ? " through Python" : ""))
     // wait for every process, at most 10 minutes plus 2 per scenario
     t0 = _cge_now()
     while (1) {
@@ -22612,6 +22639,13 @@ void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvect
         if (fileexists(pathjoin(dir, base + "_w" + strofreal(k) + ".log"))) unlink(pathjoin(dir, base + "_w" + strofreal(k) + ".log"))
     }
     printf("{txt}Solved in {res}%f{txt} parallel Stata process(es)\n", P)
+}
+
+// A path or word as a Python string literal, its backslashes doubled (from
+// version 0.24.0)
+string scalar _cge_pystr(string scalar s)
+{
+    return(char(34) + subinstr(s, char(92), char(92) + char(92)) + char(34))
 }
 
 // The simulations of loop name, in order; 0 if none
@@ -23334,7 +23368,8 @@ real colvector _cge_nash_current(string scalar ins)
 // central differences of that value (step 1e-3 times the scale of each
 // instrument), steps halved until the value improves; each evaluation solves
 // the followers' equilibrium by cge_nash solve
-void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol, real scalar maxit, real scalar trace)
+void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol, real scalar maxit, real scalar trace,
+                      | string scalar opts)
 {
     struct cge_model scalar M
     struct cge_opt scalar O
@@ -23343,6 +23378,8 @@ void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol,
     real matrix H
     real scalar n, k, j, f, ft, fp, fm, fpp, fpm, fmp, fmm, h, it, ls, sgn, lam, conv, gn, nev, kind, pidx, st
     string scalar pn, obj, slo, sup, cmd
+    // the method and damping of the followers' equilibria (from version 0.24.0)
+    if (args() < 6) opts = ""
     M = _cge_load()
     k = _cge_find(M.nashdef[., 1], leader)
     if (!k) _cge_fail("cge_nash solve: player " + leader + " not found", 111)
@@ -23370,7 +23407,7 @@ void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol,
     _cge_nash_bounds(t, sup, hi)
     nev = 0
     conv = 0
-    f = _cge_nash_leval(O, u, leader, obj, sgn, tol, maxit, nev)
+    f = _cge_nash_leval(O, u, leader, obj, sgn, tol, maxit, nev, opts)
     if (f >= .) _cge_fail("cge_nash solve: the followers' equilibrium was not found at the leader's start", 430)
     for (it = 1; it <= 50; it++) {
         g = J(n, 1, .)
@@ -23379,8 +23416,8 @@ void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol,
             h = 1e-3 * sc[j]
             e = J(n, 1, 0)
             e[j] = h
-            fp = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev)
-            fm = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev)
+            fp = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev, opts)
+            fm = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev, opts)
             if (fp >= . | fm >= .) _cge_fail("cge_nash solve: the followers' equilibrium was not found near the leader's choice", 430)
             g[j] = (fp - fm) / (2 * h)
             H[j, j] = (fp - 2 * f + fm) / h^2
@@ -23390,11 +23427,11 @@ void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol,
                 e = J(n, 1, 0)
                 e[j] = 1e-3 * sc[j]
                 e[k] = 1e-3 * sc[k]
-                fpp = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev)
-                fmm = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev)
+                fpp = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev, opts)
+                fmm = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev, opts)
                 e[k] = -e[k]
-                fpm = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev)
-                fmp = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev)
+                fpm = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev, opts)
+                fmp = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev, opts)
                 H[j, k] = H[k, j] = (fpp - fpm - fmp + fmm) / (4 * 1e-6 * sc[j] * sc[k])
             }
         }
@@ -23412,7 +23449,7 @@ void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol,
         lam = 1
         for (ls = 1; ls <= 30; ls++) {
             ut = rowmax((rowmin((u + lam * d, hi)), lo))
-            ft = _cge_nash_leval(O, ut, leader, obj, sgn, tol, maxit, nev)
+            ft = _cge_nash_leval(O, ut, leader, obj, sgn, tol, maxit, nev, opts)
             if (ft < . & ft > f - 1e-12 * max((1, abs(f)))) break
             lam = lam / 2
         }
@@ -23430,11 +23467,199 @@ void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol,
         f = ft
     }
     // the equilibrium at the leader's choice
-    f = _cge_nash_leval(O, u, leader, obj, sgn, tol, maxit, nev)
+    f = _cge_nash_leval(O, u, leader, obj, sgn, tol, maxit, nev, opts)
     st_numscalar("r(leader_converged)", conv)
     st_numscalar("r(leader_objective)", sgn * f)
     st_numscalar("r(N_equilibria)", nev)
     st_matrix("r(leader_instruments)", u')
+}
+
+// Nash equilibrium by Newton's method (from version 0.24.0): each
+// instrument's derivative of its player's objective, with its sense, G(z) in
+// the scaled instruments z, from the exact derivatives of cge_optimize, which
+// takes the players' objectives as its targets (central differences of
+// solved models where those cannot be found); within the bounds, the
+// first-order conditions F(z) = z - mid(lo, z + G(z), hi) = 0, solved by a
+// semismooth Newton method with the Jacobian of G from forward differences
+// of G (step 1e-5) and steps halved until |F| falls. Each objective is
+// scaled by its size at the start, at least 1. At the equilibrium, each
+// player's own derivatives of G must be negative semidefinite over its
+// instruments within their bounds, for a maximum of its objective
+void _cge_nash_newton(string scalar exclude, real scalar tol, real scalar maxit, real scalar trace)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    string scalar sins, star, slo, sup
+    string rowvector t
+    real colvector own, sg, z, zlo, zhi, G, F, Gt, Ft, zt, d, fr, r0, x, v, sel
+    real matrix JG, JF, H
+    real scalar np, k, n, it, ls, tt, nF, conv, nsolve, soc, ev
+    string colvector pnames
+    M = _cge_load()
+    if (cols(M.nashdef) != 6 | !rows(M.nashdef)) _cge_fail("cge_nash solve: define the players with cge_nash player", 459)
+    if (exclude != "") if (!_cge_find(M.nashdef[., 1], exclude)) _cge_fail("cge_nash solve: player " + exclude + " not found", 111)
+    sins = star = slo = sup = ""
+    own = sg = J(0, 1, .)
+    np = 0
+    for (k = 1; k <= rows(M.nashdef); k++) {
+        if (M.nashdef[k, 1] == exclude) continue
+        np++
+        t = tokens(M.nashdef[k, 2])
+        sins = sins + " " + M.nashdef[k, 2]
+        own = own \ J(cols(t), 1, np)
+        sg = sg \ (M.nashdef[k, 3] == "maximize" ? 1 : -1)
+        star = star + (np > 1 ? ", " : "") + M.nashdef[k, 4] + " = 0"
+        slo = slo + " " + M.nashdef[k, 5]
+        sup = sup + " " + M.nashdef[k, 6]
+    }
+    _cge_optimize(strtrim(sins), "", "", star, strtrim(slo), strtrim(sup), "", 1e-12, 100, 0, "", "", 1)
+    O = _cge_opt_load()
+    // the objectives scaled by their sizes at the start
+    (void) _cge_opt_solve(O.start, r0, x)
+    O = _cge_opt_load()
+    O.tscale = rowmax((J(np, 1, 1), abs(r0)))
+    _cge_opt_store(O)
+    n = rows(own)
+    _cge_opt_box(O, zlo, zhi)
+    z = _cge_opt_z(O, O.start)
+    nsolve = 0
+    if (!_cge_nash_G(O, z, own, sg, G, nsolve)) {
+        _cge_fail("cge_nash solve: the derivatives of the players' objectives cannot be found at the start", 430)
+    }
+    F = z - rowmax((zlo, rowmin((z + G, zhi))))
+    conv = 0
+    for (it = 0; it <= maxit; it++) {
+        nF = max(abs(F))
+        if (trace) printf("{txt}Iteration %f: largest gap in the first-order conditions %9.3e\n", it, nF)
+        if (nF < tol) {
+            conv = 1
+            break
+        }
+        if (it >= maxit | _cge_timeup()) break
+        if (!_cge_nash_JG(O, z, G, zhi, own, sg, JG, nsolve)) break
+        fr = (z + G :> zlo) :& (z + G :< zhi)
+        JF = I(n) - diag(fr) * (I(n) + JG)
+        d = -lusolve(JF, F)
+        if (hasmissing(d)) d = -F
+        tt = 1
+        for (ls = 1; ls <= 30; ls++) {
+            zt = rowmax((zlo, rowmin((z + tt * d, zhi))))
+            if (_cge_nash_G(O, zt, own, sg, Gt, nsolve)) {
+                Ft = zt - rowmax((zlo, rowmin((zt + Gt, zhi))))
+                if (norm(Ft) < (1 - 1e-4 * tt) * norm(F)) break
+            }
+            tt = tt / 2
+        }
+        if (ls > 30) break
+        z = zt
+        G = Gt
+        F = Ft
+    }
+    // the second-order conditions of each player at the equilibrium
+    soc = 1
+    if (conv) {
+        if (_cge_nash_JG(O, z, G, zhi, own, sg, JG, nsolve)) {
+            fr = (z + G :> zlo) :& (z + G :< zhi)
+            pnames = select(M.nashdef[., 1], M.nashdef[., 1] :!= exclude)
+            for (k = 1; k <= np; k++) {
+                sel = (own :== k) :& fr
+                if (!any(sel)) continue
+                H = select(select(JG, sel), sel')
+                ev = max(symeigenvalues((H + H') / 2))
+                if (ev > 1e-4 * max((1, max(abs(H))))) {
+                    soc = 0
+                    printf("{txt}Note: player {res}%s{txt}'s objective is not concave in its instruments at the equilibrium: the point meets its first-order conditions but may not be its best response; check with method(gs)\n",
+                           pnames[k])
+                }
+            }
+        }
+        else soc = .
+    }
+    // the equilibrium becomes the current values of the instruments
+    O = _cge_opt_load()
+    v = _cge_opt_values(O, z)
+    M = _cge_load()
+    _cge_opt_apply(M, O, v, M.p, M.xcur)
+    _cge_store(M)
+    st_numscalar("r(converged)", conv)
+    st_numscalar("r(iterations)", it)
+    st_numscalar("r(N_solves)", nsolve)
+    st_numscalar("r(second_order)", soc)
+}
+
+// G of _cge_nash_newton at z: each instrument's derivative of its player's
+// objective, with its sense; 0 if the model does not solve
+real scalar _cge_nash_G(struct cge_opt scalar O, real colvector z, real colvector own, real colvector sg,
+                        real colvector G, real scalar nsolve)
+{
+    struct cge_opt scalar Q
+    real colvector r, g, rp, rm, x, zp, zm
+    real matrix Jr
+    real scalar f, i, h
+    nsolve++
+    G = J(rows(z), 1, .)
+    if (_cge_opt_point(O, z, f, r, g, Jr)) {
+        for (i = 1; i <= rows(z); i++) G[i] = sg[own[i]] * Jr[own[i], i]
+        return(!hasmissing(G))
+    }
+    if (hasmissing(r)) return(0)
+    // without the exact derivatives: central differences of solved models
+    for (i = 1; i <= rows(z); i++) {
+        h = 1e-5
+        zp = zm = z
+        zp[i] = z[i] + h
+        zm[i] = z[i] - h
+        Q = _cge_opt_load()
+        (void) _cge_opt_solve(_cge_opt_values(Q, zp), rp, x)
+        (void) _cge_opt_solve(_cge_opt_values(Q, zm), rm, x)
+        nsolve = nsolve + 2
+        if (hasmissing(rp) | hasmissing(rm)) return(0)
+        G[i] = sg[own[i]] * (rp[own[i]] - rm[own[i]]) / (2 * h)
+    }
+    return(1)
+}
+
+// The Jacobian JG of G at z, by forward differences of G (backward at an
+// upper bound); 0 if the model does not solve
+real scalar _cge_nash_JG(struct cge_opt scalar O, real colvector z, real colvector G, real colvector zhi,
+                         real colvector own, real colvector sg, real matrix JG, real scalar nsolve)
+{
+    real colvector zt, Gt
+    real scalar j, h, n
+    n = rows(z)
+    JG = J(n, n, .)
+    for (j = 1; j <= n; j++) {
+        h = (z[j] + 1e-5 > zhi[j] ? -1e-5 : 1e-5)
+        zt = z
+        zt[j] = z[j] + h
+        if (!_cge_nash_G(O, zt, own, sg, Gt, nsolve)) return(0)
+        JG[., j] = (Gt - G) / h
+    }
+    return(1)
+}
+
+// A player's instruments set to values u, as the current shocks (from
+// version 0.24.0, for damped best responses)
+void _cge_nash_setcur(string scalar ins, real colvector u)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    string rowvector t
+    real scalar n, j, kind, pidx, st
+    string scalar pn
+    M = _cge_load()
+    t = tokens(ins)
+    n = cols(t)
+    O.kind = O.pidx = O.start = J(n, 1, .)
+    O.pname = J(n, 1, "")
+    for (j = 1; j <= n; j++) {
+        _cge_opt_instrument(M, t[j], kind, pn, pidx, st)
+        O.kind[j] = kind
+        O.pname[j] = pn
+        O.pidx[j] = pidx
+    }
+    _cge_opt_set(O, u, M.p, M.xcur)
+    _cge_store(M)
 }
 
 // A player's instruments at a bound moved inside it, as cge_optimize starts
@@ -23512,7 +23737,7 @@ real scalar _cge_strrpos(string scalar s, string scalar ch)
 // The leader's objective (with its sense, to be maximised) at the followers'
 // equilibrium with its instruments at u; missing if it is not found
 real scalar _cge_nash_leval(struct cge_opt scalar O, real colvector u, string scalar leader, string scalar obj,
-                            real scalar sgn, real scalar tol, real scalar maxit, real scalar nev)
+                            real scalar sgn, real scalar tol, real scalar maxit, real scalar nev, string scalar opts)
 {
     struct cge_model scalar M
     real scalar rc
@@ -23521,7 +23746,7 @@ real scalar _cge_nash_leval(struct cge_opt scalar O, real colvector u, string sc
     _cge_store(M)
     nev++
     rc = _stata("quietly cge_nash solve, name(_cgelead) exclude(" + leader + ") tolerance(" + strofreal(tol, "%21.17g") +
-                ") iterate(" + strofreal(maxit) + ")", 1)
+                ") iterate(" + strofreal(maxit) + ") " + opts, 1)
     if (rc) return(.)
     if (st_numscalar("r(converged)") != 1) return(.)
     return(sgn * _cge_nash_value(obj, "_cgelead"))
@@ -23618,13 +23843,15 @@ real colvector _cge_int_type(struct cge_model scalar M)
 real scalar _cge_bb_node(struct cge_model scalar M, real colvector xfix, real colvector x0, real matrix tok,
                          real scalar sgn, real scalar tol, real scalar maxit, real colvector ipos,
                          real colvector lo, real colvector up, real colvector nlo, real colvector nup,
-                         real colvector x, real scalar f, real scalar iter, real colvector lam)
+                         real colvector x, real scalar f, real scalar iter, real colvector lam, | real scalar starts)
 {
     struct cge_model scalar N
     struct cge_sys scalar S
     real colvector lo2, up2, xf, st, fx, fr, sc
-    real scalar conv, err, feas
+    real scalar conv, err, feas, best, nconv
     string scalar method
+    // multi-start of the relaxations (from version 0.24.0)
+    if (args() < 17) starts = 1
     iter = 0
     lam = J(0, 1, .)
     f = .
@@ -23650,7 +23877,7 @@ real scalar _cge_bb_node(struct cge_model scalar M, real colvector xfix, real co
     S = _cge_sys_make(N, 0)
     if (rows(S.free) > S.neq) {
         feas = 0
-        x = _cge_nlp_solve(N, N.p, xf, st, tok, sgn, tol, maxit, 0, conv, iter, err, f, lam, feas, 1)
+        x = _cge_nlp_multi(N, N.p, xf, st, tok, sgn, tol, maxit, 0, conv, iter, err, f, lam, feas, 1, starts, best, nconv)
         return(conv & f < .)
     }
     if (rows(S.free) == S.neq & S.neq > 0) {
@@ -23685,12 +23912,13 @@ real colvector _cge_bb(struct cge_model scalar M, real colvector xfix, real colv
                        real scalar sgn, real scalar tol, real scalar maxit, real scalar trace, real colvector ipos,
                        real scalar nodemax, real scalar optcr, real scalar conv, real scalar iter, real scalar err,
                        real scalar fobj, real colvector lam, real scalar nn, real scalar bound, real scalar ms,
-                       real scalar ss)
+                       real scalar ss, | real scalar starts)
 {
     real colvector lo, up, nlo, nup, x, xn, xi, frac, xinc, laminc, lamn, d1, u1, xr
     real matrix SL, SU, SX
     real rowvector pb
     real scalar ni, hinc, h, f, it, j, v, top, stop, hp, gtol, ok, fr
+    if (args() < 21) starts = 1
     _cge_bd_full(M, lo, up)
     ni = rows(ipos)
     SL = lo[ipos]
@@ -23730,7 +23958,7 @@ real colvector _cge_bb(struct cge_model scalar M, real colvector xfix, real colv
         gtol = (hinc < . ? max((1e-9 * max((1, abs(hinc))), optcr * abs(hinc))) : 0)
         if (hinc < .) if (hp >= hinc - gtol) continue
         nn++
-        ok = _cge_bb_node(M, xfix, x, tok, sgn, tol, maxit, ipos, lo, up, nlo, nup, xn, f, it, lamn)
+        ok = _cge_bb_node(M, xfix, x, tok, sgn, tol, maxit, ipos, lo, up, nlo, nup, xn, f, it, lamn, starts)
         iter = iter + it
         if (!ok) {
             if (trace) printf("{txt}Node %f: no feasible relaxation\n", nn)
@@ -23787,7 +24015,7 @@ real colvector _cge_bb(struct cge_model scalar M, real colvector xfix, real colv
     // the incumbent polished with its integer values fixed
     xr = xinc
     xr[ipos] = round(xinc[ipos])
-    ok = _cge_bb_node(M, xfix, xr, tok, sgn, tol, maxit, ipos, lo, up, round(xinc[ipos]), round(xinc[ipos]), xn, f, it, lamn)
+    ok = _cge_bb_node(M, xfix, xr, tok, sgn, tol, maxit, ipos, lo, up, round(xinc[ipos]), round(xinc[ipos]), xn, f, it, lamn, starts)
     iter = iter + it
     if (ok) {
         xinc = xn
@@ -23819,19 +24047,22 @@ real colvector _cge_bb(struct cge_model scalar M, real colvector xfix, real colv
 // simulation, with the multipliers of the equations
 void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar obj, real scalar tol,
                   real scalar maxit, real scalar trace, string scalar lin, | string scalar mname, string scalar from,
-                  string scalar hold, real scalar nodes, real scalar optcr)
+                  string scalar hold, real scalar nodes, real scalar optcr, real scalar starts)
 {
     struct cge_sys scalar S
     struct cge_model scalar M2
     real matrix tok
     real colvector x, lam, start, xs, usel, ipos
-    real scalar sgn, conv, iter, err, fobj, k, keeplin, feas, ms, ss, nn, bnd
+    real scalar sgn, conv, iter, err, fobj, k, keeplin, feas, ms, ss, nn, bnd, best, nconv
     string scalar g
     if (args() < 8) mname = ""
     if (args() < 9) from = ""
     if (args() < 10) hold = ""
     if (args() < 11) nodes = -1
     if (args() < 12) optcr = -1
+    // multi-start (from version 0.24.0)
+    if (args() < 13) starts = 1
+    if (starts < 1 | starts >= .) starts = 1
     if (nodes < 0 | nodes >= .) nodes = 10000
     if (optcr < 0 | optcr >= .) optcr = 0
     if (!_cge_sa(M)) _cge_fail("minimize() and maximize() solve a nonlinear programme of a standalone model (cge_model new); optimise a model from a SAM with cge_optimize", 198)
@@ -23854,9 +24085,9 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     nn = 0
     bnd = .
     if (rows(ipos)) {
-        x = _cge_bb(M2, xs, start, tok, sgn, tol, maxit, trace, ipos, nodes, optcr, conv, iter, err, fobj, lam, nn, bnd, ms, ss)
+        x = _cge_bb(M2, xs, start, tok, sgn, tol, maxit, trace, ipos, nodes, optcr, conv, iter, err, fobj, lam, nn, bnd, ms, ss, starts)
     }
-    else x = _cge_nlp_solve(M2, M2.p, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas)
+    else x = _cge_nlp_multi(M2, M2.p, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas, 0, starts, best, nconv)
     M.linsolver = keeplin
     k = _cge_store_sim(M, name, x, conv, iter, err, (rows(ipos) ? "minlp" : "nlp"))
     _cge_set_simobj(M, k, obj)
@@ -23881,6 +24112,8 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
         printf("{err}Simulation %s did not converge (largest scaled error %9.3e)\n", name, err)
         _cge_status_show(ms, ss)
     }
+    if (!rows(ipos) & starts > 1) printf("{txt}Multi-start: {res}%f{txt} of {res}%f{txt} start(s) converged; the best from start {res}%f\n",
+                                         nconv, starts, best)
     printf("{txt}%s %s: {res}%16.10g\n", (sgn < 0 ? "Maximised" : "Minimised"), substr(obj, 5, .), fobj)
     printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) ? "residual of the equations" : "error of the optimality conditions"), err)
     st_numscalar("r(converged)", conv)
@@ -23892,6 +24125,11 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     S = _cge_sys_make(M2, 0)
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
     st_global("r(model)", mname)
+    st_numscalar("r(starts)", starts)
+    if (!rows(ipos) & starts > 1) {
+        st_numscalar("r(best_start)", best)
+        st_numscalar("r(N_starts_converged)", nconv)
+    }
     // branch and bound (from version 0.18.0)
     st_numscalar("r(N_integer)", rows(ipos))
     if (rows(ipos)) {
@@ -23959,6 +24197,64 @@ real scalar _cge_nlp_eval(struct cge_model scalar M, struct cge_par scalar p, re
         Jm = _cge_trip_dense(jr, jc, jv, S.neq, rows(z))
     }
     return(1)
+}
+
+// Multi-start (from version 0.24.0): the interior point from start and from
+// starts - 1 other points of the free variables, drawn uniformly within
+// their bounds, or within max(1, |x|) of the start where a bound is missing,
+// by a generator of its own (MINSTD, seed 20261025), so that Stata's random
+// numbers are left alone and the points repeat from run to run; the best
+// solution that converges is kept. best is the start it came from, nconv
+// the number of starts that converged
+real colvector _cge_nlp_multi(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                              real colvector start, real matrix tok, real scalar sgn, real scalar tol,
+                              real scalar maxit, real scalar trace, real scalar conv, real scalar iter,
+                              real scalar err, real scalar fobj, real colvector lam, real scalar feas,
+                              real scalar soft, real scalar starts, real scalar best, real scalar nconv)
+{
+    struct cge_sys scalar S
+    real colvector x, x2, lam2, st, lo, up, fr
+    real scalar s, i, k, u, seed, c2, it2, e2, f2, fe2, w
+    x = _cge_nlp_solve(M, p, xfix, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas, soft)
+    best = (conv & fobj < . ? 1 : 0)
+    nconv = best
+    if (starts <= 1) return(x)
+    S = _cge_sys_make(M, 0)
+    fr = S.free
+    _cge_bd_full(M, lo, up)
+    seed = 20261025
+    for (s = 2; s <= starts; s++) {
+        if (_cge_timeup()) break
+        st = start
+        for (i = 1; i <= rows(fr); i++) {
+            seed = mod(48271 * seed, 2147483647)
+            u = seed / 2147483647
+            k = fr[i]
+            if (lo[k] > -1e299 & up[k] < 1e299) st[k] = lo[k] + u * (up[k] - lo[k])
+            else {
+                w = max((1, abs(start[k])))
+                st[k] = start[k] + (2 * u - 1) * w
+                if (lo[k] > -1e299) st[k] = max((st[k], lo[k]))
+                if (up[k] < 1e299) st[k] = min((st[k], up[k]))
+            }
+        }
+        if (trace) printf("{txt}Start %f of %f\n", s, starts)
+        fe2 = 0
+        x2 = _cge_nlp_solve(M, p, xfix, st, tok, sgn, tol, maxit, trace, c2, it2, e2, f2, lam2, fe2, soft)
+        iter = iter + it2
+        if (!(c2 & f2 < .)) continue
+        nconv++
+        if (!best | sgn * f2 < sgn * fobj - 1e-10 * max((1, abs(fobj)))) {
+            x = x2
+            conv = c2
+            err = e2
+            fobj = f2
+            lam = lam2
+            feas = fe2
+            best = s
+        }
+    }
+    return(x)
 }
 
 // The primal-dual interior-point method (from version 0.15.0) for

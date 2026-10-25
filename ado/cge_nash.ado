@@ -1,4 +1,4 @@
-*! cge_nash.ado  v0.20.0  2026-10-25
+*! cge_nash.ado  v0.24.0  2026-10-25
 *! cge-stata: Nash equilibria of players who each choose instruments to
 *! maximise or minimise an outcome, and leaders who anticipate the others
 *! (Reference Manual, cge_nash)
@@ -43,14 +43,31 @@ program define cge_nash, rclass
         exit 198
     }
     local 0 `"`rest'"'
-    syntax , NAME(name) [LEADer(name) EXCLude(name) TOLerance(real 1e-8) ITERate(integer 50) TRACE]
+    syntax , NAME(name) [LEADer(name) EXCLude(name) TOLerance(real 1e-8) ITERate(integer 50) TRACE ///
+        METHod(name) DAMPing(real 1)]
     if `tolerance' <= 0 | `iterate' < 1 {
         display as error "cge_nash solve: tolerance() must be positive and iterate() at least 1"
         exit 198
     }
+    * the method (from version 0.24.0): best responses in turn (gs), or
+    * Newton's method on the players' first-order conditions (newton); and
+    * the damping of the best responses
+    if "`method'" == "" local method gs
+    if !inlist("`method'", "gs", "newton") {
+        display as error "cge_nash solve: method() takes gs or newton"
+        exit 198
+    }
+    if !(`damping' > 0 & `damping' <= 1) {
+        display as error "cge_nash solve: damping() must be above 0 and at most 1"
+        exit 198
+    }
+    if "`method'" == "newton" & `damping' != 1 {
+        display as error "cge_nash solve: damping() goes with method(gs)"
+        exit 198
+    }
     * a leader: its instruments chosen with the followers' equilibrium nested
     if "`leader'" != "" {
-        mata: _cge_nash_leader("`leader'", "`name'", `tolerance', `iterate', ("`trace'" != ""))
+        mata: _cge_nash_leader("`leader'", "`name'", `tolerance', `iterate', ("`trace'" != ""), "method(`method') damping(`damping')")
         local lconv = r(leader_converged)
         local lobj = r(leader_objective)
         local neq = r(N_equilibria)
@@ -71,13 +88,27 @@ program define cge_nash, rclass
         if `lconv' != 1 exit 430
         exit
     }
-    * the players' best responses in turn (Gauss-Seidel), each by cge_optimize
-    * with the others' instruments at their current values, until a round
-    * changes no instrument by more than the tolerance
+    * Newton's method on the players' first-order conditions (from version
+    * 0.24.0), which leaves the instruments at the equilibrium
     mata: _cge_nash_locals("`exclude'")
     local conv 0
     local it 0
-    while `it' < `iterate' {
+    if "`method'" == "newton" {
+        mata: _cge_nash_newton("`exclude'", `tolerance', `iterate', ("`trace'" != ""))
+        local conv = r(converged)
+        local it = r(iterations)
+        local nsolves = r(N_solves)
+        local soc = r(second_order)
+        forvalues k = 1/`np' {
+            tempname v`k'
+            mata: st_matrix("`v`k''", _cge_nash_current(st_local("p`k'_ins"))')
+        }
+    }
+    * the players' best responses in turn (Gauss-Seidel), each by cge_optimize
+    * with the others' instruments at their current values, until a round
+    * changes no instrument by more than the tolerance; with damping() below
+    * 1, each player moves that share of the way to its best response
+    while "`method'" == "gs" & `it' < `iterate' {
         local ++it
         local dmax 0
         forvalues k = 1/`np' {
@@ -97,6 +128,10 @@ program define cge_nash, rclass
                 local d = abs(`v`k''[1, `j'] - cgenash_v0[1, `j']) / max(1, abs(cgenash_v0[1, `j']))
                 if `d' > `dmax' local dmax = `d'
             }
+            if `damping' < 1 {
+                matrix `v`k'' = cgenash_v0 + `damping' * (`v`k'' - cgenash_v0)
+                mata: _cge_nash_setcur(st_local("p`k'_ins"), st_matrix("`v`k''")')
+            }
         }
         if "`trace'" != "" display as text "Round `it': largest change of an instrument " as result %9.3e `dmax'
         if `dmax' < `tolerance' {
@@ -109,7 +144,7 @@ program define cge_nash, rclass
     mata: _cge_sims_drop("_cgenash")
     if "`exclude'" == "" {
         display as text _n "Nash equilibrium " as result "`name'" as text ": " cond(`conv', "converged", "{err}did not converge{txt}") ///
-            " in " as result `it' as text " round(s) of best responses"
+            " in " as result `it' as text cond("`method'" == "newton", " Newton iteration(s), " + "`nsolves'" + " solves", " round(s) of best responses")
         display as text "{hline 78}"
         display as text %-12s "Player" %-34s "  Instruments" %16s "Objective"
         display as text "{hline 78}"
@@ -131,6 +166,11 @@ program define cge_nash, rclass
     if "`exclude'" == "" display as text "{hline 78}"
     return scalar converged = `conv'
     return scalar rounds = `it'
+    return local method `method'
+    if "`method'" == "newton" {
+        return scalar N_solves = `nsolves'
+        return scalar second_order = `soc'
+    }
     return scalar N_players = `np'
     return matrix objectives = `obj'
     return matrix instruments = `ins'

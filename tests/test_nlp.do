@@ -3,7 +3,8 @@
 * its published optimum, with the marginals of its equations against
 * differences of their right sides; Rosenbrock's function; a frontier with
 * and without a binding bound against its closed form; balancing a matrix by
-* cross entropy against the RAS method; errors.
+* cross entropy against the RAS method; multi-start (from version 0.24.0)
+* against the roots of a cubic; errors.
 
 version 13.0
 
@@ -200,6 +201,35 @@ assert _rc == 198
 * a model from a SAM
 quietly do setup_synthetic.do
 capture noisily cge_solve, maximize(QH(com_agr, hhd))
+assert _rc == 198
+
+* ---------------------------------------------------------------------
+* Multi-start (from version 0.24.0): f(x) = (x^2 - 1)^2 + 0.3 x, with x =
+* k / 2 and k in [-4, 4], has a local minimum at x = 0.96, which the
+* interior point reaches from k = 2, and its global minimum at x = -1.036,
+* the root of f'(x) = 4x^3 - 4x + 0.3 with the least f, which five starts
+* find
+* ---------------------------------------------------------------------
+cge_model new
+cge_variable x, value(1)
+cge_variable k, value(2)
+cge_equation E: x = 0.5 * k
+cge_bound k, lower(-4) upper(4)
+cge_solve, name(n1) minimize((x^2 - 1)^2 + 0.3 * x)
+assert r(converged) == 1 & r(starts) == 1
+mata: st_numscalar("tn_d", _tn_val("x", "", 1))
+assert scalar(tn_d) > 0.9
+cge_solve, name(n5) minimize((x^2 - 1)^2 + 0.3 * x) starts(5)
+assert r(converged) == 1 & r(starts) == 5 & r(best_start) > 1 & r(N_starts_converged) >= 2
+mata: tn_r = Re(polyroots((0.3, -4, 0, 4))); tn_f = (tn_r :^ 2 :- 1) :^ 2 + 0.3 * tn_r
+mata: st_numscalar("tn_d", abs(_tn_val("x", "", 2) - select(tn_r, tn_f :== min(tn_f))))
+assert scalar(tn_d) < 1e-8
+mata: st_numscalar("tn_d", abs(st_numscalar("r(objective)") - min(tn_f)))
+assert scalar(tn_d) < 1e-10
+mata: mata drop tn_r tn_f
+capture noisily cge_solve, name(e1) minimize(x^2) starts(0)
+assert _rc == 198
+capture noisily cge_solve, name(e2) starts(3)
 assert _rc == 198
 
 mata: mata drop _tn_val() _tn_ras()
