@@ -3,7 +3,7 @@
 *! expression, within constraints, or to reach targets, solving the model at
 *! every trial (docs/model_spec.md, Section 18)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_optimize, rclass

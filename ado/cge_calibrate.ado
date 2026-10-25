@@ -2,7 +2,7 @@
 *! cge-stata: calibrate the model to the mapped SAM
 *! Computes base values and parameters and checks benchmark replication
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_calibrate, rclass

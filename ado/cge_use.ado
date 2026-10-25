@@ -2,7 +2,7 @@
 *! cge-stata: load a model saved with cge_save
 *! Replaces the model in memory; the dataset in memory is not changed
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_use, rclass

@@ -1,7 +1,7 @@
 *! _cge_load.ado  v0.1.0  2026-10-12
 *! cge-stata: load the Mata library on first use in a Stata session
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define _cge_load, rclass

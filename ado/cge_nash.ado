@@ -3,7 +3,7 @@
 *! maximise or minimise an outcome, and leaders who anticipate the others
 *! (Reference Manual, cge_nash)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_nash, rclass

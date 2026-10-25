@@ -2,7 +2,7 @@
 *! cge-stata: write a template that maps SAM accounts to model roles and
 *! groups them for aggregation (docs/sam_tools.md, Section 3)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_template, rclass

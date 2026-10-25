@@ -12,7 +12,7 @@ d cross-entropy balancing; SAM multipliers and structural path analysis; a libra
 d and export of the model to GAMS, to solve it with PATH, CONOPT or IPOPT.
 d
 d Requires: Stata 13 or later
-d Author: Mustapha Wasseja
+d Author: Mustapha Wasseja Mohammed
 d
 d Distribution-Date: 20261025
 d

@@ -3,7 +3,7 @@
 *! Checks the SAM against the flows the model represents (model_spec.md, 7.0);
 *! the roles may be read from a template (docs/sam_tools.md, Section 3)
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_map, rclass

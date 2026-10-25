@@ -159,7 +159,7 @@ column account.
 {title:Author}
 
 {pstd}
-Mustapha Wasseja{p_end}
+Mustapha Wasseja Mohammed{p_end}
 
 
 {title:Also see}

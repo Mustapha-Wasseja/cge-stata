@@ -110,4 +110,4 @@ debt with interest.
 {title:Author}
 
 {pstd}
-Mustapha Wasseja{p_end}
+Mustapha Wasseja Mohammed{p_end}

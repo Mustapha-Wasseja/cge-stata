@@ -1,7 +1,7 @@
 *! cge_solve.ado  v0.27.0  2026-10-25
 *! cge-stata: solve the model and store a named simulation
 *!
-*! Author: Mustapha Wasseja
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_solve, rclass

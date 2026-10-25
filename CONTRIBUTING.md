@@ -28,7 +28,7 @@ These conventions apply to every change, whoever or whatever prepares it.
   *! cge-stata: one-line purpose
   *! One-line description
   *!
-  *! Author: Mustapha Wasseja
+  *! Author: Mustapha Wasseja Mohammed
   *! Requires: Stata 13+
   ```
 
@@ -53,7 +53,7 @@ These conventions apply to every change, whoever or whatever prepares it.
 ## Commits and pull requests
 
 - Author every commit as
-  `Mustapha Wasseja <51772479+Mustapha-Wasseja@users.noreply.github.com>`.
+  `Mustapha Wasseja Mohammed <51772479+Mustapha-Wasseja@users.noreply.github.com>`.
   Continuous integration rejects commits with any other author.
 - Do not add `Co-authored-by` trailers, tool attribution lines or generated-by
   notices to commits, pull requests, issues, code comments or documentation.
