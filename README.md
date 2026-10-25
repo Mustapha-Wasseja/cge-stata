@@ -10,7 +10,14 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.27.0 implements the standard single-country model described in
+Version 0.27.1 fixes installation error `r(640)`, "package file too long".
+The package now installs 95 files, within Stata's limit of 100, by bundling
+the synthetic SAMs, model library and GAMS support files. Their original
+source files remain in the repository. Model equations and solver behaviour
+are unchanged.
+
+
+Version 0.27.1 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,

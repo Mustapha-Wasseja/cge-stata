@@ -1,4 +1,4 @@
-*! cge_synthetic.ado  v0.5.1  2026-10-21
+*! cge_synthetic.ado  v0.27.1  2026-10-25
 *! cge-stata: load the synthetic social accounting matrix (SAM)
 *! Loads a bundled synthetic SAM and reports its balance
 *!
@@ -75,8 +75,13 @@ program define cge_synthetic, rclass
         local file cge_synthetic_sam_unbal.csv
         local layout "institutions layout, unbalanced for the balancing tests"
     }
-    quietly findfile `file'
-    local samfile `"`r(fn)'"'
+    * from the package's bundle of SAMs (from version 0.27.1: Stata's package
+    * files take at most 100 files)
+    * into a file of its own name that lasts the session, whose path the
+    * command returns
+    _cge_load
+    mata: st_local("samfile", _cge_bundle_tmp("`file'"))
+    mata: _cge_bundle_get("cge_synthetic_sams.txt", "`file'", st_local("samfile"))
 
     import delimited using `"`samfile'"', varnames(1) case(preserve) ///
         stringcols(1) asdouble `clear'

@@ -1,0 +1,202 @@
+* cge-stata: ado/cge_ml_library.txt, the files below in sections that begin with @@@ (written by tools/bundle_files.py; do not edit)
+@@@ cge_ml_cournot.do
+*! cge_ml_cournot.do -- cge-stata model library (version 0.21.0)
+*! title: Cournot duopoly and a Stackelberg leader, Nash equilibria
+*! kind: nash
+*! reference: Cournot (1838); von Stackelberg (1934); textbook closed forms
+*! expect: Cournot (a - c) / 3b = 3 each; leader (a - c) / 2b = 4.5, follower 2.25
+cge_model new
+cge_parameter a = 10
+cge_parameter b = 1
+cge_parameter c = 1
+cge_variable Q1, value(1) fixed
+cge_variable Q2, value(1) fixed
+cge_variable P = a - b * (Q1 + Q2)
+cge_nash player firm1, instruments(Q1) maximize((P - c) * Q1) lower(Q1:0)
+cge_nash player firm2, instruments(Q2) maximize((P - c) * Q2) lower(Q2:0)
+cge_nash solve, name(cournot)
+cge_shock, reset
+cge_nash solve, name(stackelberg) leader(firm1)
+cge_results, sim(stackelberg)
+@@@ cge_ml_crusoe.do
+*! cge_ml_crusoe.do -- cge-stata model library (version 0.21.0)
+*! title: Robinson Crusoe: consumption and leisure, a planner's nonlinear programme
+*! kind: nlp
+*! reference: textbook one-agent economy; Cobb-Douglas utility and technology
+*! expect: labour N = a b T / (a b + 1 - a) = 3.3333333, consumption 2 sqrt(N) = 3.6514837
+* Crusoe divides T = 10 hours between labour N and leisure L, and produces
+* C = A N^b; he maximises a ln C + (1 - a) ln L. With a = b = 1/2 and A = 2,
+* the optimum is N = 10/3.
+cge_model new
+cge_parameter a = 0.5
+cge_parameter b = 0.5
+cge_parameter A = 2
+cge_parameter T = 10
+cge_variable N, value(5)
+cge_variable L, value(5)
+cge_variable C = A * N^b
+cge_equation TIME: N + L = T
+cge_bound N, lower(0)
+cge_bound L, lower(0)
+cge_solve, name(crusoe) maximize(a * ln(C) + (1 - a) * ln(L))
+cge_results, sim(crusoe)
+@@@ cge_ml_exchange.do
+*! cge_ml_exchange.do -- cge-stata model library (version 0.21.0)
+*! title: An exchange economy of two goods and two consumers
+*! kind: system
+*! reference: textbook general equilibrium; Cobb-Douglas utility
+*! expect: P(g2) = (0.7 x 10 + 0.4 x 3) / (0.3 x 2 + 0.6 x 8) = 1.5185185
+* Two consumers with Cobb-Douglas utility trade two goods from their
+* endowments; good 1 is the numeraire, and WALRAS, the excess supply of good
+* 1, is zero by Walras's law.
+cge_model new
+cge_set g = g1 g2
+cge_set h = h1 h2
+cge_parameter alpha(h,g), values(h1.g1:0.3 h1.g2:0.7 h2.g1:0.6 h2.g2:0.4)
+cge_parameter e(h,g), values(h1.g1:10 h1.g2:2 h2.g1:3 h2.g2:8)
+cge_variable P(g), value(1)
+cge_variable Y(h) = sum(g, P(g) * e(h,g))
+cge_variable X(h,g) = alpha(h,g) * Y(h) / P(g)
+cge_variable WALRAS, value(0)
+cge_equation NUM: P(g1) = 1
+cge_equation MKT(g): sum(h, X(h,g)) = sum(h, e(h,g)) + WALRAS
+cge_solve, name(exchange)
+cge_results, sim(exchange)
+@@@ cge_ml_hs071.do
+*! cge_ml_hs071.do -- cge-stata model library (version 0.21.0)
+*! title: Hock and Schittkowski's problem 71, a nonlinear programme with bounds
+*! kind: nlp
+*! reference: Hock and Schittkowski (1981), problem 71
+*! expect: minimum 17.0140173 at (1, 4.7429994, 3.8211503, 1.3794082)
+* min x1 x4 (x1 + x2 + x3) + x3 subject to x1 x2 x3 x4 >= 25 (an equation
+* with a slack S >= 0), sum x^2 = 40 and 1 <= x <= 5.
+cge_model new
+cge_set i = x1 x2 x3 x4
+cge_parameter x0(i), values(x1:1 x2:5 x3:5 x4:1)
+cge_variable X(i), value(x0(i))
+cge_variable S, value(0)
+cge_equation G1: X(x1) * X(x2) * X(x3) * X(x4) - S = 25
+cge_equation G2: sum(i, X(i)^2) = 40
+cge_bound X, lower(1) upper(5)
+cge_bound S, lower(0)
+cge_solve, name(hs071) minimize(X(x1) * X(x4) * (X(x1) + X(x2) + X(x3)) + X(x3))
+matrix list r(marginals)
+cge_results, sim(hs071)
+@@@ cge_ml_knapsack.do
+*! cge_ml_knapsack.do -- cge-stata model library (version 0.21.0)
+*! title: A knapsack of eight items: binary choices, a mixed-integer programme
+*! kind: minlp
+*! reference: textbook integer programming
+*! expect: maximum value 43, items 2, 3, 4, 6 and 8 (the only optimum)
+cge_model new
+cge_set i = i1 i2 i3 i4 i5 i6 i7 i8
+cge_parameter v(i), values(i1:15 i2:12 i3:11 i4:5 i5:13 i6:9 i7:10 i8:6)
+cge_parameter w(i), values(i1:8 i2:5 i3:6 i4:3 i5:7 i6:4 i7:6 i8:2)
+cge_parameter cap = 20
+cge_variable X(i), value(0.5)
+cge_variable S, value(1)
+cge_equation CAP: sum(i, w(i) * X(i)) + S = cap
+cge_bound X, binary
+cge_bound S, lower(0)
+cge_solve, name(knapsack) maximize(sum(i, v(i) * X(i)))
+cge_results, sim(knapsack)
+@@@ cge_ml_markets.do
+*! cge_ml_markets.do -- cge-stata model library (version 0.21.0)
+*! title: Two markets solved block by block with named models
+*! kind: system
+*! reference: GAMS-style model statements over subsets of equations
+*! expect: P = (a / 2)^(2/5): 1.9036539 and 2.5118864; total sales 31.501 in both solves
+cge_model new
+cge_set g = g1 g2
+cge_parameter a(g), values(g1:10 g2:20)
+cge_variable P(g), value(1)
+cge_variable Q(g), value(1)
+cge_equation DEM(g): Q(g) = a(g) / sqrt(P(g))
+cge_equation SUP(g): Q(g) = 2 * P(g)^2
+cge_variable TOT = sum(g, P(g) * Q(g))
+cge_model define markets = DEM SUP
+cge_model define total = TOT
+cge_solve, name(markets) model(markets)
+cge_solve, name(total) model(total) from(markets) hold(P Q)
+cge_solve, name(whole)
+cge_results, sim(whole)
+@@@ cge_ml_ramsey.do
+*! cge_ml_ramsey.do -- cge-stata model library (version 0.26.0)
+*! title: A Ramsey growth model: optimal saving over 30 years, a nonlinear programme
+*! kind: nlp
+*! reference: Ramsey (1928); Cass (1965) and Koopmans (1965), with a finite horizon
+*! expect: the Euler equation C(t+1)/C(t) = beta (1 - delta + alpha K(t+1)^(alpha - 1)) holds; capital rises from 1 toward K* = 3.161
+* A planner chooses consumption C(t) over 30 years to maximise the
+* discounted sum of ln C(t); output K^alpha is consumed or added to capital,
+* which depreciates at rate delta; capital starts at 1 and ends at the steady
+* state K* = (alpha / (1/beta - 1 + delta))^(1/(1 - alpha)). Capital
+* accumulates from each year to the next, K(t+1), in every year but the last
+* (from version 0.26.0; before, over a set of pairs of consecutive years).
+local years
+forvalues y = 1/30 {
+    local years `years' y`y'
+}
+cge_model new
+cge_set t = `years'
+cge_parameter alpha = 0.33
+cge_parameter beta = 0.95
+cge_parameter delta = 0.1
+cge_parameter k0 = 1
+cge_parameter kss = (alpha / (1 / beta - 1 + delta))^(1 / (1 - alpha))
+cge_variable K(t), value(2)
+cge_variable C(t), value(1)
+cge_equation K0: K(y1) = k0
+cge_equation ACC(t)$(ord(t) < card(t)): K(t+1) = (1 - delta) * K(t) + K(t)^alpha - C(t)
+cge_equation TERM: C(y30) = (1 - delta) * K(y30) + K(y30)^alpha - kss
+cge_bound K, lower(0)
+cge_bound C, lower(0)
+cge_solve, name(ramsey) maximize(sum(t, beta^(ord(t) - 1) * ln(C(t))))
+cge_results, sim(ramsey)
+@@@ cge_ml_ras.do
+*! cge_ml_ras.do -- cge-stata model library (version 0.21.0)
+*! title: Balancing a matrix by cross entropy, whose solution is the RAS balance
+*! kind: nlp
+*! reference: McDougall (1999), Entropy theory and RAS are friends
+*! expect: minimum cross entropy 1.81258200; X = r(r) A(r,c) s(c)
+* A prior matrix A is balanced to new row and column totals by minimising
+* sum X ln(X / A); one column equation is left out, as the totals agree.
+cge_model new
+cge_set r = r1 r2 r3
+cge_set c = c1 c2 c3 c4
+cge_parameter a(r,c), values(r1.c1:10 r1.c2:5 r1.c3:2 r1.c4:8 r2.c1:3 r2.c2:12 r2.c3:6 r2.c4:1 r3.c1:4 r3.c2:2 r3.c3:9 r3.c4:7)
+cge_parameter u(r), values(r1:30 r2:20 r3:19)
+cge_parameter v(c), values(c1:20 c2:21 c3:16 c4:12)
+cge_variable X(r,c), value(a(r,c))
+cge_equation ROW(r): sum(c, X(r,c)) = u(r)
+cge_equation COL(c)$(ord(c) < card(c)): sum(r, X(r,c)) = v(c)
+cge_bound X, lower(0)
+cge_solve, name(ras) minimize(sum((r,c), X(r,c) * ln(X(r,c) / a(r,c))))
+cge_results, sim(ras)
+@@@ cge_ml_transport.do
+*! cge_ml_transport.do -- cge-stata model library (version 0.21.0)
+*! title: Dantzig's transportation problem: least-cost shipments, a linear programme
+*! kind: nlp
+*! reference: Dantzig (1963), Linear Programming and Extensions, section 3.3
+*! expect: minimum cost 153.675 (thousands of dollars)
+* Two plants ship cases to three markets at 90 dollars per case per thousand
+* miles; supplies are limits (equations with slacks SS >= 0) and demands are
+* floors (surpluses SD >= 0).
+cge_model new
+cge_set i = seattle san_diego
+cge_set j = new_york chicago topeka
+cge_parameter a(i), values(seattle:350 san_diego:600)
+cge_parameter b(j), values(new_york:325 chicago:300 topeka:275)
+cge_parameter d(i,j), values(seattle.new_york:2.5 seattle.chicago:1.7 seattle.topeka:1.8 san_diego.new_york:2.5 san_diego.chicago:1.8 san_diego.topeka:1.4)
+cge_parameter f = 90
+cge_parameter c(i,j) = f * d(i,j) / 1000
+cge_variable X(i,j), value(100)
+cge_variable SS(i), value(10)
+cge_variable SD(j), value(10)
+cge_equation SUPPLY(i): sum(j, X(i,j)) + SS(i) = a(i)
+cge_equation DEMAND(j): sum(i, X(i,j)) - SD(j) = b(j)
+cge_bound X, lower(0)
+cge_bound SS, lower(0)
+cge_bound SD, lower(0)
+cge_solve, name(transport) minimize(sum((i,j), c(i,j) * X(i,j)))
+matrix list r(marginals)
+cge_results, sim(transport)

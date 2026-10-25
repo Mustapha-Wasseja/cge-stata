@@ -1,4 +1,4 @@
-*! cge_modlib.ado  v0.22.0  2026-10-25
+*! cge_modlib.ado  v0.27.1  2026-10-25
 *! cge-stata: a library of ready-to-run models written in the user language,
 *! as GAMS's model library (Reference Manual, cge_modlib)
 *!
@@ -43,17 +43,25 @@ program define cge_modlib, rclass
         return local kind `"`r(kind)'"'
         exit
     }
+    * the models come from the package's bundle of the library (from version
+    * 0.27.1: Stata's package files take at most 100 files)
     if "`sub'" == "run" {
-        quietly findfile cge_ml_`name'.do
-        local fn `"`r(fn)'"'
+        tempfile fn
+        _cge_load
+        mata: _cge_bundle_get("cge_ml_library.txt", "cge_ml_`name'.do", st_local("fn"))
         do `"`fn'"'
         exit
     }
     if "`sub'" == "copy" {
         local 0 `"`rest'"'
         syntax [, REPLACE]
-        quietly findfile cge_ml_`name'.do
-        copy `"`r(fn)'"' "cge_ml_`name'.do", `replace'
+        capture confirm new file "cge_ml_`name'.do"
+        if _rc & "`replace'" == "" {
+            display as error "file cge_ml_`name'.do already exists"
+            exit 602
+        }
+        _cge_load
+        mata: _cge_bundle_get("cge_ml_library.txt", "cge_ml_`name'.do", "cge_ml_`name'.do")
         display as text "Copied to " as result "cge_ml_`name'.do" as text " in the current folder"
         exit
     }
@@ -65,10 +73,11 @@ end
 * expected results, from the lines *! name: text
 program define _cge_modlib_read, rclass
     args m
-    quietly findfile cge_ml_`m'.do
-    return local fn `"`r(fn)'"'
+    tempfile fn
+    _cge_load
+    mata: _cge_bundle_get("cge_ml_library.txt", "cge_ml_`m'.do", st_local("fn"))
     tempname fh
-    file open `fh' using `"`r(fn)'"', read text
+    file open `fh' using `"`fn'"', read text
     file read `fh' line
     while r(eof) == 0 {
         if substr(`"`line'"', 1, 2) == "*!" {

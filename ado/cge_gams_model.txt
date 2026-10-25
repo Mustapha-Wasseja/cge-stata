@@ -1,0 +1,814 @@
+* cge-stata: ado/cge_gams_model.txt, the files below in sections that begin with @@@ (written by tools/bundle_files.py; do not edit)
+@@@ cge_model.gms
+$title cge-stata model in GAMS: an independent check of docs/model_spec.md
+$ontext
+Independent implementation of the static model of docs/model_spec.md
+(Sections 5 to 7), written from the specification rather than from the Stata
+or Python code. It calibrates from the SAM in the include file %data%, which
+is in the standard layout (after the layout rewrites of Section 7.0), solves
+the base, writes the base solution to %out%, and can save a work file from
+which a scenario is solved.
+
+The model is solved as a constrained nonlinear system (CNS, with PATH by
+default); with --cgetype=nlp, as a nonlinear programme with a constant
+objective, for NLP solvers such as CONOPT or IPOPT; or, with --cgetype=mcp,
+as a mixed complementarity problem, which constraints need (from version
+0.4.4, model_spec.md, Section 16). --cgesolver names the solver (path by
+default).
+
+Used in two ways:
+- by tools/gams/run_gams_check.py, the package's independent check, for example
+    gams cge_model.gms --data=data.inc --out=base.csv s=work
+- by cge_gams (from version 0.4.3), which writes the data of a model in
+  Stata and a driver, cge_run.gms, that includes this file
+$offtext
+
+$if not set data $abort "set --data=<include file>"
+$if not set out $set out base.csv
+$if not set cgesolver $set cgesolver path
+$if not set cgetype $set cgetype cns
+
+* ---------------------------------------------------------------------
+* Data: sets of accounts by role, the SAM and the model settings
+* ---------------------------------------------------------------------
+$onempty
+$include "%data%"
+$offempty
+
+alias (AC, ACP), (C, CP), (F, FP), (A, AP);
+* Margin accounts (13.4): T per unit of composite supply, TD of domestic sales,
+* TIM of imports, TEX of exports
+set TALL(AC) "all margin accounts";
+TALL(T) = yes;  TALL(TD) = yes;  TALL(TIM) = yes;  TALL(TEX) = yes;
+set D(AC) "households and enterprises";
+D(H) = yes;
+D(E) = yes;
+alias (D, DP);
+set INS(AC) "institutions receiving factor income";
+INS(D) = yes;
+INS(GOVS) = yes;
+INS(ROWS) = yes;
+INS(SHIS) = yes;
+
+scalar tol "tolerance for structural zeros";
+tol = 1e-9 * max(1, smax((AC, ACP), abs(SAM(AC, ACP))));
+scalar fund "1 when a health insurance fund is mapped";
+fund = 1$(card(SHIS) > 0);
+
+* ---------------------------------------------------------------------
+* 7.2 Taxes and trade
+* ---------------------------------------------------------------------
+sets CM(AC) "imported", CX(AC) "with domestic output", CR(AC) "exports from composite supply",
+     CE(AC) "exports from domestic output", CT(AC) "margin services",
+     CDO(AC) "with domestic sales", CQ(AC) "with composite supply", CED(AC) "finite export demand";
+parameters QM0(AC), tm(AC), exports(AC), etax(AC), QA0(AC), ta(AC), theta(AC, AC), QX0(AC),
+     te(AC), QE0(AC), QER0(AC), pwe(AC), pwm(AC), QD0(AC), PM0(AC), stax(AC), MG(AC), QQ0(AC), tq(AC),
+     QT0(AC), spend(AC), icm(AC, AC), qerbar(AC), QAM0(AC), EM(AC), DM(AC), IMG(AC),
+     icd(AC, AC), ici(AC, AC), ice(AC, AC), PDD0(AC), qebar(AC);
+QM0(C) = sum(ROWS, SAM(ROWS, C));
+CM(C) = yes$(QM0(C) > tol);
+tm(C)$CM(C) = sum(MTAXS, SAM(MTAXS, C)) / QM0(C);
+exports(C) = sum(ROWS, SAM(C, ROWS));
+etax(C) = sum(ETAXS, SAM(ETAXS, C));
+QA0(A) = sum(AC, SAM(AC, A));
+ta(A) = sum(ATAXS, SAM(ATAXS, A)) / QA0(A);
+* Home consumption (13.1): yields per unit of marketed output
+QAM0(A) = QA0(A) - sum(H, SAM(A, H));
+theta(A, C) = SAM(A, C) / QAM0(A);
+QX0(C) = sum(A, SAM(A, C));
+CX(C) = yes$(QX0(C) > tol);
+* Export-only commodities XO (13.3) are chosen by the user
+CR(C) = yes$(exports(C) > tol and QX0(C) - (exports(C) - etax(C)) <= tol and not XO(C));
+CE(C) = yes$(exports(C) > tol and not CR(C));
+EM(C) = sum(TEX, SAM(TEX, C));
+DM(C) = sum(TD, SAM(TD, C));
+IMG(C) = sum(TIM, SAM(TIM, C));
+te(C)$CE(C) = etax(C) / exports(C);
+QE0(C)$CE(C) = exports(C) - etax(C) - EM(C);
+abort$(sum(C$(XO(C) and abs(QE0(C) - QX0(C)) > tol), 1)) "export-only commodity whose exports differ from its output";
+QER0(C)$CR(C) = exports(C);
+qerbar(C) = QER0(C);
+pwe(C) = 1 / (1 - te(C));
+pwe(C)$CE(C) = exports(C) / QE0(C);
+pwm(C) = 1;
+CDO(C) = yes$(CX(C) and not XO(C));
+QD0(C)$CDO(C) = QX0(C) - QE0(C);
+spend(TALL) = sum(C, SAM(C, TALL));
+icd(CP, C)$CDO(C) = sum(TD$(spend(TD) > tol), SAM(CP, TD) / spend(TD) * SAM(TD, C)) / QD0(C);
+ici(CP, C)$CM(C) = sum(TIM$(spend(TIM) > tol), SAM(CP, TIM) / spend(TIM) * SAM(TIM, C)) / QM0(C);
+ice(CP, C)$CE(C) = sum(TEX$(spend(TEX) > tol), SAM(CP, TEX) / spend(TEX) * SAM(TEX, C)) / QE0(C);
+PM0(C)$CM(C) = 1 + tm(C) + sum(CP, ici(CP, C));
+PDD0(C) = 1 + sum(CP, icd(CP, C));
+stax(C) = sum(STAXS, SAM(STAXS, C));
+MG(C) = sum(T, SAM(T, C));
+QQ0(C) = PDD0(C) * QD0(C) + PM0(C) * QM0(C) + stax(C) + MG(C);
+CQ(C) = yes$(CDO(C) or CM(C));
+tq(C)$CQ(C) = stax(C) / QQ0(C);
+QT0(C) = sum(TALL, SAM(C, TALL));
+CT(C) = yes$(QT0(C) > tol);
+icm(CP, C)$CQ(C) = sum(T$(spend(T) > tol), SAM(CP, T) / spend(T) * SAM(T, C)) / QQ0(C);
+* Export demand (13.2): elasticities given by the user
+CED(C) = yes$(etae(C) > 0 and CE(C));
+qebar(C) = QE0(C);
+
+* ---------------------------------------------------------------------
+* 12.2 VAT: each use of a commodity is a quantity at PQ = 1, its SAM value
+* divided by 1 + tv k, with k = 1 for final users and 1 - kappa for
+* activities. tv solves SAM(vat, c) = sum of V tv k / (1 + tv k) (Newton).
+* ---------------------------------------------------------------------
+parameters kappa(AC) "VAT credit share", vatc(AC) "net VAT by commodity", tv(AC) "VAT rate",
+     vbase(AC), vf(AC), vdf(AC), vstep(AC), qhv(AC, AC);
+kappa(A) = kappain(A);
+vatc(C) = sum(VTAXS, SAM(VTAXS, C));
+vbase(C) = sum(A, SAM(C, A) * (1 - kappa(A))) + sum(H, SAM(C, H)) + sum(GOVS, SAM(C, GOVS))
+           + sum(SAVS, SAM(C, SAVS)) + sum(SHIS, SAM(C, SHIS));
+tv(C)$(abs(vatc(C)) > tol) = vatc(C) / vbase(C);
+scalar it;
+for (it = 1 to 60,
+    vf(C)$tv(C) = sum(A, SAM(C, A) * tv(C) * (1 - kappa(A)) / (1 + tv(C) * (1 - kappa(A))))
+                  + (sum(H, SAM(C, H)) + sum(GOVS, SAM(C, GOVS)) + sum(SAVS, SAM(C, SAVS))
+                     + sum(SHIS, SAM(C, SHIS))) * tv(C) / (1 + tv(C)) - vatc(C);
+    vdf(C)$tv(C) = sum(A, SAM(C, A) * (1 - kappa(A)) / sqr(1 + tv(C) * (1 - kappa(A))))
+                   + (sum(H, SAM(C, H)) + sum(GOVS, SAM(C, GOVS)) + sum(SAVS, SAM(C, SAVS))
+                      + sum(SHIS, SAM(C, SHIS))) / sqr(1 + tv(C));
+    vstep(C)$tv(C) = vf(C) / vdf(C);
+    tv(C)$tv(C) = tv(C) - vstep(C);
+);
+abort$(smax(C, abs(vstep(C))) > 1e-13) "VAT rates did not converge";
+
+* ---------------------------------------------------------------------
+* 7.3 Production. Factor quantities may be supplied (fqin, from version
+* 0.4.3); otherwise they are the factor payments, and W0 = WFDIST0 = 1
+* ---------------------------------------------------------------------
+sets FA(AC, AC) "factor used by activity", CDV(AC) "Cobb-Douglas value added",
+     LT(AC) "Leontief top nest", CDA(AC) "Cobb-Douglas top nest";
+parameters QINTA0(AC), ica(AC, AC), QF0(AC, AC), QVA0(AC), iva(AC), inta(AC), rva(AC), dva(AC, AC),
+     ad(AC), PINTA0(AC), rha(AC), ratioa(AC), dla(AC), dlac(AC), aa(AC), valuea(AC),
+     W0(AC) "base wage", WFD0(AC, AC) "base wage distortion";
+parameter QINT0(AC, AC) "intermediate input quantities";
+QINT0(C, A) = SAM(C, A) / (1 + tv(C) * (1 - kappa(A)));
+* 17.2 Nests of value added (from version 0.5.1): nests NST with members NSTF,
+* factors and commodities, and elasticities signest. Commodities in a nest
+* leave intermediate input (NE) for value added
+sets NE(AC, AC) "commodity in a nest bought by an activity", QIX(AC, AC) "intermediate input flows",
+     NFREE(AC) "factors in no nest", NNA(NST, AC) "nest used by an activity", CDN(NST) "Cobb-Douglas nests";
+alias (NST, NSTP);
+NE(C, A) = yes$(sum(NST$NSTF(NST, C), 1) and QINT0(C, A) <> 0);
+QINTA0(A) = sum(C$(not NE(C, A)), QINT0(C, A));
+ica(C, A)$(QINTA0(A) > 0 and not NE(C, A)) = QINT0(C, A) / QINTA0(A);
+QIX(C, A) = yes$(ica(C, A) or NE(C, A));
+FA(F, A) = yes$(SAM(F, A) > tol);
+QF0(F, A)$FA(F, A) = SAM(F, A);
+QF0(F, A)$(fqgiven and FA(F, A)) = fqin(F, A);
+abort$(fqgiven and sum((F, A)$(FA(F, A) and fqin(F, A) <= 0), 1)) "factor quantities must be positive where factor payments are";
+W0(F) = 1;
+W0(F)$fqgiven = sum(A, SAM(F, A)) / sum(A, QF0(F, A));
+WFD0(F, A) = 1;
+WFD0(F, A)$(fqgiven and FA(F, A)) = SAM(F, A) / (W0(F) * QF0(F, A));
+* 17.1 Taxes on factor use (from version 0.5.0): accounts FTAXS, each taxing
+* the factor given in ftfac; rates on factor payments; value added at factor
+* cost includes them
+parameters TFA0(AC, AC) "taxes on factor use", tf(AC, AC) "tax rate on factor use";
+TFA0(F, A) = sum(FTAXS$ftfac(FTAXS, F), SAM(FTAXS, A));
+abort$(sum((F, A)$(not FA(F, A) and abs(TFA0(F, A)) > tol), 1)) "a tax on factor use where the factor is not used";
+tf(F, A)$FA(F, A) = TFA0(F, A) / SAM(F, A);
+QVA0(A) = sum(F, SAM(F, A) + TFA0(F, A)) + sum(C$NE(C, A), SAM(C, A));
+iva(A) = QVA0(A) / QA0(A);
+inta(A) = QINTA0(A) / QA0(A);
+CDV(A) = yes$(abs(sigva(A) - 1) < 1e-12);
+rva(A)$(not CDV(A)) = 1 / sigva(A) - 1;
+* Nests (17.2): each is valued at its members' costs, at a price of one;
+* shares within it follow from the members' prices and quantities
+NFREE(F) = yes$(not sum(NST$NSTF(NST, F), 1));
+parameters VNA0(NST, AC) "base value of a nest", rhn(NST) "exponent of a nest",
+     dvn(NST, AC) "share of a nest in value added", an(NST, AC) "efficiency of a nest",
+     dce(AC, AC) "share of a commodity in its nest", nden(NST, AC), tden(AC);
+VNA0(NST, A) = sum(F$(NSTF(NST, F) and FA(F, A)), SAM(F, A) + TFA0(F, A))
+               + sum(C$(NSTF(NST, C) and NE(C, A)), SAM(C, A));
+NNA(NST, A) = yes$(VNA0(NST, A) > tol);
+abort$(sum(NST$(not sum(A$NNA(NST, A), 1)), 1)) "a nest of value added is used by no activity";
+CDN(NST) = yes$(abs(signest(NST) - 1) < 1e-12);
+rhn(NST)$(not CDN(NST)) = 1 / signest(NST) - 1;
+nden(NST, A)$(NNA(NST, A) and not CDN(NST))
+    = sum(F$(NSTF(NST, F) and FA(F, A)), W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rhn(NST)))
+      + sum(C$(NSTF(NST, C) and NE(C, A)), (1 + tv(C) * (1 - kappa(A))) * QINT0(C, A)**(1 + rhn(NST)));
+dva(F, A)$(FA(F, A) and not NFREE(F))
+    = sum(NST$(NSTF(NST, F) and CDN(NST)), (SAM(F, A) + TFA0(F, A)) / VNA0(NST, A))
+      + sum(NST$(NSTF(NST, F) and not CDN(NST)), W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rhn(NST))
+                                                  / nden(NST, A));
+dce(C, A)$NE(C, A)
+    = sum(NST$(NSTF(NST, C) and CDN(NST)), SAM(C, A) / VNA0(NST, A))
+      + sum(NST$(NSTF(NST, C) and not CDN(NST)), (1 + tv(C) * (1 - kappa(A))) * QINT0(C, A)**(1 + rhn(NST))
+                                                  / nden(NST, A));
+an(NST, A)$(NNA(NST, A) and CDN(NST)) = VNA0(NST, A)
+    / (prod(F$(NSTF(NST, F) and FA(F, A)), QF0(F, A)**dva(F, A)) * prod(C$(NSTF(NST, C) and NE(C, A)), QINT0(C, A)**dce(C, A)));
+an(NST, A)$(NNA(NST, A) and not CDN(NST)) = VNA0(NST, A)
+    / (sum(F$(NSTF(NST, F) and FA(F, A)), dva(F, A) * QF0(F, A)**(-rhn(NST)))
+       + sum(C$(NSTF(NST, C) and NE(C, A)), dce(C, A) * QINT0(C, A)**(-rhn(NST))))**(-1 / rhn(NST));
+* The top of value added: the factors in no nest, and the nests
+dva(F, A)$(FA(F, A) and NFREE(F) and CDV(A)) = (SAM(F, A) + TFA0(F, A)) / QVA0(A);
+dvn(NST, A)$(NNA(NST, A) and CDV(A)) = VNA0(NST, A) / QVA0(A);
+ad(A)$CDV(A) = QVA0(A) / (prod(F$(FA(F, A) and NFREE(F)), QF0(F, A)**dva(F, A))
+                          * prod(NST$NNA(NST, A), VNA0(NST, A)**dvn(NST, A)));
+tden(A)$(not CDV(A)) = sum(F$(FA(F, A) and NFREE(F)), W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rva(A)))
+                       + sum(NST$NNA(NST, A), VNA0(NST, A)**(1 + rva(A)));
+dva(F, A)$(FA(F, A) and NFREE(F) and not CDV(A)) = W0(F) * WFD0(F, A) * (1 + tf(F, A)) * QF0(F, A)**(1 + rva(A)) / tden(A);
+dvn(NST, A)$(NNA(NST, A) and not CDV(A)) = VNA0(NST, A)**(1 + rva(A)) / tden(A);
+ad(A)$(not CDV(A)) = QVA0(A) / (sum(F$(FA(F, A) and NFREE(F)), dva(F, A) * QF0(F, A)**(-rva(A)))
+                                + sum(NST$NNA(NST, A), dvn(NST, A) * VNA0(NST, A)**(-rva(A))))**(-1 / rva(A));
+* Top nest: Leontief (siga = 0, or no intermediate inputs), Cobb-Douglas (1) or CES
+PINTA0(A) = sum(C, ica(C, A) * (1 + tv(C) * (1 - kappa(A))));
+LT(A) = yes$(siga(A) = 0 or QINTA0(A) <= 0);
+CDA(A) = yes$(not LT(A) and abs(siga(A) - 1) < 1e-12);
+rha(A)$(not LT(A) and not CDA(A)) = 1 / siga(A) - 1;
+ratioa(A)$(not LT(A)) = (1 / PINTA0(A)) * (QVA0(A) / QINTA0(A))**(1 + rha(A));
+dla(A)$(not LT(A)) = ratioa(A) / (1 + ratioa(A));
+dlac(A)$(not LT(A)) = 1 / (1 + ratioa(A));
+valuea(A) = QVA0(A) + PINTA0(A) * QINTA0(A);
+dla(A)$CDA(A) = QVA0(A) / valuea(A);
+dlac(A)$CDA(A) = PINTA0(A) * QINTA0(A) / valuea(A);
+aa(A) = 1;
+aa(A)$CDA(A) = QA0(A) / (QVA0(A)**dla(A) * QINTA0(A)**dlac(A));
+aa(A)$(not LT(A) and not CDA(A)) = QA0(A) / (dla(A) * QVA0(A)**(-rha(A))
+                                      + dlac(A) * QINTA0(A)**(-rha(A)))**(-1 / rha(A));
+* 17.3 Output of a commodity from several activities (from version 0.5.2): a
+* CES or Cobb-Douglas aggregate of the activities' outputs for the commodities
+* with an elasticity sigac (0, perfect substitutes, otherwise)
+sets CAC(AC) "commodities aggregated from several activities", CDAC(AC) "Cobb-Douglas aggregates",
+     XAC(AC, AC) "output of a commodity by an activity, aggregated";
+parameters rac(AC) "exponent of the aggregate", dac(AC, AC) "share of an activity", aac(AC) "efficiency";
+CAC(C) = yes$(sigac(C) > 0);
+abort$(sum(C$(CAC(C) and sum(A$(SAM(A, C) > tol), 1) < 2), 1)) "sigac: a commodity produced by one activity only";
+CDAC(C) = yes$(CAC(C) and abs(sigac(C) - 1) < 1e-12);
+XAC(A, C) = yes$(CAC(C) and SAM(A, C) > tol);
+rac(C)$(CAC(C) and not CDAC(C)) = 1 / sigac(C) - 1;
+dac(A, C)$(XAC(A, C) and CDAC(C)) = SAM(A, C) / QX0(C);
+dac(A, C)$(XAC(A, C) and not CDAC(C)) = SAM(A, C)**(1 + rac(C)) / sum(AP$XAC(AP, C), SAM(AP, C)**(1 + rac(C)));
+aac(C) = 1;
+aac(C)$CDAC(C) = QX0(C) / prod(A$XAC(A, C), SAM(A, C)**dac(A, C));
+aac(C)$(CAC(C) and not CDAC(C)) = QX0(C) / sum(A$XAC(A, C), dac(A, C) * SAM(A, C)**(-rac(C)))**(-1 / rac(C));
+
+* ---------------------------------------------------------------------
+* 7.4 CET and Armington functions (complements of the shares stored)
+* ---------------------------------------------------------------------
+parameters rt(AC), ratiot(AC), dt(AC), dtc(AC), at(AC), rq(AC), ratioq(AC), dq(AC), dqc(AC), aq(AC);
+rt(C) = 1 / sigt(C) + 1;
+dt(C) = 0.5;
+dtc(C) = 0.5;
+at(C) = 1;
+ratiot(C)$(CE(C) and not XO(C)) = (QE0(C) / QD0(C))**(rt(C) - 1);
+dt(C)$(CE(C) and not XO(C)) = 1 / (1 + ratiot(C));
+dtc(C)$(CE(C) and not XO(C)) = ratiot(C) / (1 + ratiot(C));
+at(C)$(CE(C) and not XO(C)) = QX0(C) / (dt(C) * QE0(C)**rt(C) + dtc(C) * QD0(C)**rt(C))**(1 / rt(C));
+rq(C) = 1 / sigq(C) - 1;
+dq(C) = 0.5;
+dqc(C) = 0.5;
+aq(C)$CDO(C) = QQ0(C) / QD0(C);
+aq(C)$(CM(C) and not CDO(C)) = QQ0(C) / QM0(C);
+ratioq(C)$(CM(C) and CDO(C)) = (PM0(C) / PDD0(C)) * (QM0(C) / QD0(C))**(1 + rq(C));
+dq(C)$(CM(C) and CDO(C)) = ratioq(C) / (1 + ratioq(C));
+dqc(C)$(CM(C) and CDO(C)) = 1 / (1 + ratioq(C));
+aq(C)$(CM(C) and CDO(C)) = QQ0(C) / (dq(C) * QM0(C)**(-rq(C)) + dqc(C) * QD0(C)**(-rq(C)))**(-1 / rq(C));
+
+* ---------------------------------------------------------------------
+* 7.5 Institutions
+* ---------------------------------------------------------------------
+parameters YF0(AC), YIF0(AC, AC), tshi(AC), shif(AC, AC), trfr(AC), YI0(AC), dtx(AC), dsv(AC),
+     tins0(AC), mps0(AC), DY0(AC), safe(AC), shii(AC, AC), shir(AC), QH0(AC, AC), EH0(AC), hc(AC),
+     beta(AC, AC), gamma(AC, AC), bb(AC, AC), trdg(AC), trdr(AC), qgbar(AC), qinvbar(AC), qshibar(AC),
+     betah(AC, AC), gammah(AC, AC), bbh(AC, AC), QHA0(AC, AC),
+     cwts(AC), dwts(AC);
+scalars trgr, trrg, trgg, YSHI0, sshi, trshi, trshir, YG0, EG0, GSAV0, FSAV0;
+YF0(F) = sum(AC, SAM(F, AC));
+YIF0(INS, F) = SAM(INS, F);
+tshi(F) = sum(SHIS, SAM(SHIS, F)) / YF0(F);
+* Taxes on factor income (from version 0.5.0), taken before distribution
+parameter tfy(AC) "tax rate on factor income";
+tfy(F) = sum(FYTAXS, SAM(FYTAXS, F)) / YF0(F);
+shif(INS, F)$(not SHIS(INS)) = YIF0(INS, F) / ((1 - tshi(F) - tfy(F)) * YF0(F));
+trfr(F) = sum(ROWS, SAM(F, ROWS));
+YI0(D) = sum(AC, SAM(D, AC));
+dtx(D) = sum(DTAXS, SAM(DTAXS, D));
+dsv(D) = sum(SAVS, SAM(SAVS, D));
+tins0(D) = dtx(D) / YI0(D);
+mps0(D) = dsv(D) / ((1 - tins0(D)) * YI0(D));
+DY0(D) = YI0(D) - dtx(D) - dsv(D);
+safe(D) = DY0(D)$(abs(DY0(D)) > tol) + 1$(abs(DY0(D)) <= tol);
+shii(D, DP) = SAM(D, DP) / safe(DP);
+shir(D) = sum(ROWS, SAM(ROWS, D)) / safe(D);
+QH0(C, H) = SAM(C, H) / (1 + tv(C));
+QHA0(A, H) = SAM(A, H);
+EH0(H) = sum(C, SAM(C, H)) + sum(A, SAM(A, H));
+hc(H) = EH0(H) / safe(H);
+beta(C, H)$(EH0(H) > 0) = SAM(C, H) / EH0(H);
+betah(A, H)$(EH0(H) > 0) = SAM(A, H) / EH0(H);
+gamma(C, H) = 0;
+gammah(A, H) = 0;
+if (les,
+* LES: marginal shares in proportion to the income elasticities supplied
+    bb(C, H) = incel(C) * beta(C, H);
+* home goods take the elasticity of the activity's paired commodity (incelh)
+    bbh(A, H) = incelh(A) * betah(A, H);
+    beta(C, H) = bb(C, H) / (sum(CP, bb(CP, H)) + sum(AP, bbh(AP, H)));
+    betah(A, H) = bbh(A, H) / (sum(CP, bb(CP, H)) + sum(AP, bbh(AP, H)));
+    gamma(C, H) = QH0(C, H) + beta(C, H) * EH0(H) / frisch(H) / (1 + tv(C));
+    gammah(A, H) = QHA0(A, H) + betah(A, H) * EH0(H) / frisch(H);
+);
+trdg(D) = sum(GOVS, SAM(D, GOVS));
+trdr(D) = sum(ROWS, SAM(D, ROWS));
+trgr = sum((GOVS, ROWS), SAM(GOVS, ROWS));
+trrg = sum((ROWS, GOVS), SAM(ROWS, GOVS));
+trgg = sum(GOVS, SAM(GOVS, GOVS));
+qgbar(C) = sum(GOVS, SAM(C, GOVS)) / (1 + tv(C));
+qinvbar(C) = sum(SAVS, SAM(C, SAVS)) / (1 + tv(C));
+qshibar(C) = sum(SHIS, SAM(C, SHIS)) / (1 + tv(C));
+YSHI0 = sum((SHIS, AC), SAM(SHIS, AC));
+sshi = 0;
+sshi$fund = sum((SAVS, SHIS), SAM(SAVS, SHIS)) / YSHI0;
+trshi = sum((SHIS, GOVS), SAM(SHIS, GOVS));
+trshir = sum((SHIS, ROWS), SAM(SHIS, ROWS));
+cwts(C) = sum(H, SAM(C, H)) / sum((CP, H), SAM(CP, H)) / (1 + tv(C));
+dwts(C) = QD0(C) / sum(CP, QD0(CP));
+YG0 = sum((GOVS, AC), SAM(GOVS, AC));
+EG0 = sum((C, GOVS), SAM(C, GOVS)) + sum(D, trdg(D)) + trgg + trrg + trshi;
+
+* 12.3 Public debt: interest on the stated debt is separated from the
+* government's transfers to domestic institutions (shares hold) and abroad
+parameters hold(AC) "share of domestic interest received";
+scalars ddebt, fdebt, rd, rf, phi;
+ddebt = ddebtin;  fdebt = fdebtin;  rd = rdin;  rf = rfin;
+hold(D) = holdin(D);
+hold(D)$(debtin and not holdgiven and sum(DP, max(trdg(DP), 0)) > 0)
+    = max(trdg(D), 0) / sum(DP, max(trdg(DP), 0));
+phi = phiin;
+phi$(debtin and not phigiven and ddebt + fdebt > 0) = fdebt / (ddebt + fdebt);
+trdg(D) = trdg(D) - hold(D) * rd * ddebt;
+trrg = trrg - rf * fdebt;
+abort$(smin(D, trdg(D)) < -tol) "transfers smaller than interest";
+GSAV0 = sum((SAVS, GOVS), SAM(SAVS, GOVS));
+FSAV0 = sum((SAVS, ROWS), SAM(SAVS, ROWS));
+
+* Health link (from version 0.1.14) and factor efficiency
+parameters af(AC);
+scalars linked, hs0;
+af(F) = 1;
+* 15.2 Days lost to illness: base shares and elasticities given by the user;
+* a death rate with a non-zero elasticity also needs health services
+set FS(AC) "factors with days lost to illness";
+parameters sick0(AC) "base share of working time lost", sick(AC) "share lost before the response to services",
+     epss(AC) "elasticity of the share lost";
+FS(F) = yes$sickgiven(F);
+sick0(F) = sickin(F);
+sick(F) = sick0(F);
+epss(F) = sickelin(F);
+linked = 1$(sum(F$(eta(F) <> 0), 1) + sum(F$(epss(F) <> 0), 1) + 1$(mortelin <> 0) > 0);
+hs0 = 1;
+hs0$linked = sum(C$HCOM(C), sum(H, QH0(C, H)) + qgbar(C) + qshibar(C));
+
+* ---------------------------------------------------------------------
+* 14 Labour-market regimes: the labour force from the base unemployment
+* rate given by the user; the real minimum wage is the base real wage when
+* there is unemployment in the base (so that U (W/(CPI wmin) - 1) = mu),
+* and a share of it with full employment, when the base rate is mu/(1/r - 1)
+* ---------------------------------------------------------------------
+set FL(AC) "factors with a labour force";
+parameters u0(AC) "base unemployment rate", qlf(AC) "labour force", epsw(AC) "wage-curve elasticity",
+     wref(AC) "reference real wage", wmin(AC) "real minimum wage", lsm0(AC), QFS0(AC);
+scalar mu "smoothing of the minimum-wage condition";
+mu = muin;
+FL(F) = yes$(ungiven(F) or mwgiven(F));
+QFS0(F) = sum(A, QF0(F, A));
+wref(F) = W0(F) / sum(C, cwts(C) * (1 + tv(C)));
+u0(F) = 1;
+u0(F)$FL(F) = unin(F);
+wmin(F) = wref(F);
+wmin(F)$(FL(F) and u0(F) > 0) = wref(F) / (1 + mu / u0(F));
+wmin(F)$(FL(F) and u0(F) = 0) = mwin(F) * wref(F);
+u0(F)$(FL(F) and u0(F) = 0) = mu / (1 / mwin(F) - 1);
+qlf(F) = QFS0(F);
+qlf(F)$FL(F) = QFS0(F) / (1 - u0(F));
+epsw(F) = wcin(F);
+lsm0(F)$FL(F) = (1 - QFS0(F) / qlf(F)) + (wref(F) / wmin(F) - 1)
+                - sqrt(sqr(1 - QFS0(F) / qlf(F)) + sqr(wref(F) / wmin(F) - 1) + 2 * mu);
+
+* ---------------------------------------------------------------------
+* Variables and equations (Section 5)
+* ---------------------------------------------------------------------
+variables PA(AC), PVA(AC), PINTA(AC), PX(AC), PD(AC), PE(AC), PM(AC), PQ(AC), W(AC), EXR, CPI, DPI,
+     QA(AC), QVA(AC), QINTA(AC), QF(AC, AC), QINT(AC, AC), QX(AC), QD(AC), QE(AC), QM(AC), QQ(AC),
+     QH(AC, AC), QG(AC), QINV(AC), QFS(AC), YF(AC), YIF(AC, AC), YI(AC), EH(AC), YG, EG, GSAV, FSAV,
+     TINS(AC), MPS(AC), TINSADJ, MPSADJ, IADJ, GADJ, WFDIST(AC, AC), WALRAS, QT(AC), QER(AC), YSHI,
+     SHIADJ, QSHI(AC), EFF(AC), HS, TQADJ, TMADJ, TVADJ, PWEV(AC), QHA(AC, AC), LSW(AC), LSM(AC), DW(AC),
+     RM(AC), RE(AC), RA(AC), QNA(NST, AC), PNA(NST, AC), PXAC(AC, AC), QXAC(AC, AC);
+
+* 16.1 Rents (from version 0.4.4): premiums on imports and exports, per unit
+* of the world price, and rents on activity output, per unit of the activity
+* price. Each is paid to the government unless a constraint names another
+* recipient: a factor, a household or enterprise, or the rest of the world.
+parameters rmto(AC, AC) "recipient of the premium on imports of a commodity",
+     reto(AC, AC) "recipient of the premium on its exports", rato(AC, AC) "recipient of the rent on an activity's output";
+rmto(GOVS, C) = 1;
+reto(GOVS, C) = 1;
+rato(GOVS, A) = 1;
+* 17.2: the CES sum at the top of value added of activity za, and within nest zn
+$macro TOPSUM(za) (sum(FP$(FA(FP, za) and NFREE(FP)), dva(FP, za) * (af(FP) * EFF(FP) * DW(FP) * QF(FP, za))**(-rva(za))) + sum(NSTP$NNA(NSTP, za), dvn(NSTP, za) * QNA(NSTP, za)**(-rva(za))))
+$macro NSUM(zn, za) (sum(FP$(NSTF(zn, FP) and FA(FP, za)), dva(FP, za) * (af(FP) * EFF(FP) * DW(FP) * QF(FP, za))**(-rhn(zn))) + sum(CP$(NSTF(zn, CP) and NE(CP, za)), dce(CP, za) * QINT(CP, za)**(-rhn(zn))))
+$macro RENTTO(rr) (sum(C, rmto(rr, C) * RM(C) * pwm(C) * QM(C)) * EXR + sum(C, reto(rr, C) * RE(C) * (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) * EXR + sum(A, rato(rr, A) * RA(A) * PA(A) * QA(A)))
+
+* Built-in equation elements that user equations replace (from version
+* 0.9.3): XRP(block, e1, e2) = 1, set in cge_user.inc, with '0' for an index a
+* block does not have; the equations below leave them out
+parameter XRP(*, *, *) "built-in equation elements replaced by user equations";
+XRP('-', '-', '-') = 0;
+
+equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
+     EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
+     EQ4D(AC, AC), EQ4N(NST, AC, AC), EQ4M(NST, AC, AC), EN1C(NST, AC), EN1D(NST, AC), EN2C(NST, AC),
+     EN2D(NST, AC), EN3C(NST, AC, AC), EN3D(NST, AC, AC), EQ5(AC, AC), EQ6(AC), EQ6A(AC), EQ6D(AC),
+     EQ6B(AC, AC), EP5A(AC, AC), EP5D(AC, AC), EH1, EH2(AC), EH3(AC),
+     ET1(AC), ET2(AC), ET3(AC), ET4(AC), ET5(AC), ET6(AC), ET7(AC), ET8(AC), ET9(AC), ET3E(AC), ET10(AC),
+     EI1(AC), EI2(AC, AC), EI3(AC), EI4(AC), EI5(AC, AC), EI5H(AC, AC), EI6(AC), EI7(AC), EI8, EI9, EI10(AC), EI11(AC),
+     EI12, EI13(AC), EI14, EL1(AC), EL2(AC), ES1(AC), ES2(AC), ES3, ES4, ES5;
+
+* 5.1 Prices
+EP1(C)$(CM(C) and not XRP('P1', C, '0'))..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ + RM(C)) * EXR + sum(CP$ici(CP, C), PQ(CP) * ici(CP, C));
+EP2(C)$(CE(C) and not XRP('P2', C, '0'))..  PE(C) =e= (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * (1 - te(C) - RE(C)) * EXR
+                          - sum(CP$ice(CP, C), PQ(CP) * ice(CP, C));
+EP3(C)$(CQ(C) and not XRP('P3', C, '0'))..  PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e=
+                ((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) * QD(C))$CDO(C) + (PM(C) * QM(C))$CM(C)
+                + sum(CP$CT(CP), PQ(CP) * icm(CP, C)) * QQ(C);
+EP4(C)$(CX(C) and not XRP('P4', C, '0'))..  PX(C) * QX(C) =e= (PD(C) * QD(C))$CDO(C) + (PE(C) * QE(C))$CE(C);
+EP5(A)$(not XRP('P5', A, '0'))..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * (PXAC(A, C)$XAC(A, C) + PX(C)$(not XAC(A, C))));
+EP6(A)$(not XRP('P6', A, '0'))..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * ica(C, A));
+EP7(A)..        PA(A) * (1 - ta(A) - RA(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A);
+EP8..           CPI =e= sum(C$cwts(C), cwts(C) * PQ(C) * (1 + tv(C) * TVADJ));
+EP9..           DPI =e= sum(C$dwts(C), dwts(C) * PD(C));
+
+* 5.2 Production; factors in efficiency units af * EFF * QF
+EQ1(A)$(LT(A) and not XRP('Q1', A, '0'))..  QVA(A) =e= iva(A) * QA(A);
+EQ2(A)$(LT(A) and not XRP('Q2', A, '0'))..  QINTA(A) =e= inta(A) * QA(A);
+EQ1C(A)$(not LT(A) and not CDA(A) and not XRP('Q1C', A, '0'))..
+    QA(A) =e= aa(A) * (dla(A) * QVA(A)**(-rha(A)) + dlac(A) * QINTA(A)**(-rha(A)))**(-1 / rha(A));
+EQ2C(A)$(not LT(A) and not CDA(A) and not XRP('Q2C', A, '0'))..
+    QVA(A) =e= QINTA(A) * ((PINTA(A) / PVA(A)) * dla(A) / dlac(A))**(1 / (1 + rha(A)));
+EQ1D(A)$(CDA(A) and not XRP('Q1C', A, '0'))..  QA(A) =e= aa(A) * QVA(A)**dla(A) * QINTA(A)**dlac(A);
+EQ2D(A)$(CDA(A) and not XRP('Q2C', A, '0'))..  PVA(A) * QVA(A) * dlac(A) =e= PINTA(A) * QINTA(A) * dla(A);
+EQ3C(A)$(not CDV(A) and not XRP('Q3', A, '0'))..  QVA(A) =e= ad(A) * TOPSUM(A)**(-1 / rva(A));
+EQ3D(A)$(CDV(A) and not XRP('Q3', A, '0'))..
+    QVA(A) =e= ad(A) * prod(F$(FA(F, A) and NFREE(F)), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A))
+                     * prod(NST$NNA(NST, A), QNA(NST, A)**dvn(NST, A));
+EQ4C(F, A)$(FA(F, A) and NFREE(F) and not CDV(A) and not XRP('Q4', F, A))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PVA(A) * QVA(A) / TOPSUM(A)
+        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F) * DW(F);
+EQ4D(F, A)$(FA(F, A) and NFREE(F) and CDV(A) and not XRP('Q4', F, A))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
+* 17.2 Nests of value added: demand for the factors in a nest (EQ4N, EQ4M),
+* the quantity (EN1C, EN1D) and price (EN2C, EN2D) of each nest, and the
+* demand for the commodities in nests (EN3C, EN3D)
+EQ4N(NST, F, A)$(NSTF(NST, F) and FA(F, A) and not CDN(NST) and not XRP('Q4', F, A))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PNA(NST, A) * QNA(NST, A) / NSUM(NST, A)
+        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rhn(NST) - 1) * af(F) * EFF(F) * DW(F);
+EQ4M(NST, F, A)$(NSTF(NST, F) and FA(F, A) and CDN(NST) and not XRP('Q4', F, A))..
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PNA(NST, A) * QNA(NST, A);
+EN1C(NST, A)$(NNA(NST, A) and not CDN(NST) and not XRP('N1', NST, A))..  QNA(NST, A) =e= an(NST, A) * NSUM(NST, A)**(-1 / rhn(NST));
+EN1D(NST, A)$(NNA(NST, A) and CDN(NST) and not XRP('N1', NST, A))..
+    QNA(NST, A) =e= an(NST, A) * prod(F$(NSTF(NST, F) and FA(F, A)), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A))
+                               * prod(C$(NSTF(NST, C) and NE(C, A)), QINT(C, A)**dce(C, A));
+EN2C(NST, A)$(NNA(NST, A) and not CDV(A) and not XRP('N2', NST, A))..
+    PNA(NST, A) =e= PVA(A) * QVA(A) / TOPSUM(A) * dvn(NST, A) * QNA(NST, A)**(-rva(A) - 1);
+EN2D(NST, A)$(NNA(NST, A) and CDV(A) and not XRP('N2', NST, A))..  PNA(NST, A) * QNA(NST, A) =e= dvn(NST, A) * PVA(A) * QVA(A);
+EN3C(NST, C, A)$(NSTF(NST, C) and NE(C, A) and not CDN(NST) and not XRP('N3', C, A))..
+    PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) =e= PNA(NST, A) * QNA(NST, A) / NSUM(NST, A)
+        * dce(C, A) * QINT(C, A)**(-rhn(NST) - 1);
+EN3D(NST, C, A)$(NSTF(NST, C) and NE(C, A) and CDN(NST) and not XRP('N3', C, A))..
+    PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * QINT(C, A) =e= dce(C, A) * PNA(NST, A) * QNA(NST, A);
+EQ5(C, A)$(ica(C, A) and not XRP('Q5', C, A))..  QINT(C, A) =e= ica(C, A) * QINTA(A);
+EQ6(C)$(CX(C) and not CAC(C) and not XRP('Q6', C, '0'))..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
+* 17.3 Output from several activities: commodity output (EQ6A, EQ6D), each
+* activity's output (EQ6B) and price (EP5A, EP5D)
+EQ6A(C)$(CAC(C) and not CDAC(C) and not XRP('Q6A', C, '0'))..
+    QX(C) =e= aac(C) * sum(A$XAC(A, C), dac(A, C) * QXAC(A, C)**(-rac(C)))**(-1 / rac(C));
+EQ6D(C)$(CDAC(C) and not XRP('Q6A', C, '0'))..  QX(C) =e= aac(C) * prod(A$XAC(A, C), QXAC(A, C)**dac(A, C));
+EQ6B(A, C)$(XAC(A, C) and not XRP('Q6B', A, C))..  QXAC(A, C) =e= theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H)));
+EP5A(A, C)$(XAC(A, C) and not CDAC(C) and not XRP('P5A', A, C))..
+    PXAC(A, C) =e= PX(C) * QX(C) / sum(AP$XAC(AP, C), dac(AP, C) * QXAC(AP, C)**(-rac(C)))
+                   * dac(A, C) * QXAC(A, C)**(-rac(C) - 1);
+EP5D(A, C)$(XAC(A, C) and CDAC(C) and not XRP('P5A', A, C))..  PXAC(A, C) * QXAC(A, C) =e= dac(A, C) * PX(C) * QX(C);
+EH1$(linked and not XRP('H1', '0', '0'))..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C));
+EH2(F)$(eta(F) and not XRP('H2', F, '0')).. EFF(F) =e= (HS / hs0)**eta(F);
+EH3(F)$(FS(F) and not XRP('H3', F, '0'))..  DW(F) =e= (1 - sick(F) * (HS / hs0)**epss(F)) / (1 - sick0(F));
+
+* 5.3 Trade
+ET1(C)$(CE(C) and not XO(C) and not XRP('T1', C, '0'))..  QX(C) =e= at(C) * (dt(C) * QE(C)**rt(C) + dtc(C) * QD(C)**rt(C))**(1 / rt(C));
+ET2(C)$(CE(C) and not XO(C) and not XRP('T2', C, '0'))..  QE(C) =e= QD(C) * ((PE(C) / PD(C)) * dtc(C) / dt(C))**(1 / (rt(C) - 1));
+ET3(C)$(CX(C) and not CE(C) and not XRP('T3', C, '0'))..  QX(C) =e= QD(C);
+ET3E(C)$(XO(C) and not XRP('T3E', C, '0'))..  QX(C) =e= QE(C);
+ET4(C)$(CM(C) and CDO(C) and not XRP('T4', C, '0'))..
+    QQ(C) =e= aq(C) * (dq(C) * QM(C)**(-rq(C)) + dqc(C) * QD(C)**(-rq(C)))**(-1 / rq(C));
+ET5(C)$(CM(C) and CDO(C) and not XRP('T5', C, '0'))..  QM(C) =e= QD(C) * (((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) / PM(C))
+                                               * dq(C) / dqc(C))**(1 / (1 + rq(C)));
+ET6(C)$(CDO(C) and not CM(C) and not XRP('T6', C, '0'))..  QQ(C) =e= aq(C) * QD(C);
+ET7(C)$(CM(C) and not CDO(C) and not XRP('T7', C, '0'))..  QQ(C) =e= aq(C) * QM(C);
+ET8(C)$(CT(C) and not XRP('T8', C, '0'))..  QT(C) =e= sum(CP$icm(C, CP), icm(C, CP) * QQ(CP)) + sum(CP$icd(C, CP), icd(C, CP) * QD(CP))
+                          + sum(CP$ici(C, CP), ici(C, CP) * QM(CP)) + sum(CP$ice(C, CP), ice(C, CP) * QE(CP));
+ET10(C)$(CED(C) and not XRP('T10', C, '0'))..  QE(C) =e= qebar(C) * (PWEV(C) / pwe(C))**(-etae(C));
+ET9(C)$(CR(C) and not XRP('T9', C, '0'))..  QER(C) =e= qerbar(C) * (PQ(C) / (EXR * pwe(C)))**(-sigt(C));
+
+* 5.4 Institutions
+EI1(F)..  YF(F) =e= sum(A$FA(F, A), W(F) * WFDIST(F, A) * QF(F, A)) + trfr(F) * EXR + RENTTO(F);
+EI2(INS, F)$(not XRP('I2', INS, F))..  YIF(INS, F) =e= (shif(INS, F) * (1 - tshi(F) - tfy(F)) * YF(F))$(not SHIS(INS))
+                               + (tshi(F) * YF(F))$SHIS(INS);
+EI3(D)$(not XRP('I3', D, '0'))..  YI(D) =e= sum(F, YIF(D, F)) + sum(DP$shii(D, DP), shii(D, DP) * (1 - MPS(DP)) * (1 - TINS(DP)) * YI(DP))
+                    + trdg(D) * CPI + trdr(D) * EXR + hold(D) * rd * ddebt + RENTTO(D);
+EI4(H)$(not XRP('I4', H, '0'))..  EH(H) =e= hc(H) * (1 - MPS(H)) * (1 - TINS(H)) * YI(H);
+EI5(C, H)$(beta(C, H) and not XRP('I5', C, H))..
+    PQ(C) * (1 + tv(C) * TVADJ) * QH(C, H) =e= PQ(C) * (1 + tv(C) * TVADJ) * gamma(C, H)
+        + beta(C, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H))
+                        - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H)));
+EI5H(A, H)$(betah(A, H) and not XRP('I5H', A, H))..
+    PA(A) * QHA(A, H) =e= PA(A) * gammah(A, H)
+        + betah(A, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H))
+                         - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H)));
+EI6(C)$(not XRP('I6', C, '0'))..  QINV(C) =e= qinvbar(C) * IADJ;
+EI7(C)$(not XRP('I7', C, '0'))..  QG(C) =e= qgbar(C) * GADJ;
+EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
+                 + sum(C$CM(C), tm(C) * TMADJ * pwm(C) * QM(C)) * EXR
+                 + sum(C$CE(C), te(C) * (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) * EXR
+                 + sum(A, ta(A) * PA(A) * QA(A))
+                 + TVADJ * sum(C$tv(C), tv(C) * PQ(C) * (sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
+                       + QSHI(C)$qshibar(C) + sum(A$QIX(C, A), (1 - kappa(A)) * QINT(C, A))))
+                 + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI + sum(GOVS, RENTTO(GOVS))
+                 + sum((F, A)$FA(F, A), tf(F, A) * W(F) * WFDIST(F, A) * QF(F, A)) + sum(F, tfy(F) * YF(F));
+EI9..     EG =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QG(C)) + (sum(D, trdg(D)) + trgg + trshi) * CPI
+                 + trrg * EXR + rd * ddebt + rf * fdebt * EXR;
+EI10(D)$(not XRP('I10', D, '0')).. TINS(D) =e= tins0(D) * TINSADJ;
+EI11(D)$(not XRP('I11', D, '0')).. MPS(D) =e= mps0(D) * MPSADJ;
+EI12$(fund and not XRP('I12', '0', '0'))..  YSHI =e= sum((SHIS, F), YIF(SHIS, F)) + trshi * CPI + trshir * EXR;
+EI13(C)$(qshibar(C) and not XRP('I13', C, '0'))..  QSHI(C) =e= qshibar(C) * SHIADJ;
+EI14$(fund and not XRP('I14', '0', '0'))..  sum(C$qshibar(C), PQ(C) * (1 + tv(C) * TVADJ) * QSHI(C)) =e= (1 - sshi) * YSHI;
+
+* 14 Labour-market regimes: wage curve (L1) and smoothed minimum wage (L2);
+* each is inert unless the closure fixes its slack
+EL1(F)$(FL(F) and not XRP('L1', F, '0'))..  W(F) / CPI =e= (wref(F) * ((1 - QFS(F) / qlf(F)) / u0(F))**(-epsw(F)))$(epsw(F) > 0)
+                               + wref(F)$(epsw(F) = 0) + LSW(F);
+EL2(F)$(FL(F) and not XRP('L2', F, '0'))..  (1 - QFS(F) / qlf(F)) + (W(F) / (CPI * wmin(F)) - 1)
+                - sqrt(sqr(1 - QFS(F) / qlf(F)) + sqr(W(F) / (CPI * wmin(F)) - 1) + 2 * mu) =e= LSM(F);
+
+* 5.5 System constraints (S6 through the closure)
+ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F);
+ES2(C)$CQ(C)..  QQ(C) =e= sum(A$QIX(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
+                    + QT(C)$CT(C) + QER(C)$CR(C) + QSHI(C)$qshibar(C);
+ES3..     sum(C$CM(C), pwm(C) * QM(C)) + (sum((ROWS, F), YIF(ROWS, F))
+              + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D)) + sum(ROWS, RENTTO(ROWS))) / EXR
+          + trrg + rf * fdebt
+          =e= sum(C$CE(C), (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) + sum(C$CR(C), PQ(C) * QER(C)) / EXR
+              + sum(D, trdr(D))
+              + sum(F, trfr(F)) + trgr + trshir + FSAV;
+ES4$(not XRP('S4', '0', '0'))..     YG =e= EG + GSAV;
+ES5..     sum(D, MPS(D) * (1 - TINS(D)) * YI(D)) + GSAV + sshi * YSHI + EXR * FSAV
+          =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QINV(C)) + WALRAS;
+
+* User variables and equations (from version 0.6.1, model_spec.md, Section
+* 19), written by cge_gams
+$if exist cge_user.inc $include cge_user.inc
+
+model cge / all /;
+* For NLP solvers (--cgetype=nlp): the same equations and a constant objective
+variable OBJ "constant objective";
+equation EOBJ;
+EOBJ..  OBJ =e= 0;
+model cgenlp / cge, EOBJ /;
+* As a mixed complementarity problem (--cgetype=mcp): the equations of the
+* base; a scenario with constraints adds their pairs (model cgecon)
+model cgebase / cge /;
+scalar mstat "model status of the last solve";
+scalar mcpmode "1 when solved as a mixed complementarity problem";
+mcpmode = 0;
+$ifi %cgetype% == mcp mcpmode = 1;
+
+* ---------------------------------------------------------------------
+* Base values (Section 7.1: base prices normalised to one)
+* ---------------------------------------------------------------------
+PA.l(A) = 1;  PVA.l(A) = 1;  PINTA.l(A) = PINTA0(A);  PX.l(C) = 1;  PD.l(C) = 1;
+PE.l(C) = 1$CE(C);  PM.l(C) = PM0(C);  PQ.l(C) = 1;  W.l(F) = W0(F);  EXR.l = 1;
+PWEV.l(C) = pwe(C);  QHA.l(A, H) = QHA0(A, H);
+CPI.l = sum(C, cwts(C) * (1 + tv(C)));  DPI.l = sum(C, dwts(C));
+QA.l(A) = QA0(A);  QVA.l(A) = QVA0(A);  QINTA.l(A) = QINTA0(A);  QF.l(F, A) = QF0(F, A);
+QINT.l(C, A) = QINT0(C, A);  QX.l(C) = QX0(C);  QD.l(C) = QD0(C);  QE.l(C) = QE0(C);
+QM.l(C) = QM0(C)$CM(C);  QQ.l(C) = QQ0(C);  QH.l(C, H) = QH0(C, H);  QG.l(C) = qgbar(C);
+QINV.l(C) = qinvbar(C);  QFS.l(F) = sum(A, QF0(F, A));  YF.l(F) = YF0(F);  YIF.l(INS, F) = YIF0(INS, F);
+YI.l(D) = YI0(D);  EH.l(H) = EH0(H);  YG.l = YG0;  EG.l = EG0;  GSAV.l = GSAV0;  FSAV.l = FSAV0;
+TINS.l(D) = tins0(D);  MPS.l(D) = mps0(D);  TINSADJ.l = 1;  MPSADJ.l = 1;  IADJ.l = 1;  GADJ.l = 1;
+WFDIST.l(F, A) = WFD0(F, A);  WALRAS.l = 0;  QT.l(C) = QT0(C);  QER.l(C) = QER0(C);  YSHI.l = YSHI0;
+SHIADJ.l = 1;  QSHI.l(C) = qshibar(C);  EFF.l(F) = 1;  HS.l = hs0;  DW.l(F) = 1;
+TQADJ.l = 1;  TMADJ.l = 1;  TVADJ.l = 1;  LSW.l(F) = 0;  LSM.l(F) = lsm0(F);
+RM.l(C) = 0;  RE.l(C) = 0;  RA.l(A) = 0;
+QNA.l(NST, A) = VNA0(NST, A);  PNA.l(NST, A) = 1$NNA(NST, A);
+PXAC.l(A, C) = 1$XAC(A, C);  QXAC.l(A, C) = SAM(A, C)$XAC(A, C);
+
+* Closure (Section 6): 1 = the default of each block
+scalars clext "1 flexible exchange rate, 2 fixed",
+        clgov "1 flexible government savings; fixed, with 2 direct, 3 sales, 4 import or 5 VAT rates adjusting",
+        clsi "1 savings-driven, 2 investment-driven", clnum "1 CPI numeraire, 2 DPI";
+parameter fclo(AC) "factor closure: 1 mobile, 2 activity-specific, 3 unemployed, 4 wage curve, 5 minimum wage";
+clext = 1;  clgov = 1;  clsi = 1;  clnum = 1;  fclo(F) = 1;
+
+$include cge_closure.gms
+
+* Convergence tolerances are absolute: scale them to the size of the SAM,
+* within what double precision allows. An option file is written for PATH,
+* CONOPT, IPOPT and KNITRO; other solvers use their defaults.
+scalar ptol;
+ptol = max(1e-11, 1e-13 * smax((AC, ACP), abs(SAM(AC, ACP))));
+file optf / %cgesolver%.opt /;
+* put files print numbers below .nz as zero (default 1e-5)
+optf.nz = 0;
+optf.nr = 2;
+optf.nd = 3;
+$ifi %cgesolver% == path   putclose optf 'convergence_tolerance ', ptol:0:3 /;
+$ifi %cgesolver% == conopt putclose optf 'rtnwma ', (ptol / max(1, smax((AC, ACP), abs(SAM(AC, ACP))))):0:3 /;
+$ifi %cgesolver% == ipopt  putclose optf 'tol 1e-12' / 'constr_viol_tol ', ptol:0:3 /;
+$ifi %cgesolver% == knitro putclose optf 'feastol_abs ', ptol:0:3 / 'feastol 1e-12' /;
+cge.optfile = 0;
+$ifi %cgesolver% == path   cge.optfile = 1;
+$ifi %cgesolver% == conopt cge.optfile = 1;
+$ifi %cgesolver% == ipopt  cge.optfile = 1;
+$ifi %cgesolver% == knitro cge.optfile = 1;
+cgenlp.optfile = cge.optfile;
+cgebase.optfile = cge.optfile;
+option limrow = 0, limcol = 0, solprint = off;
+$batinclude cge_solve.gms cgebase
+
+file res / '%out%' /;
+$batinclude cge_write.gms res __base__
+@@@ cge_closure.gms
+* cge_closure.gms -- bounds, variables that do not exist, and the closure (Section 6)
+* Included by cge_model.gms, by cge_scenario.gms (the check) and by the driver
+* that cge_gams writes (cge_run.gms). Every variable is freed, then
+* fixed where the model structure or the closure requires it, at its current level.
+
+PA.lo(AC) = -inf;      PA.up(AC) = inf;      PVA.lo(AC) = -inf;     PVA.up(AC) = inf;
+PINTA.lo(AC) = -inf;   PINTA.up(AC) = inf;   PX.lo(AC) = -inf;      PX.up(AC) = inf;
+PD.lo(AC) = -inf;      PD.up(AC) = inf;      PE.lo(AC) = -inf;      PE.up(AC) = inf;
+PM.lo(AC) = -inf;      PM.up(AC) = inf;      PQ.lo(AC) = -inf;      PQ.up(AC) = inf;
+W.lo(AC) = -inf;       W.up(AC) = inf;       EXR.lo = -inf;         EXR.up = inf;
+CPI.lo = -inf;         CPI.up = inf;         DPI.lo = -inf;         DPI.up = inf;
+QA.lo(AC) = -inf;      QA.up(AC) = inf;      QVA.lo(AC) = -inf;     QVA.up(AC) = inf;
+QINTA.lo(AC) = -inf;   QINTA.up(AC) = inf;   QF.lo(AC, ACP) = -inf; QF.up(AC, ACP) = inf;
+QINT.lo(AC, ACP) = -inf; QINT.up(AC, ACP) = inf; QX.lo(AC) = -inf;  QX.up(AC) = inf;
+QD.lo(AC) = -inf;      QD.up(AC) = inf;      QE.lo(AC) = -inf;      QE.up(AC) = inf;
+QM.lo(AC) = -inf;      QM.up(AC) = inf;      QQ.lo(AC) = -inf;      QQ.up(AC) = inf;
+QH.lo(AC, ACP) = -inf; QH.up(AC, ACP) = inf; QG.lo(AC) = -inf;      QG.up(AC) = inf;
+QINV.lo(AC) = -inf;    QINV.up(AC) = inf;    QFS.lo(AC) = -inf;     QFS.up(AC) = inf;
+YF.lo(AC) = -inf;      YF.up(AC) = inf;      YIF.lo(AC, ACP) = -inf; YIF.up(AC, ACP) = inf;
+YI.lo(AC) = -inf;      YI.up(AC) = inf;      EH.lo(AC) = -inf;      EH.up(AC) = inf;
+YG.lo = -inf;          YG.up = inf;          EG.lo = -inf;          EG.up = inf;
+GSAV.lo = -inf;        GSAV.up = inf;        FSAV.lo = -inf;        FSAV.up = inf;
+TINS.lo(AC) = -inf;    TINS.up(AC) = inf;    MPS.lo(AC) = -inf;     MPS.up(AC) = inf;
+TINSADJ.lo = -inf;     TINSADJ.up = inf;     MPSADJ.lo = -inf;      MPSADJ.up = inf;
+IADJ.lo = -inf;        IADJ.up = inf;        GADJ.lo = -inf;        GADJ.up = inf;
+WFDIST.lo(AC, ACP) = -inf; WFDIST.up(AC, ACP) = inf; WALRAS.lo = -inf; WALRAS.up = inf;
+QT.lo(AC) = -inf;      QT.up(AC) = inf;      QER.lo(AC) = -inf;     QER.up(AC) = inf;
+YSHI.lo = -inf;        YSHI.up = inf;        SHIADJ.lo = -inf;      SHIADJ.up = inf;
+QSHI.lo(AC) = -inf;    QSHI.up(AC) = inf;    EFF.lo(AC) = -inf;     EFF.up(AC) = inf;
+HS.lo = -inf;          HS.up = inf;
+TQADJ.lo = -inf;       TQADJ.up = inf;       TMADJ.lo = -inf;       TMADJ.up = inf;
+TVADJ.lo = -inf;       TVADJ.up = inf;
+PWEV.lo(AC) = -inf;     PWEV.up(AC) = inf;     QHA.lo(AC, ACP) = -inf; QHA.up(AC, ACP) = inf;
+LSW.lo(AC) = -inf;      LSW.up(AC) = inf;      LSM.lo(AC) = -inf;      LSM.up(AC) = inf;
+DW.lo(AC) = -inf;       DW.up(AC) = inf;
+RM.lo(AC) = -inf;       RM.up(AC) = inf;       RE.lo(AC) = -inf;       RE.up(AC) = inf;
+RA.lo(AC) = -inf;       RA.up(AC) = inf;
+QNA.lo(NST, AC) = -inf; QNA.up(NST, AC) = inf; PNA.lo(NST, AC) = -inf; PNA.up(NST, AC) = inf;
+PXAC.lo(AC, ACP) = -inf; PXAC.up(AC, ACP) = inf; QXAC.lo(AC, ACP) = -inf; QXAC.up(AC, ACP) = inf;
+
+* Prices and quantities that are positive in the base stay positive; as a
+* mixed complementarity problem (from version 0.4.4) every variable without a
+* pair must be free or fixed, so these bounds are left out
+if (mcpmode = 0,
+PA.lo(A) = 1e-10;  PVA.lo(A) = 1e-10;  PQ.lo(C)$CQ(C) = 1e-10;  W.lo(F) = 1e-10;  EXR.lo = 1e-10;
+CPI.lo = 1e-10;  DPI.lo = 1e-10;  QA.lo(A) = 1e-10;  QVA.lo(A) = 1e-10;  QQ.lo(C)$CQ(C) = 1e-10;
+PWEV.lo(C)$CED(C) = 1e-10;
+PINTA.lo(A)$(PINTA0(A) > 0) = 1e-10;  QINTA.lo(A)$(QINTA0(A) > 0) = 1e-10;
+PX.lo(C)$CX(C) = 1e-10;  PD.lo(C)$CDO(C) = 1e-10;  QX.lo(C)$CX(C) = 1e-10;  QD.lo(C)$CDO(C) = 1e-10;
+PE.lo(C)$CE(C) = 1e-10;  QE.lo(C)$CE(C) = 1e-10;  PM.lo(C)$CM(C) = 1e-10;  QM.lo(C)$CM(C) = 1e-10;
+QF.lo(F, A)$FA(F, A) = 1e-10;  QT.lo(C)$CT(C) = 1e-10;  QER.lo(C)$CR(C) = 1e-10;
+EFF.lo(F)$eta(F) = 1e-10;  HS.lo$linked = 1e-10;  DW.lo(F)$FS(F) = 1e-10;
+QNA.lo(NST, A)$NNA(NST, A) = 1e-10;  PNA.lo(NST, A)$NNA(NST, A) = 1e-10;  QINT.lo(C, A)$NE(C, A) = 1e-10;
+PXAC.lo(A, C)$XAC(A, C) = 1e-10;  QXAC.lo(A, C)$XAC(A, C) = 1e-10;
+* the wage curve needs positive unemployment
+QFS.up(F)$(FL(F) and epsw(F) > 0) = qlf(F) * (1 - 1e-12);
+);
+
+* Variables that do not exist are held at their base values
+PE.fx(C)$(not CE(C)) = PE.l(C);        QE.fx(C)$(not CE(C)) = QE.l(C);
+PM.fx(C)$(not CM(C)) = PM.l(C);        QM.fx(C)$(not CM(C)) = QM.l(C);
+PX.fx(C)$(not CX(C)) = PX.l(C);        PD.fx(C)$(not CDO(C)) = PD.l(C);
+QX.fx(C)$(not CX(C)) = QX.l(C);        QD.fx(C)$(not CDO(C)) = QD.l(C);
+PQ.fx(C)$(not CQ(C)) = PQ.l(C);        QQ.fx(C)$(not CQ(C)) = QQ.l(C);
+PWEV.fx(C)$(not CED(C)) = PWEV.l(C);     QHA.fx(A, H)$(not betah(A, H)) = 0;
+QF.fx(F, A)$(not FA(F, A)) = 0;        WFDIST.fx(F, A)$(not FA(F, A)) = WFDIST.l(F, A);
+QT.fx(C)$(not CT(C)) = 0;              QER.fx(C)$(not CR(C)) = 0;
+QINT.fx(C, A)$(not QIX(C, A)) = 0;     QH.fx(C, H)$(not beta(C, H)) = 0;
+QSHI.fx(C)$(not qshibar(C)) = 0;       EFF.fx(F)$(not eta(F)) = EFF.l(F);
+YSHI.fx$(not fund) = YSHI.l;           SHIADJ.fx$(not fund) = SHIADJ.l;
+HS.fx$(not linked) = HS.l;
+LSW.fx(F)$(not FL(F)) = 0;             LSM.fx(F)$(not FL(F)) = 0;
+DW.fx(F)$(not FS(F)) = 1;
+* Rents (16.1) are fixed unless a constraint frees them
+RM.fx(C) = RM.l(C);                     RE.fx(C) = RE.l(C);
+RA.fx(A) = RA.l(A);
+* Nests of value added (17.2) exist only where an activity uses them
+QNA.fx(NST, A)$(not NNA(NST, A)) = 0;   PNA.fx(NST, A)$(not NNA(NST, A)) = 0;
+* Output by activity (17.3) exists only for the commodities aggregated
+PXAC.fx(A, C)$(not XAC(A, C)) = 0;      QXAC.fx(A, C)$(not XAC(A, C)) = 0;
+
+* Closure
+GADJ.fx = GADJ.l;
+if (clext = 1, FSAV.fx = FSAV.l; else EXR.fx = EXR.l;);
+* Government (12.1): the tax scaling factors are fixed except the instrument
+if (clgov > 1, GSAV.fx = GSAV.l;);
+if (clgov <> 2, TINSADJ.fx = TINSADJ.l;);
+if (clgov <> 3, TQADJ.fx = TQADJ.l;);
+if (clgov <> 4, TMADJ.fx = TMADJ.l;);
+if (clgov <> 5, TVADJ.fx = TVADJ.l;);
+if (clsi = 1, MPSADJ.fx = MPSADJ.l; else IADJ.fx = IADJ.l;);
+if (clnum = 1, CPI.fx = CPI.l; else DPI.fx = DPI.l;);
+QFS.fx(F)$(fclo(F) = 1) = QFS.l(F);
+WFDIST.fx(F, A)$(fclo(F) = 1 or fclo(F) >= 3) = WFDIST.l(F, A);
+W.fx(F)$(fclo(F) = 2 or fclo(F) = 3) = W.l(F);
+QF.fx(F, A)$(fclo(F) = 2) = QF.l(F, A);
+* 14: the regime's slack is fixed
+LSW.fx(F)$(fclo(F) = 4) = LSW.l(F);
+LSM.fx(F)$(fclo(F) = 5) = LSM.l(F);
+@@@ cge_write.gms
+* cge_write.gms -- write the solution: scenario, variable, element1, element2, value
+* $batinclude cge_write.gms <put file> <scenario name>
+%1.pc = 5;
+* numbers below .nz would be written as zero (default 1e-5)
+%1.nz = 0;
+%1.nd = 15;
+%1.nr = 2;
+%1.nw = 24;
+put %1;
+put 'scenario', 'variable', 'element1', 'element2', 'value' /;
+put '%2', '__status__', '', '', mstat /;
+loop(A, put '%2', 'PA', A.tl, '', PA.l(A) /;  put '%2', 'PVA', A.tl, '', PVA.l(A) /;
+        put '%2', 'PINTA', A.tl, '', PINTA.l(A) /;  put '%2', 'QA', A.tl, '', QA.l(A) /;
+        put '%2', 'QVA', A.tl, '', QVA.l(A) /;  put '%2', 'QINTA', A.tl, '', QINTA.l(A) /;
+        put '%2', 'RA', A.tl, '', RA.l(A) /);
+loop(C, put '%2', 'PX', C.tl, '', PX.l(C) /;  put '%2', 'PD', C.tl, '', PD.l(C) /;
+        put '%2', 'PE', C.tl, '', PE.l(C) /;  put '%2', 'PM', C.tl, '', PM.l(C) /;
+        put '%2', 'PQ', C.tl, '', PQ.l(C) /;  put '%2', 'QX', C.tl, '', QX.l(C) /;
+        put '%2', 'QD', C.tl, '', QD.l(C) /;  put '%2', 'QE', C.tl, '', QE.l(C) /;
+        put '%2', 'QM', C.tl, '', QM.l(C) /;  put '%2', 'QQ', C.tl, '', QQ.l(C) /;
+        put '%2', 'QG', C.tl, '', QG.l(C) /;  put '%2', 'QINV', C.tl, '', QINV.l(C) /;
+        put '%2', 'QT', C.tl, '', QT.l(C) /;  put '%2', 'QER', C.tl, '', QER.l(C) /;
+        put '%2', 'QSHI', C.tl, '', QSHI.l(C) /;  put '%2', 'PWE', C.tl, '', PWEV.l(C) /;
+        put '%2', 'RM', C.tl, '', RM.l(C) /;  put '%2', 'RE', C.tl, '', RE.l(C) /);
+loop((A, H), put '%2', 'QHA', A.tl, H.tl, QHA.l(A, H) /);
+loop((A, C), put '%2', 'PXAC', A.tl, C.tl, PXAC.l(A, C) /;  put '%2', 'QXAC', A.tl, C.tl, QXAC.l(A, C) /);
+loop(F, put '%2', 'W', F.tl, '', W.l(F) /;  put '%2', 'QFS', F.tl, '', QFS.l(F) /;
+        put '%2', 'YF', F.tl, '', YF.l(F) /;  put '%2', 'EFF', F.tl, '', EFF.l(F) /;
+        put '%2', 'LSW', F.tl, '', LSW.l(F) /;  put '%2', 'LSM', F.tl, '', LSM.l(F) /;
+        put '%2', 'DW', F.tl, '', DW.l(F) /);
+loop((F, A), put '%2', 'QF', F.tl, A.tl, QF.l(F, A) /;  put '%2', 'WFDIST', F.tl, A.tl, WFDIST.l(F, A) /);
+loop((C, A), put '%2', 'QINT', C.tl, A.tl, QINT.l(C, A) /);
+loop((NST, A), put '%2', 'QNA', NST.tl, A.tl, QNA.l(NST, A) /;  put '%2', 'PNA', NST.tl, A.tl, PNA.l(NST, A) /);
+loop((C, H), put '%2', 'QH', C.tl, H.tl, QH.l(C, H) /);
+loop((INS, F), put '%2', 'YIF', INS.tl, F.tl, YIF.l(INS, F) /);
+loop(D, put '%2', 'YI', D.tl, '', YI.l(D) /;  put '%2', 'TINS', D.tl, '', TINS.l(D) /;
+        put '%2', 'MPS', D.tl, '', MPS.l(D) /);
+loop(H, put '%2', 'EH', H.tl, '', EH.l(H) /);
+put '%2', 'EXR', '', '', EXR.l /;  put '%2', 'CPI', '', '', CPI.l /;  put '%2', 'DPI', '', '', DPI.l /;
+put '%2', 'YG', '', '', YG.l /;  put '%2', 'EG', '', '', EG.l /;  put '%2', 'GSAV', '', '', GSAV.l /;
+put '%2', 'FSAV', '', '', FSAV.l /;  put '%2', 'TINSADJ', '', '', TINSADJ.l /;
+put '%2', 'MPSADJ', '', '', MPSADJ.l /;  put '%2', 'IADJ', '', '', IADJ.l /;
+put '%2', 'GADJ', '', '', GADJ.l /;  put '%2', 'WALRAS', '', '', WALRAS.l /;
+put '%2', 'YSHI', '', '', YSHI.l /;  put '%2', 'SHIADJ', '', '', SHIADJ.l /;  put '%2', 'HS', '', '', HS.l /;
+put '%2', 'TQADJ', '', '', TQADJ.l /;  put '%2', 'TMADJ', '', '', TMADJ.l /;  put '%2', 'TVADJ', '', '', TVADJ.l /;
+* user variables (from version 0.6.1), when the model has them
+$if exist cge_user_write.inc $batinclude cge_user_write.inc %1 %2
+putclose %1;
+@@@ cge_solve.gms
+* cge_solve.gms -- solve the model with the chosen solver (from version 0.4.3)
+* $batinclude cge_solve.gms <model for --cgetype=mcp>
+* --cgetype=cns (the default): a constrained nonlinear system, for PATH,
+* CONOPT or KNITRO; --cgetype=nlp: the same equations with a constant
+* objective, for NLP solvers such as CONOPT or IPOPT; --cgetype=mcp (from
+* version 0.4.4): a mixed complementarity problem, for PATH, the model named
+* as the argument (cgebase for the base, cgecon for a scenario with
+* constraints). mstat keeps the model status, which cge_write.gms writes.
+$ifthen.cgetype %cgetype% == nlp
+option nlp = %cgesolver%;
+solve cgenlp using nlp minimizing OBJ;
+mstat = cgenlp.modelstat;
+$elseif.cgetype %cgetype% == mcp
+option mcp = %cgesolver%;
+solve %1 using mcp;
+mstat = %1.modelstat;
+$else.cgetype
+option cns = %cgesolver%;
+solve cge using cns;
+mstat = cge.modelstat;
+$endif.cgetype
