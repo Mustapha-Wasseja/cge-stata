@@ -1,4 +1,4 @@
-*! cge_gams.ado  v0.18.0  2026-10-25
+*! cge_gams.ado  v0.27.1  2026-10-25
 *! cge-stata: write the model and a scenario as a GAMS program, and
 *! optionally solve it in GAMS and compare the results (docs/gams.md)
 *!
@@ -106,9 +106,9 @@ program define cge_gams, rclass
         if `sa' local gmsfiles cge_solve.gms
         if `sa' local written cge_data.inc cge_user.inc cge_user_write.inc cge_sa_write.inc cge_shock_par.inc ///
             cge_shock_var.inc cge_constraints.inc cge_cons_write.inc cge_bounds.inc cge_solve.gms cge_run.gms
+        * from the package's bundle of the GAMS model (from version 0.27.1)
         foreach f of local gmsfiles {
-            quietly findfile `f'
-            quietly copy `"`r(fn)'"' `"`dir'/`f'"', replace
+            mata: _cge_bundle_get("cge_gams_model.txt", "`f'", st_local("dir") + "/`f'")
         }
         * The path that findfile leaves in r() is not a result
         mata: st_rclear()

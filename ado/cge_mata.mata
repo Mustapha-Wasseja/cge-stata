@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.27.0")
+    return("0.27.1")
 }
 
 // =====================================================================
@@ -22945,6 +22945,51 @@ void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvect
         if (fileexists(pathjoin(dir, base + "_w" + strofreal(k) + ".log"))) unlink(pathjoin(dir, base + "_w" + strofreal(k) + ".log"))
     }
     printf("{txt}Solved in {res}%f{txt} parallel Stata process(es)\n", P)
+}
+
+// Section name of bundle file bundle, written to file out (from version
+// 0.27.1). Stata's package files take at most 100 files, so the package
+// installs the SYNTHETIC SAMs, the model library and the GAMS model as three
+// bundles, whose sections begin with a line "@@@ name"
+// (tools/bundle_files.py writes them from the files of the repository)
+void _cge_bundle_get(string scalar bundle, string scalar name, string scalar out)
+{
+    string colvector L
+    string scalar fn
+    real scalar k, a, b, fh
+    fn = findfile(bundle)
+    if (fn == "") _cge_fail(bundle + " not found: install the package again, net install cge, replace", 601)
+    L = cat(fn)
+    a = 0
+    for (k = 1; k <= rows(L); k++) {
+        if (subinstr(L[k], char(13), "") == "@@@ " + name) {
+            a = k
+            break
+        }
+    }
+    if (!a) _cge_fail(name + " is not in " + bundle + ": install the package again, net install cge, replace", 601)
+    for (b = a + 1; b <= rows(L); b++) if (substr(L[b], 1, 4) == "@@@ ") break
+    if (fileexists(out)) unlink(out)
+    fh = fopen(out, "w")
+    for (k = a + 1; k < b; k++) fput(fh, subinstr(L[k], char(13), ""))
+    fclose(fh)
+}
+
+// A file in Stata's folder of temporary files for section name of a bundle,
+// named after it and lasting the session, so that a command can return its
+// path, as cge_synthetic returns r(filename) (from version 0.27.1); the stem
+// of a temporary file of Stata's makes the name unique to the process
+string scalar _cge_bundle_tmp(string scalar name)
+{
+    pointer() scalar q
+    string scalar t
+    if ((q = findexternal("cge__bdtmp")) == NULL) {
+        q = crexternal("cge__bdtmp")
+        t = st_tempfilename()
+        if (substr(t, -4, 4) == ".tmp") t = substr(t, 1, strlen(t) - 4)
+        *q = t + "_"
+    }
+    return(*q + name)
 }
 
 // A path or word as a Python string literal, its backslashes doubled (from

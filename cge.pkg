@@ -14,7 +14,7 @@ d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja
 d
-d Distribution-Date: 20261024
+d Distribution-Date: 20261025
 d
 f ado/cge.ado
 f ado/cge.sthlp
@@ -75,15 +75,7 @@ f ado/cge_region.sthlp
 f ado/cge_model.ado
 f ado/cge_modlib.ado
 f ado/cge_modlib.sthlp
-F ado/cge_ml_exchange.do
-F ado/cge_ml_crusoe.do
-F ado/cge_ml_ramsey.do
-F ado/cge_ml_markets.do
-F ado/cge_ml_hs071.do
-F ado/cge_ml_transport.do
-F ado/cge_ml_ras.do
-F ado/cge_ml_knapsack.do
-F ado/cge_ml_cournot.do
+F ado/cge_ml_library.txt
 f ado/cge_model.sthlp
 f ado/cge_solve.ado
 f ado/cge_solve.sthlp
@@ -113,26 +105,9 @@ f ado/cge_use.ado
 f ado/cge_use.sthlp
 f ado/cge_gams.ado
 f ado/cge_gams.sthlp
-F ado/cge_model.gms
-F ado/cge_closure.gms
-F ado/cge_solve.gms
-F ado/cge_write.gms
+F ado/cge_gams_model.txt
 f ado/cge_synthetic.ado
 f ado/cge_synthetic.sthlp
-F data/cge_synthetic_sam.csv
-F data/cge_synthetic_sam_na.csv
-F data/cge_synthetic_sam_inst.csv
-F data/cge_synthetic_sam_margins.csv
-F data/cge_synthetic_sam_tc.csv
-F data/cge_synthetic_sam_mp.csv
-F data/cge_synthetic_sam_cnm.csv
-F data/cge_synthetic_sam_sut.csv
-F data/cge_synthetic_sam_health.csv
-F data/cge_synthetic_sam_unbal.csv
-F data/cge_synthetic_sam_vat.csv
-F data/cge_synthetic_sam_home.csv
-F data/cge_synthetic_sam_trade.csv
-F data/cge_synthetic_sam_ftax.csv
-F data/cge_synthetic_sam_nest.csv
+F data/cge_synthetic_sams.txt
 F data/cge_elasticities.csv
 F data/cge_elasticity_sources.csv
