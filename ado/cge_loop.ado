@@ -1,4 +1,4 @@
-*! cge_loop.ado  v0.9.9  2026-10-24
+*! cge_loop.ado  v0.19.0  2026-10-25
 *! cge-stata: solve the model for a list or grid of scenarios, as a GAMS loop
 *! over a set of scenarios or GUSS does (Reference Manual, cge_loop)
 *!
@@ -8,10 +8,16 @@
 program define cge_loop, rclass
     version 13.0
     syntax [using/] , NAME(name) [VALues(string asis) GRID SCale COLD NOSTORE KEEP(string) ///
-        MEASures(string asis) CLEAR TOLerance(real 1e-10) ITERate(integer 100)]
+        MEASures(string asis) CLEAR TOLerance(real 1e-10) ITERate(integer 100) ///
+        PARallel(integer 1) STATAexe(string) FIRST(integer 1)]
     _cge_load
     if (`"`values'"' != "") == (`"`using'"' != "") {
         display as error "cge_loop: give values() or using, one of them"
+        exit 198
+    }
+    * parallel runs and the number of the first scenario (from version 0.19.0)
+    if `parallel' < 1 | `first' < 1 {
+        display as error "cge_loop: parallel() and first() take a positive number"
         exit 198
     }
     if `tolerance' <= 0 | `iterate' < 1 {
@@ -66,6 +72,7 @@ program define cge_loop, rclass
         restore
     }
     mata: _cge_loop("`name'", "`targets'", st_local("lists"), ("`grid'" != ""), ("`scale'" != ""), ("`cold'" != ""), ///
-        ("`nostore'" == ""), "`keep'", st_local("measures"), ("`clear'" != ""), `tolerance', `iterate', (`"`using'"' != ""))
+        ("`nostore'" == ""), "`keep'", st_local("measures"), ("`clear'" != ""), `tolerance', `iterate', (`"`using'"' != ""), ///
+        `parallel', st_local("stataexe"), `first')
     return add
 end

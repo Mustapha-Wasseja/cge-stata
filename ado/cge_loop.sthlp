@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.9  24oct2026}{...}
+{* *! version 0.19.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -29,6 +29,9 @@
 {synopt:{opt clear}}replace the data in memory with the results{p_end}
 {synopt:{opt tol:erance(#)}}convergence tolerance of each solve; default 1e-10{p_end}
 {synopt:{opt iter:ate(#)}}Newton iterations of each solve; default 100{p_end}
+{synopt:{opt par:allel(#)}}solve the scenarios in # Stata processes (from version 0.19.0){p_end}
+{synopt:{opt stata:exe(path)}}the Stata executable of the processes{p_end}
+{synopt:{opt first(#)}}the number of the first scenario; default 1{p_end}
 {synoptline}
 
 
@@ -96,6 +99,19 @@ the default starts each from the solution before.
 {phang}
 {opt nostore} does not store the simulations; the measures and the dataset
 are kept.
+
+{phang}
+{opt parallel(#)} (from version 0.19.0) solves the scenarios in # Stata
+processes at once: the model is saved, the scenarios split into contiguous
+groups, each solved by Stata in batch mode, and the simulations merged back
+with the same names and results as one run. On Windows, Stata in batch mode
+cannot start other processes, so the scenarios are then solved in the
+session, with a note. {opt stataexe(path)} gives the executable of the
+processes; by default that of the running edition.
+
+{phang}
+{opt first(#)} (from version 0.19.0) numbers the scenarios from #, so that
+the simulations are {it:name}#, ....
 
 
 {title:Examples}

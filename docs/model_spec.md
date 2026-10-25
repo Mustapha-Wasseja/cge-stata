@@ -2468,6 +2468,35 @@ infeasibility (status 10); a node limit of 1 (status 14); types reset by
 cases miknap, a knapsack with a unique optimum, and miils) to 6e-16 and
 2.1e-11.
 
+## 28. Parallel scenario runs (from version 0.19.0)
+
+`cge_loop, parallel(P)` (`_cge_loop_par`) saves the model (`cge_save`),
+splits the S scenarios, whose values are first completed with the targets'
+values in place, into P contiguous groups ($a_k = \lfloor (k-1)S/P \rfloor +
+1$, $b_k = \lfloor kS/P \rfloor$), and writes for each a do-file that sets
+the session's ado-path with relative folders made absolute
+(`_cge_abs_adopath`), loads the model, runs `cge_loop` with the group's
+values as paired lists and `first(a_k)`, saves the model and writes its
+return code to a file. The processes are started with `winexec` (Windows,
+`/e`) or `shell ... -b ... &`, in the folder of Stata's temporary files,
+where their logs go; the executable is that of the running edition
+(`_cge_stata_exe`) or `stataexe()`. The session waits (`sleep 200`) for every
+return code, at most 600 + 120 S seconds, stops with a process's error, and
+merges the groups' simulations (`_cge_store_sim` with each simulation's
+parameters, statuses kept), so that the names and results are those of one
+run; the measures are computed in the session. Within a group, each scenario
+starts from the solution of the one before. On Windows, Stata in batch mode
+ignores `winexec`, so the scenarios are solved in the session with a note.
+`first(f)` numbers the scenarios from f.
+
+Tests (`tests/test_parallel.do`, in batch mode): parallel(2) gives the
+sequential loop's measures to 1e-10 (solved in the session); first()
+names the simulations; the executable and an absolute ado-path; errors. The
+runs across processes were checked in an interactive session of StataNow
+19.5: four scenarios in two processes give the sequential loop's measures to
+5.7e-13, with the same names; the processes' start-up took 14 s against 0.1 s
+for the four solves, so that parallel runs pay for scenarios that take longer.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

@@ -53,6 +53,9 @@ where \argu{values} is a numlist.
 \opt{}{cold} & solve each scenario from the base\\
 \optarg{tol}{erance}{\#} & convergence tolerance of each solve; default \texttt{1e-10}\\
 \optarg{iter}{ate}{\#} & Newton iterations of each solve; default 100\\
+\optarg{par}{allel}{\#} & solve the scenarios in \# Stata processes (from version 0.19.0)\\
+\optarg{stata}{exe}{path} & the Stata executable of the processes\\
+\optarg{}{first}{\#} & the number of the first scenario; default 1\\
 \optgroup{Results}
 \optarg{meas}{ures}{list} & report measures or expressions, separated by commas\\
 \optarg{}{keep}{names} & the variables of the dataset of results; all by default\\
@@ -105,6 +108,25 @@ scenario and element of the variables kept, with \cmd{s}, \cmd{scenario},
 variables.
 
 \item[\opt{}{nostore}] keeps the results without storing the simulations.
+
+\item[\optarg{par}{allel}{\#}] (from version 0.19.0) solves the scenarios in
+\# Stata processes at once, as GAMS's grid computing does: the model is saved,
+the scenarios are split into contiguous groups, and each group is solved by
+Stata in batch mode, which loads the model and runs \cmd{cge_loop} on it,
+each scenario from the solution of the one before within its group; their
+simulations are merged into the model in memory, with the same names and
+results as one run. The processes run in the folder of Stata's temporary
+files, whose files are removed afterwards. On Windows, Stata running in batch
+mode cannot start other processes, so the scenarios are then solved in the
+session, with a note. Each process starts Stata and loads the model, some
+seconds, so that parallel runs pay when the scenarios take longer than that.
+
+\item[\optarg{stata}{exe}{path}] gives the Stata executable of the parallel
+processes; by default, that of the running edition in Stata's folder.
+
+\item[\optarg{}{first}{\#}] (from version 0.19.0) numbers the scenarios from
+\#, so that the simulations are \argu{name}\#, \dots; the parallel processes
+use it.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -156,6 +178,7 @@ order from the solution before, so that GAMS follows the same path:
 \begin{storedres}
 \resgroup{Scalars}
 \res{r(N_scenarios)} & number of scenarios\\
+\res{r(parallel)} & Stata processes that solved them (from version 0.19.0)\\
 \res{r(N_converged)} & number of scenarios solved\\
 \res{r(N_failed)} & number of scenarios not solved\\
 \res{r(iterations)} & Newton iterations in all\\

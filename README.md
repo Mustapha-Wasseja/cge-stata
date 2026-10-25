@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.18.0 implements the standard single-country model described in
+Version 0.19.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,8 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.19.0 solves the scenarios of `cge_loop` in several Stata processes
+at once (`parallel()`), merging their simulations as one run.
 Version 0.18.0 adds integer and binary variables (`cge_bound, integer` or
 `binary`): a nonlinear programme with them is solved by branch and bound, as
 GAMS's MINLP and MIP models are, and exported to GAMS as one.

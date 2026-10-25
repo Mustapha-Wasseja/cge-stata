@@ -261,7 +261,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.18.0")
+    return("0.19.0")
 }
 
 // =====================================================================
@@ -22095,7 +22095,8 @@ real matrix _cge_loop_grid(string scalar s_lists, real scalar T, real scalar gri
 // shocks in place are left as they were.
 void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, real scalar grid, real scalar scale,
                real scalar cold, real scalar store, string scalar keep, string scalar s_meas, real scalar clear,
-               real scalar tol, real scalar maxit, real scalar usedata)
+               real scalar tol, real scalar maxit, real scalar usedata, | real scalar par, string scalar exe,
+               real scalar first)
 {
     struct cge_model scalar M
     struct cge_opt scalar O
@@ -22108,7 +22109,13 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     real scalar T, S, k, j, s, conv, iter, err, nm, kd, pi, st, it2, done, haskey, nr, w, kk
     string scalar method, m2, pn
     pointer() scalar q
+    real scalar parrun, kr
 
+    // parallel runs across Stata processes and the number of the first
+    // scenario (from version 0.19.0)
+    if (args() < 14) par = 1
+    if (args() < 15) exe = ""
+    if (args() < 16) first = 1
     M = _cge_load()
     _cge_need(M, "calibrated")
     if (!regexm(name, "^[A-Za-z_][A-Za-z_0-9]*$") | strlen(name) > 24) _cge_fail("cge_loop: name() takes a name of at most 24 characters", 198)
@@ -22141,10 +22148,14 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     }
     else {
         V = _cge_loop_grid(s_lists, T, grid)
-        snames = strofreal(1::rows(V))
+        snames = strofreal((first - 1) :+ (1::rows(V)))
     }
     S = rows(V)
     for (k = 1; k <= T; k++) if (scale) V[., k] = V[., k] :* O.start[k]
+    // a target that a scenario leaves out keeps its value in place
+    for (k = 1; k <= T; k++) {
+        for (s = 1; s <= S; s++) if (V[s, k] >= .) V[s, k] = O.start[k]
+    }
     // the measures: report measures or expressions of the user language
     O.estart = O.elen = J(0, 1, .)
     O.etok = J(0, 3, .)
@@ -22172,7 +22183,26 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     conv_v = it_v = res_v = J(S, 1, .)
     X = J(rows(M.x0), S, .)
     simn = J(S, 1, "")
-    for (s = 1; s <= S; s++) {
+    // parallel runs (from version 0.19.0): the scenarios in contiguous
+    // groups, each solved by another Stata process in batch mode from the
+    // saved model, and their simulations merged back
+    parrun = 0
+    if (par > 1 & S > 1 & c("os") == "Windows" & c("mode") == "batch") {
+        printf("{txt}Note: Stata in batch mode cannot start other Stata processes on Windows; the scenarios are solved in this session\n")
+    }
+    else if (par > 1 & S > 1) {
+        _cge_loop_par(M, name, tg, V, cold, tol, maxit, par, exe, store, first, conv_v, it_v, res_v, X, simn)
+        parrun = 1
+        psave = M.p
+        xsave = M.xcur
+        for (s = 1; s <= S; s++) {
+            kr = _cge_find(M.simname, name + strofreal(first - 1 + s))
+            p = (kr ? M.simp[kr] : M.p)
+            if (haskey) _cge_opt_rows(M, p, X[., s], keys, val)
+            for (k = 1; k <= nm; k++) R[s, k] = _cge_opt_item(M, O, p, X[., s], keys, val, mkeys[k, .], mex[k], 0)
+        }
+    }
+    for (s = 1; s <= (parrun ? 0 : S); s++) {
         v = V[s, .]'
         // a target that the scenario leaves out keeps its value in place
         for (k = 1; k <= T; k++) if (v[k] >= .) v[k] = O.start[k]
@@ -22208,7 +22238,7 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
         if (haskey) _cge_opt_rows(M, p, x, keys, val)
         for (k = 1; k <= nm; k++) R[s, k] = _cge_opt_item(M, O, p, x, keys, val, mkeys[k, .], mex[k], 0)
         if (store) {
-            simn[s] = name + strofreal(s)
+            simn[s] = name + strofreal(first - 1 + s)
             M.p = p
             (void) _cge_store_sim(M, simn[s], x, conv, iter, err, method)
             M.p = psave
@@ -22301,6 +22331,7 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     }
 
     st_numscalar("r(N_scenarios)", S)
+    st_numscalar("r(parallel)", (parrun ? min((par, S)) : 1))
     st_numscalar("r(N_converged)", sum(conv_v))
     st_numscalar("r(N_failed)", S - sum(conv_v))
     st_numscalar("r(iterations)", sum(it_v))
@@ -22311,6 +22342,190 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     st_global("r(name)", name)
     st_global("r(targets)", invtokens(tg))
     if (store) st_global("r(sims)", invtokens(simn'))
+}
+
+// The Stata executable that runs the parallel processes of cge_loop (from
+// version 0.19.0): exe, or the one of the running edition in Stata's folder
+string scalar _cge_stata_exe(string scalar exe)
+{
+    string rowvector cand
+    string scalar d
+    real scalar k
+    if (exe != "") {
+        if (!fileexists(exe)) _cge_fail("cge_loop: stataexe(): " + exe + " not found", 601)
+        return(exe)
+    }
+    d = c("sysdir_stata")
+    if (c("os") == "Windows") {
+        cand = ("StataMP-64.exe", "StataSE-64.exe", "StataBE-64.exe", "Stata-64.exe", "StataMP.exe", "StataSE.exe", "Stata.exe")
+        if (!c("MP")) cand = cand[(2, 3, 4, 1, 6, 7, 5)]
+        if (!c("MP") & !c("SE")) cand = ("StataBE-64.exe", "Stata-64.exe", "StataSE-64.exe", "StataMP-64.exe", "Stata.exe")
+    }
+    else {
+        cand = ("stata-mp", "stata-se", "stata-be", "stata")
+        if (!c("MP")) cand = cand[(2, 3, 4, 1)]
+        if (!c("MP") & !c("SE")) cand = ("stata-be", "stata", "stata-se", "stata-mp")
+    }
+    for (k = 1; k <= cols(cand); k++) if (fileexists(d + cand[k])) return(d + cand[k])
+    _cge_fail("cge_loop: no Stata executable found in " + d + "; give it with stataexe()", 601)
+}
+
+// The ado-path of this session with relative folders made absolute, for the
+// parallel processes, which run in another folder
+string scalar _cge_abs_adopath()
+{
+    string scalar rest, e, out, pwd
+    real scalar k
+    pwd = c("pwd")
+    if (substr(pwd, -1, 1) != "/" & substr(pwd, -1, 1) != char(92)) pwd = pwd + "/"
+    rest = c("adopath") + ";"
+    out = ""
+    while (strlen(rest)) {
+        k = strpos(rest, ";")
+        e = strtrim(substr(rest, 1, k - 1))
+        rest = substr(rest, k + 1, .)
+        // the quotes Stata puts around an entry, compound or not
+        e = subinstr(e, char(34), "")
+        if (substr(e, 1, 1) == char(96)) e = substr(e, 2, .)
+        if (substr(e, -1, 1) == char(39)) e = substr(e, 1, strlen(e) - 1)
+        if (e == "") continue
+        if (!anyof(("BASE", "SITE", "PERSONAL", "PLUS", "OLDPLACE", "UPDATES"), e)) {
+            if (e == ".") e = pwd
+            else if (!(substr(e, 2, 1) == ":" | substr(e, 1, 1) == "/" | substr(e, 1, 1) == char(92) | substr(e, 1, 1) == "~")) e = pwd + e
+        }
+        out = out + (out != "" ? ";" : "") + (strpos(e, " ") ? char(34) + e + char(34) : e)
+    }
+    return(out)
+}
+
+// Parallel runs of cge_loop (from version 0.19.0): the model is saved, the
+// scenarios V split into contiguous groups, and each group solved by a Stata
+// process in batch mode, which loads the model, runs cge_loop on its group
+// with first() numbering the scenarios as in one run, and saves the model
+// with its simulations; their simulations are then merged into M (or only
+// read, without store), with the solutions, convergence, iterations and
+// residuals of each scenario
+void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvector tg, real matrix V,
+                   real scalar cold, real scalar tol, real scalar maxit, real scalar par, string scalar exe,
+                   real scalar store, real scalar first, real colvector conv_v, real colvector it_v,
+                   real colvector res_v, real matrix X, string colvector simn)
+{
+    struct cge_model scalar R, Ms
+    struct cge_par scalar ps
+    string scalar pre, dir, base, fm, adop, spec, cwd, q, line, nm
+    string colvector fw, fr, fd
+    real colvector a, b
+    real scalar S, P, T, k, j, fh, t0, done, rc, kr, ks, ms, ss
+    q = char(34)
+    S = rows(V)
+    T = cols(V)
+    P = min((par, S))
+    exe = _cge_stata_exe(exe)
+    // the temporary files, named without periods: Stata names a batch log
+    // after the name of its do-file up to the first period
+    pre = st_tempfilename()
+    pathsplit(pre, dir, base)
+    base = "cgepar_" + subinstr(subinstr(base, ".", "_"), "-", "_")
+    pre = pathjoin(dir, base)
+    fm = pre + "_model.cgem"
+    _cge_store(M)
+    stata("quietly cge_save using " + q + fm + q + ", replace")
+    adop = _cge_abs_adopath()
+    a = b = J(P, 1, .)
+    fw = fr = fd = J(P, 1, "")
+    for (k = 1; k <= P; k++) {
+        a[k] = floor((k - 1) * S / P) + 1
+        b[k] = floor(k * S / P)
+        fw[k] = pre + "_w" + strofreal(k) + ".do"
+        fr[k] = pre + "_r" + strofreal(k) + ".cgem"
+        fd[k] = pre + "_d" + strofreal(k) + ".txt"
+        spec = ""
+        for (j = 1; j <= T; j++) {
+            spec = spec + (j > 1 ? "; " : "") + tg[j] + " = " + invtokens(strtrim(strofreal(V[|a[k], j \ b[k], j|]', "%21.17g")))
+        }
+        fh = fopen(fw[k], "w")
+        fput(fh, "version 13.0")
+        fput(fh, "set more off")
+        fput(fh, "global S_ADO " + char(96) + q + adop + q + char(39))
+        fput(fh, "capture noisily {")
+        fput(fh, "    cge_use using " + q + fm + q)
+        fput(fh, "    cge_loop, name(" + name + ") values(" + spec + ") first(" + strofreal(first - 1 + a[k]) + ")" +
+             (cold ? " cold" : "") + " tolerance(" + strofreal(tol, "%21.17g") + ") iterate(" + strofreal(maxit) + ")")
+        fput(fh, "    cge_save using " + q + fr[k] + q + ", replace")
+        fput(fh, "}")
+        fput(fh, "local cgeparrc = _rc")
+        fput(fh, "file open cgeparfh using " + q + fd[k] + q + ", write replace text")
+        // the macro written with char(): the Mata file is compiled through
+        // Stata, which would expand it
+        fput(fh, "file write cgeparfh " + q + char(96) + "cgeparrc" + char(39) + q)
+        fput(fh, "file close cgeparfh")
+        fclose(fh)
+    }
+    // the processes start in the folder of the temporary files, where their
+    // logs are written
+    cwd = c("pwd")
+    stata("quietly cd " + q + dir + q)
+    for (k = 1; k <= P; k++) {
+        if (c("os") == "Windows") stata("winexec " + q + exe + q + " /e do " + q + fw[k] + q)
+        else stata("shell " + q + exe + q + " -b do " + q + fw[k] + q + " &")
+    }
+    stata("quietly cd " + q + cwd + q)
+    printf("{txt}Started {res}%f{txt} Stata process(es) for {res}%f{txt} scenario(s); waiting\n", P, S)
+    // wait for every process, at most 10 minutes plus 2 per scenario
+    t0 = _cge_now()
+    while (1) {
+        done = 0
+        for (k = 1; k <= P; k++) done = done + fileexists(fd[k])
+        if (done == P) break
+        if (_cge_now() - t0 > 1000 * (600 + 120 * S)) {
+            _cge_fail("cge_loop: the parallel processes did not finish; their files begin with " + pre, 9)
+        }
+        stata("sleep 200")
+    }
+    // their simulations, merged
+    Ms = M
+    for (k = 1; k <= P; k++) {
+        fh = fopen(fd[k], "r")
+        line = fget(fh)
+        fclose(fh)
+        if (rows(line) * cols(line) == 0) line = ""
+        rc = strtoreal(line)
+        if (rc != 0) {
+            _cge_fail("cge_loop: parallel process " + strofreal(k) + " stopped with error " + line + "; see " +
+                      pathjoin(dir, base + "_w" + strofreal(k) + ".log"), (rc < . & rc > 0 ? rc : 9))
+        }
+        stata("quietly cge_use using " + q + fr[k] + q)
+        R = _cge_load()
+        for (j = a[k]; j <= b[k]; j++) {
+            nm = name + strofreal(first - 1 + j)
+            kr = _cge_find(R.simname, nm)
+            if (!kr) _cge_fail("cge_loop: simulation " + nm + " is missing from process " + strofreal(k), 459)
+            X[., j] = R.simx[., kr]
+            conv_v[j] = R.simconv[kr]
+            it_v[j] = R.simiter[kr]
+            res_v[j] = R.simres[kr]
+            if (store) {
+                simn[j] = nm
+                ps = Ms.p
+                Ms.p = R.simp[kr]
+                ks = _cge_store_sim(Ms, nm, X[., j], conv_v[j], it_v[j], res_v[j], R.simmethod[kr])
+                Ms.p = ps
+                _cge_simstat(R, kr, ms, ss)
+                _cge_set_simstat(Ms, ks, ms, ss)
+            }
+        }
+    }
+    M = Ms
+    _cge_store(M)
+    // the temporary files
+    unlink(fm)
+    for (k = 1; k <= P; k++) {
+        unlink(fw[k])
+        unlink(fd[k])
+        if (fileexists(fr[k])) unlink(fr[k])
+        if (fileexists(pathjoin(dir, base + "_w" + strofreal(k) + ".log"))) unlink(pathjoin(dir, base + "_w" + strofreal(k) + ".log"))
+    }
+    printf("{txt}Solved in {res}%f{txt} parallel Stata process(es)\n", P)
 }
 
 // The simulations of loop name, in order; 0 if none
