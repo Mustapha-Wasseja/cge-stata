@@ -13,8 +13,9 @@ IPOPT or to extend (`cge_gams`).
 Version 0.27.1 fixes installation error `r(640)`, "package file too long".
 The package now installs 95 files, within Stata's limit of 100, by bundling
 the synthetic SAMs, model library and GAMS support files. Their original
-source files remain in the repository. Model equations and solver behaviour
-are unchanged.
+source files remain in the repository. Parallel scenario runs also wait for
+the worker's complete status record, preventing an intermittent empty-status
+error. Model equations and numerical solvers are unchanged.
 
 
 Version 0.27.1 implements the standard single-country model described in

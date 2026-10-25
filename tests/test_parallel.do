@@ -10,6 +10,29 @@
 version 13.0
 
 quietly do setup_synthetic.do
+* A status file can exist while its worker is still writing it. Empty and
+* incomplete files must not be treated as completed workers.
+tempfile workerstatus
+tempname workerfh
+mata: assert(_cge_par_done(st_local("workerstatus")) == 0)
+file open `workerfh' using "`workerstatus'", write text replace
+file close `workerfh'
+mata: assert(_cge_par_done(st_local("workerstatus")) == 0)
+file open `workerfh' using "`workerstatus'", write text replace
+file write `workerfh' "0" _n
+file close `workerfh'
+mata: assert(_cge_par_done(st_local("workerstatus")) == 0)
+file open `workerfh' using "`workerstatus'", write text replace
+file write `workerfh' "0" _n "do"
+file close `workerfh'
+mata: assert(_cge_par_done(st_local("workerstatus")) == 0)
+foreach worker_rc in 0 430 {
+    file open `workerfh' using "`workerstatus'", write text replace
+    file write `workerfh' "`worker_rc'" _n "done" _n
+    file close `workerfh'
+    mata: assert(_cge_par_done(st_local("workerstatus")) == 1)
+}
+
 * processes from batch mode on Windows: Stata 16 and later with Python
 local pyok 0
 if c(stata_version) >= 16 {

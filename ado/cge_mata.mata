@@ -22809,6 +22809,21 @@ string scalar _cge_abs_adopath()
     return(out)
 }
 
+// A worker is complete only after its return code and final marker have
+// both been written. The file exists before its contents are available.
+real scalar _cge_par_done(string scalar fn)
+{
+    real scalar fh
+    string scalar rc, marker
+    if (!fileexists(fn)) return(0)
+    fh = fopen(fn, "r")
+    rc = fget(fh)
+    marker = fget(fh)
+    fclose(fh)
+    if (rows(marker) * cols(marker) == 0) return(0)
+    return(marker == "done")
+}
+
 // Parallel runs of cge_loop (from version 0.19.0): the model is saved, the
 // scenarios V split into contiguous groups, and each group solved by a Stata
 // process in batch mode, which loads the model, runs cge_loop on its group
@@ -22868,7 +22883,7 @@ void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvect
         fput(fh, "file open cgeparfh using " + q + fd[k] + q + ", write replace text")
         // the macro written with char(): the Mata file is compiled through
         // Stata, which would expand it
-        fput(fh, "file write cgeparfh " + q + char(96) + "cgeparrc" + char(39) + q)
+        fput(fh, "file write cgeparfh " + q + char(96) + "cgeparrc" + char(39) + q + " _n " + q + "done" + q + " _n")
         fput(fh, "file close cgeparfh")
         fclose(fh)
     }
@@ -22894,7 +22909,7 @@ void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvect
     t0 = _cge_now()
     while (1) {
         done = 0
-        for (k = 1; k <= P; k++) done = done + fileexists(fd[k])
+        for (k = 1; k <= P; k++) done = done + _cge_par_done(fd[k])
         if (done == P) break
         if (_cge_now() - t0 > 1000 * (600 + 120 * S)) {
             _cge_fail("cge_loop: the parallel processes did not finish; their files begin with " + pre, 9)
