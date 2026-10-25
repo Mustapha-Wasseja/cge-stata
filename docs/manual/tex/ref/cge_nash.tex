@@ -1,0 +1,126 @@
+\cgeentry{cge_nash}{Nash equilibria of players who choose instruments, and leaders}
+
+\cgesec{Description}
+
+\cmd{cge_nash} (from version 0.20.0) finds the Nash equilibrium of players who
+each choose instruments to maximise or minimise an outcome of the model,
+given the others' choices, as an equilibrium problem in GAMS's EMP framework
+does, and the choice of a leader who anticipates the others' equilibrium, as
+in a Stackelberg game. A player is defined with \cmd{cge_nash player}, with
+its instruments, objective and bounds written as in \manref{cge_optimize};
+\cmd{cge_nash solve} finds the equilibrium and stores it as a simulation.
+
+\cgesec{Quick start}
+
+Two firms that each choose an output to maximise profit, in a standalone
+model where the price depends on both outputs
+\begin{stcode}
+cge_nash player firm1, instruments(Q1) maximize((P - c) * Q1) lower(Q1:0)
+cge_nash player firm2, instruments(Q2) maximize((P - c) * Q2) lower(Q2:0)
+cge_nash solve, name(cournot)
+\end{stcode}
+Firm 1 as the leader
+\begin{stcode}
+cge_nash solve, name(stackelberg) leader(firm1)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_nash player} \argu{name} \texttt{,} \optarg{inst}{ruments}{list} \{\optarg{max}{imize}{objective} $|$ \optarg{min}{imize}{objective}\} [\optarg{low}{er}{spec} \optarg{up}{per}{spec}]\\
+\cmdb{cge_nash solve} \texttt{,} \optarg{}{name}{name} [\optarg{lead}{er}{player} \optarg{tol}{erance}{\#} \optarg{iter}{ate}{\#} \opt{}{trace}]\\
+\cmdb{cge_nash list}\\
+\cmdb{cge_nash clear} [\argu{player}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Players}
+\optarg{inst}{ruments}{list} & the player's instruments, as in \manref{cge_optimize}\\
+\optarg{max}{imize}{objective} & a report measure or expression to maximise\\
+\optarg{min}{imize}{objective} & a report measure or expression to minimise\\
+\optarg{low}{er}{spec}, \optarg{up}{per}{spec} & bounds, as \argu{instrument}\cmd{:}\argu{value}\\
+\optgroup{Solve}
+\optarg{}{name}{name} & the simulation of the equilibrium\\
+\optarg{lead}{er}{player} & the leader, who anticipates the others' equilibrium\\
+\optarg{tol}{erance}{\#} & largest change of an instrument in a round; default \texttt{1e-8}\\
+\optarg{iter}{ate}{\#} & rounds of best responses; default 50\\
+\opt{}{trace} & display each round\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{inst}{ruments}{list}] gives the player's instruments, as in
+\manref{cge_optimize}: elements of parameters that \manref{cge_shock} changes,
+of user parameters or of variables the closure fixes. An instrument belongs to
+one player.
+
+\item[\optarg{max}{imize}{objective}] and \optarg{min}{imize}{objective} give the
+player's objective, a report measure or an expression of the user language.
+
+\item[\optarg{low}{er}{spec}] and \optarg{up}{per}{spec} bound the
+instruments. An instrument at a bound, where a best response may leave it,
+starts the next one just inside it.
+
+\item[\optarg{lead}{er}{player}] makes \argu{player} a leader: its instruments
+are chosen to maximise its objective at the equilibrium of the other players
+that each choice gives.
+
+\item[\optarg{tol}{erance}{\#}] ends the rounds of best responses when none
+changes an instrument by more than \# relative to its size.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+In each round, each player in turn chooses its best response to the others'
+instruments, by \manref{cge_optimize} with exact derivatives, and leaves it in
+place for the next (a Gauss--Seidel iteration). At a Nash equilibrium no
+player can do better given the others' choices, and a round changes nothing.
+The iteration converges when the players' responses are not too strongly
+interdependent, as in the examples; it may cycle otherwise.
+
+\cgesubsec{Example 1: Cournot and Stackelberg}
+
+Inverse demand $P = a - b(q_1 + q_2)$ with $a = 10$, $b = 1$ and a unit cost
+$c = 1$; the Cournot outputs are $(a - c)/3b = 3$, and a leader produces $(a -
+c)/2b = 4.5$, against the follower's $(a - c)/4b = 2.25$:
+\stlog{nash_cournot}
+The leader's profit, $(a - c)^2/8b = 10.125$, exceeds its Cournot profit of 9.
+
+\cgesec{Stored results}
+
+\cmd{cge_nash solve} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(converged)} & 1 if the equilibrium was found\\
+\res{r(rounds)} & rounds of best responses (without a leader)\\
+\res{r(N_players)} & players\\
+\res{r(objective)} & the leader's objective (with a leader)\\
+\res{r(N_equilibria)} & the followers' equilibria solved (with a leader)\\
+\resgroup{Macros}
+\res{r(name)} & the simulation of the equilibrium\\
+\res{r(leader)} & the leader, if any\\
+\resgroup{Matrices}
+\res{r(instruments)} & the players' instruments at the equilibrium\\
+\res{r(objectives)} & their objectives\\
+\res{r(leader_instruments)} & the leader's instruments (with a leader)\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+With players $p = 1, \dots, P$, instruments $u_p$ and objectives $f_p(x(u),
+u)$, a Nash equilibrium $u^*$ satisfies $u_p^* \in \arg\max_{u_p} f_p(x(u_p,
+u_{-p}^*), u_p, u_{-p}^*)$ for every $p$. Each round sets $u_p \leftarrow
+\arg\max f_p(\cdot, u_{-p})$ for $p = 1, \dots, P$ in turn, until the largest
+change $|\Delta u| / \max(1, |u|)$ of a round is below the tolerance. A leader
+$\ell$ chooses $u_\ell$ to maximise $F(u_\ell) = f_\ell(x, u_\ell, u_{-\ell}^*(u_\ell))$,
+with $u_{-\ell}^*(u_\ell)$ the followers' equilibrium, by a projected Newton
+method with central differences of $F$ (steps $10^{-3}$ times the scale of
+each instrument), each evaluation solving the followers' equilibrium.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_optimize}{Choose policy instruments to maximise an outcome or reach targets}
+\seeentry{cge_model}{A standalone model, written whole in the user language}
+\end{alsosee}

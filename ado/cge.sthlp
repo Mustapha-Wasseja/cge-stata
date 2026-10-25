@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.19.0  25oct2026}{...}
+{* *! version 0.20.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -64,6 +64,7 @@ debt with interest.
 {p2col:{helpb cge_solve}}solve and store a simulation{p_end}
 {p2col:{helpb cge_options}}settings of the solver: LU, limits, Jacobian{p_end}
 {p2col:{helpb cge_optimize}}choose instruments to maximise an outcome or reach targets{p_end}
+{p2col:{helpb cge_nash}}Nash equilibria of players who choose instruments, and leaders{p_end}
 {p2col:{helpb cge_loop}}solve the model for a list or grid of scenarios{p_end}
 {p2col:{helpb cge_dynamic}}solve a dynamic run, recursive or with perfect foresight{p_end}
 {p2col:{helpb cge_region}}link single-country models through bilateral trade{p_end}

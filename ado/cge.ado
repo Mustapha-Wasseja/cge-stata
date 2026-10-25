@@ -1,4 +1,4 @@
-*! cge.ado  v0.19.0  2026-10-25
+*! cge.ado  v0.20.0  2026-10-25
 *! cge-stata: computable general equilibrium modelling in Stata
 *! Displays the package version and the available commands
 *!
@@ -9,7 +9,7 @@ program define cge, rclass
     version 13.0
     syntax
 
-    local version "0.19.0"
+    local version "0.20.0"
 
     display as text _n "cge-stata " as result "`version'"
     display as text "Computable general equilibrium modelling in Stata"
@@ -40,6 +40,7 @@ program define cge, rclass
     display as text "  {help cge_options}     settings of the solver: LU, limits, Jacobian"
     display as text "  {help cge_optimize}    choose instruments to maximise an outcome or reach targets"
     display as text "  {help cge_loop}        solve the model for a list or grid of scenarios"
+    display as text "  {help cge_nash}        Nash equilibria of players who choose instruments, and leaders"
     display as text "  {help cge_dynamic}     solve a dynamic run, recursive or with perfect foresight"
     display as text "  {help cge_region}      link single-country models through bilateral trade"
     display as text "  {help cge_results}     display or save all results of a simulation"

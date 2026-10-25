@@ -1,0 +1,63 @@
+. cge_model new
+New standalone model: write its sets, parameters, variables and equations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_parameter a = 10
+User parameter a: 1 value(s), from 10 to 10
+
+. cge_parameter b = 1
+User parameter b: 1 value(s), from 1 to 1
+
+. cge_parameter c = 1
+User parameter c: 1 value(s), from 1 to 1
+
+. cge_variable Q1, value(1) fixed
+User variable Q1: 1 element(s), base value 1
+It is exogenous
+
+. cge_variable Q2, value(1) fixed
+User variable Q2: 1 element(s), base value 1
+It is exogenous
+
+. cge_variable P = a - b * (Q1 + Q2)
+User variable P: 1 element(s), base value 8
+and its definition, equation P
+
+. cge_nash player firm1, instruments(Q1) maximize((P - c) * Q1) lower(Q1:0)
+Player firm1: maximises (P - c) * Q1 over Q1
+
+. cge_nash player firm2, instruments(Q2) maximize((P - c) * Q2) lower(Q2:0)
+Player firm2: maximises (P - c) * Q2 over Q2
+
+. cge_nash solve, name(cournot)
+
+Nash equilibrium cournot: converged in 15 round(s) of best responses
+------------------------------------------------------------------------------
+Player        Instruments                            Objective
+------------------------------------------------------------------------------
+firm1         3                                    9.000000006
+firm2         3                                    8.999999989
+------------------------------------------------------------------------------
+
+. cge_shock, reset
+All shocks removed
+
+. cge_nash solve, name(stackelberg) leader(firm1)
+
+Leader firm1: converged after 10 equilibria of the followers
+Leader's objective:           10.125
+
+           c1
+r1  4.4999999
+
+. cge_results, sim(stackelberg)
+
+Simulation stackelberg of a standalone model (solved, 1 iteration(s), largest scaled residual  0.00e
+> +00)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+Q1                                          1          4.5  350.000
+Q2                                          1         2.25  125.000
+P                                           8         3.25  -59.375
+-------------------------------------------------------------------

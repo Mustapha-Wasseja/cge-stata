@@ -65,6 +65,8 @@ f ado/cge_options.ado
 f ado/cge_options.sthlp
 f ado/cge_macro.ado
 f ado/cge_macro.sthlp
+f ado/cge_nash.ado
+f ado/cge_nash.sthlp
 f ado/cge_nest.ado
 f ado/cge_nest.sthlp
 f ado/cge_region.ado

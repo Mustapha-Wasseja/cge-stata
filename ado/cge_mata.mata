@@ -244,6 +244,9 @@ struct cge_model {
     // and binary variables: each definition's variable, elements and type
     // (integer, binary or continuous), applied in order
     string matrix    intdef
+    // the players of cge_nash (from version 0.20.0): each player's name,
+    // instruments, sense (maximize or minimize), objective and bounds
+    string matrix    nashdef
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -261,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.19.0")
+    return("0.20.0")
 }
 
 // =====================================================================
@@ -21480,7 +21483,9 @@ real colvector _cge_opt_max(struct cge_opt scalar O, real colvector z0, real sca
             zt = z + lam * d
             zt = rowmax((rowmin((zt, hi)), lo))
             ft = _cge_opt_aug(O, zt)
-            if (ft < . & ft > fa) break
+            // a rise must exceed rounding (from version 0.20.0): near a flat
+            // optimum, rises of rounding size moved the point without end
+            if (ft < . & ft > fa + 1e-14 * max((1, abs(fa)))) break
             lam = lam / 2
         }
         if (ls > 40) {
@@ -22684,6 +22689,7 @@ void _cge_model_new()
     M.simmodel = J(0, 1, "")
     M.mdef = J(0, 2, "")
     M.intdef = J(0, 3, "")
+    M.nashdef = J(0, 6, "")
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
@@ -23100,6 +23106,359 @@ void _cge_mdef_list()
     }
     st_numscalar("r(N_models)", rows(M.mdef))
     st_global("r(models)", invtokens(M.mdef[., 1]'))
+}
+
+// =====================================================================
+// Nash equilibria and leaders (from version 0.20.0; model_spec.md, Section 29)
+// =====================================================================
+
+// cge_nash player: a player with its instruments, objective and bounds, as
+// in cge_optimize; a player of the same name is replaced
+void _cge_nash_add(string scalar name, string scalar ins, string scalar sense, string scalar obj,
+                   string scalar lo, string scalar up)
+{
+    struct cge_model scalar M
+    string rowvector t
+    real scalar k, j, kind, pidx, st, rep
+    string scalar pn
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    t = tokens(ins)
+    if (!cols(t)) _cge_fail("cge_nash player: give the player's instruments", 198)
+    for (k = 1; k <= cols(t); k++) _cge_opt_instrument(M, t[k], kind, pn, pidx, st)
+    if (cols(M.nashdef) != 6) M.nashdef = J(0, 6, "")
+    // an instrument belongs to one player
+    for (j = 1; j <= rows(M.nashdef); j++) {
+        if (M.nashdef[j, 1] == name) continue
+        for (k = 1; k <= cols(t); k++) {
+            if (anyof(tokens(M.nashdef[j, 2]), t[k])) _cge_fail("cge_nash player: " + t[k] + " is an instrument of player " + M.nashdef[j, 1], 198)
+        }
+    }
+    rep = (rows(M.nashdef) ? _cge_find(M.nashdef[., 1], name) : 0)
+    if (rep) M.nashdef[rep, .] = (name, invtokens(t), sense, obj, lo, up)
+    else M.nashdef = M.nashdef \ (name, invtokens(t), sense, obj, lo, up)
+    _cge_store(M)
+    printf("{txt}Player {res}%s{txt}%s: %s %s over %s\n", name, (rep ? " (replaced)" : ""), (sense == "maximize" ? "maximises" : "minimises"),
+           obj, invtokens(t))
+    st_numscalar("r(N_players)", rows(M.nashdef))
+}
+
+void _cge_nash_list()
+{
+    struct cge_model scalar M
+    real scalar k
+    M = _cge_load()
+    if (cols(M.nashdef) != 6 | !rows(M.nashdef)) {
+        printf("{txt}No players; define them with cge_nash player\n")
+        st_numscalar("r(N_players)", 0)
+        st_global("r(players)", "")
+        return
+    }
+    printf("{txt}Players\n")
+    for (k = 1; k <= rows(M.nashdef); k++) {
+        printf("{txt}  {res}%-12s{txt} %s %s over %s%s%s\n", M.nashdef[k, 1], M.nashdef[k, 3], M.nashdef[k, 4], M.nashdef[k, 2],
+               (M.nashdef[k, 5] != "" ? "; lower(" + M.nashdef[k, 5] + ")" : ""), (M.nashdef[k, 6] != "" ? "; upper(" + M.nashdef[k, 6] + ")" : ""))
+    }
+    st_numscalar("r(N_players)", rows(M.nashdef))
+    st_global("r(players)", invtokens(M.nashdef[., 1]'))
+}
+
+void _cge_nash_clear(string scalar name)
+{
+    struct cge_model scalar M
+    real colvector keep
+    M = _cge_load()
+    if (cols(M.nashdef) != 6) M.nashdef = J(0, 6, "")
+    if (name == "") M.nashdef = J(0, 6, "")
+    else {
+        if (!rows(M.nashdef) | !_cge_find(M.nashdef[., 1], name)) _cge_fail("cge_nash: player " + name + " not found", 111)
+        keep = (M.nashdef[., 1] :!= name)
+        M.nashdef = (any(keep) ? select(M.nashdef, keep) : J(0, 6, ""))
+    }
+    _cge_store(M)
+    printf("{txt}%s\n", (name == "" ? "All players removed" : "Player " + name + " removed"))
+}
+
+// The players, but exclude, as locals np, and p#_name, p#_ins, p#_sense,
+// p#_obj, p#_lo and p#_up for the ado-file
+void _cge_nash_locals(string scalar exclude)
+{
+    struct cge_model scalar M
+    real scalar k, n
+    string scalar pf
+    M = _cge_load()
+    if (cols(M.nashdef) != 6 | !rows(M.nashdef)) _cge_fail("cge_nash solve: define the players with cge_nash player", 459)
+    if (exclude != "") if (!_cge_find(M.nashdef[., 1], exclude)) _cge_fail("cge_nash solve: player " + exclude + " not found", 111)
+    n = 0
+    for (k = 1; k <= rows(M.nashdef); k++) {
+        if (M.nashdef[k, 1] == exclude) continue
+        n++
+        pf = "p" + strofreal(n) + "_"
+        st_local(pf + "name", M.nashdef[k, 1])
+        st_local(pf + "ins", M.nashdef[k, 2])
+        st_local(pf + "sense", M.nashdef[k, 3])
+        st_local(pf + "obj", M.nashdef[k, 4])
+        st_local(pf + "lo", M.nashdef[k, 5])
+        st_local(pf + "up", M.nashdef[k, 6])
+    }
+    st_local("np", strofreal(n))
+}
+
+// The value of a measure or expression, as an objective of cge_optimize, at
+// stored simulation sim
+real scalar _cge_nash_value(string scalar spec, string scalar sim)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    struct cge_par scalar p
+    string matrix keys
+    string rowvector key
+    string colvector tables
+    real colvector val, x
+    real scalar k, ex
+    M = _cge_load()
+    k = _cge_sim_index(M, sim)
+    p = M.simp[k]
+    x = M.simx[., k]
+    O.estart = O.elen = J(0, 1, .)
+    O.etok = J(0, 3, .)
+    O.etext = J(0, 1, "")
+    _cge_opt_rows(M, p, x, keys, val)
+    tables = uniqrows(keys[., 1])
+    ex = _cge_opt_parse(M, O, spec, "objective", key, tables)
+    return(_cge_opt_item(M, O, p, x, keys, val, key, ex, 0))
+}
+
+// The current values of instruments ins, as cge_optimize reads them
+real colvector _cge_nash_current(string scalar ins)
+{
+    struct cge_model scalar M
+    string rowvector t
+    real colvector v
+    real scalar k, kind, pidx, st
+    string scalar pn
+    M = _cge_load()
+    t = tokens(ins)
+    v = J(cols(t), 1, .)
+    for (k = 1; k <= cols(t); k++) {
+        _cge_opt_instrument(M, t[k], kind, pn, pidx, st)
+        v[k] = st
+    }
+    return(v)
+}
+
+// A leader (from version 0.20.0), as Stackelberg's: the leader's instruments
+// maximise (or minimise) its objective at the Nash equilibrium of the other
+// players that each choice of them gives, by a projected Newton method with
+// central differences of that value (step 1e-3 times the scale of each
+// instrument), steps halved until the value improves; each evaluation solves
+// the followers' equilibrium by cge_nash solve
+void _cge_nash_leader(string scalar leader, string scalar name, real scalar tol, real scalar maxit, real scalar trace)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    string rowvector t
+    real colvector u, g, d, lo, hi, sc, e, ut, z
+    real matrix H
+    real scalar n, k, j, f, ft, fp, fm, fpp, fpm, fmp, fmm, h, it, ls, sgn, lam, conv, gn, nev, kind, pidx, st
+    string scalar pn, obj, slo, sup, cmd
+    M = _cge_load()
+    k = _cge_find(M.nashdef[., 1], leader)
+    if (!k) _cge_fail("cge_nash solve: player " + leader + " not found", 111)
+    if (rows(M.nashdef) < 2) _cge_fail("cge_nash solve: a leader needs at least one other player", 459)
+    t = tokens(M.nashdef[k, 2])
+    obj = M.nashdef[k, 4]
+    sgn = (M.nashdef[k, 3] == "maximize" ? 1 : -1)
+    slo = M.nashdef[k, 5]
+    sup = M.nashdef[k, 6]
+    n = cols(t)
+    O.kind = O.pidx = O.start = J(n, 1, .)
+    O.pname = J(n, 1, "")
+    for (j = 1; j <= n; j++) {
+        _cge_opt_instrument(M, t[j], kind, pn, pidx, st)
+        O.kind[j] = kind
+        O.pname[j] = pn
+        O.pidx[j] = pidx
+        O.start[j] = st
+    }
+    u = O.start
+    sc = abs(u) :* (abs(u) :> 1e-12) + (abs(u) :<= 1e-12)
+    lo = J(n, 1, -1e300)
+    hi = J(n, 1, 1e300)
+    _cge_nash_bounds(t, slo, lo)
+    _cge_nash_bounds(t, sup, hi)
+    nev = 0
+    conv = 0
+    f = _cge_nash_leval(O, u, leader, obj, sgn, tol, maxit, nev)
+    if (f >= .) _cge_fail("cge_nash solve: the followers' equilibrium was not found at the leader's start", 430)
+    for (it = 1; it <= 50; it++) {
+        g = J(n, 1, .)
+        H = J(n, n, .)
+        for (j = 1; j <= n; j++) {
+            h = 1e-3 * sc[j]
+            e = J(n, 1, 0)
+            e[j] = h
+            fp = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev)
+            fm = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev)
+            if (fp >= . | fm >= .) _cge_fail("cge_nash solve: the followers' equilibrium was not found near the leader's choice", 430)
+            g[j] = (fp - fm) / (2 * h)
+            H[j, j] = (fp - 2 * f + fm) / h^2
+        }
+        for (j = 1; j <= n; j++) {
+            for (k = j + 1; k <= n; k++) {
+                e = J(n, 1, 0)
+                e[j] = 1e-3 * sc[j]
+                e[k] = 1e-3 * sc[k]
+                fpp = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev)
+                fmm = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev)
+                e[k] = -e[k]
+                fpm = _cge_nash_leval(O, u + e, leader, obj, sgn, tol, maxit, nev)
+                fmp = _cge_nash_leval(O, u - e, leader, obj, sgn, tol, maxit, nev)
+                H[j, k] = H[k, j] = (fpp - fpm - fmp + fmm) / (4 * 1e-6 * sc[j] * sc[k])
+            }
+        }
+        // held at a bound where the gradient points outwards
+        z = !((u :<= lo :+ 1e-12) :& (g :< 0)) :& !((u :>= hi :- 1e-12) :& (g :> 0))
+        gn = max(abs(z :* g :* sc)) / max((1, abs(f)))
+        if (trace) printf("{txt}Leader iteration %f: objective {res}%14.10g{txt}, largest free gradient {res}%9.3e\n", it - 1, sgn * f, gn)
+        if (gn < 1e-6) {
+            conv = 1
+            break
+        }
+        d = J(n, 1, 0)
+        if (max(symeigenvalues(select(select(H, z), z'))) < 0) d[_cge_which(z)] = -lusolve(select(select(H, z), z'), select(g, z))
+        else d[_cge_which(z)] = select(g :* sc :^ 2, z) / max((1, max(abs(select(g :* sc, z)))))
+        lam = 1
+        for (ls = 1; ls <= 30; ls++) {
+            ut = rowmax((rowmin((u + lam * d, hi)), lo))
+            ft = _cge_nash_leval(O, ut, leader, obj, sgn, tol, maxit, nev)
+            if (ft < . & ft > f - 1e-12 * max((1, abs(f)))) break
+            lam = lam / 2
+        }
+        if (ls > 30) {
+            conv = (gn < 1e-4)
+            break
+        }
+        if (max(abs(ut - u) :/ sc) < 1e-10) {
+            u = ut
+            f = ft
+            conv = 1
+            break
+        }
+        u = ut
+        f = ft
+    }
+    // the equilibrium at the leader's choice
+    f = _cge_nash_leval(O, u, leader, obj, sgn, tol, maxit, nev)
+    st_numscalar("r(leader_converged)", conv)
+    st_numscalar("r(leader_objective)", sgn * f)
+    st_numscalar("r(N_equilibria)", nev)
+    st_matrix("r(leader_instruments)", u')
+}
+
+// A player's instruments at a bound moved inside it, as cge_optimize starts
+// from within the bounds
+void _cge_nash_nudge(string scalar ins, string scalar slo, string scalar sup)
+{
+    struct cge_model scalar M
+    struct cge_opt scalar O
+    string rowvector t
+    real colvector u, lo, hi
+    real scalar n, j, kind, pidx, st, ch, d
+    string scalar pn
+    M = _cge_load()
+    t = tokens(ins)
+    n = cols(t)
+    O.kind = O.pidx = O.start = J(n, 1, .)
+    O.pname = J(n, 1, "")
+    for (j = 1; j <= n; j++) {
+        _cge_opt_instrument(M, t[j], kind, pn, pidx, st)
+        O.kind[j] = kind
+        O.pname[j] = pn
+        O.pidx[j] = pidx
+        O.start[j] = st
+    }
+    u = O.start
+    lo = J(n, 1, -1e300)
+    hi = J(n, 1, 1e300)
+    _cge_nash_bounds(t, slo, lo)
+    _cge_nash_bounds(t, sup, hi)
+    ch = 0
+    for (j = 1; j <= n; j++) {
+        // 5 per cent of a finite range inside, or 1 per cent of the bound's
+        // size: cge_optimize scales an instrument by its start, so that a
+        // start just inside a bound at 0 would make its steps minute
+        d = (lo[j] > -1e299 & hi[j] < 1e299 ? 0.05 * (hi[j] - lo[j]) : 0.01 * max((1, abs(u[j]))))
+        if (u[j] <= lo[j]) {
+            u[j] = lo[j] + d
+            ch = 1
+        }
+        else if (u[j] >= hi[j]) {
+            u[j] = hi[j] - d
+            ch = 1
+        }
+    }
+    if (ch) {
+        _cge_opt_set(O, u, M.p, M.xcur)
+        _cge_store(M)
+    }
+}
+
+// The bounds of a player's instruments, as cge_optimize's lower() and upper()
+// (instrument:value pairs), into b
+void _cge_nash_bounds(string rowvector t, string scalar spec, real colvector b)
+{
+    string rowvector pr
+    real scalar k, j, c
+    pr = tokens(spec)
+    for (k = 1; k <= cols(pr); k++) {
+        c = _cge_strrpos(pr[k], ":")
+        if (!c) _cge_fail("cge_nash: write bounds as instrument:value", 198)
+        j = _cge_find(t', substr(pr[k], 1, c - 1))
+        if (!j) _cge_fail("cge_nash: " + substr(pr[k], 1, c - 1) + " is not an instrument of the player", 198)
+        b[j] = strtoreal(substr(pr[k], c + 1, .))
+    }
+}
+
+// The last position of ch in s (Stata 13 has no strrpos)
+real scalar _cge_strrpos(string scalar s, string scalar ch)
+{
+    real scalar k
+    for (k = strlen(s); k >= 1; k--) if (substr(s, k, 1) == ch) return(k)
+    return(0)
+}
+
+// The leader's objective (with its sense, to be maximised) at the followers'
+// equilibrium with its instruments at u; missing if it is not found
+real scalar _cge_nash_leval(struct cge_opt scalar O, real colvector u, string scalar leader, string scalar obj,
+                            real scalar sgn, real scalar tol, real scalar maxit, real scalar nev)
+{
+    struct cge_model scalar M
+    real scalar rc
+    M = _cge_load()
+    _cge_opt_set(O, u, M.p, M.xcur)
+    _cge_store(M)
+    nev++
+    rc = _stata("quietly cge_nash solve, name(_cgelead) exclude(" + leader + ") tolerance(" + strofreal(tol, "%21.17g") +
+                ") iterate(" + strofreal(maxit) + ")", 1)
+    if (rc) return(.)
+    if (st_numscalar("r(converged)") != 1) return(.)
+    return(sgn * _cge_nash_value(obj, "_cgelead"))
+}
+
+// The simulations named in names dropped (the temporary ones of cge_nash)
+void _cge_sims_drop(string rowvector names)
+{
+    struct cge_model scalar M
+    real colvector keep
+    real scalar k
+    M = _cge_load()
+    if (!rows(M.simname)) return
+    keep = J(rows(M.simname), 1, 1)
+    for (k = 1; k <= cols(names); k++) keep = keep :& (M.simname :!= names[k])
+    if (all(keep)) return
+    _cge_sims_keep(M, _cge_which(keep))
+    _cge_store(M)
 }
 
 // =====================================================================
@@ -24172,6 +24531,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "mdef", M.mdef)
     _cge_io_put(fh, "simmodel", M.simmodel)
     _cge_io_put(fh, "intdef", M.intdef)
+    _cge_io_put(fh, "nashdef", M.nashdef)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -24333,6 +24693,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "mdef") M.mdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "simmodel") M.simmodel = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "intdef") M.intdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "nashdef") M.nashdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

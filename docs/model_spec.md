@@ -2497,6 +2497,41 @@ runs across processes were checked in an interactive session of StataNow
 5.7e-13, with the same names; the processes' start-up took 14 s against 0.1 s
 for the four solves, so that parallel runs pay for scenarios that take longer.
 
+## 29. Nash equilibria and leaders (from version 0.20.0)
+
+`cge_nash player NAME, instruments() maximize()|minimize() [lower() upper()]`
+keeps (name, instruments, sense, objective, bounds) in `M.nashdef`, saved
+with the model; instruments are read as in `cge_optimize`
+(`_cge_opt_instrument`), and an instrument belongs to one player. `cge_nash
+solve, name()` iterates rounds of best responses (Gauss-Seidel): each player
+in turn solves `cge_optimize` over its instruments with the others' at their
+current values, which leaves its optimum as the current shocks (an
+instrument at a bound first moves inside it, by 5 per cent of a finite range
+or 1 per cent of its size, as `cge_optimize` starts within the bounds and
+scales an instrument by its start, `_cge_nash_nudge`); the rounds
+end when the largest change of an instrument, relative to $\max(1, |u|)$, is
+below the tolerance (default 1e-8, at most `iterate()` rounds). The
+equilibrium is solved and stored as the simulation; each player's objective
+there is evaluated by `_cge_nash_value` (the parser of `cge_optimize` at a
+stored simulation). `leader()` (`_cge_nash_leader`) maximises the leader's
+objective $F(u_\ell)$ at the followers' equilibrium (`cge_nash solve,
+exclude()` for each evaluation, `_cge_nash_leval`) by a projected Newton
+method: gradient and Hessian from central differences of $F$ with steps
+$10^{-3}$ times each instrument's scale, Newton's step where the Hessian is
+negative definite and a scaled gradient step otherwise, halving until $F$
+rises, converged when the largest free gradient, scaled, is below $10^{-6}$.
+
+Tests (`tests/test_nash.do`): Cournot duopoly, $q = (a - c)/3b = 3$, to
+1e-6, with profits of 9; Stackelberg, $q_\ell = 4.5$ and $q_f = 2.25$, to
+1e-4, with the leader's profit $10.125$; three firms, $2.25$ each; a game on
+the standard model (the direct tax factor bringing revenue to 2 per cent
+above its base against a tariff chosen for welfare), where the tariff ends at
+its lower bound and the government's own optimum confirms the tax factor;
+save and load; errors. The exact maximiser of `cge_optimize` now requires a
+rise in its line search to exceed $10^{-14}\max(1, |F|)$: near the flat
+optimum of a best response, rises of rounding size had moved the point
+without end at a gradient of 1.2e-10.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
