@@ -31,7 +31,8 @@ user parameters ({helpb cge_parameter}). From version 0.7.2, a condition,
 {it:name}{cmd:(}{it:i}{cmd:)$(}{it:condition}{cmd:)}, defines the variable
 only for the elements that meet it; see {it:Conditions} in
 {helpb cge_equation}. From version 0.9.1, a variable may have two indexes,
-{it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}, as in {cmd:X(c,h)}; see
+{it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)}, as in {cmd:X(c,h)}, and from
+version 0.25.0 three or more, as in {cmd:X(i,j,k)}; see
 {it:Two indexes and sets of pairs} in {helpb cge_equation}. From version
 0.9.2, an expression may use the values of earlier periods of a dynamic run,
 {cmd:lag(}{it:VAR}{cmd:)}, and from version 0.10.2 those of later periods of a

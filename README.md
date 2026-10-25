@@ -10,7 +10,7 @@ IPOPT or to extend (`cge_gams`).
 
 ## Status
 
-Version 0.24.0 implements the standard single-country model described in
+Version 0.25.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -84,6 +84,9 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.25.0 lets user sets, parameters, variables and equations have
+three or more indexes, as `X(i,j,k)`, with sums over tuples of indexes and
+sets of tuples, `cge_set m(i,j,k) = p1.q1.r1 ...`.
 Version 0.24.0 finds Nash equilibria by Newton's method on the players'
 first-order conditions (`cge_nash solve, method(newton)`) and damps best
 responses (`damping()`); starts nonlinear programmes and the relaxations of

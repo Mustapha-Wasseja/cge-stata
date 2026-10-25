@@ -825,6 +825,37 @@ else {
     }
 }
 
+* Three and four indexes (version 0.25.0): a standalone model with a
+* variable, an equation and parameters over three and four indexes and a sum
+* over a set of triples; GAMS declares them over (AC, AC, AC)
+display as text _n "{hline 60}" _n "Case " as result "multiindex"
+quietly cge_model new
+quietly cge_set i = p1 p2
+quietly cge_set j = q1 q2 q3
+quietly cge_set k = r1 r2
+quietly cge_parameter a(i,j,k) = 100 * ord(i) + 10 * ord(j) + ord(k)
+quietly cge_set m(i,j,k) = p1.q1.r1 p1.q2.r2 p2.q3.r1
+quietly cge_parameter b(i,j,k,i2) = a(i,j,k) * ord(i2)
+quietly cge_variable X(i,j,k), value(10)
+quietly cge_equation EX(i,j,k): X(i,j,k)^2 = a(i,j,k)
+quietly cge_variable Y(i,j,k)$(m(i,j,k)), value(1)
+quietly cge_equation EY(i,j,k)$(m(i,j,k)): Y(i,j,k) * X(i,j,k) = sum(i2, b(i,j,k,i2))
+quietly cge_variable T = sum(m(i,j,k), Y(i,j,k)) + sum((i,j,k), X(i,j,k))
+quietly cge_shock a, elements(p2.q3.r1) value(400)
+quietly cge_solve, name(multiindex) tolerance(1e-12)
+assert r(converged) == 1
+if "`phase'" == "export" {
+    cge_gams using `"`dir'/multiindex"', sim(multiindex) replace
+}
+else {
+    capture confirm file `"`dir'/multiindex/cge_multiindex.csv"'
+    if !_rc {
+        cge_gams using `"`dir'/multiindex"', sim(multiindex) compare noexport
+        post `post' ("multiindex") ("multiindex") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 * Linked regions (version 0.12.0): a free-trade area between the synthetic
 * SAM and its institutions layout; each region's solution, with its world
 * prices and tariffs from the links as parameters, solved by GAMS on its own

@@ -131,6 +131,19 @@ an element is written \cmd{e1.e2}; in the GAMS program the variables are
 declared over two sets of accounts, \cmd{(AC, AC)}, with the pairs outside
 their domains fixed at 0.
 
+From version 0.25.0 a symbol may have three or more indexes, as GAMS's do:
+\cmd{cge_parameter a(i,j,k) = 100 * ord(i) + 10 * ord(j) + ord(k)},
+\cmd{cge_variable X(i,j,k)} and \cmd{cge_equation EX(i,j,k): X(i,j,k)^2 =
+a(i,j,k)}. A sum runs over any tuple of indexes, \cmd{sum((j,k), X(i,j,k))},
+and a set of tuples, \cmd{cge_set m(i,j,k) = p1.q1.r1 p2.q3.r1}, serves in
+sums, \cmd{sum(m(i,j,k), a(i,j,k))}, and in conditions, \cmd{m(i,j,k)}, as a
+set of pairs does. An element is written \cmd{p2.q3.r1} in
+\manref{cge_shock}, \manref{cge_bound} and \cmd{values()}; long data take
+one label variable for each index, \cmd{from(v) labels(li lj lk)}. In the
+results the second element column holds the later labels joined by periods,
+\cmd{q3.r1}, and the GAMS program declares the variables over \cmd{(AC, AC,
+AC)}.
+
 Labels may be the names of indexes, as the years \cmd{t1}, \cmd{t2} and
 \cmd{t3} of a set whose alias is \cmd{t2}. From version 0.22.1 an equation
 over two indexes puts them in correctly, and from version 0.23.0 so does a

@@ -2690,6 +2690,55 @@ stops at $k = 2$, five find the best of the nine integers);
 16 and later with Python, the sequential results to $10^{-10}$; the note
 and the session's results on Stata 13).
 
+## 34. Three or more indexes (from version 0.25.0)
+
+User sets, parameters, variables and equations may have any number of
+indexes, as GAMS's symbols do: `cge_parameter a(i,j,k) = ...`,
+`cge_variable X(i,j,k)`, `cge_equation EX(i,j,k)$(m(i,j,k)): ...`. The
+indexes must differ; two over the same set take digits, as `(i,j,k,i2)`.
+
+Layout. A symbol over sets $S_1, \dots, S_n$ has the set code
+`S1|S2|...|Sn` and is stored, as one with two indexes, as a matrix of
+$|S_1|$ rows and $|S_2| \cdots |S_n|$ columns: the later sets form a
+product whose labels are the tuples of their labels joined by periods, the
+last index changing fastest (`_cge_setsize`, `_cge_setlab` and `_cge_nidx`
+read codes of any length; `_cge_setparts` gives the first set and the
+product). Element $(e_1, e_2, \dots, e_n)$ is therefore row $e_1$ and column
+`e2.e3....`, so that everything written for two indexes (results, GAMS
+labels in files, GDX records, positions) holds, the second label being a
+tuple. Labels have no periods (letters, digits and underscores), so the
+tuples are unambiguous.
+
+Domains. `_cge_u_substd` puts in the labels of an element for the indexes of
+the domain; with three or more it recovers the position of each index,
+for `ord()`, from the position in the product, and puts in all but the last
+through placeholders, each label marked as in Section 32.
+
+Sums and sets of tuples. `sum((i,j,k)$(c), e)` is written as
+`sum(i, sum(j, sum(k$(c), e)))`, and `sum(m(i,j,k)$(c), e)` over a set of
+tuples (`cge_set m(i,j,k) = e1.e2.e3 ...`) as the same with the condition
+`m(i,j,k) & (c)`; `prod`, `smax` and `smin` likewise. In a condition,
+`m(e1,e2,e3)` is 1 for a tuple of the set. A set that a set of tuples is
+over can no longer be removed while that set exists.
+
+Data. `values(e1.e2.e3:#)` gives values by element; `from(v) labels(li lj
+lk)` reads long data, one label variable per index; the wide form of
+`from()` stays for two indexes. `cge_shock`, `cge_bound`, `cge_constraint`
+and the results take an element as `e1.e2.e3`; messages and listings write
+it `X(e1,e2,e3)`. The results dataset keeps two element columns, the second
+holding the later labels joined by periods.
+
+GAMS. Variables are declared over `(AC, AC, AC)`, parameters and lags over
+`(*, *, *)`, and their elements written `('e1', 'e2', 'e3')`.
+
+Tests: `tests/test_multiindex.do` (a three-index parameter, variable and
+equation, $X_{ijk} = \sqrt{100i + 10j + k}$ to $10^{-12}$; sums over all,
+two and one of the indexes against closed forms, 2058, $600i + 129$ and
+$300i + 60 + 3k$; a set of triples in a sum, a domain and a condition
+against enumeration; four indexes with an alias; `values()` and long
+`from()`; shocks of a parameter and of a fixed variable; bounds; saving
+and loading; errors); the export case `multiindex`.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

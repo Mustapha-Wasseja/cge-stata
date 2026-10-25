@@ -165,6 +165,17 @@ indexes, as in {cmd:perp(FL(c,h))}. The results give the second index in
 {cmd:element2}, and {helpb cge_gams} declares the variables over two sets of
 accounts.
 
+{pstd}
+From version 0.25.0 variables, equations and parameters may have three or
+more indexes, {cmd:cge_equation EX(i,j,k): X(i,j,k)^2 = a(i,j,k)}; a sum
+runs over any tuple of indexes, {cmd:sum((j,k), X(i,j,k))}, and a set of
+tuples, {cmd:cge_set m(i,j,k) = p1.q1.r1 p2.q3.r1}, serves in sums,
+{cmd:sum(m(i,j,k),} ...{cmd:)}, and in conditions, {cmd:m(i,j,k)}. An
+element is written {it:e1}{cmd:.}{it:e2}{cmd:.}{it:e3}, as in
+{cmd:elements(p2.q3.r1)}; the results hold the second and later labels in
+{cmd:element2}, joined by periods, and {helpb cge_gams} declares the
+variables over {cmd:(AC, AC, AC)}.
+
 
 {title:Inequalities}
 

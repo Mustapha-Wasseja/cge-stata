@@ -16,7 +16,7 @@
 {cmd:cge_set} {it:name}{cmd:,} {opt from(varname)} [{opt except(elements)}]
 
 {p 8 12 2}
-{cmd:cge_set} {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)} {cmd:=} {it:e1}{cmd:.}{it:f1} [{it:e2}{cmd:.}{it:f2} ...]
+{cmd:cge_set} {it:name}{cmd:(}{it:i}{cmd:,}{it:j}[{cmd:,}{it:k} ...]{cmd:)} {cmd:=} {it:e1}{cmd:.}{it:f1}[{cmd:.}{it:g1} ...] [{it:e2}{cmd:.}{it:f2}[{cmd:.}{it:g2} ...] ...]
 
 {p 8 12 2}
 {cmd:cge_set} {cmd:,} {opt list}
@@ -58,6 +58,10 @@ being the sum over its pairs, and in conditions, where
 {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)} is 1 for a pair of the set, so
 that it restricts sums, terms and the domains of variables and equations with
 two indexes; see {it:Two indexes and sets of pairs} in {helpb cge_equation}.
+From version 0.25.0 a set may hold tuples of three or more elements,
+{cmd:cge_set m(i,j,k) = p1.q1.r1 p2.q3.r1}, which serve in the same ways:
+{cmd:sum(m(i,j,k),} {it:expression}{cmd:)} and the condition
+{cmd:m(i,j,k)}.
 
 {pstd}
 The elements are written out in the order given, each once, without those in

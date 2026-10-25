@@ -75,13 +75,15 @@ user variable or equation uses them.
 {phang}
 {opt values(spec)} gives values by element, as {it:element}{cmd::}{it:#}
 pairs separated by spaces, for example {cmd:values(com_agr:0.3 com_man:0.5)};
-for a parameter with two indexes, {it:e1}{cmd:.}{it:e2}{cmd::}{it:#}. Elements
-not given take {opt default()}.
+for a parameter with two indexes, {it:e1}{cmd:.}{it:e2}{cmd::}{it:#}, and with
+three, {it:e1}{cmd:.}{it:e2}{cmd:.}{it:e3}{cmd::}{it:#} (from version 0.25.0).
+Elements not given take {opt default()}.
 
 {phang}
 {opt from(varname)} takes the values from the numeric variable {it:varname}
 of the data in memory, one observation per element, and {opt labels(varlist)}
-names the string variables that hold the element labels, one for each index.
+names the string variables that hold the element labels, one for each index
+(any number of them from version 0.25.0).
 Observations with a missing value or an empty label are skipped; elements
 without an observation take {opt default()}.
 
