@@ -2570,7 +2570,8 @@ the move (`_cge_optimize`); before, such a start stopped with error 459,
 which a best response of `cge_nash` from a bound met (its nudge stays). The
 library adds `ramsey`: a planner's choice of consumption over 30 years with
 capital accumulation over the pairs of consecutive years (a set of pairs
-`nx(t,t2)`), a terminal capital at the steady state and the discounted sum
+`nx(t,t2)`; from version 0.26.0 the lead `K(t+1)`, Section 35), a terminal
+capital at the steady state and the discounted sum
 of $\ln C$; the Euler equation $C_{t+1}/C_t = \beta(1 - \delta + \alpha
 K_{t+1}^{\alpha - 1})$ holds in every year to 1.7e-11.
 
@@ -2738,6 +2739,42 @@ $300i + 60 + 3k$; a set of triples in a sum, a domain and a condition
 against enumeration; four indexes with an alias; `values()` and long
 `from()`; shocks of a parameter and of a fixed variable; bounds; saving
 and loading; errors); the export case `multiindex`.
+
+## 35. Lags and leads on ordered sets (from version 0.26.0)
+
+A user set is ordered, its elements in the order given, and an argument of
+a reference may shift an index by a whole number, as GAMS's lags and leads
+do: `K(t-1)` is the element before, `K(t+1)` the one after and `K(t+n)` $n$
+places after; `K(t--1)` and `K(t++1)` count round the set (circular), so
+that the element after the last is the first. An element beyond the set
+does not exist, and its reference is 0, as in GAMS: in
+`cge_variable L(t) = g(t-1)` the first element is 0. `base()` of such a
+reference is 0 too. Conditions take `ord(t)` and `card(t)`, as
+`$(ord(t) > 1)` and `$(ord(t) < card(t))`.
+
+`_cge_u_substl` puts in an index with its shifts: with the labels of the
+set, the shifted position $o \pm n$ gives a label (marked as in Section
+32), or for a circular shift $((o \pm n - 1) \bmod |S|) + 1$; beyond the
+set it gives the token `char(3)` + `none`. It serves the sums
+(`_cge_u_expand`) and, through `_cge_u_substd`, every domain: equations,
+defined variables, parameter assignments and their conditions, each index of
+several. The compiler (`_cge_u_compile`) makes a reference that holds that
+token 0 (`_cge_u_none`). Shifts are written out with the elements, so the
+GAMS program has the labels and needs nothing of its own.
+
+These shifts are within one model, over a set such as the years of an
+intertemporal model; `lag()` and `lead()` (Section 19) refer to the periods
+of a dynamic run instead. The library's Ramsey model now accumulates
+capital with `K(t+1)` in every year but the last, in place of a set of pairs
+of consecutive years; its solution is unchanged.
+
+Tests: `tests/test_lagindex.do` (lags, leads, a shift by 2 and circular
+shifts of $g_t = t$ against their values, with 0 beyond the set; a
+telescoping sum, 4; a shift within a sum over an alias, $40t + 14$; capital
+accumulated by a lag in an equation's domain and by a lead, against the
+recursion $K_t = 0.9K_{t-1} + 10(t - 1)$; two indexes; base() of a lag in a
+domain's condition; errors); `tests/test_modlib.do` (the Ramsey model's
+Euler equation); the export case `lagindex`.
 
 ## References
 

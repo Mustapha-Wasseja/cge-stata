@@ -260,6 +260,23 @@ evaluated once, at the base. {helpb cge_gams} writes values of later periods
 as parameters {cmd:LEAD1_}{it:VAR}, and the period as {cmd:TPERIOD},
 {cmd:TFIRST} and {cmd:TLAST}.
 
+{pstd}
+From version 0.26.0, an index of an ordered set may also be shifted within
+one model, as in GAMS: {cmd:K(t-1)} is the element of the set before,
+{cmd:K(t+1)} the element after, {cmd:K(t+2)} the one two places after, and
+{cmd:K(t--1)} and {cmd:K(t++1)} count round the set. An element beyond the
+set does not exist, and its reference is 0. Conditions take {cmd:ord(t)} and
+{cmd:card(t)}, for example capital that accumulates over the years of an
+intertemporal model:
+
+{phang2}{cmd:. cge_equation K0(t)$(ord(t) == 1): K(t) = 100}{p_end}
+{phang2}{cmd:. cge_equation KA(t)$(ord(t) > 1): K(t) = 0.9 * K(t-1) + inv(t-1)}{p_end}
+
+{pstd}
+These shifts are written out with the elements, in sums, conditions and
+symbols with several indexes; {cmd:lag()} and {cmd:lead()} refer to the
+periods of a dynamic run instead.
+
 
 {title:Functions and macros}
 

@@ -206,7 +206,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 58 cases (version 0.25.0). Together they cover:
+There are 59 cases (version 0.26.0). Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -254,7 +254,9 @@ There are 58 cases (version 0.25.0). Together they cover:
   aliases g2 and g3 of a set with labels g1 to g3;
 - three and four indexes (from version 0.25.0): variables, equations and
   parameters declared over (AC, AC, AC) and (*, *, *, *), and a sum over a
-  set of triples.
+  set of triples;
+- lags and leads on ordered sets (from version 0.26.0): K(t-1), a circular
+  lead and a lead beyond the set.
 
 `run_export_check.py` runs GAMS up to three times when it returns 7, a
 licence error that a network licence gives now and then (from version

@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.25.0")
+    return("0.26.0")
 }
 
 // =====================================================================
@@ -18323,6 +18323,82 @@ string rowvector _cge_u_subst(string rowvector t, string scalar idx, string scal
     return(select(out, out :!= ""))
 }
 
+// Tokens with index idx replaced by element el, at position ordv of the
+// set whose labels are labs (from version 0.26.0): as _cge_u_subst, and an
+// argument idx+n or idx-n, n a whole number, is the element n places after
+// or before, as GAMS's lags and leads on ordered sets; idx++n and idx--n
+// count round the set (circular). An element beyond the set is the token
+// char(3) + "none", whose reference _cge_u_compile makes 0, as GAMS does. el
+// comes marked by _cge_u_mk; the shifted labels are marked here.
+string rowvector _cge_u_substl(struct cge_model scalar M, string rowvector t, string scalar idx, string scalar el,
+                               real scalar ordv, string vector labs)
+{
+    string rowvector out
+    real scalar k, j, sg, circ, np, n
+    if (!anyof(t, idx)) return(t)
+    n = length(labs)
+    out = J(1, 0, "")
+    k = 1
+    while (k <= cols(t)) {
+        if (t[k] == idx & k > 1 & k + 3 <= cols(t)) {
+            if ((t[k - 1] == "(" | t[k - 1] == ",") & (t[k + 1] == "+" | t[k + 1] == "-")) {
+                sg = (t[k + 1] == "+" ? 1 : -1)
+                j = k + 2
+                circ = (t[j] == t[k + 1])
+                if (circ) j++
+                if (j + 1 <= cols(t)) {
+                    if (regexm(t[j], "^[0-9]+$") & (t[j + 1] == ")" | t[j + 1] == ",")) {
+                        np = ordv + sg * strtoreal(t[j])
+                        if (circ) np = np - n * floor((np - 1) / n)
+                        out = out, (np >= 1 & np <= n ? _cge_u_mk(M, labs[np]) : char(3) + "none")
+                        k = j + 1
+                        continue
+                    }
+                }
+            }
+        }
+        out = out, t[k]
+        k++
+    }
+    return(_cge_u_subst(out, idx, el, ordv))
+}
+
+// The reference that holds an element beyond its set (from version 0.26.0),
+// NAME(..., t+1, ...) at the last element: 0, as in GAMS, with base() of it
+string rowvector _cge_u_none(string rowvector t)
+{
+    string rowvector u
+    real scalar k, a, d, e
+    u = t
+    while (1) {
+        k = 0
+        for (a = 1; a <= cols(u); a++) if (u[a] == char(3) + "none") {
+            k = a
+            break
+        }
+        if (!k) break
+        // the parenthesis that opens the reference's arguments
+        d = 0
+        for (a = k - 1; a >= 1; a--) {
+            if (u[a] == ")") d++
+            else if (u[a] == "(") {
+                if (!d) break
+                d--
+            }
+        }
+        if (a < 2) _cge_fail("an element beyond the end of its set is not an argument of a reference", 198)
+        e = _cge_u_close(u, a)
+        a = a - 1
+        // base(NAME(...)) as a whole
+        if (a >= 3 & e < cols(u)) if (u[a - 1] == "(" & u[a - 2] == "base" & u[e + 1] == ")") {
+            a = a - 2
+            e = e + 1
+        }
+        u = (a > 1 ? u[|1 \ a - 1|] : J(1, 0, "")), "0", (e < cols(u) ? u[|e + 1 \ cols(u)|] : J(1, 0, ""))
+    }
+    return(u)
+}
+
 // Element el as it is put in for an index: marked with char(2) when it is
 // the name of an index, as label g2 of a set whose alias is g2, so that a sum
 // over that index within does not replace it again; _cge_u_compile removes
@@ -18393,12 +18469,14 @@ string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar 
                 n = 0
                 for (j = 1; j <= cols(els); j++) {
                     el = _cge_u_mk(M, els[j])
+                    // with the elements before and after it, idx-1 and idx+1
+                    // (from version 0.26.0)
                     if (cols(cond)) {
-                        if (!_cge_u_condval(M, p, x0, _cge_u_subst(("(", cond, ")"), idx, el, j))) continue
+                        if (!_cge_u_condval(M, p, x0, _cge_u_substl(M, ("(", cond, ")"), idx, el, j, els))) continue
                     }
                     // the element first, then the sums within: their
                     // conditions may use this index
-                    piece = _cge_u_expand(M, p, x0, _cge_u_subst(body, idx, el, j))
+                    piece = _cge_u_expand(M, p, x0, _cge_u_substl(M, body, idx, el, j, els))
                     if (piece == "#empty") continue
                     if (n) terms = terms, (fn == "sum" ? "+" : (fn == "prod" ? "*" : ","))
                     terms = terms, "(", piece, ")"
@@ -18588,19 +18666,18 @@ string rowvector _cge_u_subst2(string rowvector t, string scalar idx, string sca
 // labels of one of its elements (from version 0.25.0, for any number of
 // indexes): e1, and e2 the later labels joined by periods, at positions o1
 // and o2 (o2 in the product of the later sets, the last index changing
-// fastest), each label marked by _cge_u_mk; one or two indexes as before,
-// through _cge_u_subst2, more through placeholders for all but the last
+// fastest), each label marked by _cge_u_mk; from version 0.26.0 each index
+// by _cge_u_substl, with its lags and leads
 string rowvector _cge_u_substd(struct cge_model scalar M, string rowvector t, string scalar idx, string scalar set,
                                string scalar e1, string scalar e2, real scalar o1, real scalar o2)
 {
     string rowvector ip, sc, lab, u
     real rowvector pos
-    real scalar n, m, r, j, sz
+    real scalar n, m, r, sz
     ip = _cge_u_nodelim(tokens(idx, ","), ",")
     n = cols(ip)
-    if (n <= 2) return(_cge_u_subst2(t, idx, _cge_u_mk(M, e1), _cge_u_mk(M, e2), o1, o2))
     sc = _cge_setcodes(set)
-    lab = e1, _cge_u_nodelim(tokens(e2, "."), ".")
+    lab = (n == 1 ? e1 : (e1, _cge_u_nodelim(tokens(e2, "."), ".")))
     if (cols(sc) != n | cols(lab) != n) _cge_fail("cge internal error: the domain " + idx + " and its element do not match", 3498)
     // the position in each set, from the position in the product
     pos = J(1, n, .)
@@ -18611,12 +18688,10 @@ string rowvector _cge_u_substd(struct cge_model scalar M, string rowvector t, st
         pos[m] = mod(r, sz) + 1
         r = floor(r / sz)
     }
+    // each index in turn, with its lags and leads (from version 0.26.0); the
+    // marks of _cge_u_mk keep a label put in from being replaced again
     u = t
-    for (m = 1; m < n; m++) u = _cge_u_subst(u, ip[m], char(1) + "cge_e" + strofreal(m), pos[m])
-    u = _cge_u_subst(u, ip[n], _cge_u_mk(M, lab[n]), pos[n])
-    for (j = 1; j <= cols(u); j++) {
-        if (substr(u[j], 1, 6) == char(1) + "cge_e") u[j] = _cge_u_mk(M, lab[strtoreal(substr(u[j], 7, .))])
-    }
+    for (m = 1; m <= n; m++) u = _cge_u_substl(M, u, ip[m], _cge_u_mk(M, lab[m]), pos[m], _cge_setlab(M, sc[m]))
     return(u)
 }
 
@@ -18832,6 +18907,8 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     if (args() < 5) condmode = 0
     // labels marked by _cge_u_mk (from version 0.23.0)
     if (any(strpos(t, char(2)))) t = _cge_u_um(t)
+    // references to elements beyond their sets (from version 0.26.0)
+    if (anyof(t, char(3) + "none")) t = _cge_u_none(t)
     P = _cge_gams_params()
     out = J(0, 3, .)
     // operator stack: (kind, code); kind 1 operator, 2 function, 3 "(", 4

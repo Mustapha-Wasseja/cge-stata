@@ -856,6 +856,33 @@ else {
     }
 }
 
+* Lags and leads on ordered sets (version 0.26.0): capital accumulated by
+* K(t-1), a circular lead and a lead beyond the set (0); the equations reach
+* GAMS written out with the labels
+display as text _n "{hline 60}" _n "Case " as result "lagindex"
+quietly cge_model new
+quietly cge_set t = y1 y2 y3 y4 y5
+quietly cge_parameter inv(t) = 10 * ord(t)
+quietly cge_variable K(t), value(100)
+quietly cge_equation K0(t)$(ord(t) == 1): K(t) = 100
+quietly cge_equation KA(t)$(ord(t) > 1): K(t) = 0.9 * K(t-1) + inv(t-1)
+quietly cge_variable Q(t), value(10)
+quietly cge_equation EQ(t): Q(t)^2 = K(t++1) + K(t+1)
+quietly cge_shock inv, elements(y2) value(40)
+quietly cge_solve, name(lagindex) tolerance(1e-12)
+assert r(converged) == 1
+if "`phase'" == "export" {
+    cge_gams using `"`dir'/lagindex"', sim(lagindex) replace
+}
+else {
+    capture confirm file `"`dir'/lagindex/cge_lagindex.csv"'
+    if !_rc {
+        cge_gams using `"`dir'/lagindex"', sim(lagindex) compare noexport
+        post `post' ("lagindex") ("lagindex") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 * Linked regions (version 0.12.0): a free-trade area between the synthetic
 * SAM and its institutions layout; each region's solution, with its world
 * prices and tariffs from the links as parameters, solved by GAMS on its own

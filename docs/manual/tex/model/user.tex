@@ -193,6 +193,30 @@ period, may not use them. The GAMS program declares the values of later
 periods as parameters \cmd{LEAD1_U_Q} and the period as the scalars
 \cmd{TPERIOD}, \cmd{TFIRST} and \cmd{TLAST}.
 
+\section{Lags and leads on ordered sets}\label{sec:userindexlags}
+
+From version 0.26.0, an index of a user set, whose elements are ordered as
+given, may be shifted within a reference, as in GAMS: \cmd{K(t-1)} is the
+element before, \cmd{K(t+1)} the element after and \cmd{K(t+2)} the one two
+places after, and \cmd{K(t--1)} and \cmd{K(t++1)} count round the set, the
+element after the last being the first. An element beyond the set does not
+exist, and its reference is 0. Capital that accumulates over the years of
+an intertemporal model, with a given first year,
+\begin{equation*}
+K_1 = 100, \qquad K_t = (1 - \delta) K_{t-1} + I_{t-1} \quad (t > 1),
+\end{equation*}
+is written
+\begin{quote}
+\cmd{cge_equation K0(t)$(ord(t) == 1): K(t) = 100}\\
+\cmd{cge_equation KA(t)$(ord(t) > 1): K(t) = (1 - delta) * K(t-1) + inv(t-1)}
+\end{quote}
+or with a lead, \cmd{cge_equation KA(t)$(ord(t) < card(t)): K(t+1) = ...}.
+Shifts serve in sums, as \cmd{sum(t$(ord(t) < card(t)), X(t+1) - X(t))}, in
+conditions, in parameter assignments and in symbols with several indexes,
+\cmd{w(r,t-1)}. They are written out with the elements, so that the GAMS
+program has the labels. These shifts are within one model; \cmd{lag()} and
+\cmd{lead()} refer to the periods of a dynamic run.
+
 \section{Functions and macros}\label{sec:userfunctions}
 
 From version 0.9.7, the language has the functions of GAMS that a square
