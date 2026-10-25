@@ -6,6 +6,7 @@ Model      Kind    Title
 ------------------------------------------------------------------------------
 exchangesystem  An exchange economy of two goods and two consumers
 crusoenlp     Robinson Crusoe: consumption and leisure, a planner's nonlinear programme
+ramseynlp     A Ramsey growth model: optimal saving over 30 years, a nonlinear programme
 marketssystem  Two markets solved block by block with named models
 hs071 nlp     Hock and Schittkowski's problem 71, a nonlinear programme with bounds
 transportnlp     Dantzig's transportation problem: least-cost shipments, a linear programme

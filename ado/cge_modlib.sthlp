@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.21.0  25oct2026}{...}
+{* *! version 0.22.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -35,6 +35,7 @@ model's do-file, {cmd:cge_ml_}{it:model}{cmd:.do}, in the current folder.
 {p2colset 9 21 23 2}{...}
 {p2col:{cmd:exchange}}an exchange economy of two goods and two consumers{p_end}
 {p2col:{cmd:crusoe}}Robinson Crusoe's labour and leisure, a nonlinear programme{p_end}
+{p2col:{cmd:ramsey}}a Ramsey growth model, optimal saving over 30 years (from version 0.22.0){p_end}
 {p2col:{cmd:markets}}two markets solved block by block with named models{p_end}
 {p2col:{cmd:hs071}}Hock and Schittkowski's problem 71{p_end}
 {p2col:{cmd:transport}}Dantzig's transportation problem, a linear programme{p_end}

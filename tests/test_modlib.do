@@ -17,7 +17,7 @@ real scalar _tl_val(string scalar v, string scalar el, string scalar sim)
 end
 
 cge_modlib list
-assert r(N_models) == 8
+assert r(N_models) == 9
 cge_modlib describe transport
 assert "`r(kind)'" == "nlp" & strpos("`r(expect)'", "153.675")
 
@@ -31,6 +31,30 @@ quietly cge_modlib run crusoe
 mata: st_numscalar("tl_d", abs(_tl_val("N", "", "crusoe") - 10 / 3) + abs(_tl_val("C", "", "crusoe") - 2 * sqrt(10 / 3)))
 display as text "crusoe: distance from the closed form " as result %9.2e scalar(tl_d)
 assert scalar(tl_d) < 1e-7
+
+* the Ramsey model (from version 0.22.0): the Euler equation in every year
+quietly cge_modlib run ramsey
+capture mata: mata drop _tl_euler()
+mata:
+real scalar _tl_euler()
+{
+    real scalar t, c1, c2, kn, w
+    w = 0
+    for (t = 1; t <= 29; t++) {
+        c1 = _tl_val("C", "y" + strofreal(t), "ramsey")
+        c2 = _tl_val("C", "y" + strofreal(t + 1), "ramsey")
+        kn = _tl_val("K", "y" + strofreal(t + 1), "ramsey")
+        w = max((w, abs((c2 / c1) / (0.95 * (1 - 0.1 + 0.33 * kn^(0.33 - 1))) - 1)))
+    }
+    return(w)
+}
+end
+mata: st_numscalar("tl_d", _tl_euler())
+display as text "ramsey: largest gap in the Euler equation " as result %9.2e scalar(tl_d)
+assert scalar(tl_d) < 1e-8
+* capital rises from 1 toward the steady state
+mata: st_numscalar("tl_d", (abs(_tl_val("K", "y1", "ramsey") - 1) < 1e-9) & (_tl_val("K", "y15", "ramsey") > 2.5) & (_tl_val("K", "y15", "ramsey") < (0.33 / (1 / 0.95 - 0.9))^(1 / 0.67)))
+assert scalar(tl_d) == 1
 
 * two markets solved block by block
 quietly cge_modlib run markets
@@ -116,5 +140,5 @@ assert _rc == 198
 capture noisily cge_modlib nothing ras
 assert _rc == 198
 
-mata: mata drop _tl_val() _tl_cost()
+mata: mata drop _tl_val() _tl_cost() _tl_euler()
 scalar drop tl_d tl_c

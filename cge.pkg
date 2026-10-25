@@ -76,6 +76,7 @@ f ado/cge_modlib.ado
 f ado/cge_modlib.sthlp
 F ado/cge_ml_exchange.do
 F ado/cge_ml_crusoe.do
+F ado/cge_ml_ramsey.do
 F ado/cge_ml_markets.do
 F ado/cge_ml_hs071.do
 F ado/cge_ml_transport.do

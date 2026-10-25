@@ -120,8 +120,11 @@ capture noisily cge_optimize, instruments(tm(xyz)) maximize(`ev')
 assert _rc == 111
 capture noisily cge_optimize, instruments(tm(com_man)) maximize(macro nothing)
 assert _rc == 111
-capture noisily cge_optimize, instruments(tm(com_man)) maximize(`ev') lower(tm(com_man):0.5)
-assert _rc == 459
+* a start below the lower bound (from version 0.22.0) starts inside it; the
+* optimum is then at the bound
+cge_optimize, instruments(tm(com_man)) maximize(`ev') lower(tm(com_man):0.5)
+assert r(converged) == 1 & abs(el(r(instruments), 1, 1) - 0.5) < 1e-10
+quietly cge_shock, reset
 capture noisily cge_optimize, instruments(tm(com_man) tm(com_man)) maximize(`ev')
 assert _rc == 198
 capture noisily cge_optimize, instruments(tm(com_man)) maximize(`ev') minimize(`ev')
@@ -208,5 +211,16 @@ capture noisily cge_optimize, instruments(tm(com_man)) maximize(QXX(com_man))
 assert _rc == 111
 capture noisily cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= government revenue)
 assert _rc == 111
+quietly cge_shock, reset
+
+* a start on a bound (from version 0.22.0): the optimiser starts inside it and
+* finds the optimum of a start within the bounds
+quietly cge_shock, reset
+cge_optimize, instruments(tm(com_man)) maximize(government revenue) lower(tm(com_man):0) upper(tm(com_man):2) name(oe1)
+local t1 = el(r(instruments), 1, 1)
+quietly cge_shock tm, elements(com_man) value(0)
+cge_optimize, instruments(tm(com_man)) maximize(government revenue) lower(tm(com_man):0) upper(tm(com_man):2) name(ob)
+assert r(converged) == 1
+assert reldif(el(r(instruments), 1, 1), `t1') < 1e-6
 quietly cge_shock, reset
 program drop _compare_optimum _compare_solution

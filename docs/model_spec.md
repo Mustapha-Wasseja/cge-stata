@@ -2561,6 +2561,27 @@ read, separated by spaces, and a marker under token k (the end for an error
 after the last token; the 80 characters before the place for a long
 expression), then stops as `_cge_fail`.
 
+## 31. Starts on bounds and a growth model (from version 0.22.0)
+
+`cge_optimize` moves an instrument whose current value lies on or beyond a
+bound inside it, by 5 per cent of a finite range or 1 per cent of the
+bound's size, with a note, and scales the instruments by their starts after
+the move (`_cge_optimize`); before, such a start stopped with error 459,
+which a best response of `cge_nash` from a bound met (its nudge stays). The
+library adds `ramsey`: a planner's choice of consumption over 30 years with
+capital accumulation over the pairs of consecutive years (a set of pairs
+`nx(t,t2)`), a terminal capital at the steady state and the discounted sum
+of $\ln C$; the Euler equation $C_{t+1}/C_t = \beta(1 - \delta + \alpha
+K_{t+1}^{\alpha - 1})$ holds in every year to 1.7e-11.
+
+Known limitation: element labels equal to the names of indexes (labels `t2`
+in a set whose alias index is `t2`) are substituted wrongly in conditions on
+sets of pairs; the model's years are named `y1` to `y30`.
+
+Tests: `tests/test_optimize.do` (a start on a bound reaches the optimum of a
+start within it); `tests/test_modlib.do` (the Euler equation to 1e-8 and
+the path of capital).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

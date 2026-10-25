@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.16.0  25oct2026}{...}
+{* *! version 0.22.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -105,7 +105,8 @@ the targets; the display marks those that bind.
 {opt lower(spec)} and {opt upper(spec)} give bounds as
 {it:instrument}{cmd::}{it:value} pairs, for example
 {cmd:lower(tm(com_man):0) upper(tm(com_man):0.2)}. An instrument's current
-value must lie strictly within its bounds.
+value on or beyond a bound starts inside it, with a note (from version
+0.22.0).
 
 {phang}
 {opt name(name)} names the simulation that holds the optimum; the default is

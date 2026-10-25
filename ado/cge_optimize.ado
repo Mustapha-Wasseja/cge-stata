@@ -1,4 +1,4 @@
-*! cge_optimize.ado  v0.15.0  2026-10-24
+*! cge_optimize.ado  v0.22.0  2026-10-24
 *! cge-stata: choose instruments to maximise or minimise a report measure or an
 *! expression, within constraints, or to reach targets, solving the model at
 *! every trial (docs/model_spec.md, Section 18)

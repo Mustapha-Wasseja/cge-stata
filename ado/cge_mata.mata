@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.21.0")
+    return("0.22.0")
 }
 
 // =====================================================================
@@ -21735,6 +21735,7 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
     real colvector z, v, r, x, val, v0, r0, re, s, cv
     real colvector tsc, csc, tv, cb, tmg, cmg, img
     real scalar n, k, i, j, f, f0, conv, outer, rprev, iter, conv2, kd, pi, st, it2, nt, nc, viol, ex, rx, sc, ms, ss
+    real scalar d, st0
     string scalar pn
     if (args() < 11) s_con = ""
     if (args() < 12) s_grad = ""
@@ -21778,9 +21779,21 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
         }
     }
     if (any((O.lo :< .) :& (O.hi :< .) :& (O.lo :>= O.hi))) _cge_fail("an instrument's lower bound is not below its upper bound", 198)
-    if (any(((O.lo :< .) :& (O.start :<= O.lo)) :| ((O.hi :< .) :& (O.start :>= O.hi)))) {
-        _cge_fail("the starting value of each instrument, its current value, must lie strictly within its bounds", 459)
+    // a start on or beyond a bound moves inside it (from version 0.22.0), by 5
+    // per cent of a finite range or 1 per cent of the bound's size, and the
+    // instruments are scaled by their starts (before, such a start stopped
+    // the optimisation with error 459)
+    for (k = 1; k <= n; k++) {
+        if ((O.lo[k] < . & O.start[k] <= O.lo[k]) | (O.hi[k] < . & O.start[k] >= O.hi[k])) {
+            st0 = O.start[k]
+            if (O.lo[k] < . & O.hi[k] < .) d = 0.05 * (O.hi[k] - O.lo[k])
+            else d = 0.01 * max((1, abs(O.lo[k] < . & st0 <= O.lo[k] ? O.lo[k] : O.hi[k])))
+            O.start[k] = (O.lo[k] < . & st0 <= O.lo[k] ? O.lo[k] + d : O.hi[k] - d)
+            printf("{txt}Note: %s starts at %s, on or beyond a bound; the optimiser starts from %s\n", O.label[k],
+                   strtrim(sprintf("%12.0g", st0)), strtrim(sprintf("%12.0g", O.start[k])))
+        }
     }
+    O.scale = abs(O.start) :* (abs(O.start) :> 1e-12) + (abs(O.start) :<= 1e-12)
     // Objective, targets and constraints: report measures or, from version
     // 0.9.4, expressions of the user language
     if (s_max != "" & s_min != "") _cge_fail("give maximize() or minimize(), not both", 198)

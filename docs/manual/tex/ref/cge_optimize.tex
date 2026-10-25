@@ -131,8 +131,9 @@ optimum.
 \cmd{instruments()}, for example
 \cmd{lower(tm(com_man):0) upper(tm(com_man):0.2)}. An instrument without a
 bound is unbounded on that side. A lower bound must be below the upper
-bound, and the current value of each instrument must lie strictly within its
-bounds.
+bound. From version 0.22.0, an instrument whose current value lies on or
+beyond a bound starts inside it, by 5 per cent of a finite range or 1 per
+cent of the bound's size, with a note; before, it stopped the optimisation.
 
 \item[\optarg{}{name}{name}] names the simulation that holds the optimum;
 the default is \cmd{optimum}. A simulation of that name is replaced.
