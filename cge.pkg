@@ -72,6 +72,16 @@ f ado/cge_nest.sthlp
 f ado/cge_region.ado
 f ado/cge_region.sthlp
 f ado/cge_model.ado
+f ado/cge_modlib.ado
+f ado/cge_modlib.sthlp
+F ado/cge_ml_exchange.do
+F ado/cge_ml_crusoe.do
+F ado/cge_ml_markets.do
+F ado/cge_ml_hs071.do
+F ado/cge_ml_transport.do
+F ado/cge_ml_ras.do
+F ado/cge_ml_knapsack.do
+F ado/cge_ml_cournot.do
 f ado/cge_model.sthlp
 f ado/cge_solve.ado
 f ado/cge_solve.sthlp

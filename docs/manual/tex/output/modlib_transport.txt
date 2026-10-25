@@ -1,0 +1,106 @@
+. cge_modlib describe transport
+
+Model transport: Dantzig's transportation problem: least-cost shipments, a linear programme
+Kind:      nlp
+Reference: Dantzig (1963), Linear Programming and Extensions, section 3.3
+Expected:  minimum cost 153.675 (thousands of dollars)
+File:      cge_ml_transport.do
+
+. cge_modlib run transport
+
+. *! cge_ml_transport.do -- cge-stata model library (version 0.21.0)
+. *! title: Dantzig's transportation problem: least-cost shipments, a linear programme
+. *! kind: nlp
+. *! reference: Dantzig (1963), Linear Programming and Extensions, section 3.3
+. *! expect: minimum cost 153.675 (thousands of dollars)
+. * Two plants ship cases to three markets at 90 dollars per case per thousand
+. * miles; supplies are limits (equations with slacks SS >= 0) and demands are
+. * floors (surpluses SD >= 0).
+. cge_model new
+New standalone model: write its sets, parameters, variables and equations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set i = seattle san_diego
+User set i: 2 element(s): seattle san_diego
+
+. cge_set j = new_york chicago topeka
+User set j: 3 element(s): new_york chicago topeka
+
+. cge_parameter a(i), values(seattle:350 san_diego:600)
+User parameter a(i): 2 value(s), from 350 to 600
+
+. cge_parameter b(j), values(new_york:325 chicago:300 topeka:275)
+User parameter b(j): 3 value(s), from 275 to 325
+
+. cge_parameter d(i,j), values(seattle.new_york:2.5 seattle.chicago:1.7 seattle.topeka:1.8 san_diego
+> .new_york:2.5 san_diego.chicago:1.8 san_diego.topeka:1.4)
+User parameter d(i,j): 6 value(s), from 1.4 to 2.5
+
+. cge_parameter f = 90
+User parameter f: 1 value(s), from 90 to 90
+
+. cge_parameter c(i,j) = f * d(i,j) / 1000
+User parameter c(i,j): 6 value(s), from .126 to .225
+
+. cge_variable X(i,j), value(100)
+User variable X(i,j): 6 element(s), base values 100 100 100 100 100 ...
+Add the equations that determine it with cge_equation
+
+. cge_variable SS(i), value(10)
+User variable SS(i): 2 element(s), base values 10 10
+Add the equations that determine it with cge_equation
+
+. cge_variable SD(j), value(10)
+User variable SD(j): 3 element(s), base values 10 10 10
+Add the equations that determine it with cge_equation
+
+. cge_equation SUPPLY(i): sum(j, X(i,j)) + SS(i) = a(i)
+User equation SUPPLY: 2 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  4.83e-01)
+
+. cge_equation DEMAND(j): sum(i, X(i,j)) - SD(j) = b(j)
+User equation DEMAND: 3 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  4.15e-01)
+
+. cge_bound X, lower(0)
+Variable X: lower bound 0 for 6 element(s)
+
+. cge_bound SS, lower(0)
+Variable SS: lower bound 0 for 2 element(s)
+
+. cge_bound SD, lower(0)
+Variable SD: lower bound 0 for 3 element(s)
+
+. cge_solve, name(transport) minimize(sum((i,j), c(i,j) * X(i,j)))
+Simulation transport solved in 9 iteration(s) (interior point)
+Minimised sum((i,j), c(i,j) * X(i,j)):          153.675
+Largest scaled error of the optimality conditions  1.45e-07
+
+. matrix list r(marginals)
+
+r(marginals)[1,5]
+           c1         c2         c3         c4         c5
+r1  1.103e-08  1.327e-08  .22499999  .15299999  .12599999
+
+. cge_results, sim(transport)
+
+Simulation transport of a standalone model (solved, 9 iteration(s), largest scaled residual  1.45e-0
+> 7)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+X(seattle,new_york)                       100      32.3927  -67.607
+X(seattle,chicago)                        100          300  200.000
+X(seattle,topeka)                         100  6.96865e-08 -100.000
+X(san_diego,new_york)                     100      292.607  192.607
+X(san_diego,chicago)                      100  2.77506e-07 -100.000
+X(san_diego,topeka)                       100          275  175.000
+SS(seattle)                                10      17.6073   76.073
+SS(san_diego)                              10      32.3927  223.927
+SD(new_york)                               10  1.11395e-08 -100.000
+SD(chicago)                                10  1.63870e-08 -100.000
+SD(topeka)                                 10  1.98955e-08 -100.000
+-------------------------------------------------------------------
+
+.
+end of do-file

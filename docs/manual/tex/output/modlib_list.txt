@@ -1,0 +1,17 @@
+. cge_modlib list
+
+The model library of cge-stata
+------------------------------------------------------------------------------
+Model      Kind    Title
+------------------------------------------------------------------------------
+exchangesystem  An exchange economy of two goods and two consumers
+crusoenlp     Robinson Crusoe: consumption and leisure, a planner's nonlinear programme
+marketssystem  Two markets solved block by block with named models
+hs071 nlp     Hock and Schittkowski's problem 71, a nonlinear programme with bounds
+transportnlp     Dantzig's transportation problem: least-cost shipments, a linear programme
+ras   nlp     Balancing a matrix by cross entropy, whose solution is the RAS balance
+knapsackminlp   A knapsack of eight items: binary choices, a mixed-integer programme
+cournotnash    Cournot duopoly and a Stackelberg leader, Nash equilibria
+------------------------------------------------------------------------------
+cge_modlib describe model shows a model; cge_modlib run model runs it;
+cge_modlib copy model copies it to the current folder

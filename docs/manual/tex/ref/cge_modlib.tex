@@ -1,0 +1,81 @@
+\cgeentry{cge_modlib}{A library of ready-to-run models in the user language}
+
+\cgesec{Description}
+
+\cmd{cge_modlib} (from version 0.21.0) lists, describes, runs and copies the
+models of the package's library, as GAMS's model library does: small,
+complete models written in the user language (\manref{cge_model}), each with
+its reference and the result it reproduces, which also serve as templates.
+\cmd{cge_modlib copy} puts a model's do-file in the current folder, to be
+changed and run.
+
+\cgesec{Quick start}
+
+The models of the library
+\begin{stcode}
+cge_modlib list
+\end{stcode}
+Run Dantzig's transportation problem, and copy it to edit
+\begin{stcode}
+cge_modlib run transport
+cge_modlib copy transport
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_modlib} [\cmd{list}]\\
+\cmdb{cge_modlib describe} \argu{model}\\
+\cmdb{cge_modlib run} \argu{model}\\
+\cmdb{cge_modlib copy} \argu{model} [\texttt{,} \opt{}{replace}]
+\end{stsyntax}
+
+\cgesec{Remarks and examples}
+
+\begin{center}
+\begin{tabular}{@{}l l p{0.62\textwidth}@{}}
+\hline
+Model & Kind & Content and result\\
+\hline
+\cmd{exchange} & system & two goods and two consumers; $P_2 = 8.2/5.4$\\
+\cmd{crusoe} & NLP & Robinson Crusoe's labour and leisure; $N = 10/3$\\
+\cmd{markets} & system & two markets solved block by block with named models\\
+\cmd{hs071} & NLP & Hock and Schittkowski's problem 71; 17.0140173\\
+\cmd{transport} & NLP & Dantzig's transportation problem, a linear programme; 153.675\\
+\cmd{ras} & NLP & a matrix balanced by cross entropy, the RAS solution\\
+\cmd{knapsack} & MINLP & eight binary choices; 43\\
+\cmd{cournot} & Nash & Cournot duopoly, 3 each, and a Stackelberg leader, 4.5\\
+\hline
+\end{tabular}
+\end{center}
+
+\cgesubsec{Example 1: the library and a model}
+
+\stlog{modlib_list}
+Dantzig's transportation problem ships cases from two plants to three
+markets at least cost; the supplies are limits and the demands floors,
+written as equations with slacks bounded at zero:
+\stlog{modlib_transport}
+The minimum cost, 153.675 thousand dollars, is the textbook's. The marginals
+of the equations are the shadow prices of the plants' capacities and of the
+markets' demands.
+
+\cgesec{Stored results}
+
+\cmd{cge_modlib list} stores \cmd{r(models)} and \cmd{r(N_models)};
+\cmd{cge_modlib describe} stores \cmd{r(title)}, \cmd{r(kind)} and
+\cmd{r(expect)}.
+
+\cgesec{Methods and formulas}
+
+Each model is a do-file, \cmd{cge_ml_}\argu{model}\cmd{.do}, installed with the
+package, whose first lines (\cmd{*!} \argu{key}\cmd{:} \argu{text}) give its
+title, kind, reference and expected result. The test suite runs every model
+and checks its result (\texttt{tests/test\_modlib.do}).
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_model}{A standalone model, written whole in the user language}
+\seeentry{cge_solve}{Solve the model}
+\end{alsosee}

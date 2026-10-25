@@ -504,6 +504,21 @@ variables of the first held at their levels by \opt{}{hold()}, as GAMS's
 \manref{cge_gams} exports it with the equations of the model and the other
 variables fixed.
 
+\section{Error positions}\label{sec:errorpos}
+
+From version 0.21.0, a syntax error in an expression, such as an operand or
+an operator missing, two operands in a row or a parenthesis not closed, shows
+the expression as it was read, its tokens separated by spaces, with a marker
+under the place, before the message, as GAMS's \cmd{\$} errors do:
+\begin{stcode}
+. cge_equation E: X + * 2 = 1
+    X + * 2
+        ^
+an operand is missing before *
+\end{stcode}
+An equation over a set is read element by element, so the marker points into
+the first element at fault.
+
 \section{Compilation}
 
 Each equation is written out for every element of its set that meets its

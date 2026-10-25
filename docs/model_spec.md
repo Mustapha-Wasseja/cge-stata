@@ -2444,7 +2444,10 @@ is solved by `_cge_bb`:
 The interior point accepts a point it cannot improve before its iteration
 limit when its scaled residuals are below $\max(\text{tol}, 10^{-8})$ and its
 error below $\max(10^3\,\text{tol}, 10^{-7})$, as IPOPT's acceptable level
-(a relaxation at a bound stalled at a dual error of 7e-10).
+(a relaxation at a bound stalled at a dual error of 7e-10); from version
+0.21.0 the best point met is accepted, to $\max(10^3\,\text{tol}, 10^{-6})$,
+after a degenerate linear programme (Dantzig's transportation problem)
+reached 1.4e-7 before a step of its multipliers spoiled it.
 
 GAMS: `_cge_gams_user` declares a variable `integer variable` or `binary
 variable` when all its elements are of that type (a mixture stops the
@@ -2531,6 +2534,32 @@ save and load; errors. The exact maximiser of `cge_optimize` now requires a
 rise in its line search to exceed $10^{-14}\max(1, |F|)$: near the flat
 optimum of a best response, rises of rounding size had moved the point
 without end at a gradient of 1.2e-10.
+
+## 30. Model library and error positions (from version 0.21.0)
+
+`cge_modlib` lists, describes, runs (`do`) and copies the models of the
+library, do-files `cge_ml_NAME.do` installed with the package (`F` lines of
+`cge.pkg`) and found by `findfile`; each begins with `*!` lines giving its
+title, kind, reference and expected result, which `cge_modlib list` and
+`describe` read. The models: an exchange economy ($P_2 = 8.2/5.4$), Robinson
+Crusoe as a planner's NLP ($N = 10/3$), two markets solved block by block
+with named models, HS071 (17.0140173), Dantzig's transportation problem as a
+linear programme (153.675), cross-entropy balancing (the RAS solution), a
+knapsack (43, a unique optimum) and Cournot and Stackelberg games (3; 4.5 and
+2.25). `tests/test_modlib.do` runs each and checks its result.
+
+The interior point keeps the best point it meets, by the error of the
+optimality conditions, and accepts it when it stops short of its iteration
+limit with that error below $\max(10^3\,\text{tol}, 10^{-6})$ and the equations
+holding, as IPOPT's acceptable level: the transportation problem, a
+degenerate linear programme, reached 1.4e-7 at its optimum before a step of
+its multipliers raised the error to 15.
+
+Error positions: the compiler of expressions, `_cge_u_compile`, reports its
+syntax errors through `_cge_u_fail(t, k, msg, rc)`, which prints the tokens
+read, separated by spaces, and a marker under token k (the end for an error
+after the last token; the 80 characters before the place for a long
+expression), then stops as `_cge_fail`.
 
 ## References
 

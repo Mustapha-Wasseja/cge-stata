@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.20.0")
+    return("0.21.0")
 }
 
 // =====================================================================
@@ -18559,6 +18559,34 @@ real scalar _cge_u_varpos(struct cge_model scalar M, string scalar name, string 
     _cge_fail(name + "(" + invtokens(args, ", ") + ") is not an element of " + name, 111)
 }
 
+// A syntax error in an expression (from version 0.21.0), as GAMS's $ errors:
+// the expression as it was read, its tokens separated by spaces, with a
+// marker under token k, then the message
+void _cge_u_fail(string rowvector t, real scalar k, string scalar msg, real scalar rc)
+{
+    string scalar line
+    real scalar j, at
+    if (cols(t)) {
+        line = ""
+        at = .
+        for (j = 1; j <= cols(t); j++) {
+            if (j == k) at = strlen(line) + (j > 1)
+            line = line + (j > 1 ? " " : "") + t[j]
+        }
+        if (at >= .) at = strlen(line) + 1
+        if (strlen(line) <= 200) {
+            errprintf("    %s\n", line)
+            errprintf("    %s^\n", at * " ")
+        }
+        else {
+            // a long expression: the 80 characters before the place
+            errprintf("    ...%s\n", substr(line, max((1, at - 79)), 120))
+            errprintf("       %s^\n", (at + 1 - max((1, at - 79))) * " ")
+        }
+    }
+    _cge_fail(msg, rc)
+}
+
 // Compiles one side of a scalar equation (tokens written out) to postfix
 // rows (type, value, element): 1 number, 2 variable at a position, 3
 // parameter (index in M.upar, element), 4 operator (1 + 2 - 3 * 4 / 5 ^), 5
@@ -18587,7 +18615,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     while (k <= cols(t)) {
         tk = t[k]
         if (regexm(tk, "^[0-9.]")) {
-            if (prev) _cge_fail("two operands in a row at " + tk, 198)
+            if (prev) _cge_u_fail(t, k, "two operands in a row at " + tk, 198)
             out = out \ (1, strtoreal(tk), .)
             gtok = gtok, tk
             prev = 1
@@ -18595,20 +18623,20 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             continue
         }
         if (regexm(tk, "^[A-Za-z_]")) {
-            if (prev) _cge_fail("two operands in a row at " + tk, 198)
+            if (prev) _cge_u_fail(t, k, "two operands in a row at " + tk, 198)
             nm = tk
             args = J(1, 0, "")
             e = k
             // in a condition (from version 0.7.2), sameas(e1, e2) and set
             // membership, goods(com_agr): 1 or 0
             if (nm == "sameas") {
-                if (!condmode) _cge_fail("sameas() is allowed only in conditions ($)", 198)
-                if (k + 5 > cols(t)) _cge_fail("sameas(): write sameas(i, label)", 198)
-                if (t[k + 1] != "(" | t[k + 3] != "," | t[k + 5] != ")") _cge_fail("sameas(): write sameas(i, label)", 198)
+                if (!condmode) _cge_u_fail(t, k, "sameas() is allowed only in conditions ($)", 198)
+                if (k + 5 > cols(t)) _cge_u_fail(t, k, "sameas(): write sameas(i, label)", 198)
+                if (t[k + 1] != "(" | t[k + 3] != "," | t[k + 5] != ")") _cge_u_fail(t, k, "sameas(): write sameas(i, label)", 198)
                 for (j = 2; j <= 4; j = j + 2) {
                     if (!anyof(_cge_alllabels(M), t[k + j])) {
-                        if (_cge_u_isindex(M, t[k + j])) _cge_fail("sameas(): index " + t[k + j] + " is not the index of a sum or of the domain", 198)
-                        _cge_fail("sameas(): " + t[k + j] + " is not the label of an element of the model", 111)
+                        if (_cge_u_isindex(M, t[k + j])) _cge_u_fail(t, k, "sameas(): index " + t[k + j] + " is not the index of a sum or of the domain", 198)
+                        _cge_u_fail(t, k, "sameas(): " + t[k + j] + " is not the label of an element of the model", 111)
                     }
                 }
                 out = out \ (1, t[k + 2] == t[k + 4], .)
@@ -18617,7 +18645,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                 k = k + 6
                 continue
             }
-            if (nm == "ord") _cge_fail("ord(): write ord(i), with i the index of a sum or of the domain", 198)
+            if (nm == "ord") _cge_u_fail(t, k, "ord(): write ord(i), with i the index of a sum or of the domain", 198)
             // membership of a pair in a set of pairs (from version 0.9.1)
             if (condmode & k + 5 <= cols(t) & _cge_us_find(M, nm)) {
                 if (_cge_us_pairs(M, _cge_us_find(M, nm)) & t[k + 1] == "(" & t[k + 3] == "," & t[k + 5] == ")") {
@@ -18632,8 +18660,8 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                 if (t[k + 1] == "(" & t[k + 3] == ")" & !_cge_vidx(M, nm) & !_cge_up_find(M, nm) & _cge_u_isindex(M, nm)) {
                     lab = _cge_setlab(M, _cge_u_set(M, nm))
                     if (!anyof(_cge_alllabels(M), t[k + 2])) {
-                        if (_cge_u_isindex(M, t[k + 2])) _cge_fail(nm + "(" + t[k + 2] + "): index " + t[k + 2] + " is not the index of a sum or of the domain", 198)
-                        _cge_fail(nm + "(" + t[k + 2] + "): " + t[k + 2] + " is not the label of an element of the model", 111)
+                        if (_cge_u_isindex(M, t[k + 2])) _cge_u_fail(t, k, nm + "(" + t[k + 2] + "): index " + t[k + 2] + " is not the index of a sum or of the domain", 198)
+                        _cge_u_fail(t, k, nm + "(" + t[k + 2] + "): " + t[k + 2] + " is not the label of an element of the model", 111)
                     }
                     out = out \ (1, anyof(lab, t[k + 2]), .)
                     gtok = gtok, strofreal(out[rows(out), 2])
@@ -18652,16 +18680,16 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                         _cge_u_args(t, k + 1, e, a1, a2)
                         na = rows(a1)
                         code = _cge_find(("min", "max", "abs", "sqr", "log10", "ifthen")', nm)
-                        if (code <= 2 & na < 1) _cge_fail(nm + "(): give one argument or more", 198)
-                        if (code >= 3 & code <= 5 & na != 1) _cge_fail(nm + "(): give one argument", 198)
-                        if (code == 6 & na != 3) _cge_fail("ifthen(): write ifthen(condition, value if true, value if false)", 198)
+                        if (code <= 2 & na < 1) _cge_u_fail(t, k, nm + "(): give one argument or more", 198)
+                        if (code >= 3 & code <= 5 & na != 1) _cge_u_fail(t, k, nm + "(): give one argument", 198)
+                        if (code == 6 & na != 3) _cge_u_fail(t, k, "ifthen(): write ifthen(condition, value if true, value if false)", 198)
                         gp = J(1, 0, "")
                         for (j = 1; j <= na; j++) {
                             sub = _cge_u_compile(M, t[|a1[j] \ a2[j]|], x0, g, (code == 6 & j == 1 ? 1 : condmode))
                             // a condition of parameters, which the GAMS models
                             // of type CNS and MCP accept
                             if (code == 6 & j == 1) {
-                                if (any(sub[., 1] :== 2)) _cge_fail("ifthen(): the condition may use parameters, lags and numbers, not variables; use an inequality for a switch on variables", 198)
+                                if (any(sub[., 1] :== 2)) _cge_u_fail(t, k, "ifthen(): the condition may use parameters, lags and numbers, not variables; use an inequality for a switch on variables", 198)
                             }
                             out = out \ sub
                             gp = gp, g
@@ -18696,10 +18724,10 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                     if (nm == "base") {
                         // base(reference): the base value, a number; of a
                         // variable, or from version 0.11.0 of a parameter
-                        if (e < k + 3) _cge_fail("base(): give a variable or a parameter, as base(GSAV) or base(ad(act_agr))", 198)
+                        if (e < k + 3) _cge_u_fail(t, k, "base(): give a variable or a parameter, as base(GSAV) or base(ad(act_agr))", 198)
                         nm = t[k + 2]
                         args = (e > k + 3 ? t[|k + 4 \ e - 2|] : J(1, 0, ""))
-                        if (e > k + 3 & (t[k + 3] != "(" | t[e - 1] != ")")) _cge_fail("base(): give a variable or a parameter, as base(GSAV) or base(ad(act_agr))", 198)
+                        if (e > k + 3 & (t[k + 3] != "(" | t[e - 1] != ")")) _cge_u_fail(t, k, "base(): give a variable or a parameter, as base(GSAV) or base(ad(act_agr))", 198)
                         args = select(args, args :!= ",")
                         pos = _cge_u_varpos(M, nm, args)
                         if (!pos) {
@@ -18718,8 +18746,8 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                     }
                     args = (e > k + 2 ? t[|k + 2 \ e - 1|] : J(1, 0, ""))
                     for (j = 1; j <= cols(args); j++) {
-                        if (mod(j, 2) == 0 & args[j] != ",") _cge_fail("the elements of " + nm + " must be labels separated by commas", 198)
-                        if (mod(j, 2) == 1 & !regexm(args[j], "^[A-Za-z_0-9]")) _cge_fail("the elements of " + nm + " must be labels separated by commas", 198)
+                        if (mod(j, 2) == 0 & args[j] != ",") _cge_u_fail(t, k, "the elements of " + nm + " must be labels separated by commas", 198)
+                        if (mod(j, 2) == 1 & !regexm(args[j], "^[A-Za-z_0-9]")) _cge_u_fail(t, k, "the elements of " + nm + " must be labels separated by commas", 198)
                     }
                     args = select(args, args :!= ",")
                 }
@@ -18738,18 +18766,18 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             if (!pos & _cge_up_find(M, nm)) {
                 pi = _cge_up_find(M, nm)
                 if (cols(args) != _cge_nidx(M.updef[pi, 2]) + _cge_nidx(M.updef[pi, 3])) {
-                    _cge_fail("parameter " + nm + " has " + strofreal(_cge_nidx(M.updef[pi, 2]) + _cge_nidx(M.updef[pi, 3])) +
+                    _cge_u_fail(t, k, "parameter " + nm + " has " + strofreal(_cge_nidx(M.updef[pi, 2]) + _cge_nidx(M.updef[pi, 3])) +
                               " index(es); " + strofreal(cols(args)) + " given", 198)
                 }
                 el = 1
                 if (cols(args)) {
                     lab = _cge_setlab(M, M.updef[pi, 2])
                     el = _cge_find(lab, args[1])
-                    if (!el) _cge_fail(args[1] + " is not an element of parameter " + nm, 111)
+                    if (!el) _cge_u_fail(t, k, args[1] + " is not an element of parameter " + nm, 111)
                     if (cols(args) == 2) {
                         lab = _cge_setlab(M, M.updef[pi, 3])
                         j = _cge_find(lab, args[2])
-                        if (!j) _cge_fail(args[2] + " is not an element of parameter " + nm, 111)
+                        if (!j) _cge_u_fail(t, k, args[2] + " is not an element of parameter " + nm, 111)
                         el = (el - 1) * rows(lab) + j
                     }
                 }
@@ -18768,10 +18796,10 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                 // the tax on factor use by factor and activity (from version
                 // 0.11.0), tf(f, a)
                 if (nm == "tf" & !_cge_sa(M)) {
-                    if (cols(args) != 2) _cge_fail("parameter tf needs a factor and an activity, as tf(lab, act_agr)", 198)
+                    if (cols(args) != 2) _cge_u_fail(t, k, "parameter tf needs a factor and an activity, as tf(lab, act_agr)", 198)
                     el = _cge_find(M.F, args[1])
                     j = _cge_find(M.A, args[2])
-                    if (!el | !j) _cge_fail("tf(" + args[1] + ", " + args[2] + "): give a factor and an activity", 111)
+                    if (!el | !j) _cge_u_fail(t, k, "tf(" + args[1] + ", " + args[2] + "): give a factor and an activity", 111)
                     if (!_cge_find(M.upar, nm)) M.upar = M.upar \ nm
                     out = out \ (3, _cge_find(M.upar, nm), (el - 1) * rows(M.A) + j)
                     gtok = gtok, "tf('" + args[1] + "', '" + args[2] + "')"
@@ -18782,19 +18810,19 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                 // a standalone model has no model parameters (from version 0.13.0)
                 pi = (_cge_sa(M) ? 0 : _cge_find(P[., 1], nm))
                 if (!pi & condmode & _cge_u_isindex(M, nm)) {
-                    _cge_fail("index " + nm + " in a condition: compare elements with sameas(" + nm + ", label) or positions with ord(" + nm + ")", 198)
+                    _cge_u_fail(t, k, "index " + nm + " in a condition: compare elements with sameas(" + nm + ", label) or positions with ord(" + nm + ")", 198)
                 }
-                if (!pi & _cge_sa(M)) _cge_fail(nm + " is not a variable or a user parameter of the model", 111)
-                if (!pi) _cge_fail(nm + " is not a model variable, a user variable, a user parameter or a parameter that cge_shock changes", 111)
+                if (!pi & _cge_sa(M)) _cge_u_fail(t, k, nm + " is not a variable or a user parameter of the model", 111)
+                if (!pi) _cge_u_fail(t, k, nm + " is not a model variable, a user variable, a user parameter or a parameter that cge_shock changes", 111)
                 if (P[pi, 3] == "") {
-                    if (cols(args)) _cge_fail("parameter " + nm + " has no elements", 198)
+                    if (cols(args)) _cge_u_fail(t, k, "parameter " + nm + " has no elements", 198)
                     el = 1
                 }
                 else {
-                    if (cols(args) != 1) _cge_fail("parameter " + nm + " needs one element", 198)
+                    if (cols(args) != 1) _cge_u_fail(t, k, "parameter " + nm + " needs one element", 198)
                     lab = _cge_gams_setlabels(M, P[pi, 3])
                     el = _cge_find(lab, args[1])
-                    if (!el) _cge_fail(args[1] + " is not an element of parameter " + nm, 111)
+                    if (!el) _cge_u_fail(t, k, args[1] + " is not an element of parameter " + nm, 111)
                 }
                 if (!_cge_find(M.upar, nm)) M.upar = M.upar \ nm
                 out = out \ (3, _cge_find(M.upar, nm), el)
@@ -18805,19 +18833,19 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             continue
         }
         if (tk == "(") {
-            if (prev) _cge_fail("an operator is missing before (", 198)
+            if (prev) _cge_u_fail(t, k, "an operator is missing before (", 198)
             opst = opst \ (3, 0)
             gtok = gtok, "("
             k++
             continue
         }
         if (tk == ")") {
-            if (!prev) _cge_fail("an operand is missing before )", 198)
+            if (!prev) _cge_u_fail(t, k, "an operand is missing before )", 198)
             while (rows(opst)) {
                 if (opst[rows(opst), 1] == 3) break
                 out = out \ _cge_u_pop(opst)
             }
-            if (!rows(opst)) _cge_fail("a parenthesis is closed but not opened", 198)
+            if (!rows(opst)) _cge_u_fail(t, k, "a parenthesis is closed but not opened", 198)
             opst = (rows(opst) > 1 ? opst[|1, 1 \ rows(opst) - 1, 2|] : J(0, 2, .))
             // a function whose argument this closes
             if (rows(opst)) {
@@ -18830,16 +18858,16 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
         }
         // logical not, in conditions (from version 0.7.2)
         if (tk == "!") {
-            if (!condmode) _cge_fail("! and comparisons are allowed only in conditions ($)", 198)
-            if (prev) _cge_fail("! must come before an operand", 198)
+            if (!condmode) _cge_u_fail(t, k, "! and comparisons are allowed only in conditions ($)", 198)
+            if (prev) _cge_u_fail(t, k, "! must come before an operand", 198)
             opst = opst \ (6, 0)
             gtok = gtok, "not"
             k++
             continue
         }
         if (anyof((">", "<", ">=", "<=", "==", "!=", "&", "|"), tk)) {
-            if (!condmode) _cge_fail("comparisons and & | are allowed only in conditions ($)", 198)
-            if (!prev) _cge_fail("an operand is missing before " + tk, 198)
+            if (!condmode) _cge_u_fail(t, k, "comparisons and & | are allowed only in conditions ($)", 198)
+            if (!prev) _cge_u_fail(t, k, "an operand is missing before " + tk, 198)
             code = 5 + _cge_find((">", "<", ">=", "<=", "==", "!=", "&", "|")', tk)
             pr = _cge_u_prec(code)
             while (rows(opst)) {
@@ -18871,7 +18899,7 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
                     k++
                     continue
                 }
-                _cge_fail("an operand is missing before " + tk, 198)
+                _cge_u_fail(t, k, "an operand is missing before " + tk, 198)
             }
             code = strpos("+-*/^", tk)
             pr = _cge_u_prec(code)
@@ -18894,16 +18922,16 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             k++
             continue
         }
-        _cge_fail("cannot read " + tk + " in the expression", 198)
+        _cge_u_fail(t, k, "cannot read " + tk + " in the expression", 198)
     }
-    if (!prev) _cge_fail("the expression ends with an operator", 198)
+    if (!prev) _cge_u_fail(t, k, "the expression ends with an operator", 198)
     while (rows(opst)) {
-        if (opst[rows(opst), 1] == 3) _cge_fail("a parenthesis is opened but not closed", 198)
+        if (opst[rows(opst), 1] == 3) _cge_u_fail(t, k, "a parenthesis is opened but not closed", 198)
         out = out \ _cge_u_pop(opst)
     }
     gams = invtokens(_cge_gams_pow(gtok), " ")
     n = rows(out)
-    if (!n) _cge_fail("an empty expression", 198)
+    if (!n) _cge_u_fail(t, k, "an empty expression", 198)
     return(out)
 }
 
@@ -23900,7 +23928,8 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
 {
     struct cge_sys scalar S
     real colvector map, z, L, U, il, iu, gf, c, sl, su, zl, zu, rd, dz, dzl, dzu, zn, cn, gfn, e, gp, gm
-    real colvector cp, cm, sol, lamn, gphi, sig, x, esc, ev
+    real colvector cp, cm, sol, lamn, gphi, sig, x, esc, ev, zb, lamb
+    real scalar eb, epb, fb
     real matrix Jm, Jn, Jp, Jmm, W, Hs, K, Q, R, Z
     real scalar n, m, mu, f, fn, it, i, h, hp, hm, osc, sd, ed, ep, ec, emu, del, a, az, tau, nu, phi, phin
     real scalar dphi, ok, k, lmin, fp, fm, ntry
@@ -23975,6 +24004,11 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
         zu[iu] = mu :/ su[iu]
     }
     nu = 1
+    // the best point met, by the error of the optimality conditions (from
+    // version 0.21.0)
+    eb = epb = fb = .
+    zb = z
+    lamb = lam
     for (it = 0; it <= maxit; it++) {
         iter = it
         // the optimality conditions, scaled as in Wachter and Biegler (2006)
@@ -23987,6 +24021,13 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
         if (rows(il)) ec = max((ec, max(abs(sl[il] :* zl[il])) / sd))
         if (rows(iu)) ec = max((ec, max(abs(su[iu] :* zu[iu])) / sd))
         err = max((ed, ep, ec))
+        if (err < eb) {
+            eb = err
+            epb = ep
+            zb = z
+            lamb = lam
+            fb = f
+        }
         if (trace) printf("{txt}Iteration %f: objective {res}%14.8g{txt}, dual {res}%9.2e{txt}, primal {res}%9.2e{txt}, complementarity {res}%9.2e{txt}, mu %9.2e\n",
                           it, sgn * f * osc, ed, ep, ec, mu)
         // whether the point satisfies the equations, to the tolerance or to
@@ -24118,10 +24159,18 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
             zu[iu] = rowmax((rowmin((zu[iu], 1e10 * mu :/ su[iu])), mu :/ (1e10 :* su[iu])))
         }
     }
-    // a point the method cannot improve, before its iteration limit, at which
-    // the equations hold and the optimality conditions nearly do, is
-    // accepted, as IPOPT's acceptable level (from version 0.18.0)
-    if (!conv & it < maxit & err < max((1e3 * tol, 1e-7)) & ep < max((tol, 1e-8))) conv = 1
+    // when the method cannot improve before its iteration limit, the best
+    // point met is accepted if the equations hold there and the optimality
+    // conditions nearly do, as IPOPT's acceptable level (from version 0.18.0;
+    // from version 0.21.0 the best point, to 1e-6: a degenerate linear
+    // programme reached 1.4e-7 before a step of the multipliers spoiled it)
+    if (!conv & it < maxit & eb < max((1e3 * tol, 1e-6)) & epb < max((tol, 1e-8))) {
+        conv = 1
+        z = zb
+        lam = lamb
+        f = fb
+        err = eb
+    }
     x = xfix
     x[S.free] = z :* M.xscale[S.free]
     if (S.reduced) _cge_derive(M, p, x)

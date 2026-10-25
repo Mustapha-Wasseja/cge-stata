@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.20.0  25oct2026}{...}
+{* *! version 0.21.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -61,6 +61,7 @@ debt with interest.
 {p2col:{helpb cge_macro}}macros of the language of user variables and equations{p_end}
 {p2col:{helpb cge_nest}}declare a nested CES or CET block, as MPSGE's production blocks{p_end}
 {p2col:{helpb cge_model}}a standalone model, written whole in the user language; model statistics{p_end}
+{p2col:{helpb cge_modlib}}a library of ready-to-run models in the user language{p_end}
 {p2col:{helpb cge_solve}}solve and store a simulation{p_end}
 {p2col:{helpb cge_options}}settings of the solver: LU, limits, Jacobian{p_end}
 {p2col:{helpb cge_optimize}}choose instruments to maximise an outcome or reach targets{p_end}
