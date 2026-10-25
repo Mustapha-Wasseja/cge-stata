@@ -206,7 +206,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 54 cases (version 0.17.0). Together they cover:
+There are 56 cases (version 0.18.0). Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -247,7 +247,9 @@ There are 54 cases (version 0.17.0). Together they cover:
   with a binding bound, which IPOPT solves as NLPs to 6.8e-13, 3.1e-13 and
   3.9e-12 of the interior-point solutions.
 - a named model (from version 0.17.0): two markets of a standalone model
-  solved on their own, the variable outside them fixed, to 4.2e-16.
+  solved on their own, the variable outside them fixed, to 4.2e-16;
+- mixed-integer programmes (from version 0.18.0): a knapsack and integer
+  least squares, which SCIP solves as MINLPs to 6e-16 and 2.1e-11.
 
 Results (21 October 2026, GAMS 54.2; `tools/gams/export_check_results.csv`):
 

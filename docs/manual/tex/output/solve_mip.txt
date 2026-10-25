@@ -1,0 +1,54 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set i = i1 i2 i3 i4 i5 i6 i7 i8
+User set i: 8 element(s): i1 i2 i3 i4 i5 i6 i7 i8
+
+. cge_parameter v(i), values(i1:15 i2:12 i3:11 i4:5 i5:13 i6:9 i7:10 i8:6)
+User parameter v(i): 8 value(s), from 5 to 15
+
+. cge_parameter w(i), values(i1:8 i2:5 i3:6 i4:3 i5:7 i6:4 i7:6 i8:2)
+User parameter w(i): 8 value(s), from 2 to 8
+
+. cge_variable X(i), value(0.5)
+User variable X(i): 8 element(s), base values .5 .5 .5 .5 .5 ...
+Add the equations that determine it with cge_equation
+
+. cge_variable S, value(1)
+User variable S: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation CAP: sum(i, w(i) * X(i)) + S = 20
+User equation CAP: 1 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  6.98e-02)
+
+. cge_bound X, binary
+Variable X: binary for 8 element(s), with bounds 0 and 1
+
+. cge_bound S, lower(0)
+Variable S: lower bound 0 for 1 element(s)
+
+. cge_solve, name(knap) maximize(sum(i, v(i) * X(i)))
+Simulation knap solved by branch and bound: 28 node(s), 340 iteration(s)
+Best bound               43; relative gap  0.00e+00
+Maximised sum(i, v(i) * X(i)):               43
+Largest scaled residual of the equations  0.00e+00
+
+. cge_results, sim(knap)
+
+Simulation knap of a standalone model (solved, 340 iteration(s), largest scaled residual  0.00e+00)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+X(i1)                                      .5            0 -100.000
+X(i2)                                      .5            1  100.000
+X(i3)                                      .5            1  100.000
+X(i4)                                      .5            1  100.000
+X(i5)                                      .5            0 -100.000
+X(i6)                                      .5            1  100.000
+X(i7)                                      .5            0 -100.000
+X(i8)                                      .5            1  100.000
+S                                           1  7.09819e-16 -100.000
+-------------------------------------------------------------------

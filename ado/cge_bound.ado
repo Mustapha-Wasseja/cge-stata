@@ -1,4 +1,4 @@
-*! cge_bound.ado  v0.9.8  2026-10-24
+*! cge_bound.ado  v0.18.0  2026-10-25
 *! cge-stata: attributes of model and user variables, as GAMS's .lo, .up,
 *! .scale, .l and .fx (Reference Manual, cge_bound)
 *!
@@ -38,13 +38,25 @@ program define cge_bound, rclass
     }
     local var `spec'
     syntax [, ELements(string) LOwer(string) UPper(string) SCale(string) LEVel(string) ///
-        FIX(string) RELative CLEAR]
+        FIX(string) RELative CLEAR INTeger BINary CONTinuous]
     if `"`inline'"' != "" {
         if `"`elements'"' != "" {
             display as error "cge_bound: give the elements in parentheses or in elements(), not both"
             exit 198
         }
         local elements `"`inline'"'
+    }
+    * the type of a variable of a standalone model (from version 0.18.0), as
+    * GAMS's integer and binary variables
+    local types `integer' `binary' `continuous'
+    if "`types'" != "" {
+        if wordcount("`types'") > 1 | `"`lower'`upper'`scale'`level'`fix'`relative'`clear'"' != "" {
+            display as error "cge_bound: give one of integer, binary and continuous, alone"
+            exit 198
+        }
+        mata: _cge_int_add("`var'", st_local("elements"), "`types'")
+        return add
+        exit
     }
     if "`clear'" != "" {
         if `"`elements'`lower'`upper'`scale'`level'`fix'`relative'"' != "" {

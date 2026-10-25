@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.17.0  25oct2026}{...}
+{* *! version 0.18.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt step:s(#)} {opt trace}
 {opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}
-{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)}]
+{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)}]
 
 
 {title:Description}
@@ -86,7 +86,11 @@ solution of a system, 1 (optimal) one of a system with constraints, 2
 (locally optimal) that of a nonlinear programme, 5 (locally infeasible) a
 failure, 6 (intermediate infeasible) a solve stopped by a limit, 7 (feasible
 solution) a nonlinear programme stopped at a feasible point and 13 (error, no
-solution) equations that cannot be evaluated at the start. Solver status 1 is
+solution) equations that cannot be evaluated at the start; for branch and
+bound (from version 0.18.0), 1 is an integer solution after a complete search,
+8 (integer solution) one found before a limit stopped the search, 10 (integer
+infeasible) a complete search without one and 14 (no solution returned) a
+limit reached without one. Solver status 1 is
 normal completion, 2 an iteration interrupt, 3 a resource (time) interrupt,
 4 termination by the solver and 5 an evaluation error.
 
@@ -174,6 +178,16 @@ model at their levels for this solve, as GAMS's {cmd:x.fx = x.l}: whole
 variables, {cmd:hold(P Q)}, or elements, {cmd:hold(P(g1))}.
 
 {phang}
+{opt nodes(#)} and {opt optcr(#)} (from version 0.18.0) set the node limit and
+the relative gap of branch and bound, as GAMS's {cmd:nodlim} and {cmd:optcr}:
+a nonlinear programme with integer or binary variables ({helpb cge_bound}) is
+solved by branch and bound, depth first, each node's relaxation by the
+interior point, branching on the most fractional variable. The defaults are
+10,000 nodes and a gap of 0 (to 1e-9). Branch and bound is exact when the
+relaxations are convex, as linear and convex quadratic ones are, and a
+heuristic otherwise.
+
+{phang}
 {opt diagnose} displays the diagnostics after a solve that converges too.
 {helpb cge_listing} lists every equation element at the solution, or where a
 solve stopped (from version 0.9.5).
@@ -207,6 +221,10 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(model)}}the named model solved, if any (from version 0.17.0){p_end}
 {synopt:{cmd:r(from)}}the simulation the solve started from, if any{p_end}
 {synopt:{cmd:r(hold)}}the variables held, if any{p_end}
+{synopt:{cmd:r(N_integer)}}integer and binary elements, for a nonlinear programme (from version 0.18.0){p_end}
+{synopt:{cmd:r(nodes)}}nodes of branch and bound{p_end}
+{synopt:{cmd:r(bestbound)}}its best bound{p_end}
+{synopt:{cmd:r(gap)}}its relative gap{p_end}
 {synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}

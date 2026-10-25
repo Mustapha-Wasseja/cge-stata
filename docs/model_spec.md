@@ -2410,6 +2410,64 @@ load; dropping; HS071 as a nonlinear programme of a submodel with an
 equation outside it at its level; errors. GAMS (export check case
 namedmodel) to 4.2e-16.
 
+## 27. Integer variables and branch and bound (from version 0.18.0)
+
+`cge_bound X[(e)], integer|binary|continuous` appends (name, elements, type)
+to `M.intdef` (standalone models only); `binary` also appends the bounds 0
+and 1 to `M.bddef`. `_cge_int_pos` gives the integer and binary positions,
+the definitions applied in order (`continuous` resets), and `_cge_int_type`
+their types for GAMS; `cge_bound X, clear` removes them. A system solve of a
+model with integer variables stops with 459; a nonlinear programme with them
+is solved by `_cge_bb`:
+
+- the node stack holds bounds of the integer variables (columns of `SL`,
+  `SU`), warm starts (`SX`) and the parent's relaxation value (`pb`), depth
+  first;
+- `_cge_bb_node` solves a node: bounds that meet fix the variable; with more
+  free variables than equations the interior point (`_cge_nlp_solve`, soft:
+  no stop on its preconditions), with as many Newton's method and a check of
+  the bounds, with none a point whose residuals must vanish;
+- a node is pruned when its relaxation, or its parent's, is no better than
+  the incumbent less $\max(10^{-9}\max(1, |h|), \text{optcr}\,|h|)$, in the
+  minimisation value $h$; an integral relaxation ($|x - \text{round}(x)| \le
+  10^{-6}$) becomes the incumbent; otherwise the most fractional variable
+  $x_j = v$ branches into $x_j \le \lfloor v \rfloor$ and $x_j \ge \lceil v
+  \rceil$, the child nearer $v$ first;
+- the incumbent is solved again with its integers fixed at their rounded
+  values; the marginals are those of that solve;
+- statuses: 1/1 for a complete search with an incumbent, 8 with an incumbent
+  when the node limit (solver status 2) or the time limit (3) stops it, 10/1
+  for a complete search without one, 14 when a limit stops it without one;
+  `r(nodes)`, `r(bestbound)` (the incumbent, or the least bound of the nodes
+  left), `r(gap)`; the simulation's method is `minlp`.
+
+The interior point accepts a point it cannot improve before its iteration
+limit when its scaled residuals are below $\max(\text{tol}, 10^{-8})$ and its
+error below $\max(10^3\,\text{tol}, 10^{-7})$, as IPOPT's acceptable level
+(a relaxation at a bound stalled at a dual error of 7e-10).
+
+GAMS: `_cge_gams_user` declares a variable `integer variable` or `binary
+variable` when all its elements are of that type (a mixture stops the
+export), with `.lo = -inf` and `.up = inf` for integer elements before the
+bounds of `cge_bound`; the driver solves `cgeprog using minlp` (or `mip`)
+with `optcr = 0, optca = 0`, SCIP by default. Two fixes found by the export
+check: a model without sets declares `set AC(*)`, and an integer constant
+exponent is written `power(x, n)` (`_cge_gams_pow`), since GAMS's `x ** y`
+needs $x > 0$.
+
+Saving a model without simulations and loading it gave a 0 x 0 matrix of
+simulations, to which a solution could not be joined; `_cge_store_sim` now
+shapes it first.
+
+Tests (`tests/test_mip.do`): a knapsack of eight items against enumeration
+of the 256 choices (37, in 19 nodes); integer least squares against
+enumeration (0.52 at (2, 1)); an equation among integers with a continuous
+variable, whose leaves are square systems (4 at (3, 2, 3)); integer
+infeasibility (status 10); a node limit of 1 (status 14); types reset by
+`continuous` and kept by save and load; errors. GAMS with SCIP (export check
+cases miknap, a knapsack with a unique optimum, and miils) to 6e-16 and
+2.1e-11.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

@@ -240,6 +240,10 @@ struct cge_model {
     // stored simulation solved, empty for the whole model
     string matrix    mdef
     string colvector simmodel
+    // integer and binary variables (from version 0.18.0), as GAMS's integer
+    // and binary variables: each definition's variable, elements and type
+    // (integer, binary or continuous), applied in order
+    string matrix    intdef
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
@@ -257,7 +261,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.17.0")
+    return("0.18.0")
 }
 
 // =====================================================================
@@ -5362,6 +5366,9 @@ string scalar _cge_mstat_name(real scalar ms)
     if (ms == 5) return("locally infeasible")
     if (ms == 6) return("intermediate infeasible")
     if (ms == 7) return("feasible solution")
+    if (ms == 8) return("integer solution")
+    if (ms == 10) return("integer infeasible")
+    if (ms == 14) return("no solution returned")
     if (ms == 13) return("error, no solution")
     if (ms == 16) return("solved")
     return("unknown")
@@ -8295,6 +8302,9 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
 {
     real scalar k
     k = _cge_find(M.simname, name)
+    // a model loaded without simulations has them as a 0 x 0 matrix, which a
+    // column cannot be joined to
+    if (!cols(M.simx)) M.simx = J(rows(x), 0, .)
     if (k == 0) {
         M.simname = M.simname \ name
         M.simclosure = M.simclosure \ _cge_closure_text(M)
@@ -8369,7 +8379,7 @@ void _cge_set_simobj(struct cge_model scalar M, real scalar k, string scalar obj
 
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
                 real scalar steps, real scalar diagnose, string scalar lin, string scalar obj, real scalar tlim,
-                string scalar mname, string scalar from, string scalar hold)
+                string scalar mname, string scalar from, string scalar hold, real scalar nodes, real scalar optcr)
 {
     struct cge_model scalar M
     real colvector x, x2, start
@@ -8385,8 +8395,15 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     if (args() < 11) mname = ""
     if (args() < 12) from = ""
     if (args() < 13) hold = ""
+    // branch and bound (from version 0.18.0): the node limit and the relative
+    // gap
+    if (args() < 14) nodes = -1
+    if (args() < 15) optcr = -1
     M = _cge_load()
     _cge_need(M, "calibrated")
+    if (obj == "" & _cge_sa(M)) if (rows(_cge_int_pos(M))) {
+        _cge_fail("the model has integer variables: solve it with minimize() or maximize(), as a mixed-integer programme", 459)
+    }
     // the options of cge_options where the command gives none, and the
     // deadline of the time limit (from version 0.16.0)
     tol = _cge_opttol(M, tol)
@@ -8395,7 +8412,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     _cge_deadline_set(_cge_opttime(M, tlim))
     // a nonlinear programme (from version 0.15.0)
     if (obj != "") {
-        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold)
+        _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold, nodes, optcr)
         _cge_deadline_set(.)
         return
     }
@@ -8821,6 +8838,13 @@ void _cge_bd_clear(string scalar name)
         if (!_cge_vidx(M, name)) _cge_fail("cge_bound: " + name + " is not a model or user variable", 198)
         keep = (M.bddef[., 1] :!= name)
         M.bddef = (any(keep) ? select(M.bddef, keep) : J(0, 7, ""))
+    }
+    // the integer and binary types (from version 0.18.0)
+    if (cols(M.intdef) != 3) M.intdef = J(0, 3, "")
+    if (name == "") M.intdef = J(0, 3, "")
+    else if (rows(M.intdef)) {
+        keep = (M.intdef[., 1] :!= name)
+        M.intdef = (any(keep) ? select(M.intdef, keep) : J(0, 3, ""))
     }
     _cge_bd_sync(M)
     _cge_store(M)
@@ -16485,8 +16509,12 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
     nc = (rows(M.bY) ? sum(p.bmode :> 0) : 0)
     if (nc & type != "mcp") _cge_fail("the scenario has constraints: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
     // a nonlinear programme (from version 0.15.0): its objective in GAMS
-    if (sim != "") if (M.simmethod[k] == "nlp") {
-        if (type != "nlp") _cge_fail("simulation " + sim + " is a nonlinear programme: export it with type(nlp) and an NLP solver", 198)
+    if (sim != "") if (M.simmethod[k] == "nlp" | M.simmethod[k] == "minlp") {
+        if (M.simmethod[k] == "nlp" & type != "nlp") _cge_fail("simulation " + sim + " is a nonlinear programme: export it with type(nlp) and an NLP solver", 198)
+        // a mixed-integer programme (from version 0.18.0)
+        if (M.simmethod[k] == "minlp" & type != "minlp" & type != "mip") {
+            _cge_fail("simulation " + sim + " has integer variables: export it with type(minlp) or type(mip) and a MINLP or MIP solver", 198)
+        }
         (void) _cge_nlp_tok(M, _cge_simobj(M, k), sgn, gobj)
     }
     // a simulation of a named model (from version 0.17.0): the model's
@@ -16506,7 +16534,9 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
     lab = _cge_us_alllabels(M)
     fh = _cge_gopen(dir + "/cge_data.inc")
     fput(fh, "* The labels of a standalone model (cge_model new), written by cge_gams")
-    fput(fh, "set AC 'labels of the model' /")
+    // a model without sets has an empty set of labels, which GAMS reads only
+    // with its domain (from version 0.18.0)
+    fput(fh, "set AC" + (rows(lab) ? "" : "(*)") + " 'labels of the model' /")
     for (k = 1; k <= rows(lab); k++) fput(fh, "    '" + lab[k] + "'" + (k < rows(lab) ? "," : ""))
     fput(fh, "/;")
     fput(fh, "alias (AC, ACP);")
@@ -16635,8 +16665,11 @@ void _cge_gams_driver_sa(string scalar dir, string scalar name, string scalar so
         for (j = 1; j <= rows(fxl); j++) fput(fh, fxl[j])
     }
     if (isnlp) {
-        fput(fh, "option nlp = %cgesolver%;")
-        fput(fh, "solve cgeprog using nlp " + (sgn < 0 ? "maximizing" : "minimizing") + " OBJV;")
+        // a mixed-integer programme (from version 0.18.0), solved to a zero gap
+        if (type == "minlp" | type == "mip") fput(fh, "option " + type + " = %cgesolver%, optcr = 0, optca = 0;")
+        else fput(fh, "option nlp = %cgesolver%;")
+        fput(fh, "solve cgeprog using " + (type == "minlp" | type == "mip" ? type : "nlp") + " " +
+             (sgn < 0 ? "maximizing" : "minimizing") + " OBJV;")
         fput(fh, "mstat = cgeprog.modelstat;")
     }
     else if (subeqs != "") {
@@ -16840,6 +16873,18 @@ void _cge_gams_compare_dyn(string scalar dir, string scalar run, | real scalar i
 }
 
 // 1 if the scenario (current, or stored simulation sim) has constraints
+// 1 if simulation sim is a mixed-integer programme (from version 0.18.0)
+real scalar _cge_gams_isint(string scalar sim)
+{
+    struct cge_model scalar M
+    real scalar k
+    if (sim == "") return(0)
+    M = _cge_load()
+    k = _cge_find(M.simname, sim)
+    if (!k) return(0)
+    return(M.simmethod[k] == "minlp")
+}
+
 // 1 if simulation sim is a nonlinear programme (from version 0.15.0)
 real scalar _cge_gams_isnlp(string scalar sim)
 {
@@ -16849,7 +16894,7 @@ real scalar _cge_gams_isnlp(string scalar sim)
     M = _cge_load()
     k = _cge_find(M.simname, sim)
     if (!k) return(0)
-    return(M.simmethod[k] == "nlp")
+    return(M.simmethod[k] == "nlp" | M.simmethod[k] == "minlp")
 }
 
 real scalar _cge_gams_hascons(string scalar sim)
@@ -16991,7 +17036,7 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     }
     walras = .
     for (i = 1; i <= rows(key); i++) if (key[i] == "WALRAS||") walras = val[i]
-    if (M.simmethod[k] == "nlp") printf("{txt}GAMS model status: base not solved (the starting levels of a nonlinear programme), scenario {res}%g{txt} (1 or 2: optimal)\n", status)
+    if (M.simmethod[k] == "nlp" | M.simmethod[k] == "minlp") printf("{txt}GAMS model status: base not solved (the starting levels of a nonlinear programme), scenario {res}%g{txt} (1 or 2: optimal)\n", status)
     else printf("{txt}GAMS model status: base {res}%g{txt}, scenario {res}%g{txt} (1, 2, 15 or 16: solved)\n", bstatus, status)
     printf("{txt}Base: {res}%f{txt} values compared; largest relative difference {res}%9.2e{txt}%s\n", nb, db,
            (vb != "" ? " (" + vb + ")" : ""))
@@ -18853,10 +18898,44 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
         if (opst[rows(opst), 1] == 3) _cge_fail("a parenthesis is opened but not closed", 198)
         out = out \ _cge_u_pop(opst)
     }
-    gams = invtokens(gtok, " ")
+    gams = invtokens(_cge_gams_pow(gtok), " ")
     n = rows(out)
     if (!n) _cge_fail("an empty expression", 198)
     return(out)
+}
+
+// GAMS's x ** y is defined for x > 0 only: an integer constant exponent is
+// written power(x, n), which takes any x (from version 0.18.0). The left
+// operand is one token or a group in parentheses with its function's name
+string rowvector _cge_gams_pow(string rowvector g)
+{
+    real scalar k, a, depth, n
+    k = 2
+    while (k < cols(g)) {
+        n = (g[k] == "**" ? strtoreal(g[k + 1]) : .)
+        if (n < . & n == round(n) & abs(n) <= 1000) {
+            a = k - 1
+            if (g[a] == ")") {
+                depth = 0
+                // a power() written for an inner exponent opens a group too
+                for (; a >= 1; a--) {
+                    if (g[a] == ")") depth++
+                    else if (g[a] == "(" | g[a] == "power(") depth--
+                    if (depth == 0) break
+                }
+                if (a < 1) return(g)
+                if (a > 1 & g[a] == "(") {
+                    if (regexm(g[a - 1], "^[a-zA-Z_][a-zA-Z0-9_]*$") & !anyof(("and", "or", "not", "eq", "ne"), g[a - 1])) a--
+                }
+            }
+            g = (a > 1 ? g[|1 \ a - 1|] : J(1, 0, "")), "power(", g[|a \ k - 1|], ",", g[k + 1], ")",
+                (k + 2 <= cols(g) ? g[|k + 2 \ cols(g)|] : J(1, 0, ""))
+            k = k + 4
+            continue
+        }
+        k++
+    }
+    return(g)
 }
 
 // The base value of element args of a parameter (from version 0.11.0): a user
@@ -20594,7 +20673,8 @@ void _cge_un_widen(struct cge_model scalar M)
 void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar fw)
 {
     string colvector e1, e2, decl
-    real colvector pos, ul, ur
+    real colvector pos, ul, ur, ity, tys
+    real scalar vty
     real matrix LG
     real scalar fh, fh2, k, kv, i, gap
     string scalar g, dom, ix
@@ -20644,13 +20724,21 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
         fput(fh, "XRP('" + M.urep[i, 1] + "', '" + (M.urep[i, 2] == "" ? "0" : M.urep[i, 2]) + "', '" +
              (M.urep[i, 3] == "" ? "0" : M.urep[i, 3]) + "') = 1;")
     }
+    // the types of the elements (from version 0.18.0): GAMS declares integer
+    // and binary variables as such, a whole variable at a time
+    ity = _cge_int_type(M)
     for (k = 1; k <= M.nuv; k++) {
         kv = rows(M.vname) - M.nuv + k
         g = "U_" + M.vname[kv]
         dom = (M.vset[kv] == "" ? "" : (_cge_nidx(M.vset[kv]) == 2 ? "(AC, AC)" : "(AC)"))
-        fput(fh, "variable " + g + dom + ";")
         _cge_vlabels(M, kv, e1, e2)
         pos = _cge_vpos(M, kv)
+        tys = ity[select(pos, M.exists[pos, 1])]
+        vty = (rows(tys) ? max(tys) : 0)
+        if (rows(tys)) if (min(tys) != vty) {
+            _cge_fail("cge_gams: variable " + M.vname[kv] + " has elements of different types (integer, binary, continuous); GAMS declares a variable's type as a whole", 198)
+        }
+        fput(fh, (vty == 1 ? "integer variable " : (vty == 2 ? "binary variable " : "variable ")) + g + dom + ";")
         for (i = 1; i <= rows(pos); i++) {
             // elements outside a conditional domain do not exist (from
             // version 0.7.2): fixed at 0, as in Stata, where referred to
@@ -20658,6 +20746,8 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
                 fput(fh, g + ".fx" + _cge_gams_elem(e1[i], e2[i]) + " = 0;")
                 continue
             }
+            // an integer variable has no bounds but those of cge_bound
+            if (vty == 1) fput(fh, g + ".lo" + _cge_gams_elem(e1[i], e2[i]) + " = -inf;  " + g + ".up" + _cge_gams_elem(e1[i], e2[i]) + " = inf;")
             // an exogenous user variable (from version 0.9.0)
             if (M.uvdef[k, 6] == "fixed") fput(fh, g + ".fx" + _cge_gams_elem(e1[i], e2[i]) + " = " + _cge_gnum(M.x0[pos[i]]) + ";")
             fput(fh, g + ".l" + _cge_gams_elem(e1[i], e2[i]) + " = " + _cge_gnum(M.x0[pos[i]]) + ";")
@@ -22378,6 +22468,7 @@ void _cge_model_new()
     M.simstat = J(0, 2, .)
     M.simmodel = J(0, 1, "")
     M.mdef = J(0, 2, "")
+    M.intdef = J(0, 3, "")
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
@@ -22797,6 +22888,271 @@ void _cge_mdef_list()
 }
 
 // =====================================================================
+// Integer variables and branch and bound (from version 0.18.0;
+// model_spec.md, Section 27)
+// =====================================================================
+
+// cge_bound NAME, integer|binary|continuous: the type of the elements of a
+// user variable of a standalone model; binary also bounds them by 0 and 1
+void _cge_int_add(string scalar name, string scalar elems, string scalar type)
+{
+    struct cge_model scalar M
+    real colvector pos
+    real scalar k
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (!_cge_sa(M)) _cge_fail("cge_bound: integer and binary variables are variables of a standalone model (cge_model new)", 198)
+    k = _cge_vidx(M, name)
+    if (!k) _cge_fail("cge_bound: " + name + " is not a variable of the model", 198)
+    pos = _cge_bd_pos(M, k, elems)
+    if (!rows(pos)) _cge_fail("cge_bound: " + name + " has no element in this model", 459)
+    if (cols(M.intdef) != 3) M.intdef = J(0, 3, "")
+    M.intdef = M.intdef \ (name, strtrim(elems), type)
+    if (type == "binary") {
+        if (cols(M.bddef) != 7) M.bddef = J(0, 7, "")
+        M.bddef = M.bddef \ (name, strtrim(elems), "0", "1", "", "", "")
+        _cge_bd_sync(M)
+        _cge_bd_valid(M)
+    }
+    _cge_store(M)
+    printf("{txt}Variable {res}%s{txt}: %s for %f element(s)%s\n", name, type, rows(pos),
+           (type == "binary" ? ", with bounds 0 and 1" : ""))
+    st_global("r(name)", name)
+    st_numscalar("r(N_elements)", rows(pos))
+    st_numscalar("r(N_integer)", rows(_cge_int_pos(M)))
+}
+
+// The positions of the integer and binary elements
+real colvector _cge_int_pos(struct cge_model scalar M)
+{
+    real colvector isint, pos
+    real scalar r, k
+    if (cols(M.intdef) != 3 | !rows(M.intdef)) return(J(0, 1, .))
+    isint = J(rows(M.x0), 1, 0)
+    for (r = 1; r <= rows(M.intdef); r++) {
+        k = _cge_vidx(M, M.intdef[r, 1])
+        if (!k) continue
+        pos = _cge_bd_pos(M, k, M.intdef[r, 2], 1)
+        if (rows(pos)) isint[pos] = J(rows(pos), 1, (M.intdef[r, 3] != "continuous"))
+    }
+    return(_cge_which(isint :& M.exists))
+}
+
+// The type of each element for GAMS: 0 continuous, 1 integer, 2 binary
+real colvector _cge_int_type(struct cge_model scalar M)
+{
+    real colvector ty, pos
+    real scalar r, k
+    ty = J(rows(M.x0), 1, 0)
+    if (cols(M.intdef) != 3) return(ty)
+    for (r = 1; r <= rows(M.intdef); r++) {
+        k = _cge_vidx(M, M.intdef[r, 1])
+        if (!k) continue
+        pos = _cge_bd_pos(M, k, M.intdef[r, 2], 1)
+        if (rows(pos)) ty[pos] = J(rows(pos), 1, (M.intdef[r, 3] == "integer" ? 1 : (M.intdef[r, 3] == "binary" ? 2 : 0)))
+    }
+    return(ty)
+}
+
+// A node of branch and bound: the relaxation with the integer variables
+// ipos within nlo and nup (the other bounds lo and up), solved from x0;
+// those whose bounds meet are fixed. With more free variables than equations
+// the interior point solves it, with as many Newton's method and a point
+// within the bounds; with none left it is a point. Returns 1 with a solution
+// x, its objective f and the multipliers lam
+real scalar _cge_bb_node(struct cge_model scalar M, real colvector xfix, real colvector x0, real matrix tok,
+                         real scalar sgn, real scalar tol, real scalar maxit, real colvector ipos,
+                         real colvector lo, real colvector up, real colvector nlo, real colvector nup,
+                         real colvector x, real scalar f, real scalar iter, real colvector lam)
+{
+    struct cge_model scalar N
+    struct cge_sys scalar S
+    real colvector lo2, up2, xf, st, fx, fr, sc
+    real scalar conv, err, feas
+    string scalar method
+    iter = 0
+    lam = J(0, 1, .)
+    f = .
+    x = x0
+    if (any(nlo :> nup :+ 1e-9)) return(0)
+    N = M
+    lo2 = lo
+    up2 = up
+    lo2[ipos] = nlo
+    up2[ipos] = nup
+    xf = xfix
+    st = x0
+    fx = _cge_which(N.exists :& (N.fixed :== 0) :& (abs(up2 - lo2) :<= 1e-12 :* rowmax((J(rows(lo2), 1, 1), abs(lo2)))))
+    if (rows(fx)) {
+        N.fixed[fx] = J(rows(fx), 1, 1)
+        xf[fx] = lo2[fx]
+        st[fx] = lo2[fx]
+    }
+    N.bdlp = _cge_which(lo2 :> -1e299)
+    N.bdlv = (rows(N.bdlp) ? lo2[N.bdlp] : J(0, 1, .))
+    N.bdup = _cge_which(up2 :< 1e299)
+    N.bduv = (rows(N.bdup) ? up2[N.bdup] : J(0, 1, .))
+    S = _cge_sys_make(N, 0)
+    if (rows(S.free) > S.neq) {
+        feas = 0
+        x = _cge_nlp_solve(N, N.p, xf, st, tok, sgn, tol, maxit, 0, conv, iter, err, f, lam, feas, 1)
+        return(conv & f < .)
+    }
+    if (rows(S.free) == S.neq & S.neq > 0) {
+        x = _cge_solve_point(N, N.p, xf, st, tol, maxit, 0, conv, iter, err, method, 0, 0)
+        if (!conv) return(0)
+    }
+    else {
+        if (rows(S.free)) return(0)
+        x = xf
+        if (S.neq) if (!(_cge_maxres(N, N.p, x) < tol)) return(0)
+    }
+    fr = S.free
+    if (rows(fr)) {
+        sc = rowmax((J(rows(fr), 1, 1), abs(x[fr])))
+        if (any(x[fr] :< lo2[fr] :- 1e-9 :* sc) | any(x[fr] :> up2[fr] :+ 1e-9 :* sc)) return(0)
+    }
+    f = _cge_u_value(N, N.p, x, tok)
+    return(f < .)
+}
+
+// Branch and bound (from version 0.18.0) over the integer variables ipos,
+// as a GAMS MINLP or MIP solver: depth first, the child nearer the
+// relaxation's value first; each node's relaxation solved by _cge_bb_node,
+// branching on the most fractional variable, x <= floor(v) and x >= ceil(v);
+// a node whose relaxation, or whose parent's, is no better than the
+// incumbent less the gap tolerance (the larger of 1e-9 and optcr, relative)
+// is pruned. Statuses: 1 (optimal) when the search ends with an integer
+// solution, 8 (integer solution) when a limit stops it with one, 10 (integer
+// infeasible) when it ends without, 14 (no solution returned) when a limit
+// stops it without; nn the nodes solved, bound the best bound
+real colvector _cge_bb(struct cge_model scalar M, real colvector xfix, real colvector start, real matrix tok,
+                       real scalar sgn, real scalar tol, real scalar maxit, real scalar trace, real colvector ipos,
+                       real scalar nodemax, real scalar optcr, real scalar conv, real scalar iter, real scalar err,
+                       real scalar fobj, real colvector lam, real scalar nn, real scalar bound, real scalar ms,
+                       real scalar ss)
+{
+    real colvector lo, up, nlo, nup, x, xn, xi, frac, xinc, laminc, lamn, d1, u1, xr
+    real matrix SL, SU, SX
+    real rowvector pb
+    real scalar ni, hinc, h, f, it, j, v, top, stop, hp, gtol, ok, fr
+    _cge_bd_full(M, lo, up)
+    ni = rows(ipos)
+    SL = lo[ipos]
+    SU = up[ipos]
+    SX = start
+    pb = -1e300
+    hinc = .
+    xinc = laminc = J(0, 1, .)
+    iter = nn = stop = 0
+    conv = 0
+    err = .
+    while (cols(SL)) {
+        if (nn >= nodemax) {
+            stop = 2
+            break
+        }
+        if (_cge_timeup()) {
+            stop = 3
+            break
+        }
+        top = cols(SL)
+        nlo = SL[., top]
+        nup = SU[., top]
+        x = SX[., top]
+        hp = pb[top]
+        if (top > 1) {
+            SL = SL[., (1..top - 1)]
+            SU = SU[., (1..top - 1)]
+            SX = SX[., (1..top - 1)]
+            pb = pb[(1..top - 1)]
+        }
+        else {
+            SL = SU = J(ni, 0, .)
+            SX = J(rows(start), 0, .)
+            pb = J(1, 0, .)
+        }
+        gtol = (hinc < . ? max((1e-9 * max((1, abs(hinc))), optcr * abs(hinc))) : 0)
+        if (hinc < .) if (hp >= hinc - gtol) continue
+        nn++
+        ok = _cge_bb_node(M, xfix, x, tok, sgn, tol, maxit, ipos, lo, up, nlo, nup, xn, f, it, lamn)
+        iter = iter + it
+        if (!ok) {
+            if (trace) printf("{txt}Node %f: no feasible relaxation\n", nn)
+            continue
+        }
+        h = sgn * f
+        if (hinc < .) if (h >= hinc - gtol) {
+            if (trace) printf("{txt}Node %f: relaxation {res}%14.8g{txt}, no better than the incumbent\n", nn, f)
+            continue
+        }
+        xi = xn[ipos]
+        frac = abs(xi :- round(xi))
+        if (max(frac) <= 1e-6) {
+            hinc = h
+            xinc = xn
+            laminc = lamn
+            if (trace) printf("{txt}Node %f: integer solution {res}%14.8g\n", nn, f)
+            continue
+        }
+        // the most fractional variable
+        j = 1
+        for (fr = 2; fr <= ni; fr++) if (frac[fr] > frac[j]) j = fr
+        v = xi[j]
+        if (trace) printf("{txt}Node %f: relaxation {res}%14.8g{txt}; branch on %s = %g\n", nn, f, _cge_poslabel(M, ipos[j]), v)
+        d1 = nup
+        d1[j] = floor(v)
+        u1 = nlo
+        u1[j] = ceil(v)
+        // the child nearer v is explored first, so pushed last
+        if (v - floor(v) < 0.5) {
+            SL = SL, u1, nlo
+            SU = SU, nup, d1
+        }
+        else {
+            SL = SL, nlo, u1
+            SU = SU, d1, nup
+        }
+        SX = SX, xn, xn
+        pb = pb, h, h
+    }
+    // the best bound: the incumbent, or the least bound of the nodes left
+    if (cols(pb)) bound = min(pb)
+    else bound = .
+    if (hinc < .) bound = (bound < . ? min((bound, hinc)) : hinc)
+    if (bound <= -1e299) bound = .
+    bound = (bound < . ? sgn * bound : .)
+    if (hinc >= .) {
+        fobj = .
+        ms = (stop ? 14 : 10)
+        ss = (stop ? stop : 1)
+        lam = J(0, 1, .)
+        return(start)
+    }
+    // the incumbent polished with its integer values fixed
+    xr = xinc
+    xr[ipos] = round(xinc[ipos])
+    ok = _cge_bb_node(M, xfix, xr, tok, sgn, tol, maxit, ipos, lo, up, round(xinc[ipos]), round(xinc[ipos]), xn, f, it, lamn)
+    iter = iter + it
+    if (ok) {
+        xinc = xn
+        laminc = lamn
+        hinc = sgn * f
+    }
+    fobj = sgn * hinc
+    if (!stop) bound = fobj
+    // the marginals of the equations with the integer values fixed, as GAMS
+    // reports them for a MIP
+    lam = laminc
+    conv = !stop
+    ms = (stop ? 8 : 1)
+    ss = (stop ? stop : 1)
+    // the largest scaled residual of the equations at the solution
+    err = _cge_maxres(M, M.p, xinc)
+    return(xinc)
+}
+
+// =====================================================================
 // Nonlinear programmes (from version 0.15.0; model_spec.md, Section 24)
 // =====================================================================
 
@@ -22808,17 +23164,21 @@ void _cge_mdef_list()
 // simulation, with the multipliers of the equations
 void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar obj, real scalar tol,
                   real scalar maxit, real scalar trace, string scalar lin, | string scalar mname, string scalar from,
-                  string scalar hold)
+                  string scalar hold, real scalar nodes, real scalar optcr)
 {
     struct cge_sys scalar S
     struct cge_model scalar M2
     real matrix tok
-    real colvector x, lam, start, xs, usel
-    real scalar sgn, conv, iter, err, fobj, k, keeplin, feas, ms, ss
+    real colvector x, lam, start, xs, usel, ipos
+    real scalar sgn, conv, iter, err, fobj, k, keeplin, feas, ms, ss, nn, bnd
     string scalar g
     if (args() < 8) mname = ""
     if (args() < 9) from = ""
     if (args() < 10) hold = ""
+    if (args() < 11) nodes = -1
+    if (args() < 12) optcr = -1
+    if (nodes < 0 | nodes >= .) nodes = 10000
+    if (optcr < 0 | optcr >= .) optcr = 0
     if (!_cge_sa(M)) _cge_fail("minimize() and maximize() solve a nonlinear programme of a standalone model (cge_model new); optimise a model from a SAM with cge_optimize", 198)
     if (rows(M.bY)) {
         _cge_fail("constraints and inequalities paired with variables are complementarity conditions; a nonlinear programme takes equations and the bounds of cge_bound: write an inequality as an equation with a slack variable bounded at zero", 459)
@@ -22834,22 +23194,40 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     _cge_hold(M2, hold)
     start = _cge_named_from(M2, xs, from)
     feas = 0
-    x = _cge_nlp_solve(M2, M2.p, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas)
+    // integer variables (from version 0.18.0): branch and bound
+    ipos = _cge_int_pos(M2)
+    nn = 0
+    bnd = .
+    if (rows(ipos)) {
+        x = _cge_bb(M2, xs, start, tok, sgn, tol, maxit, trace, ipos, nodes, optcr, conv, iter, err, fobj, lam, nn, bnd, ms, ss)
+    }
+    else x = _cge_nlp_solve(M2, M2.p, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, feas)
     M.linsolver = keeplin
-    k = _cge_store_sim(M, name, x, conv, iter, err, "nlp")
+    k = _cge_store_sim(M, name, x, conv, iter, err, (rows(ipos) ? "minlp" : "nlp"))
     _cge_set_simobj(M, k, obj)
     _cge_set_simmodel(M, k, mname)
     // the statuses, in GAMS's codes (from version 0.16.0)
-    _cge_status(conv, 0, 1, feas, err, ms, ss)
+    if (!rows(ipos)) _cge_status(conv, 0, 1, feas, err, ms, ss)
     _cge_set_simstat(M, k, ms, ss)
     _cge_store(M)
-    if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) (interior point)\n", name, iter)
+    if (rows(ipos)) {
+        if (conv) printf("{txt}Simulation {res}%s{txt} solved by branch and bound: {res}%f{txt} node(s), {res}%f{txt} iteration(s)\n",
+                         name, nn, iter)
+        else {
+            printf("{err}Simulation %s: branch and bound stopped after %f node(s)%s\n", name, nn,
+                   (fobj < . ? " with an integer solution" : " without an integer solution"))
+            _cge_status_show(ms, ss)
+        }
+        if (bnd < .) printf("{txt}Best bound {res}%16.10g{txt}; relative gap {res}%9.3e\n", bnd,
+                            (fobj < . ? abs(fobj - bnd) / max((1e-10, abs(fobj))) : .))
+    }
+    else if (conv) printf("{txt}Simulation {res}%s{txt} solved in {res}%f{txt} iteration(s) (interior point)\n", name, iter)
     else {
         printf("{err}Simulation %s did not converge (largest scaled error %9.3e)\n", name, err)
         _cge_status_show(ms, ss)
     }
     printf("{txt}%s %s: {res}%16.10g\n", (sgn < 0 ? "Maximised" : "Minimised"), substr(obj, 5, .), fobj)
-    printf("{txt}Largest scaled error of the optimality conditions {res}%9.3e\n", err)
+    printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) ? "residual of the equations" : "error of the optimality conditions"), err)
     st_numscalar("r(converged)", conv)
     st_numscalar("r(iterations)", iter)
     st_numscalar("r(max_residual)", err)
@@ -22859,9 +23237,16 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     S = _cge_sys_make(M2, 0)
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
     st_global("r(model)", mname)
+    // branch and bound (from version 0.18.0)
+    st_numscalar("r(N_integer)", rows(ipos))
+    if (rows(ipos)) {
+        st_numscalar("r(nodes)", nn)
+        st_numscalar("r(bestbound)", bnd)
+        st_numscalar("r(gap)", (fobj < . & bnd < . ? abs(fobj - bnd) / max((1e-10, abs(fobj))) : .))
+    }
     if (rows(lam)) st_matrix("r(marginals)", lam')
     st_global("r(name)", name)
-    st_global("r(method)", "nlp")
+    st_global("r(method)", (rows(ipos) ? "minlp" : "nlp"))
     st_global("r(objective_expr)", substr(obj, 5, .))
 }
 
@@ -22936,7 +23321,8 @@ real scalar _cge_nlp_eval(struct cge_model scalar M, struct cge_par scalar p, re
 real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
                               real colvector start, real matrix tok, real scalar sgn, real scalar tol,
                               real scalar maxit, real scalar trace, real scalar conv, real scalar iter,
-                              real scalar err, real scalar fobj, real colvector lam, | real scalar feas)
+                              real scalar err, real scalar fobj, real colvector lam, | real scalar feas,
+                              real scalar soft)
 {
     struct cge_sys scalar S
     real colvector map, z, L, U, il, iu, gf, c, sl, su, zl, zu, rd, dz, dzl, dzu, zn, cn, gfn, e, gp, gm
@@ -22952,6 +23338,10 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
     err = .
     fobj = .
     lam = J(0, 1, .)
+    // soft (from version 0.18.0): a node of branch and bound returns without a
+    // solution instead of stopping
+    if (args() < 16) soft = 0
+    if (n <= m & soft) return(start)
     if (n <= m) {
         _cge_fail("a nonlinear programme needs more free variables than equations: the model has " + strofreal(n) +
                   " free variable element(s) and " + strofreal(m) + " equation(s)", 459)
@@ -22966,6 +23356,7 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
     iu = _cge_which(U :< .)
     for (k = 1; k <= rows(il); k++) {
         if (U[il[k]] < . & U[il[k]] - L[il[k]] <= 1e-12 * max((1, abs(L[il[k]])))) {
+            if (soft) return(start)
             _cge_fail(_cge_poslabel(M, S.free[il[k]]) + ": its lower and upper bounds are equal; fix it with cge_variable, fixed", 459)
         }
     }
@@ -22985,6 +23376,7 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
     // most 100
     osc = 1
     if (!_cge_nlp_eval(M, p, xfix, S, z, tok, sgn, osc, map, f, gf, c, Jm)) {
+        if (soft) return(start)
         _cge_fail("the objective or the equations cannot be evaluated at the start of the nonlinear programme", 459)
     }
     osc = max((1, max(abs(gf)) / 100))
@@ -23152,6 +23544,10 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
             zu[iu] = rowmax((rowmin((zu[iu], 1e10 * mu :/ su[iu])), mu :/ (1e10 :* su[iu])))
         }
     }
+    // a point the method cannot improve, before its iteration limit, at which
+    // the equations hold and the optimality conditions nearly do, is
+    // accepted, as IPOPT's acceptable level (from version 0.18.0)
+    if (!conv & it < maxit & err < max((1e3 * tol, 1e-7)) & ep < max((tol, 1e-8))) conv = 1
     x = xfix
     x[S.free] = z :* M.xscale[S.free]
     if (S.reduced) _cge_derive(M, p, x)
@@ -23560,6 +23956,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "simstat", M.simstat)
     _cge_io_put(fh, "mdef", M.mdef)
     _cge_io_put(fh, "simmodel", M.simmodel)
+    _cge_io_put(fh, "intdef", M.intdef)
     _cge_io_put(fh, "utok", M.utok)
     _cge_io_put(fh, "ustart", M.ustart)
     _cge_io_put(fh, "ulen", M.ulen)
@@ -23720,6 +24117,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "simstat") M.simstat = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "mdef") M.mdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "simmodel") M.simmodel = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "intdef") M.intdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "utok") M.utok = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "ustart") M.ustart = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "ulen") M.ulen = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)

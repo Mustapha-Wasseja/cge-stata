@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.8  24oct2026}{...}
+{* *! version 0.18.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -15,6 +15,9 @@
 
 {p 8 12 2}
 {cmd:cge_bound} {it:VAR}[{cmd:(}{it:e}[{cmd:,}{it:e2}]{cmd:)}]{cmd:,} {opt fix(#)} [{opt el:ements(list)} {opt rel:ative}]
+
+{p 8 12 2}
+{cmd:cge_bound} {it:VAR}[{cmd:(}{it:e}[{cmd:,}{it:e2}]{cmd:)}]{cmd:,} {opt int:eger}|{opt bin:ary}|{opt cont:inuous} [{opt el:ements(list)}]
 
 {p 8 12 2}
 {cmd:cge_bound} {it:VAR}{cmd:, clear}
@@ -111,8 +114,18 @@ the marginals of the constraints, as GAMS's solution listing does.
 {opt relative} reads the values as multiples of the base values.
 
 {phang}
-{opt clear}, after a variable, removes its attributes; {cmd:cge_bound, clear}
-removes every attribute. {opt list} displays the definitions.
+{opt integer}, {opt binary} and {opt continuous} (from version 0.18.0) set the
+type of the elements of a variable of a standalone model, as GAMS's
+{cmd:integer variable} and {cmd:binary variable}; {opt binary} also sets the
+bounds 0 and 1, and {opt continuous} makes elements continuous again. Each is
+given alone. A nonlinear programme with integer or binary elements
+({helpb cge_solve}, {opt minimize()} or {opt maximize()}) is solved by branch
+and bound.
+
+{phang}
+{opt clear}, after a variable, removes its attributes, its type included;
+{cmd:cge_bound, clear} removes every attribute. {opt list} displays the
+definitions.
 
 
 {title:Examples}

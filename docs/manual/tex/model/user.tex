@@ -453,6 +453,29 @@ written but not solved. The export check (\texttt{tools/gams}) solves
 problem 71 of \citet{hock1981}, a balancing by cross entropy and a frontier
 with a binding bound in GAMS with IPOPT and compares the solutions.
 
+\section{Integer variables}\label{sec:integer}
+
+From version 0.18.0, \cmd{cge_bound X, integer} or \cmd{binary} (with bounds 0
+and 1) makes elements of a standalone model's variables integers, and
+\cmd{continuous} makes them continuous again; a nonlinear programme with such
+elements is mixed-integer, as GAMS's MINLP and MIP models are. Branch and
+bound solves it: each node is the relaxation with bounds on the integer
+variables, solved by the interior point, or by Newton's method when the
+bounds leave as many free variables as equations; a node whose relaxation is
+fractional branches on the most fractional variable $x_j = v$ into $x_j \le
+\lfloor v \rfloor$ and $x_j \ge \lceil v \rceil$, exploring first the child
+nearer $v$, depth first; a node whose bound is no better than the incumbent,
+less the gap tolerance $\max(10^{-9}, \text{optcr}) \times |f|$, is pruned.
+The search ends with model status 1 (optimal) and an integer solution, whose
+continuous variables are solved again with the integers fixed, or 10
+(integer infeasible); a node or time limit gives 8 (integer solution) or 14
+(no solution returned). The interior point finds a local optimum of each
+relaxation, so that branch and bound is exact for problems whose relaxations
+are convex, as linear and convex quadratic ones are, and a heuristic
+otherwise. \manref{cge_gams} exports the problem as a GAMS MINLP (or, with
+\cmd{type(mip)}, a MIP), declaring integer and binary variables as such,
+solved by SCIP unless another solver is named.
+
 \section{Named models}\label{sec:namedmodels}
 
 From version 0.17.0, \cmd{cge_model define} names a model over a subset of a

@@ -1,4 +1,4 @@
-*! cge_gams.ado  v0.15.0  2026-10-24
+*! cge_gams.ado  v0.18.0  2026-10-25
 *! cge-stata: write the model and a scenario as a GAMS program, and
 *! optionally solve it in GAMS and compare the results (docs/gams.md)
 *!
@@ -38,11 +38,16 @@ program define cge_gams, rclass
     * solved as one, with IPOPT unless another solver is given
     local isnlp 0
     if "`sim'" != "" mata: st_local("isnlp", strofreal(_cge_gams_isnlp("`sim'")))
-    if "`solver'" == "" local solver = cond(`isnlp', "ipopt", "path")
+    * a mixed-integer programme (from version 0.18.0): MINLP, with SCIP unless
+    * another solver is given
+    local isint 0
+    if "`sim'" != "" mata: st_local("isint", strofreal(_cge_gams_isint("`sim'")))
+    if "`solver'" == "" local solver = cond(`isint', "scip", cond(`isnlp', "ipopt", "path"))
     local solver = strlower("`solver'")
     if "`type'" == "" {
         local type cns
         if inlist("`solver'", "ipopt", "ipopth", "minos", "snopt") | `isnlp' local type nlp
+        if `isint' local type minlp
         * a scenario with constraints is a mixed complementarity problem (from version 0.4.4)
         if "`dynamic'" == "" {
             mata: st_local("hascons", strofreal(_cge_gams_hascons("`sim'")))
@@ -50,8 +55,8 @@ program define cge_gams, rclass
         }
     }
     local type = strlower("`type'")
-    if !inlist("`type'", "cns", "nlp", "mcp") {
-        display as error "type() must be cns (a constrained nonlinear system), nlp or mcp"
+    if !inlist("`type'", "cns", "nlp", "mcp", "minlp", "mip") {
+        display as error "type() must be cns (a constrained nonlinear system), nlp, mcp, minlp or mip"
         exit 198
     }
     if "`run'" != "" & "`c(mode)'" == "batch" & "`c(os)'" == "Windows" {

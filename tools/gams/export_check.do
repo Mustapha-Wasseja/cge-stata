@@ -725,6 +725,49 @@ foreach case in nlphs071 nlpentropy nlpfrontier {
     }
 }
 
+* Mixed-integer programmes (version 0.18.0), solved by branch and bound and
+* by SCIP as MINLP: a knapsack of binary choices, with a unique optimum, and
+* integer least squares
+foreach case in miknap miils {
+    display as text _n "{hline 60}" _n "Case " as result "`case'"
+    quietly cge_model new
+    if "`case'" == "miknap" {
+        quietly cge_set i = i1 i2 i3 i4 i5 i6 i7 i8
+        quietly cge_parameter v(i), values(i1:15 i2:12 i3:11 i4:5 i5:13 i6:9 i7:10 i8:6)
+        quietly cge_parameter w(i), values(i1:8 i2:5 i3:6 i4:3 i5:7 i6:4 i7:6 i8:2)
+        quietly cge_variable X(i), value(0.5)
+        quietly cge_variable S, value(1)
+        quietly cge_equation CAP: sum(i, w(i) * X(i)) + S = 20
+        quietly cge_bound X, binary
+        quietly cge_bound S, lower(0)
+        local obj maximize(sum(i, v(i) * X(i)))
+    }
+    else {
+        quietly cge_variable X, value(1)
+        quietly cge_variable Y, value(1)
+        quietly cge_variable S, value(1.5)
+        quietly cge_equation CAP: X + Y + S = 3.5
+        quietly cge_bound X, lower(0) upper(10)
+        quietly cge_bound Y, lower(0) upper(10)
+        quietly cge_bound X, integer
+        quietly cge_bound Y, integer
+        quietly cge_bound S, lower(0)
+        local obj minimize((X - 2.4)^2 + (Y - 1.6)^2)
+    }
+    quietly cge_solve, name(`case') `obj'
+    assert r(converged) == 1
+    if "`phase'" == "export" {
+        cge_gams using `"`dir'/`case'"', sim(`case') replace
+    }
+    else {
+        capture confirm file `"`dir'/`case'/cge_`case'.csv"'
+        if _rc continue
+        cge_gams using `"`dir'/`case'"', sim(`case') compare noexport
+        post `post' ("`case'") ("`case'") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 * A named model (version 0.17.0): two markets of a standalone model solved on
 * their own after a shock, with the value of their sales outside the model at
 * its level; GAMS solves model cgesub with the variable outside it fixed

@@ -55,6 +55,8 @@ cge_solve, name(ls) minimize(sum(i, X(i)^2))
 \optarg{mod}{el}{name} & solve named model \argu{name} of a standalone model\\
 \optarg{}{from}{sim} & start from the levels of simulation \argu{sim}\\
 \optarg{}{hold}{varlist} & hold variables at their levels for this solve\\
+\optarg{nod}{es}{\#} & node limit of branch and bound; default \texttt{10000}\\
+\optarg{}{optcr}{\#} & relative gap of branch and bound; default \texttt{0}\\
 \optarg{step}{s}{\#} & apply the shocks in \argu{\#} equal steps; default \texttt{0}, only after a direct solve fails\\
 \optgroup{Nonlinear programmes of standalone models}
 \optarg{min}{imize}{expression} & minimise \argu{expression} subject to the equations\\
@@ -100,6 +102,12 @@ standalone model at their levels for this solve, as GAMS's \cmd{x.fx = x.l}:
 whole variables, \cmd{hold(P Q)}, or elements, \cmd{hold(P(g1))}, with
 \cmd{P(e1,e2)} for two indexes. With \opt{}{from()}, the levels are those of
 the simulation.
+
+\item[\optarg{nod}{es}{\#}] and \optarg{}{optcr}{\#} (from version 0.18.0)
+set the node limit and the relative gap of branch and bound, which solves a
+nonlinear programme with integer or binary variables (\manref{cge_bound}), as
+GAMS's \cmd{nodlim} and \cmd{optcr}. The defaults are 10,000 nodes and a gap
+of 0, to the tolerance $10^{-9}$.
 
 \item[\optarg{time}{limit}{\#}] (from version 0.16.0) sets a time limit in
 seconds, as GAMS's \cmd{reslim}; by default there is none, or the limit set by
@@ -239,7 +247,10 @@ Model status & Meaning & When\\
 5 & locally infeasible & the solver stopped without a solution\\
 6 & intermediate infeasible & an iteration or time limit stopped the solve\\
 7 & feasible solution & a nonlinear programme stopped short at a feasible point\\
+8 & integer solution & branch and bound stopped by a limit with an integer solution\\
+10 & integer infeasible & branch and bound ended without an integer solution\\
 13 & error, no solution & an equation cannot be evaluated at the start\\
+14 & no solution returned & branch and bound stopped by a limit without one\\
 16 & solved & a solution of a system of equations\\
 \hline
 Solver status & Meaning & \\
@@ -277,6 +288,16 @@ The solution is the RAS balance of the prior, $X_{rc} = \rho_r A_{rc}
 \citep{mcdougall1999}, to $10^{-11}$, as the test suite checks.
 \manref{cge_balance} balances a SAM by these methods directly.
 
+\cgesubsec{Example 6: integer variables}
+
+From version 0.18.0, integer and binary variables (\manref{cge_bound}) make a
+nonlinear programme a mixed-integer one, solved by branch and bound. A
+knapsack of eight items, with the capacity written as an equation with a
+slack:
+\stlog{solve_mip}
+The optimum is that of every one of the 256 choices; the nodes are the
+relaxations solved.
+
 \cgesubsec{The reduced and the full systems}
 
 Explicit definitions, such as intermediate and household demand, are left out
@@ -309,11 +330,15 @@ to the tolerance, and the test suite checks that they do.
 \res{r(N_dof)} & free variables less equations, for a nonlinear programme\\
 \resgroup{Macros}
 \res{r(name)} & name of the simulation\\
-\res{r(method)} & solution method: \cmd{newton}, \cmd{broydenpowell}, with constraints \cmd{semismooth}, or \cmd{nlp}\\
+\res{r(method)} & solution method: \cmd{newton}, \cmd{broydenpowell}, with constraints \cmd{semismooth}, \cmd{nlp} or \cmd{minlp}\\
 \res{r(objective_expr)} & the objective of a nonlinear programme\\
 \res{r(model)} & the named model solved, if any (from version 0.17.0)\\
 \res{r(from)} & the simulation the solve started from, if any\\
 \res{r(hold)} & the variables held, if any\\
+\res{r(N_integer)} & integer and binary elements, for a nonlinear programme (from version 0.18.0)\\
+\res{r(nodes)} & nodes of branch and bound\\
+\res{r(bestbound)} & the best bound of branch and bound\\
+\res{r(gap)} & its relative gap from the objective\\
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto} (from version 0.10.1)\\
 \res{r(closure)} & closure\\
 \res{r(constraints)} & the constraints and their regimes, if any\\

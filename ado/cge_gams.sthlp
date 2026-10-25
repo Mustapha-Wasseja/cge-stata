@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.15.0  25oct2026}{...}
+{* *! version 0.18.0  25oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_gams} {helpb using} {it:folder}
 [{cmd:,} {opt sim(name)} {opt dyn:amic(name)} {opt loop(name)} {opt replace} {opt run} {opt compare} {opt noexport}
-{opt gams(path)} {opt solver(name)} {opt type(cns|nlp|mcp)} {opt imp:ort(name)}]
+{opt gams(path)} {opt solver(name)} {opt type(cns|nlp|mcp|minlp|mip)} {opt imp:ort(name)}]
 
 
 {title:Description}
@@ -145,7 +145,7 @@ the GAMS program writes an option file with tolerances scaled to the size of
 the SAM for PATH, CONOPT, IPOPT and KNITRO; other solvers use their defaults.
 
 {phang}
-{opt type(cns|nlp|mcp)} chooses the GAMS model type:
+{opt type(cns|nlp|mcp|minlp|mip)} chooses the GAMS model type:
 
 {phang2}o  {cmd:cns}, a constrained nonlinear system (PATH, CONOPT, KNITRO);{p_end}
 {phang2}o  {cmd:nlp}, the same equations with a constant objective, for NLP solvers;{p_end}
@@ -159,7 +159,10 @@ simulation that {helpb cge_solve} solved as a nonlinear programme, with
 one: its objective is the variable {cmd:OBJV}, defined by equation
 {cmd:EOBJV}, which {cmd:solve cgeprog using nlp} minimises or maximises, and
 its base, the starting levels, is written but not solved; it needs
-{cmd:type(nlp)}. Both
+{cmd:type(nlp)}. One with integer or binary variables (from version 0.18.0)
+is exported as a mixed-integer programme, {cmd:type(minlp)} by default or
+{cmd:type(mip)}, solved by SCIP unless {opt solver()} names another, to a gap
+of 0; its integer and binary variables are declared as such. Both
 solver and type can also be set when GAMS is run, for example
 {cmd:gams cge_run.gms --cgesolver=ipopt --cgetype=nlp}.
 

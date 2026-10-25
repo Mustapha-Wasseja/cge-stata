@@ -38,6 +38,12 @@ cge_bound, list
 cge_bound, clear
 \end{stcode}
 
+From version 0.18.0, \opt{int}{eger}, \opt{bin}{ary} and
+\opt{cont}{inuous} set the type of the elements of a variable of a standalone
+model, as GAMS's \cmd{integer variable} and \cmd{binary variable}: a nonlinear
+programme with integer or binary variables is solved by branch and bound
+(\manref{cge_solve}).
+
 \cgesec{Syntax}
 
 Bounds, scales and starting levels
@@ -47,6 +53,10 @@ Bounds, scales and starting levels
 The value of a fixed variable
 \begin{stsyntax}
 \cmdb{cge_bound} \argu{VAR}[\cmd{(}\argu{e}[\cmd{,}\argu{e2}]\cmd{)}] \texttt{,} \optarg{}{fix}{\#} [\optarg{el}{ements}{list} \opt{rel}{ative}]
+\end{stsyntax}
+The type of a variable of a standalone model (from version 0.18.0)
+\begin{stsyntax}
+\cmdb{cge_bound} \argu{VAR}[\cmd{(}\argu{e}[\cmd{,}\argu{e2}]\cmd{)}] \texttt{,} \opt{int}{eger}|\opt{bin}{ary}|\opt{cont}{inuous} [\optarg{el}{ements}{list}]
 \end{stsyntax}
 Remove the attributes of a variable, or display and remove them all
 \begin{stsyntax}
@@ -67,6 +77,8 @@ several are given in \opt{}{elements()}, as in \manref{cge_shock}, with
 \optarg{sc}{ale}{\#} & scale of the variable in the solver, as \cmd{.scale}\\
 \optarg{lev}{el}{\#} & starting level of a free variable, as \cmd{.l}\\
 \optarg{}{fix}{\#} & value of a variable fixed under the closure, as \cmd{.fx}\\
+\opt{int}{eger}, \opt{bin}{ary} & integer, or binary with bounds 0 and 1 (from version 0.18.0)\\
+\opt{cont}{inuous} & continuous again\\
 \optgroup{Elements and values}
 \optarg{el}{ements}{list} & the elements\\
 \opt{rel}{ative} & values as multiples of the base values\\
@@ -101,6 +113,13 @@ an element in parentheses.
 
 \item[\opt{rel}{ative}] reads the values as multiples of the base values, and
 \opt{}{scale()} as a multiple of the automatic scale.
+
+\item[\opt{int}{eger}, \opt{bin}{ary} and \opt{cont}{inuous}] (from version
+0.18.0) set the type of the elements of a variable of a standalone model, as
+GAMS's \cmd{integer variable} and \cmd{binary variable}; \opt{bin}{ary} also
+sets the bounds 0 and 1. Each is given alone. A nonlinear programme with
+integer or binary elements is solved by branch and bound
+(\secref{sec:integer}).
 
 \item[\opt{}{clear}] after a variable removes its attributes;
 \cmd{cge_bound, clear} removes every attribute. \opt{}{list} displays the
