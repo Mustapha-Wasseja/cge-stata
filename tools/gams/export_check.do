@@ -796,6 +796,35 @@ else {
     }
 }
 
+* Labels that are the names of indexes (version 0.23.0): labels g1 to g3 of
+* a set whose aliases are g2 and g3, in sums over g2 and g3 within equations
+* over g and a parameter's definition; the GAMS program quotes the labels
+display as text _n "{hline 60}" _n "Case " as result "labalias"
+quietly cge_model new
+quietly cge_set g = g1 g2 g3
+quietly cge_parameter a(g,g2) = ord(g)^2 * ord(g2)
+quietly cge_parameter b(g,g2) = ord(g) * ord(g2)^2
+quietly cge_parameter c(g) = sum(g2, a(g,g2))
+quietly cge_parameter d(g), values(g1:1 g2:2 g3:3)
+quietly cge_variable X(g), value(1)
+quietly cge_variable Y(g), value(1)
+quietly cge_equation EX(g): X(g) = sum(g2, a(g,g2) * d(g2)) / (1 + X(g)) + c(g)
+quietly cge_equation EY(g): Y(g) = sum(g2, sum(g3, b(g2,g3) * X(g3))) / d(g)
+quietly cge_shock d, elements(g2) value(5)
+quietly cge_solve, name(labalias) tolerance(1e-12)
+assert r(converged) == 1
+if "`phase'" == "export" {
+    cge_gams using `"`dir'/labalias"', sim(labalias) replace
+}
+else {
+    capture confirm file `"`dir'/labalias/cge_labalias.csv"'
+    if !_rc {
+        cge_gams using `"`dir'/labalias"', sim(labalias) compare noexport
+        post `post' ("labalias") ("labalias") (r(base_maxdiff)) (r(maxdiff)) (r(modelstat)) (r(base_modelstat)) ///
+            (r(walras)) (r(N_compared))
+    }
+}
+
 * Linked regions (version 0.12.0): a free-trade area between the synthetic
 * SAM and its institutions layout; each region's solution, with its world
 * prices and tariffs from the links as parameters, solved by GAMS on its own

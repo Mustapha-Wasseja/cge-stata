@@ -134,6 +134,11 @@ bound is unbounded on that side. A lower bound must be below the upper
 bound. From version 0.22.0, an instrument whose current value lies on or
 beyond a bound starts inside it, by 5 per cent of a finite range or 1 per
 cent of the bound's size, with a note; before, it stopped the optimisation.
+The optimiser scales each instrument by its start, but from version 0.23.0
+by no less than 1 per cent of a finite range, 1 per cent of a single bound's
+size (at least 1), or 0.01 without bounds; a free instrument that starts at
+zero is scaled by 1. Before, a start of $10^{-7}$ was its own scale, and the
+optimisation stopped far from the optimum.
 
 \item[\optarg{}{name}{name}] names the simulation that holds the optimum;
 the default is \cmd{optimum}. A simulation of that name is replaced.

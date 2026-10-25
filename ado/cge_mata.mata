@@ -264,7 +264,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.22.1")
+    return("0.23.0")
 }
 
 // =====================================================================
@@ -17968,7 +17968,7 @@ real colvector _cge_up_assign(struct cge_model scalar M, string scalar name, str
     for (j = 1; j <= rows(e1); j++) {
         if (!dom[j]) continue
         tl = tk
-        if (idx != "") tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
+        if (idx != "") tl = _cge_u_subst2(("(", tl, ")"), idx, _cge_u_mk(M, e1[j]), _cge_u_mk(M, e2[j]), o1[j], o2[j])
         tok = _cge_u_compile(M, _cge_u_written(M, pb, M.x0, tl), M.x0, g)
         for (r = 1; r <= rows(tok); r++) {
             if (anyof((2, 9, 11, 12), tok[r, 1])) {
@@ -18200,6 +18200,22 @@ string rowvector _cge_u_subst(string rowvector t, string scalar idx, string scal
     return(select(out, out :!= ""))
 }
 
+// Element el as it is put in for an index: marked with char(2) when it is
+// the name of an index, as label g2 of a set whose alias is g2, so that a sum
+// over that index within does not replace it again; _cge_u_compile removes
+// the marks (from version 0.23.0)
+string scalar _cge_u_mk(struct cge_model scalar M, string scalar el)
+{
+    if (el == "") return(el)
+    return(_cge_u_isindex(M, el) ? char(2) + el : el)
+}
+
+// Tokens without the marks of _cge_u_mk
+string rowvector _cge_u_um(string rowvector t)
+{
+    return(subinstr(t, char(2), ""))
+}
+
 // Sums written out: sum(i, body) becomes (body_1 + body_2 + ...) over the
 // elements of the set of i; sums within sums are written out first. With a
 // condition, sum(i$cond, body), only the elements for which cond holds at
@@ -18208,7 +18224,7 @@ string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar 
                                string rowvector t)
 {
     string rowvector out, body, els, cond, terms, piece
-    string scalar idx, fn
+    string scalar idx, fn, el
     real scalar k, e, j, c, d, n, m, inner
     out = J(1, 0, "")
     k = 1
@@ -18228,8 +18244,10 @@ string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar 
                 // an index the domain controls is written out before the sum
                 // (from version 0.13.0, a message of its own: GAMS's "set
                 // already under control")
-                if (_cge_u_islabel(M, idx) & !_cge_u_isindex(M, idx)) {
-                    _cge_fail(fn + "(): the index of the " + fn + " is an index of the domain too, written out here as " + idx +
+                // (a label marked by _cge_u_mk is not an index, from version
+                // 0.23.0: before, the label g2 for the alias g2 was summed over)
+                if (_cge_u_islabel(M, _cge_u_um(idx)) & !_cge_u_isindex(M, idx)) {
+                    _cge_fail(fn + "(): the index of the " + fn + " is an index of the domain too, written out here as " + _cge_u_um(idx) +
                               "; sum over another index of the same set, such as the index with a digit (f2 for f)", 198)
                 }
                 els = _cge_setlab(M, _cge_u_set(M, idx))'
@@ -18251,12 +18269,13 @@ string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar 
                 terms = J(1, 0, "")
                 n = 0
                 for (j = 1; j <= cols(els); j++) {
+                    el = _cge_u_mk(M, els[j])
                     if (cols(cond)) {
-                        if (!_cge_u_condval(M, p, x0, _cge_u_subst(("(", cond, ")"), idx, els[j], j))) continue
+                        if (!_cge_u_condval(M, p, x0, _cge_u_subst(("(", cond, ")"), idx, el, j))) continue
                     }
                     // the element first, then the sums within: their
                     // conditions may use this index
-                    piece = _cge_u_expand(M, p, x0, _cge_u_subst(body, idx, els[j], j))
+                    piece = _cge_u_expand(M, p, x0, _cge_u_subst(body, idx, el, j))
                     if (piece == "#empty") continue
                     if (n) terms = terms, (fn == "sum" ? "+" : (fn == "prod" ? "*" : ","))
                     terms = terms, "(", piece, ")"
@@ -18360,7 +18379,7 @@ real scalar _cge_u_condval(struct cge_model scalar M, struct cge_par scalar p, r
         _cge_fail("tperiod, tfirst and tlast change by period, but a condition ($) holds in every period; write ifthen(tlast, a, b)", 198)
     }
     v = _cge_u_value(M, p, x0, tok)
-    if (v >= .) _cge_fail("a condition is missing at the base: " + invtokens(t, " "), 459)
+    if (v >= .) _cge_fail("a condition is missing at the base: " + invtokens(_cge_u_um(t), " "), 459)
     return(v != 0)
 }
 
@@ -18377,7 +18396,7 @@ real colvector _cge_u_domain(struct cge_model scalar M, struct cge_par scalar p,
     m = J(rows(e1), 1, 1)
     if (cond == "") return(m)
     tc = _cge_u_pre(M, _cge_u_tokens(cond))
-    for (j = 1; j <= rows(e1); j++) m[j] = _cge_u_condval(M, p, x0, _cge_u_subst2(("(", tc, ")"), idx, e1[j], e2[j], o1[j], o2[j]))
+    for (j = 1; j <= rows(e1); j++) m[j] = _cge_u_condval(M, p, x0, _cge_u_subst2(("(", tc, ")"), idx, _cge_u_mk(M, e1[j]), _cge_u_mk(M, e2[j]), o1[j], o2[j]))
     return(m)
 }
 
@@ -18612,6 +18631,8 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     real matrix sub
     string rowvector gp
     if (args() < 5) condmode = 0
+    // labels marked by _cge_u_mk (from version 0.23.0)
+    if (any(strpos(t, char(2)))) t = _cge_u_um(t)
     P = _cge_gams_params()
     out = J(0, 3, .)
     // operator stack: (kind, code); kind 1 operator, 2 function, 3 "(", 4
@@ -19635,7 +19656,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
                 continue
             }
             tl = _cge_u_pre(M, _cge_u_tokens(M.uvdef[k, 3]))
-            if (idx != "") tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
+            if (idx != "") tl = _cge_u_subst2(("(", tl, ")"), idx, _cge_u_mk(M, e1[j]), _cge_u_mk(M, e2[j]), o1[j], o2[j])
             tl = _cge_u_written(M, pb, x0, tl)
             tok = _cge_u_compile(M, tl, x0, gtl)
             // a definition cannot give the base value from its own lag or lead
@@ -19672,8 +19693,8 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
             tl = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 4]))
             tr = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 5]))
             if (idx != "") {
-                tl = _cge_u_subst2(("(", tl, ")"), idx, e1[j], e2[j], o1[j], o2[j])
-                tr = _cge_u_subst2(("(", tr, ")"), idx, e1[j], e2[j], o1[j], o2[j])
+                tl = _cge_u_subst2(("(", tl, ")"), idx, _cge_u_mk(M, e1[j]), _cge_u_mk(M, e2[j]), o1[j], o2[j])
+                tr = _cge_u_subst2(("(", tr, ")"), idx, _cge_u_mk(M, e1[j]), _cge_u_mk(M, e2[j]), o1[j], o2[j])
             }
             L = _cge_u_compile(M, _cge_u_written(M, pb, x0, tl), x0, gtl)
             R = _cge_u_compile(M, _cge_u_written(M, pb, x0, tr), x0, gtr)
@@ -21801,7 +21822,18 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
                    strtrim(sprintf("%12.0g", st0)), strtrim(sprintf("%12.0g", O.start[k])))
         }
     }
-    O.scale = abs(O.start) :* (abs(O.start) :> 1e-12) + (abs(O.start) :<= 1e-12)
+    // the scales: the starts, but no less than 1 per cent of a finite range,
+    // of the size of a single bound (at least 1), or 0.01 without bounds; a
+    // free instrument that starts at zero is scaled by 1 (from version
+    // 0.23.0: before, a start of 1e-7 was its own scale, and the scaled
+    // gradient met the tolerance far from the optimum)
+    for (k = 1; k <= n; k++) {
+        if (O.lo[k] < . & O.hi[k] < .) d = 0.01 * (O.hi[k] - O.lo[k])
+        else if (O.lo[k] < .) d = 0.01 * max((1, abs(O.lo[k])))
+        else if (O.hi[k] < .) d = 0.01 * max((1, abs(O.hi[k])))
+        else d = (abs(O.start[k]) <= 1e-12 ? 1 : 0.01)
+        O.scale[k] = max((abs(O.start[k]), d))
+    }
     // Objective, targets and constraints: report measures or, from version
     // 0.9.4, expressions of the user language
     if (s_max != "" & s_min != "") _cge_fail("give maximize() or minimize(), not both", 198)

@@ -2579,13 +2579,47 @@ alias index is `t2`) were substituted wrongly in equations over two indexes:
 the first index was replaced by its label, which the second index's
 substitution replaced again. From version 0.22.1 `_cge_u_subst2` puts the
 first element in through a placeholder (`tests/test_models.do`, pairs of
-consecutive years t1 to t3). Sums over an alias inside an equation can meet
-the same collision, so labels that differ from the names of indexes remain
-the safer choice; the model's years are named `y1` to `y30`.
+consecutive years t1 to t3). Sums over an alias inside an equation met the
+same collision until version 0.23.0 (Section 32); the model's years are
+named `y1` to `y30`.
 
 Tests: `tests/test_optimize.do` (a start on a bound reaches the optimum of a
 start within it); `tests/test_modlib.do` (the Euler equation to 1e-8 and
 the path of capital).
+
+## 32. Labels named like indexes, and the optimiser's scales (from version 0.23.0)
+
+An element put in for an index, in an equation, a defined variable, a
+parameter's definition, a domain's condition or a sum, is marked with
+`char(2)` when it is the name of an index (`_cge_u_mk`): label `g2` of a set
+whose alias is `g2`. A sum over `g2` within then leaves it alone, and the
+compiler (`_cge_u_compile`) removes the marks before it reads the
+references (`_cge_u_um`). Before, in $X_g = \sum_{g_2} a_{g,g_2}$ with labels
+`g1` to `g3`, the element `g2` of the equation became the sum's index, and
+$X_{g2}$ was $\sum_j a_{j,j} = 36$ for $\sum_j a_{2,j} = 24$ (with $a_{i,j} =
+i^2 j$); nested sums met the same collision through the outer sum's
+elements. A sum over the equation's own index, `sum(g, ...)` in an equation
+over `g`, is an error for such labels as for others (GAMS's "set already
+under control"); before, it was a sum over the alias that the label names.
+Labels that are not the names of indexes are not marked, so models without
+them write the same tokens as before.
+
+`cge_optimize` scales each instrument by its start, but by no less than 1
+per cent of a finite range, 1 per cent of a single bound's size (at least 1),
+or 0.01 without bounds; a free instrument that starts at zero is scaled by 1,
+as before. Before, a start of $10^{-7}$ was its own scale: the gradient in
+the scaled instruments, $10^{-7}$ times the gradient, met the tolerance far
+from the optimum, and the optimal tariff of the synthetic model came out at
+0.33 for 1.51 (0.0018 from $10^{-10}$).
+
+`tools/gams/run_export_check.py` runs GAMS up to three times when it
+returns 7, a licence error that the network licence gives now and then.
+
+Tests: `tests/test_models.do` (sums over the aliases `g2` and `g3`, nested,
+and a parameter, against $6i^2$ and $84i$; the sum over the equation's own
+index); `tests/test_optimize.do` (starts of $10^{-4}$, $10^{-7}$ and
+$10^{-10}$ within bounds and $10^{-7}$ without, to the optimum of the
+base start within $10^{-6}$); the export case `labalias`.
 
 ## References
 

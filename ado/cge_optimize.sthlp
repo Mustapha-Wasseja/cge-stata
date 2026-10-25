@@ -106,7 +106,9 @@ the targets; the display marks those that bind.
 {it:instrument}{cmd::}{it:value} pairs, for example
 {cmd:lower(tm(com_man):0) upper(tm(com_man):0.2)}. An instrument's current
 value on or beyond a bound starts inside it, with a note (from version
-0.22.0).
+0.22.0). The instruments are scaled by their starts, but by no less than 1
+per cent of a finite range, or of a single bound's size (at least 1), or
+0.01 without bounds (from version 0.23.0).
 
 {phang}
 {opt name(name)} names the simulation that holds the optimum; the default is

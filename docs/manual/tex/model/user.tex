@@ -131,6 +131,16 @@ an element is written \cmd{e1.e2}; in the GAMS program the variables are
 declared over two sets of accounts, \cmd{(AC, AC)}, with the pairs outside
 their domains fixed at 0.
 
+Labels may be the names of indexes, as the years \cmd{t1}, \cmd{t2} and
+\cmd{t3} of a set whose alias is \cmd{t2}. From version 0.22.1 an equation
+over two indexes puts them in correctly, and from version 0.23.0 so does a
+sum over an alias within an equation, a defined variable or a parameter's
+definition: in \cmd{cge_equation EX(g): X(g) = sum(g2, a(g,g2))}, with
+labels \cmd{g1} to \cmd{g3}, the element \cmd{g2} put in for \cmd{g} is
+marked, so that the sum over \cmd{g2} does not replace it again. Before,
+$X_{g2}$ summed $a_{j,j}$ over $j$. A sum over the equation's own index is
+an error.
+
 \section{Lags}\label{sec:userlags}
 
 From version 0.9.2, \cmd{lag(VAR)} is the value of a variable in the period

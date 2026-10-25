@@ -206,7 +206,7 @@ new variable needs a starting level (`.l`) before the base solve.
 2. GAMS solves every exported model.
 3. Stata solves each case again and compares the results (`compare noexport`).
 
-There are 56 cases (version 0.18.0). Together they cover:
+There are 57 cases (version 0.23.0). Together they cover:
 
 - the standard, institutions, margins, territorial and supply-use layouts;
 - mixed elasticities and top nests, and LES demand;
@@ -249,7 +249,13 @@ There are 56 cases (version 0.18.0). Together they cover:
 - a named model (from version 0.17.0): two markets of a standalone model
   solved on their own, the variable outside them fixed, to 4.2e-16;
 - mixed-integer programmes (from version 0.18.0): a knapsack and integer
-  least squares, which SCIP solves as MINLPs to 6e-16 and 2.1e-11.
+  least squares, which SCIP solves as MINLPs to 6e-16 and 2.1e-11;
+- labels that are the names of indexes (from version 0.23.0): sums over the
+  aliases g2 and g3 of a set with labels g1 to g3.
+
+`run_export_check.py` runs GAMS up to three times when it returns 7, a
+licence error that a network licence gives now and then (from version
+0.23.0).
 
 Results (21 October 2026, GAMS 54.2; `tools/gams/export_check_results.csv`):
 

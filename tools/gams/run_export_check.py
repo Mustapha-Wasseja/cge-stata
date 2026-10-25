@@ -100,9 +100,16 @@ def main() -> None:
             gtype, solver = "nlp", nlp_solver
         if d.name in MINLP_CASES:
             gtype, solver = "minlp", "scip"
-        r = subprocess.run([args.gams, "cge_run.gms", "lo=0", f"--cgesolver={solver}",
-                            f"--cgetype={gtype}"], cwd=d, capture_output=True, text=True)
-        print(f"GAMS {d.name:14s} return code {r.returncode}", flush=True)
+        # return code 7 is a licence error, which a network licence gives
+        # now and then: the run is tried up to three times (version 0.23.0)
+        for attempt in range(3):
+            r = subprocess.run([args.gams, "cge_run.gms", "lo=0", f"--cgesolver={solver}",
+                                f"--cgetype={gtype}"], cwd=d, capture_output=True, text=True)
+            if r.returncode != 7:
+                break
+            time.sleep(10)
+        print(f"GAMS {d.name:14s} return code {r.returncode}"
+              + (f" (try {attempt + 1})" if attempt else ""), flush=True)
     folders = [d for d in folders if d.name not in skipped]
     run_stata(stata, work, "compare")
 

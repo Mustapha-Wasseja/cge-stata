@@ -223,4 +223,19 @@ cge_optimize, instruments(tm(com_man)) maximize(government revenue) lower(tm(com
 assert r(converged) == 1
 assert reldif(el(r(instruments), 1, 1), `t1') < 1e-6
 quietly cge_shock, reset
+* starts near zero (from version 0.23.0): the scale is no less than 1 per
+* cent of the range, or 0.01 without bounds; before, a start of 1e-7 was its
+* own scale and the optimiser stopped, converged, at 0.33
+foreach s in 1e-4 1e-7 1e-10 {
+    quietly cge_shock tm, elements(com_man) value(`s')
+    cge_optimize, instruments(tm(com_man)) maximize(government revenue) lower(tm(com_man):0) upper(tm(com_man):2) name(ob)
+    assert r(converged) == 1
+    assert reldif(el(r(instruments), 1, 1), `t1') < 1e-6
+    quietly cge_shock, reset
+}
+quietly cge_shock tm, elements(com_man) value(1e-7)
+cge_optimize, instruments(tm(com_man)) maximize(government revenue) name(ob)
+assert r(converged) == 1
+assert reldif(el(r(instruments), 1, 1), `t1') < 1e-6
+quietly cge_shock, reset
 program drop _compare_optimum _compare_solution

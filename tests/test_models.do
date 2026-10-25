@@ -211,5 +211,34 @@ cge_solve, name(acc)
 mata: st_numscalar("tm_d", abs(_tm_val("K", "t3", 1) - 4))
 assert scalar(tm_d) < 1e-12
 
+* ---------------------------------------------------------------------
+* Labels that are the names of indexes, in sums (from version 0.23.0): labels
+* g1 to g3 of set g, whose aliases are g2 and g3. Equations over g sum over
+* g2, and a sum over g2 holds one over g3; with a(g,g2) = ord(g)^2 ord(g2)
+* and b(g,g2) = ord(g) ord(g2)^2, X(g_i) = 6 i^2 and Y(g_i) = 84 i. Before,
+* a label put in for an index was replaced again by a sum's elements (X(g2)
+* = 36, Y(g2) = 156)
+* ---------------------------------------------------------------------
+cge_model new
+cge_set g = g1 g2 g3
+cge_parameter a(g,g2) = ord(g)^2 * ord(g2)
+cge_parameter b(g,g2) = ord(g) * ord(g2)^2
+cge_parameter c(g) = sum(g2, a(g,g2))
+cge_variable X(g), value(1)
+cge_variable Y(g), value(1)
+cge_variable Z(g), value(1)
+cge_equation EX(g): X(g) = sum(g2, a(g,g2))
+cge_equation EY(g): Y(g) = ord(g) * sum(g2, sum(g3, b(g2,g3)))
+cge_equation EZ(g): Z(g) = c(g)
+cge_solve, name(lab)
+forvalues i = 1/3 {
+    mata: st_numscalar("tm_d", max(abs((_tm_val("X", "g`i'", 1) - 6 * `i'^2, _tm_val("Y", "g`i'", 1) - 84 * `i', _tm_val("Z", "g`i'", 1) - 6 * `i'^2))))
+    assert scalar(tm_d) < 1e-12
+}
+* a sum over the equation's own index is an error, as in GAMS; before, it
+* was a sum over the alias that the label names
+capture noisily cge_equation EW(g): X(g) = sum(g, a(g,g))
+assert _rc == 198
+
 mata: mata drop _tm_val()
 scalar drop tm_t tm_d tm_w
