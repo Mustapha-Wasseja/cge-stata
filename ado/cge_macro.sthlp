@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.7  24oct2026}{...}
+{* *! version 0.9.7  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -62,24 +62,38 @@ removes every macro once no user variable or equation uses one.
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM, mapped and calibrated{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}A CES aggregate of two quantities, a price relative to the CPI, and a constant{p_end}
+
 {phang2}{cmd:. cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)}{p_end}
+
 {phang2}{cmd:. cge_macro rel(v) = v / CPI}{p_end}
+
 {phang2}{cmd:. cge_macro half = 0.5}{p_end}
 
 {pstd}A macro that uses others, and variables defined with them{p_end}
+
 {phang2}{cmd:. cge_macro cesq(c) = ces(QD(c), QM(c), half, half)}{p_end}
+
 {phang2}{cmd:. cge_variable CQ(c)$(base(QM(c)) > 0) = cesq(c)}{p_end}
+
 {phang2}{cmd:. cge_variable RP(c) = rel(PQ(c))}{p_end}
+
 {phang2}{cmd:. cge_macro, list}{p_end}
 
 {pstd}A tariff removal{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve}{p_end}
 
 

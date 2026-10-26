@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -30,6 +30,7 @@ then stops with a message and leaves the model in memory unchanged.
 {title:Example}
 
 {phang2}{cmd:. cge_use using mymodel}{p_end}
+
 {phang2}{cmd:. cge_report, sims(_all)}{p_end}
 
 

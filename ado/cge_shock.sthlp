@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.7.1  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -54,7 +54,8 @@ accumulate until {cmd:cge_shock, reset} restores all base values.
 {p2col:{cmd:wref}}reference real wage of the wage curve (factors with a labour force){p_end}
 {p2col:{cmd:sick}}share of working time lost to illness before the response to health services (factors with {opt sickdays()}; from version 0.3.4), for example an epidemic{p_end}
 {p2col:{cmd:mort}}crude death rate before the response to health services (no elements; with {opt mortality()}){p_end}
-{p2col:{cmd:tf}}rates of tax on the use of factors (factors; from version 0.5.0), in every activity that uses them: {cmd:scale()} changes each rate, {cmd:value()} sets one rate for every activity, which introduces a tax where the SAM has none{p_end}
+{p2col:{cmd:tf}}rates of tax on the use of factors (factors; from version 0.5.0), in every activity that uses them: {cmd:scale()} changes each rate,
+{cmd:value()} sets one rate for every activity, which introduces a tax where the SAM has none{p_end}
 {p2col:{cmd:tfy}}rates of tax on factor income (factors){p_end}
 {p2colreset}{...}
 
@@ -133,17 +134,28 @@ of a variable, to change; the default, or {cmd:elements(all)}, is all. For varia
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM of {helpb cge_synthetic}, mapped as in {helpb cge_map}{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}Shocks{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_shock pwm, elements(com_man) scale(1.1)}{p_end}
+
 {phang2}{cmd:. cge_shock QFS, elements(lab) scale(1.05)}{p_end}
+
 {phang2}{cmd:. cge_shock qg, elements(com_ser) scale(1.2)}{p_end}
+
 {phang2}{cmd:. cge_shock trdr, elements(hhd) scale(0.5)}{p_end}
+
 {phang2}{cmd:. cge_shock, reset}{p_end}
 
 

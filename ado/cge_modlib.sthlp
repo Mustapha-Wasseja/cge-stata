@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.22.0  25oct2026}{...}
+{* *! version 0.22.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -48,7 +48,9 @@ model's do-file, {cmd:cge_ml_}{it:model}{cmd:.do}, in the current folder.
 {title:Examples}
 
 {phang2}{cmd:. cge_modlib list}{p_end}
+
 {phang2}{cmd:. cge_modlib describe transport}{p_end}
+
 {phang2}{cmd:. cge_modlib run transport}{p_end}
 
 

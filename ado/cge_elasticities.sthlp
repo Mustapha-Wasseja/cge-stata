@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 25 27 2}{...}
@@ -104,17 +104,28 @@ category to those not listed.
 {title:Examples}
 
 {phang2}{cmd:. cge_elasticities sigmaq, country(TGO SLE BWA)}{p_end}
+
 {phang2}{cmd:. cge_elasticities incelas, country(TGO) clear}{p_end}
 
 {pstd}Values for the SYNTHETIC SAM with a health sector, mapped as in {helpb cge_map}{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear health}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap)}
+{cmd:households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
 {phang2}{cmd:. cge_elasticities sigmaq, country(TGO) values}{p_end}
+
 {phang2}{cmd:. local sq `r(values)'}{p_end}
+
 {phang2}{cmd:. cge_elasticities incelas, country(TGO) values map(com_agr:food com_hlt:health) others(other)}{p_end}
+
 {phang2}{cmd:. local ie `r(values)'}{p_end}
+
 {phang2}{cmd:. cge_elasticities frisch, values}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(`sq') sigmat(2) incelas(`ie') frisch(`r(values)')}{p_end}
 
 

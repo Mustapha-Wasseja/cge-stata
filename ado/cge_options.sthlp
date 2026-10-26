@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.16.0  25oct2026}{...}
+{* *! version 0.16.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -89,11 +89,17 @@ restores every setting to its default.
 {title:Examples}
 
 {phang2}{cmd:. cge_options, linsolver(sparse)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(large)}{p_end}
+
 {phang2}{cmd:. cge_options}{p_end}
+
 {phang2}{cmd:. cge_options, mcp(activeset)}{p_end}
+
 {phang2}{cmd:. cge_options, mcp(semismooth)}{p_end}
+
 {phang2}{cmd:. cge_options, iterate(30) timelimit(60) tolerance(1e-12)}{p_end}
+
 {phang2}{cmd:. cge_options, reset}{p_end}
 
 

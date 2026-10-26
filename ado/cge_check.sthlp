@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.7.1  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -20,10 +20,15 @@
 and reports each as {cmd:[ok]} or {cmd:[fail]} with the value tested:
 
 {p 8 12 2}- SAM balance;{p_end}
+
 {p 8 12 2}- benchmark replication: the base solves every equation of the model (user equations, which may act as shocks, are left out from version 0.7.1);{p_end}
+
 {p 8 12 2}- the closure has as many free variables as equations;{p_end}
+
 {p 8 12 2}- for the selected simulation: the solution residual, Walras's law and the GDP identity;{p_end}
+
 {p 8 12 2}- with {opt homogeneity}: doubling every fixed nominal value doubles all prices and nominal values and leaves quantities unchanged;{p_end}
+
 {p 8 12 2}- with {opt perturb()}: the solver returns to the base from perturbed starting values.{p_end}
 
 {pstd}

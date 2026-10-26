@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.24.0  25oct2026}{...}
+{* *! version 0.24.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -90,20 +90,35 @@ largest gap in the first-order conditions. The default is 1e-8.
 {title:Examples}
 
 {pstd}Cournot duopoly and a Stackelberg leader in a standalone model{p_end}
+
 {phang2}{cmd:. cge_model new}{p_end}
+
 {phang2}{cmd:. cge_parameter a = 10}{p_end}
+
 {phang2}{cmd:. cge_parameter b = 1}{p_end}
+
 {phang2}{cmd:. cge_parameter c = 1}{p_end}
+
 {phang2}{cmd:. cge_variable Q1, value(1) fixed}{p_end}
+
 {phang2}{cmd:. cge_variable Q2, value(1) fixed}{p_end}
+
 {phang2}{cmd:. cge_variable P = a - b * (Q1 + Q2)}{p_end}
+
 {phang2}{cmd:. cge_nash player firm1, instruments(Q1) maximize((P - c) * Q1) lower(Q1:0)}{p_end}
+
 {phang2}{cmd:. cge_nash player firm2, instruments(Q2) maximize((P - c) * Q2) lower(Q2:0)}{p_end}
+
 {phang2}{cmd:. cge_nash solve, name(cournot)}{p_end}
+
 {phang2}{cmd:. cge_shock, reset}{p_end}
+
 {phang2}{cmd:. cge_nash solve, name(cournot_newton) method(newton)}{p_end}
+
 {phang2}{cmd:. cge_shock, reset}{p_end}
+
 {phang2}{cmd:. cge_nash solve, name(stackelberg) leader(firm1)}{p_end}
+
 {phang2}{cmd:. cge_nash list}{p_end}
 
 

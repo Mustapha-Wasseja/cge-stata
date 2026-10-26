@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.24.0  25oct2026}{...}
+{* *! version 0.24.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -121,21 +121,32 @@ the simulations are {it:name}#, ....
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM, mapped and calibrated{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}A sweep over the tariff on manufactures, with revenue and welfare{p_end}
+
 {phang2}{cmd:. cge_loop, name(tariff) values(tm(com_man) = 0(0.05)0.3) measures(YG, welfare equivalent_variation hhd)}{p_end}
+
 {phang2}{cmd:. matrix list r(measures)}{p_end}
 
 {pstd}Every combination of two tariffs, with the imports of each commodity as a dataset{p_end}
+
 {phang2}{cmd:. cge_loop, name(two) values(tm(com_man) = 0 0.1 0.2; tm(com_agr) = 0 0.1) grid keep(QM) clear}{p_end}
+
 {phang2}{cmd:. list scenario t1 t2 element1 value if element1 == "com_man", noobs}{p_end}
 
 {pstd}Government purchases of services and the labour force, as multiples of their values{p_end}
+
 {phang2}{cmd:. cge_loop, name(fiscal) values(qg(com_ser) = 1 1.1 1.2; QFS(lab) = 1 1 1.05) scale}{p_end}
+
 {phang2}{cmd:. cge_report, sims(fiscal1 fiscal2 fiscal3) tables(macro)}{p_end}
 
 

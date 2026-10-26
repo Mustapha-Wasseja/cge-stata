@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.4.2  21oct2026}{...}
+{* *! version 0.4.2  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -78,9 +78,14 @@ model in memory is not changed.
 {title:Examples}
 
 {phang2}{cmd:. cge_synthetic, clear health}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap)}
+{cmd:households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
 {phang2}{cmd:. cge_spa, from(com_hlt) to(hhd)}{p_end}
+
 {phang2}{cmd:. cge_spa, from(com_hlt) to(lab) maxlength(8) threshold(0.0001) clear}{p_end}
 
 

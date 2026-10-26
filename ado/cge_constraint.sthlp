@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 23 25 2}{...}
@@ -31,6 +31,7 @@ direction only (from version 0.4.4; Reference Manual, {it:Bounds and complementa
 every solution one of two things holds:
 
 {phang2}o  the limited variable is within its bound and the adjusting variable is at its fixed level; or{p_end}
+
 {phang2}o  the limited variable is at its bound and the adjusting variable has moved to keep it there.{p_end}
 
 {pstd}
@@ -117,12 +118,20 @@ solution. {opt clear} removes them, and sends every rent to the government.
 {title:Examples}
 
 {phang2}{cmd:. cge_synthetic, clear health}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap)}
+{cmd:households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_shock qg, elements(com_hlt) scale(1.2)}{p_end}
+
 {phang2}{cmd:. cge_constraint QA, elements(act_hlt) upper(1.03) scale rents(hhd)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(capacity)}{p_end}
+
 {phang2}{cmd:. cge_constraint, list}{p_end}
 
 

@@ -118,12 +118,20 @@ examples. Its repository path is {cmd:docs/manual/cge-stata-manual.pdf}.
 {title:Example}
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+
 {phang2}{cmd:. cge_results}{p_end}
+
 {phang2}{cmd:. cge_check, homogeneity}{p_end}
 
 

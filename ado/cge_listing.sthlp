@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.8  24oct2026}{...}
+{* *! version 0.9.8  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -109,26 +109,40 @@ element with two indexes is labelled by both, as {cmd:lab,act_agr}.
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM, mapped and calibrated{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}At the base, every equation holds{p_end}
+
 {phang2}{cmd:. cge_listing, base}{p_end}
 
 {pstd}Tariffs removed, before the model is solved: the equations the shock moves, and every element of the import prices and of government revenue{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_listing, current blocks(P1 I8)}{p_end}
 
 {pstd}The solution, and every element as a dataset{p_end}
+
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+
 {phang2}{cmd:. cge_listing, sim(notariff) clear}{p_end}
+
 {phang2}{cmd:. list if block == "T2", noobs}{p_end}
 
 {pstd}The solution listing of a quota: the room within its bound and its marginal, the premium (from version 0.9.8){p_end}
+
 {phang2}{cmd:. cge_constraint QM, elements(com_man) upper(1.02) scale}{p_end}
+
 {phang2}{cmd:. cge_solve, name(quota)}{p_end}
+
 {phang2}{cmd:. cge_listing, sim(quota) solution variables(QM RM) blocks(T5)}{p_end}
 
 

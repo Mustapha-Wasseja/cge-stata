@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.8.3  23oct2026}{...}
+{* *! version 0.8.3  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 24 26 2}{...}
@@ -27,7 +27,9 @@ solves. It then summarises every report measure of {helpb cge_report} across
 the draws that converged:
 
 {phang2}- the result with the central elasticities;{p_end}
+
 {phang2}- the mean and standard deviation;{p_end}
+
 {phang2}- the 5th and 95th percentiles (order statistics).{p_end}
 
 {pstd}
@@ -103,8 +105,11 @@ elasticities of every draw ({cmd:table} {cmd:elasticity}).
 {title:Example}
 
 {phang2}{cmd:. program define tariff_cut}{p_end}
+
 {phang2}{cmd:  1.     cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:  2. end}{p_end}
+
 {phang2}{cmd:. cge_sensitivity, scenario(tariff_cut) draws(200) spread(0.5) saving(sens.dta, replace)}{p_end}
 
 

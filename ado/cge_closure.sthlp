@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -80,7 +80,9 @@ fixes. Elements are written {it:NAME}, {it:NAME}{cmd:(}{it:e1}{cmd:)} or
 example:
 
 {phang2}o  {cmd:swap(GSAV GADJ)} fixes government savings and lets government consumption adjust;{p_end}
+
 {phang2}o  {cmd:swap(EXR CPI)} makes the exchange rate the numeraire;{p_end}
+
 {phang2}o  {cmd:swap(QG(com_hlt) GADJ)} fixes government purchases of health services, which can then be shocked, and scales the other purchases with them.{p_end}
 
 {pmore}
@@ -98,21 +100,32 @@ such a closure is singular, and {cmd:cge_closure} names the equation.
 {title:Example}
 
 {pstd}Setup: the SYNTHETIC SAM of {helpb cge_synthetic}, mapped as in {helpb cge_map}{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}A fixed exchange rate, investment-driven savings, unemployment at a fixed wage and sector-specific capital{p_end}
+
 {phang2}{cmd:. cge_closure, external(fixexr) savinv(investment) factors(lab:unemployed cap:specific)}{p_end}
 
 {pstd}Fixed government savings, with government consumption adjusting{p_end}
+
 {phang2}{cmd:. cge_closure, swap(GSAV GADJ)}{p_end}
 
 {pstd}A wage curve, and a minimum wage, which need a labour force from {helpb cge_calibrate}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) unemployment(lab:0.15) wagecurve(lab:0.1)}{p_end}
+
 {phang2}{cmd:. cge_closure, factors(lab:wagecurve)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) minwage(lab:0.95)}{p_end}
+
 {phang2}{cmd:. cge_closure, factors(lab:minwage cap:specific)}{p_end}
 
 

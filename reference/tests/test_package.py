@@ -30,3 +30,16 @@ def test_package_files_exist():
 
 def test_bundles_are_current():
     assert bundle_files.check(ROOT) == []
+
+
+def test_help_source_lines_fit_the_stata_viewer():
+    # Long physical lines can lose characters and expose SMCL tags in the
+    # Windows Viewer even when smcl2txt renders the same file correctly.
+    # Keep a margin below the Viewer failure boundary observed at 244 bytes.
+    oversized = [
+        f"{path.name}:{number} ({len(line)} bytes)"
+        for path in sorted((ROOT / "ado").glob("*.sthlp"))
+        for number, line in enumerate(path.read_bytes().splitlines(), 1)
+        if len(line) > 200
+    ]
+    assert oversized == []

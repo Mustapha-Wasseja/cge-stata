@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -43,6 +43,7 @@ when it is to be shared with users of Stata 13.
 {title:Example}
 
 {phang2}{cmd:. cge_save using mymodel, replace}{p_end}
+
 {phang2}{cmd:. cge_use using mymodel}{p_end}
 
 

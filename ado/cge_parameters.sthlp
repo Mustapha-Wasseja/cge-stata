@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  22oct2026}{...}
+{* *! version 0.7.1  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 23 25 2}{...}
@@ -45,6 +45,7 @@ shocks. By default the base (calibrated) parameters are given.
 {title:Example}
 
 {phang2}{cmd:. cge_parameters, clear}{p_end}
+
 {phang2}{cmd:. list if parameter == "tm"}{p_end}
 
 

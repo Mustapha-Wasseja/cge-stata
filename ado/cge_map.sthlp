@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -12,7 +12,9 @@
 {p 8 12 2}
 {cmd:cge_map}{cmd:,} {opt activities(names)} {opt commodities(names)} {opt factors(names)}
 {opt households(names)} {opt government(name)} {opt savinv(name)} {opt row(name)}
-[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)} {opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)} {opt vattax(name)} {opt vatshare(spec)} {opt domesticmargins(names)} {opt importmargins(names)} {opt exportmargins(names)}
+[{opt enterprises(names)} {opt marginaccounts(names)} {opt stocks(names)} {opt insurance(name)} {opt margins(names)} {opt territorial(names)} {opt dirtax(name)}
+{opt saltax(name)} {opt imptax(name)} {opt exptax(name)} {opt acttax(name)} {opt vattax(name)} {opt vatshare(spec)} {opt domesticmargins(names)}
+{opt importmargins(names)} {opt exportmargins(names)}
 {opt factortax(account:factor ...)} {opt factorincometax(name)}
 {opt report(filename)} {opt replace}]
 
@@ -33,8 +35,11 @@ of the model and checks the SAM against the flows the model represents
 (Reference Manual, {it:Calibration}). It looks for:
 
 {p 8 12 2}- accounts that are not balanced;{p_end}
+
 {p 8 12 2}- accounts with flows but no role;{p_end}
+
 {p 8 12 2}- non-zero cells that are flows the model does not represent;{p_end}
+
 {p 8 12 2}- negative cells where the model needs non-negative values.{p_end}
 
 {pstd}
@@ -213,41 +218,59 @@ problems are found.
 {pstd}The SYNTHETIC SAM of {helpb cge_synthetic}:{p_end}
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
 
 {pstd}
 A supply-use layout with margin accounts, a commodity imported only
 ({cmd:com_fuel}, listed last) and a stock-change account:
 
 {phang2}{cmd:. cge_synthetic, clear sut}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser com_fuel) factors(lab cap) households(hhd) government(gov) savinv(si) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) marginaccounts(trd trp) stocks(dstk)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser com_fuel) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(si) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) marginaccounts(trd trp) stocks(dstk)}{p_end}
 
 {pstd}
 Health services and a social health insurance fund:
 
 {phang2}{cmd:. cge_synthetic, clear health}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap)}
+{cmd:households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
 
 
 {pstd}
 From a template, filled in Excel:
 
 {phang2}{cmd:. cge_template using roles.xlsx}{p_end}
+
 {phang2}{it:(fill in the roles in Excel)}{p_end}
+
 {phang2}{cmd:. cge_map using roles.xlsx}{p_end}
 
 {pstd}
 VAT, as a separate account or as shares of the sales tax:
 
 {phang2}{cmd:. cge_synthetic, clear vat}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vattax(tax_vat)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vattax(tax_vat)}{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vatshare(com_man:0.5 com_ser:1)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) vatshare(com_man:0.5 com_ser:1)}{p_end}
 
 
 {title:Stored results}

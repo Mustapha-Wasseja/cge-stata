@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.7  24oct2026}{...}
+{* *! version 0.9.7  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -53,6 +53,7 @@ frees another variable. For example, government consumption can be fixed in
 nominal terms, with the volumes adjusting:
 
 {phang2}{cmd:. cge_variable GEXP = sum(c, PQ(c) * QG(c)), nominal}{p_end}
+
 {phang2}{cmd:. cge_closure, swap(GEXP GADJ)}{p_end}
 
 {pstd}
@@ -84,7 +85,10 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, those of
 
 {p2colset 9 34 36 2}{...}
 {p2col:{it:VAR} or {it:VAR}{cmd:(}{it:e}[{cmd:,} {it:e2}]{cmd:)}}a model or user variable, at an element such as {cmd:com_hlt} or the index of the equation or of a sum{p_end}
-{p2col:{it:par}{cmd:(}{it:e}{cmd:)}}a parameter at its current value: {cmd:tm}, {cmd:te}, {cmd:tq}, {cmd:ta}, {cmd:tv}, {cmd:kappa}, {cmd:pwm}, {cmd:pwe}, {cmd:ad}, {cmd:af}, {cmd:qg}, {cmd:qinv}, {cmd:trdg}, {cmd:trdr}, {cmd:trfr}, {cmd:trgr}, {cmd:trrg}, {cmd:trgg}, {cmd:tshi}, {cmd:qshi}, {cmd:trshi}, {cmd:trshir}, {cmd:rd}, {cmd:rf}, {cmd:ddebt}, {cmd:fdebt}, {cmd:qlf}, {cmd:wmin}, {cmd:wref}, {cmd:sick}, {cmd:tfy} or {cmd:hs0}, for example {cmd:tv(c)} or {cmd:trgr}{p_end}
+{p2col:{it:par}{cmd:(}{it:e}{cmd:)}}a parameter at its current value: {cmd:tm}, {cmd:te}, {cmd:tq}, {cmd:ta}, {cmd:tv}, {cmd:kappa}, {cmd:pwm}, {cmd:pwe},
+{cmd:ad}, {cmd:af}, {cmd:qg}, {cmd:qinv}, {cmd:trdg}, {cmd:trdr}, {cmd:trfr}, {cmd:trgr}, {cmd:trrg}, {cmd:trgg}, {cmd:tshi}, {cmd:qshi}, {cmd:trshi},
+{cmd:trshir}, {cmd:rd}, {cmd:rf}, {cmd:ddebt}, {cmd:fdebt}, {cmd:qlf}, {cmd:wmin}, {cmd:wref}, {cmd:sick}, {cmd:tfy} or {cmd:hs0}, for example {cmd:tv(c)} or
+{cmd:trgr}{p_end}
 {p2col:{it:upar}[{cmd:(}{it:e}[{cmd:,} {it:e2}]{cmd:)}]}a user parameter defined by {helpb cge_parameter}, at its current value (from version 0.7.1){p_end}
 {p2col:{cmd:base(}{it:VAR}[{cmd:(}{it:e}{cmd:)}]{cmd:)}}the base value of a variable, or from version 0.11.0 of a parameter, as {cmd:base(ad(act_agr))}{p_end}
 {p2col:{cmd:tf(}{it:f}{cmd:,} {it:a}{cmd:)}}the tax on the use of factor {it:f} in activity {it:a} (from version 0.11.0){p_end}
@@ -93,7 +97,8 @@ functions {cmd:exp()}, {cmd:ln()} (or {cmd:log()}) and {cmd:sqrt()}, those of
 {p2col:{cmd:sum(}{it:map}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:),} {it:expression}{cmd:)}}the sum over the pairs of a set of pairs defined by {helpb cge_set} (from version 0.9.1){p_end}
 {p2col:{cmd:ord(}{it:i}{cmd:)}}the position of the element of index {it:i} in its set, from 1 (from version 0.7.2){p_end}
 {p2col:{cmd:lag(}{it:VAR}[{cmd:(}{it:e}{cmd:)}][{cmd:,} {it:k}]{cmd:)}}the value of a variable {it:k} periods before, 1 to 4, 1 if omitted; the base outside dynamic runs (from version 0.9.2){p_end}
-{p2col:{cmd:lead(}{it:VAR}[{cmd:(}{it:e}{cmd:)}][{cmd:,} {it:k}]{cmd:)}}the value of a variable {it:k} periods after, 1 to 4, in a run with perfect foresight; the base in a static simulation (from version 0.10.2){p_end}
+{p2col:{cmd:lead(}{it:VAR}[{cmd:(}{it:e}{cmd:)}][{cmd:,} {it:k}]{cmd:)}}the value of a variable {it:k} periods after, 1 to 4, in a run with perfect foresight;
+the base in a static simulation (from version 0.10.2){p_end}
 {p2col:{cmd:tperiod}, {cmd:tfirst}, {cmd:tlast}}the period of a dynamic run, and 1 in its first or last period, else 0; all 0 in a static simulation (from version 0.10.2){p_end}
 {p2col:{cmd:card(}{it:set}{cmd:)}}the number of elements of a model or user set, or of pairs of a set of pairs (from version 0.9.7){p_end}
 {p2colreset}{...}
@@ -227,6 +232,7 @@ one period to the next, for example government purchases that move halfway
 towards revenue each period:
 
 {phang2}{cmd:. cge_variable GL, value(1)}{p_end}
+
 {phang2}{cmd:. cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)}{p_end}
 
 {pstd}
@@ -247,7 +253,9 @@ capital that earns the real rental rate and depreciates at 5 per cent, at an
 interest rate of 5 per cent:
 
 {phang2}{cmd:. cge_variable RK = W(cap) / CPI}{p_end}
+
 {phang2}{cmd:. cge_variable Q, value(10)}{p_end}
+
 {phang2}{cmd:. cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05}{p_end}
 
 {pstd}
@@ -270,6 +278,7 @@ set does not exist, and its reference is 0. Conditions take {cmd:ord(t)} and
 intertemporal model:
 
 {phang2}{cmd:. cge_equation K0(t)$(ord(t) == 1): K(t) = 100}{p_end}
+
 {phang2}{cmd:. cge_equation KA(t)$(ord(t) > 1): K(t) = 0.9 * K(t-1) + inv(t-1)}{p_end}
 
 {pstd}
@@ -319,6 +328,7 @@ equation or of a sum, and a macro without parameters stands for its
 expression. For example, a CES aggregate of domestic goods and imports:
 
 {phang2}{cmd:. cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)}{p_end}
+
 {phang2}{cmd:. cge_variable CQ(c)$(base(QM(c)) > 0) = ces(QD(c), QM(c), 0.5, 0.5)}{p_end}
 
 {pstd}
@@ -344,6 +354,7 @@ agricultural goods held at the base, and government purchases of goods 10 per
 cent above the rule of {cmd:I7}:
 
 {phang2}{cmd:. cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))}{p_end}
+
 {phang2}{cmd:. cge_equation g7(c)$(goods(c)): QG(c) = 1.1 * qg(c) * GADJ, replace(I7)}{p_end}
 
 {pstd}
@@ -389,72 +400,123 @@ all.
 {title:Examples}
 
 {pstd}Real government savings held at the base, the direct tax rate adjusting{p_end}
+
 {phang2}{cmd:. cge_variable RGSAV = GSAV / CPI}{p_end}
+
 {phang2}{cmd:. cge_closure, swap(RGSAV TINSADJ)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve}{p_end}
 
 {pstd}Prices relative to the consumer price index, by commodity{p_end}
+
 {phang2}{cmd:. cge_variable PREL(c) = PQ(c) * (1 + tv(c)) / CPI}{p_end}
 
 {pstd}Government purchases of services 10 per cent above the base, with GADJ adjusting{p_end}
+
 {phang2}{cmd:. cge_variable LAM, value(1)}{p_end}
+
 {phang2}{cmd:. cge_equation lam: QG(com_ser) = LAM * base(QG(com_ser))}{p_end}
+
 {phang2}{cmd:. cge_closure, swap(LAM GADJ)}{p_end}
+
 {phang2}{cmd:. cge_shock LAM, value(1.1)}{p_end}
+
 {phang2}{cmd:. cge_solve}{p_end}
 
 {pstd}An import quota on manufactures, with its premium; government revenue at least its base level, sales tax rates adjusting; and a relative price held within bounds (from version 0.9.0){p_end}
+
 {phang2}{cmd:. cge_equation quota: QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))}{p_end}
+
 {phang2}{cmd:. cge_equation rev: YG >= base(YG), perp(TQADJ)}{p_end}
+
 {phang2}{cmd:. cge_variable PRA = PQ(com_agr) / CPI, lower(0.999) upper(1.001)}{p_end}
+
 {phang2}{cmd:. cge_solve}{p_end}
+
 {phang2}{cmd:. cge_constraint, list}{p_end}
 
 {pstd}Spending on the imports that carry a tariff, and the tariff revenue by commodity, defined only for them{p_end}
+
 {phang2}{cmd:. cge_variable MT = sum(c$(tm(c) > 0), PM(c) * QM(c)), nominal}{p_end}
+
 {phang2}{cmd:. cge_variable TMV(c)$(tm(c) > 0) = tm(c) * PM(c) * QM(c)}{p_end}
 
 {pstd}Government purchases of goods, and of agricultural goods and services{p_end}
+
 {phang2}{cmd:. cge_set goods = c, except(com_ser)}{p_end}
+
 {phang2}{cmd:. cge_variable GG = sum(c, (PQ(c) * QG(c))$(goods(c)))}{p_end}
+
 {phang2}{cmd:. cge_variable GAS = sum(c$(sameas(c, com_agr) | sameas(c, com_ser)), PQ(c) * QG(c))}{p_end}
 
 {pstd}Household spending by commodity and household, its total, and the output of activities paired with their commodities (from version 0.9.1){p_end}
+
 {phang2}{cmd:. cge_variable XH(c,h) = PQ(c) * QH(c, h), nominal}{p_end}
+
 {phang2}{cmd:. cge_variable XS = sum((c,h), XH(c,h)), nominal}{p_end}
+
 {phang2}{cmd:. cge_set map(a,c) = act_agr.com_agr act_man.com_man}{p_end}
+
 {phang2}{cmd:. cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal}{p_end}
+
 {phang2}{cmd:. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)}{p_end}
 
-{pstd}Government purchases that move halfway towards revenue each period of a dynamic run, and the change in output from the period before (from version 0.9.2); the earlier user equations are removed first{p_end}
+{pstd}Government purchases that move halfway towards revenue each period of a dynamic run, and the change in output from the period before (from version 0.9.2);
+the earlier user equations are removed first{p_end}
+
 {phang2}{cmd:. cge_closure, swap(none)}{p_end}
+
 {phang2}{cmd:. cge_equation, clear}{p_end}
+
 {phang2}{cmd:. cge_variable GL, value(1)}{p_end}
+
 {phang2}{cmd:. cge_equation gl: GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)}{p_end}
+
 {phang2}{cmd:. cge_variable LAMG, value(1)}{p_end}
+
 {phang2}{cmd:. cge_equation lamg: GADJ = LAMG * GL}{p_end}
+
 {phang2}{cmd:. cge_closure, swap(LAMG GADJ)}{p_end}
+
 {phang2}{cmd:. cge_variable DQA(a) = QA(a) - lag(QA(a))}{p_end}
+
 {phang2}{cmd:. cge_dynamic, name(lagged) periods(0/3) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.02)}{p_end}
 
-{pstd}Exports of agricultural goods held at the base, in place of their export supply, and government purchases of services 10 per cent above the base (from version 0.9.3); the earlier user equations are removed first{p_end}
+{pstd}Exports of agricultural goods held at the base, in place of their export supply, and government purchases of services 10 per cent above the base (from
+version 0.9.3); the earlier user equations are removed first{p_end}
+
 {phang2}{cmd:. cge_closure, swap(none)}{p_end}
+
 {phang2}{cmd:. cge_equation, clear}{p_end}
+
 {phang2}{cmd:. cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))}{p_end}
+
 {phang2}{cmd:. cge_equation gs: QG(com_ser) = 1.1 * base(QG(com_ser)), replace(I7(com_ser))}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve}{p_end}
 
 {pstd}The largest export, the product of prices, a tariff switch and a CES aggregate defined by a macro (from version 0.9.7); the earlier user equations are removed first{p_end}
+
 {phang2}{cmd:. cge_shock, reset}{p_end}
+
 {phang2}{cmd:. cge_equation, clear}{p_end}
+
 {phang2}{cmd:. cge_variable QEMAX = smax(c, QE(c))}{p_end}
+
 {phang2}{cmd:. cge_variable PPROD = prod(c, PQ(c))}{p_end}
+
 {phang2}{cmd:. cge_variable MSW = ifthen(tm(com_man) > 0, QM(com_man), 0)}{p_end}
+
 {phang2}{cmd:. cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)}{p_end}
+
 {phang2}{cmd:. cge_variable CQ(c)$(base(QM(c)) > 0) = ces(QD(c), QM(c), 0.5, 0.5)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve}{p_end}
 
 

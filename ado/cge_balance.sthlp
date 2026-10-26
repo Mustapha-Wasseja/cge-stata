@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -101,10 +101,13 @@ RAS and 100 for cross entropy.
 {title:Examples}
 
 {phang2}{cmd:. cge_synthetic, clear unbalanced}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
+
 {phang2}{cmd:. cge_balance}{p_end}
 
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
+
 {phang2}{cmd:. cge_balance, method(ce) totals(act_agr:97 hhd:290) fixed(row:* hhd:lab)}{p_end}
 
 

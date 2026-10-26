@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.22.0  25oct2026}{...}
+{* *! version 0.22.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -129,26 +129,41 @@ differences of solves of the model. {cmd:r(gradient)} returns the choice.
 {title:Examples}
 
 {pstd}The tariff on manufactures that maximises household welfare, revenue-neutral{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_closure, government(fixgsav)}{p_end}
+
 {phang2}{cmd:. cge_optimize, instruments(tm(com_man)) maximize(welfare equivalent_variation hhd) lower(tm(com_man):-0.5) upper(tm(com_man):1)}{p_end}
 
 {pstd}Both tariffs, keeping tariff revenue at its base value{p_end}
+
 {phang2}{cmd:. cge_optimize, instruments(tm(com_agr) tm(com_man)) maximize(welfare equivalent_variation hhd) targets(government tax_import = 8)}{p_end}
 
 {pstd}The direct tax rate that keeps government savings at the base when tariffs are removed{p_end}
+
 {phang2}{cmd:. cge_closure, government(flexgsav)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_optimize, instruments(TINSADJ) targets(government savings = 3)}{p_end}
 
-{pstd}The tariff that maximises government revenue while imports of manufactures stay within 2 per cent of the base, with the objective and the constraint written as expressions (from version 0.9.4){p_end}
+{pstd}The tariff that maximises government revenue while imports of manufactures stay within 2 per cent of the base, with the objective and the constraint
+written as expressions (from version 0.9.4){p_end}
+
 {phang2}{cmd:. cge_shock, reset}{p_end}
+
 {phang2}{cmd:. cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= 0.98 * base(QM(com_man))) lower(tm(com_man):0) upper(tm(com_man):2) name(revenue)}{p_end}
 
 {pstd}Its shadow price: the revenue lost per unit increase in the floor on imports (from version 0.9.8){p_end}
+
 {phang2}{cmd:. matrix list r(constraint_marginals)}{p_end}
 
 

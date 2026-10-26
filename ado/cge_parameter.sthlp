@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.13.0  24oct2026}{...}
+{* *! version 0.13.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -103,31 +103,49 @@ second index whose label is its name.
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM with a health sector, mapped and calibrated{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear health}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap)}
+{cmd:households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}A target for government health purchases, 1.1 times the base, that a
 user equation enforces with government consumption adjusting{p_end}
+
 {phang2}{cmd:. cge_parameter hgoal = 1.1}{p_end}
+
 {phang2}{cmd:. cge_variable LAM, value(1)}{p_end}
+
 {phang2}{cmd:. cge_equation lam: QG(com_hlt) = LAM * hgoal * base(QG(com_hlt))}{p_end}
+
 {phang2}{cmd:. cge_closure, swap(LAM GADJ)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(goal)}{p_end}
 
 {pstd}A scenario with a higher target{p_end}
+
 {phang2}{cmd:. cge_shock hgoal, value(1.2)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(goal12)}{p_end}
 
 {pstd}Assignments: the share of each commodity in intermediate input, by activity, and the import tariff rates, where there are imports{p_end}
+
 {phang2}{cmd:. cge_parameter qint0(c,a) = base(QINT(c,a))}{p_end}
+
 {phang2}{cmd:. cge_parameter share(c,a) = qint0(c,a) / sum(c2, qint0(c2,a))}{p_end}
+
 {phang2}{cmd:. cge_parameter tm2(c)$(base(QM(c)) > 0) = tm(c)}{p_end}
 
 {pstd}Weights by commodity, and a price index of the user's own{p_end}
+
 {phang2}{cmd:. cge_parameter w(c), values(com_agr:0.4 com_man:0.3 com_ser:0.2 com_hlt:0.1)}{p_end}
+
 {phang2}{cmd:. cge_variable PIDX = sum(c, w(c) * PQ(c))}{p_end}
+
 {phang2}{cmd:. cge_parameter, list}{p_end}
 
 
