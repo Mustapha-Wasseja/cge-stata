@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.10.2  24oct2026}{...}
+{* *! version 0.10.2  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -187,46 +187,93 @@ is 1e-12.
 
 {title:Examples}
 
-{pstd}Perfect foresight: investment-driven savings, with investment that
+{pstd}{bf:Example 1: recursive dynamics and withdrawal of donor funding}{p_end}
+
+{pstd}
+This example uses a SYNTHETIC SAM with a health sector and a social health
+insurance fund partly financed by donors abroad. The data and growth rates
+are illustrative and describe no country.{p_end}
+
+{pstd}{bf:1. Set up and calibrate the model}{p_end}
+
+{phang2}{cmd:cge_synthetic, clear health}{p_end}
+
+{phang2}{cmd:cge_sam, labels(account)}{p_end}
+
+{phang2}{cmd:cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
+{phang2}{cmd:cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
+
+{phang2}{cmd:cge_closure, factors(cap:specific)}{p_end}
+
+{pstd}{bf:2. Solve the baseline}{p_end}
+
+{pstd}
+Calibrate the baseline efficiency path to 5 per cent annual GDP growth.
+The baseline retains the donors' contributions.{p_end}
+
+{phang2}{cmd:cge_dynamic, name(base) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.03) population(0.025) gdpgrowth(0.05)}{p_end}
+
+{pstd}{bf:3. Define and solve the donor-withdrawal scenario}{p_end}
+
+{pstd}
+The following program sets foreign transfers to the insurance fund
+({cmd:trshir}) to zero from 2022. The scenario uses the baseline's efficiency
+path, so GDP can respond to the withdrawal.{p_end}
+
+{phang2}{cmd:program define donor_exit}{p_end}
+{p 12 16 2}{cmd:args t}{p_end}
+{p 12 16 2}{cmd:if `t' >= 2022 cge_shock trshir, value(0)}{p_end}
+{phang2}{cmd:end}{p_end}
+
+{phang2}{cmd:cge_dynamic, name(exit) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.03) population(0.025) baseline(base) shocks(donor_exit)}{p_end}
+
+{pstd}{bf:4. Compare and report the results}{p_end}
+
+{pstd}
+Load the scenario's results relative to the baseline into Stata's data in
+memory, then display the scenario's macroeconomic and health tables.{p_end}
+
+{phang2}{cmd:cge_dynresults, run(exit) baseline(base) clear}{p_end}
+
+{phang2}{cmd:cge_report, run(exit) tables(macro health)}{p_end}
+
+
+{pstd}{bf:Example 2: perfect foresight}{p_end}
+
+{pstd}Investment-driven savings, with investment that
 follows Tobin's q, the expected value of a unit of capital, and a tariff cut
-in 2022 known from 2018{p_end}
+in 2022 known from 2018. This example uses a separate synthetic model.{p_end}
 
-{phang2}{cmd:. cge_synthetic, clear}{p_end}
-{phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
-{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
-{phang2}{cmd:. cge_closure, savinv(investment)}{p_end}
-{phang2}{cmd:. cge_variable RK = W(cap) / CPI}{p_end}
-{phang2}{cmd:. cge_variable Q, value(10)}{p_end}
-{phang2}{cmd:. cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05}{p_end}
-{phang2}{cmd:. cge_variable IRULE = IADJ / (Q / base(Q))^2}{p_end}
-{phang2}{cmd:. cge_closure, swap(IRULE IADJ)}{p_end}
-{phang2}{cmd:. program define tariff_cut}{p_end}
-{phang2}{cmd:  1.     args t}{p_end}
-{phang2}{cmd:  2.     if `t' == 2022 cge_shock tm, value(0)}{p_end}
-{phang2}{cmd:  3. end}{p_end}
-{phang2}{cmd:. cge_dynamic, name(tq) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.10) growth(lab:0.02) shocks(tariff_cut) foresight}{p_end}
+{phang2}{cmd:cge_synthetic, clear}{p_end}
 
-{pstd}Setup: the SYNTHETIC SAM with a health sector and a social health
-insurance fund, which donors abroad help to finance{p_end}
+{phang2}{cmd:cge_sam, labels(account)}{p_end}
 
-{phang2}{cmd:. cge_synthetic, clear health}{p_end}
-{phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
-{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
-{phang2}{cmd:. cge_closure, factors(cap:specific)}{p_end}
+{phang2}{cmd:cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
 
-{pstd}A baseline calibrated to 5 per cent growth, and an end to the donors'
-contributions to the insurance fund ({cmd:trshir}) from 2022:{p_end}
+{phang2}{cmd:cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
-{phang2}{cmd:. cge_dynamic, name(base) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.03) population(0.025) gdpgrowth(0.05)}{p_end}
-{phang2}{cmd:. program define donor_exit}{p_end}
-{phang2}{cmd:  1.     args t}{p_end}
-{phang2}{cmd:  2.     if `t' >= 2022 cge_shock trshir, value(0)}{p_end}
-{phang2}{cmd:  3. end}{p_end}
-{phang2}{cmd:. cge_dynamic, name(exit) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.03) population(0.025) baseline(base) shocks(donor_exit)}{p_end}
-{phang2}{cmd:. cge_dynresults, run(exit) baseline(base) clear}{p_end}
-{phang2}{cmd:. cge_report, run(exit) tables(macro health)}{p_end}
+{phang2}{cmd:cge_closure, savinv(investment)}{p_end}
+
+{phang2}{cmd:cge_variable RK = W(cap) / CPI}{p_end}
+
+{phang2}{cmd:cge_variable Q, value(10)}{p_end}
+
+{phang2}{cmd:cge_equation qeq: Q = (lead(RK) + 0.95 * lead(Q)) / 1.05}{p_end}
+
+{phang2}{cmd:cge_variable IRULE = IADJ / (Q / base(Q))^2}{p_end}
+
+{phang2}{cmd:cge_closure, swap(IRULE IADJ)}{p_end}
+
+{phang2}{cmd:program define tariff_cut}{p_end}
+
+{p 12 16 2}{cmd:args t}{p_end}
+
+{p 12 16 2}{cmd:if `t' == 2022 cge_shock tm, value(0)}{p_end}
+
+{phang2}{cmd:end}{p_end}
+
+{phang2}{cmd:cge_dynamic, name(tq) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.10) growth(lab:0.02) shocks(tariff_cut) foresight}{p_end}
 
 
 {title:Stored results}

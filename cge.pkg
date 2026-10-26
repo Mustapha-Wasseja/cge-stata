@@ -1,20 +1,20 @@
 v 3
 d cge -- Computable general equilibrium (CGE) modelling in Stata
 d
-d Builds, calibrates and solves static and dynamic (recursive or perfect-foresight) single-country CGE models
-d from a social accounting matrix, using Stata and Mata: CES or
-d Cobb-Douglas value added, CET exports, Armington imports,
-d households, government, savings-investment and the rest of the
-d world, with selectable closures, limits that may bind (quotas, capacity,
-d borrowing and deficit ceilings) and built-in validation checks; SAM tools
-d for reading SAMs of any size, mapping templates, aggregation and RAS or
-d cross-entropy balancing; SAM multipliers and structural path analysis; a library of published elasticities, with sources;
-d and export of the model to GAMS, to solve it with PATH, CONOPT or IPOPT.
+d Builds, calibrates and solves SAM-based CGE models: static simulations,
+d recursive dynamics and perfect foresight with user-specified equations.
+d Links calibrated regions through bilateral trade and supports standalone
+d user-defined models, complementarity, nonlinear and integer optimisation,
+d policy optimisation, and Nash and Stackelberg games.
+d Includes SAM preparation and balancing, multiplier and structural path
+d analysis, scenario loops, validation, sensitivity and household microsimulation.
+d Built-in solvers use Stata and Mata; optional experimental SciPy links
+d require Stata 16+ with Python and SciPy. GAMS export and GDX exchange are available.
 d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja Mohammed
 d
-d Distribution-Date: 20261025
+d Distribution-Date: 20261026
 d
 f ado/cge.ado
 f ado/cge.sthlp

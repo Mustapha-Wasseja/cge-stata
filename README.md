@@ -2,11 +2,18 @@
 
 Computable general equilibrium (CGE) modelling in Stata.
 
-`cge-stata` builds, calibrates and solves single-country CGE models from a
-social accounting matrix (SAM) entirely within Stata and Mata. No external
-modelling system (GAMS, GEMPACK or similar) is required. From version 0.4.3 the
-model can also be written as a GAMS program, to solve with PATH, CONOPT or
-IPOPT or to extend (`cge_gams`).
+`cge-stata` builds, calibrates and solves CGE models in Stata. Its built-in
+SAM-based model supports static simulations, recursive dynamics and
+perfect-foresight runs with user-specified forward-looking equations.
+Calibrated single-country models can be linked through bilateral trade, and
+users can write standalone models with their own sets, parameters, variables
+and equations. The package also provides policy optimisation, Nash and
+Stackelberg games, sensitivity analysis and household microsimulation.
+
+The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
+experimental SciPy solver links require Stata 16 or later with Python and
+SciPy. GAMS export and GDX data exchange are also available; solving an
+exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
