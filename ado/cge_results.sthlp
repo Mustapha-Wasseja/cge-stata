@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -49,7 +49,9 @@ simulation solved again under its own name keeps its place).
 {title:Example}
 
 {phang2}{cmd:. cge_results, sim(notariff)}{p_end}
+
 {phang2}{cmd:. cge_results, sim(notariff) clear nodisplay}{p_end}
+
 {phang2}{cmd:. list if variable == "QA"}{p_end}
 
 

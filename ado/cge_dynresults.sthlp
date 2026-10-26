@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 23 25 2}{...}
@@ -44,6 +44,7 @@ its absolute value) are added. Variable names are those of the Reference Manual
 {pstd}After the example in {helpb cge_dynamic}:{p_end}
 
 {phang2}{cmd:. cge_dynresults, run(exit) baseline(base) clear}{p_end}
+
 {phang2}{cmd:. line dev_pct period if variable == "EH" & element1 == "hhd"}{p_end}
 
 

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -82,11 +82,17 @@ group with its members' role.
 {title:Example}
 
 {pstd}A SAM of your own, from a CSV file{p_end}
+
 {phang2}{cmd:. cge_sam using national_sam.csv, clear}{p_end}
+
 {phang2}{cmd:. cge_template using sam_roles.xlsx}{p_end}
+
 {pstd}(fill in roles, pairs and groups in Excel){p_end}
+
 {phang2}{cmd:. cge_aggregate using sam_roles.xlsx}{p_end}
+
 {phang2}{cmd:. cge_balance}{p_end}
+
 {phang2}{cmd:. cge_map using sam_roles.xlsx}{p_end}
 
 

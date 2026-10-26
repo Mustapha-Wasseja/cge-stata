@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.2  20oct2026}{...}
+{* *! version 0.3.2  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -10,7 +10,8 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut} {opt health} {opt unb:alanced} {opt vat} {opt home} {opt trade} {opt factort:ax} {opt nest:s}]
+{cmd:cge_synthetic} [{cmd:,} {opt clear} {opt nat:ional} {opt ins:titutions} {opt mar:gins} {opt ter:ritorial} {opt mult:iproduct} {opt non:imported} {opt sut}
+{opt health} {opt unb:alanced} {opt vat} {opt home} {opt trade} {opt factort:ax} {opt nest:s}]
 
 
 {title:Options}
@@ -137,6 +138,7 @@ column account.
 {title:Example}
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. list account act_agr act_man act_ser, noobs}{p_end}
 
 

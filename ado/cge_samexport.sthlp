@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  18oct2026}{...}
+{* *! version 0.3.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -56,7 +56,9 @@ unchanged.
 {title:Examples}
 
 {phang2}{cmd:. cge_balance, method(ce)}{p_end}
+
 {phang2}{cmd:. cge_samexport using balanced_sam.xlsx, replace}{p_end}
+
 {phang2}{cmd:. cge_samexport, clear long}{p_end}
 
 

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.17.0  25oct2026}{...}
+{* *! version 0.17.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -84,24 +84,41 @@ model, or all of them, and {cmd:cge_model list} lists them.
 {title:Examples}
 
 {pstd}An exchange economy of two goods and two consumers{p_end}
+
 {phang2}{cmd:. cge_model new}{p_end}
+
 {phang2}{cmd:. cge_set g = g1 g2}{p_end}
+
 {phang2}{cmd:. cge_set h = h1 h2}{p_end}
+
 {phang2}{cmd:. cge_parameter alpha(h,g), values(h1.g1:0.3 h1.g2:0.7 h2.g1:0.6 h2.g2:0.4)}{p_end}
+
 {phang2}{cmd:. cge_parameter e(h,g), values(h1.g1:10 h1.g2:2 h2.g1:3 h2.g2:8)}{p_end}
+
 {phang2}{cmd:. cge_variable P(g), value(1)}{p_end}
+
 {phang2}{cmd:. cge_variable Y(h) = sum(g, P(g) * e(h,g))}{p_end}
+
 {phang2}{cmd:. cge_variable X(h,g) = alpha(h,g) * Y(h) / P(g)}{p_end}
+
 {phang2}{cmd:. cge_variable WALRAS, value(0)}{p_end}
+
 {phang2}{cmd:. cge_equation NUM: P(g1) = 1}{p_end}
+
 {phang2}{cmd:. cge_equation MKT(g): sum(h, X(h,g)) = sum(h, e(h,g)) + WALRAS}{p_end}
+
 {phang2}{cmd:. cge_model describe}{p_end}
+
 {phang2}{cmd:. cge_solve, name(eq)}{p_end}
+
 {phang2}{cmd:. cge_results, sim(eq)}{p_end}
 
 {pstd}A named model: incomes and demands at the equilibrium prices, with the prices held{p_end}
+
 {phang2}{cmd:. cge_model define demand = Y X}{p_end}
+
 {phang2}{cmd:. cge_solve, name(dem) model(demand) from(eq) hold(P)}{p_end}
+
 {phang2}{cmd:. cge_model list}{p_end}
 
 {pstd}

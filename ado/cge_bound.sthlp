@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.18.0  25oct2026}{...}
+{* *! version 0.18.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -131,28 +131,44 @@ definitions.
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM, mapped and calibrated{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}Imports within half and twice their base, a floor on the price of manufactures, a scale and a starting level{p_end}
+
 {phang2}{cmd:. cge_bound QM, lower(0.5) upper(2) relative}{p_end}
+
 {phang2}{cmd:. cge_bound PQ(com_man), lower(0.5)}{p_end}
+
 {phang2}{cmd:. cge_bound QA(act_man), scale(1000)}{p_end}
+
 {phang2}{cmd:. cge_bound EXR, level(1.05)}{p_end}
+
 {phang2}{cmd:. cge_bound, list}{p_end}
 
 {pstd}The tariffs removed; the solution and its listing{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+
 {phang2}{cmd:. cge_listing, sim(notariff) solution}{p_end}
 
 {pstd}Foreign savings fixed 20 per cent above the base, as {cmd:FSAV.fx}{p_end}
+
 {phang2}{cmd:. cge_bound FSAV, fix(1.2) relative}{p_end}
+
 {phang2}{cmd:. cge_solve, name(fsav)}{p_end}
 
 {pstd}The attributes removed{p_end}
+
 {phang2}{cmd:. cge_bound, clear}{p_end}
 
 

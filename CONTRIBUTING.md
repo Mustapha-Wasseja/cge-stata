@@ -21,6 +21,12 @@ These conventions apply to every change, whoever or whatever prepares it.
 - Model code is in `ado/cge_mata.mata`; ado-files are thin wrappers that call it.
   After editing the Mata file, run `clear all` so that the new version is
   loaded.
+- Keep physical lines in help files at most 200 bytes long and separate
+  example paragraphs with blank lines. Keep each inline SMCL directive on
+  one physical line; split long commands into consecutive `{cmd:...}` spans.
+  Check changes in the Viewer with `do tools/check_help_viewer.do` from the
+  repository root in an interactive Stata session. A direct `smcl2txt`
+  translation does not reproduce the Viewer's long-line rendering failures.
 - File header, as in the existing files:
 
   ```stata

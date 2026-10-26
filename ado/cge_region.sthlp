@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.12.0  24oct2026}{...}
+{* *! version 0.12.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -123,24 +123,45 @@ last for the session: save each region with {helpb cge_save} after
 {title:Examples}
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_region add A}{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear institutions}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd npi) enterprises(ent) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd npi)}
+{cmd:enterprises(ent) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_region add B, units(2)}{p_end}
+
 {phang2}{cmd:. clear}{p_end}
+
 {phang2}{cmd:. set obs 2}{p_end}
+
 {phang2}{cmd:. generate exporter = cond(_n == 1, "A", "B")}{p_end}
+
 {phang2}{cmd:. generate importer = cond(_n == 1, "B", "A")}{p_end}
+
 {phang2}{cmd:. generate commodity = "com_man"}{p_end}
+
 {phang2}{cmd:. generate value = cond(_n == 1, 24, 30)}{p_end}
+
 {phang2}{cmd:. cge_region trade, exporter(exporter) importer(importer) commodity(commodity) value(value)}{p_end}
+
 {phang2}{cmd:. cge_region tariff, from(A B) to(A B) value(0)}{p_end}
+
 {phang2}{cmd:. cge_region solve, name(fta)}{p_end}
+
 {phang2}{cmd:. cge_region results, sim(fta) clear}{p_end}
 
 

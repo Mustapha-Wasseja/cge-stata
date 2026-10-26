@@ -46,24 +46,30 @@ factor (the base capital stock is base capital income divided by the rental
 rate). New capital is shared among capital factors by base income. For capital
 specific to each activity, it is allocated by relative rental rates, with
 sensitivity {opt sensitivity()}.{p_end}
+
 {phang2}2. Other factors grow at the rates in {opt growth()}.{p_end}
+
 {phang2}3. Subsistence consumption (LES) and the base of the health link grow
 with {opt population()}. With a death rate ({helpb cge_calibrate},
 {opt mortality()}; from version 0.3.4), population growth is
 {opt population()} plus the base death rate less the previous period's death
 rate, and the factors in {opt deathfactors()} lose workers to deaths at
 working ages.{p_end}
+
 {phang2}4. Government consumption and real transfers grow at
 {opt govgrowth()}; flows in foreign currency, and fixed foreign savings, at
 {opt foreigngrowth()}.{p_end}
+
 {phang2}5. With public debt ({helpb cge_calibrate}, {opt debt()}), the previous
 period's deficit is borrowed, the share {opt foreignborrowing()} abroad, and
 interest is paid on the new stocks; a surplus repays debt in the same shares
 (from version 0.3.1).{p_end}
+
 {phang2}6. The program in {opt shocks()} is called with the period as its
 argument; it may use {helpb cge_shock}, for example to cancel debt with
 {cmd:cge_shock fdebt}. Shocks persist in later periods, so a shock with
 {opt scale()} should be applied only once.{p_end}
+
 {phang2}7. Value-added efficiency grows at {opt tfp()}; or follows the path
 of the run named in {opt baseline()}; or, with {opt gdpgrowth()}, grows
 uniformly at the rate for which real value added at base prices grows at the
@@ -200,7 +206,8 @@ are illustrative and describe no country.{p_end}
 
 {phang2}{cmd:cge_sam, labels(account)}{p_end}
 
-{phang2}{cmd:cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+{phang2}{cmd:cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
 
 {phang2}{cmd:cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2) healthcom(com_hlt) healthfac(lab) healthelas(0.3)}{p_end}
 
@@ -222,8 +229,11 @@ The following program sets foreign transfers to the insurance fund
 path, so GDP can respond to the withdrawal.{p_end}
 
 {phang2}{cmd:program define donor_exit}{p_end}
+
 {p 12 16 2}{cmd:args t}{p_end}
+
 {p 12 16 2}{cmd:if `t' >= 2022 cge_shock trshir, value(0)}{p_end}
+
 {phang2}{cmd:end}{p_end}
 
 {phang2}{cmd:cge_dynamic, name(exit) periods(2018/2030) capital(cap) depreciation(0.05) rental(0.15) growth(lab:0.03) population(0.025) baseline(base) shocks(donor_exit)}{p_end}
@@ -249,7 +259,8 @@ in 2022 known from 2018. This example uses a separate synthetic model.{p_end}
 
 {phang2}{cmd:cge_sam, labels(account)}{p_end}
 
-{phang2}{cmd:cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+{phang2}{cmd:cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov)}
+{cmd:savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
 
 {phang2}{cmd:cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 

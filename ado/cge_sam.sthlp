@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -98,12 +98,17 @@ parameter with two indexes {it:name} ({cmd:SAM} by default), through
 {title:Examples}
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
 
 {pstd}A SAM of your own, from an Excel sheet, a CSV file, or a dataset of cells{p_end}
+
 {phang2}{cmd:. cge_sam using mysam.xlsx, sheet("SAM") labels(account) clear}{p_end}
+
 {phang2}{cmd:. cge_sam using large_sam.csv}{p_end}
+
 {phang2}{cmd:. cge_sam using sam_cells.dta, long(row column value) clear}{p_end}
+
 {phang2}{cmd:. cge_sam using model.gdx, symbol(SAM) clear gams(C:/GAMS/54/gams.exe)}{p_end}
 
 

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.6  23oct2026}{...}
+{* *! version 0.9.6  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -36,8 +36,10 @@ budget shares.
 
 {phang2}- Each income component changes as the CGE says that source changes for
 the household's group.{p_end}
+
 {phang2}- Nominal consumption follows the household's income and its group's
 direct tax and savings rates.{p_end}
+
 {phang2}- Consumption is deflated by a price index from the household's own
 budget shares, or its group's, at the prices households pay, including VAT.{p_end}
 
@@ -45,14 +47,26 @@ budget shares, or its group's, at the prices households pay, including VAT.{p_en
 The command then reports, before and after each simulation:
 
 {phang2}- real consumption per person, at base prices, for all households and each group;{p_end}
+
 {phang2}- for each poverty line, the headcount, poverty gap, severity and number of poor;{p_end}
+
 {phang2}- the Gini coefficient, Theil index, mean log deviation, GE(2), Atkinson indexes and the Palma and S80/S20 ratios;{p_end}
+
 {phang2}- incidence by decile, or by any number of quantiles, of base consumption per person;{p_end}
+
 {phang2}- the growth incidence curve, the growth of each percentile of the distribution;{p_end}
+
 {phang2}- each household's equivalent and compensating variations (from version 0.8.1);{p_end}
-{phang2}- with {opt decompose}, the contribution of each channel, each source of income, direct taxes and savings, and prices, to every change, and the growth and redistribution components of the change in poverty (from version 0.8.1);{p_end}
-{phang2}- with {opt market()} and the fiscal instruments, fiscal incidence as the Commitment to Equity (CEQ) method measures it: market, net market, disposable, consumable and final income, the concentration, Kakwani index, coverage and marginal contribution of each tax and benefit, the Reynolds-Smolensky index and fiscal impoverishment, in the base and after the simulation, with in-kind health benefits that follow the model's health spending (from version 0.8.2);{p_end}
-{phang2}- with {opt reweight()}, the results for survey weights adjusted so that totals such as employment by sector follow the model; with {opt svy}, standard errors from the survey design; with {opt bands()}, the range of the results across draws of the elasticities (from version 0.8.3).{p_end}
+
+{phang2}- with {opt decompose}, the contribution of each channel, each source of income, direct taxes and savings, and prices, to every change, and the growth
+and redistribution components of the change in poverty (from version 0.8.1);{p_end}
+
+{phang2}- with {opt market()} and the fiscal instruments, fiscal incidence as the Commitment to Equity (CEQ) method measures it: market, net market, disposable,
+consumable and final income, the concentration, Kakwani index, coverage and marginal contribution of each tax and benefit, the Reynolds-Smolensky index and
+fiscal impoverishment, in the base and after the simulation, with in-kind health benefits that follow the model's health spending (from version 0.8.2);{p_end}
+
+{phang2}- with {opt reweight()}, the results for survey weights adjusted so that totals such as employment by sector follow the model; with {opt svy}, standard
+errors from the survey design; with {opt bands()}, the range of the results across draws of the elasticities (from version 0.8.3).{p_end}
 
 {pstd}
 The survey's own income and consumption data drive the results. The CGE
@@ -85,10 +99,15 @@ measured per person, over persons. The default is 1.
 their sources:
 
 {phang2}- a factor of the model (its group's income from that factor, or the factor's income if the group has none);{p_end}
+
 {phang2}- {cmd:gov}, government transfers in real terms;{p_end}
+
 {phang2}- {cmd:row}, transfers from abroad, such as remittances;{p_end}
+
 {phang2}- {cmd:dom}, transfers from other domestic institutions, such as dividends;{p_end}
+
 {phang2}- {cmd:cpi}, income indexed to the CPI;{p_end}
+
 {phang2}- {cmd:fixed}, unchanged nominal income.{p_end}
 
 {pmore}
@@ -134,10 +153,15 @@ With it, the fiscal instruments are amounts the household pays or receives,
 not negative:
 
 {phang2}- {opt dtax(varlist)}, direct taxes and contributions; they change with market income and the group's direct tax rate;{p_end}
+
 {phang2}- {opt transfers(varlist)}, direct transfers, which change as the group's transfers from the government;{p_end}
+
 {phang2}- {opt itax(varlist)}, indirect taxes, which change with nominal spending and the share of sales tax and VAT in the prices the household pays;{p_end}
+
 {phang2}- {opt subsidies(varlist)}, indirect subsidies, which change with nominal spending;{p_end}
-{phang2}- {opt inkind(var:target ...)}, in-kind benefits, such as health or education services, valued at cost: each changes as the model's spending on its target, a commodity bought by the government, such as {cmd:com_hlt}, or {cmd:shi}, the purchases of the health insurance fund.{p_end}
+
+{phang2}- {opt inkind(var:target ...)}, in-kind benefits, such as health or education services, valued at cost: each changes as the model's spending on its
+target, a commodity bought by the government, such as {cmd:com_hlt}, or {cmd:shi}, the purchases of the health insurance fund.{p_end}
 
 {pmore}
 Market income changes as the household's income components do, or as its
@@ -271,15 +295,21 @@ percentile), {cmd:base}, {cmd:value} (simulated), {cmd:change} and
 {cmd:pct} (per cent change). The tables are:
 
 {p2colset 9 22 24 2}{...}
-{p2col:{cmd:summary}}by group: {cmd:mean}; {cmd:ev} and {cmd:cv} per person, with {cmd:pct} their per cent of base consumption; for each line {cmd:fgt0}, {cmd:fgt1}, {cmd:fgt2} and {cmd:npoor}; {cmd:gini}, {cmd:theil}, {cmd:mld}, {cmd:ge2}, {cmd:atkinson_05}, {cmd:atkinson_1}, {cmd:atkinson_2}, {cmd:palma} and {cmd:s80s20}{p_end}
+{p2col:{cmd:summary}}by group: {cmd:mean}; {cmd:ev} and {cmd:cv} per person, with {cmd:pct} their per cent of base consumption; for each line {cmd:fgt0},
+{cmd:fgt1}, {cmd:fgt2} and {cmd:npoor}; {cmd:gini}, {cmd:theil}, {cmd:mld}, {cmd:ge2}, {cmd:atkinson_05}, {cmd:atkinson_1}, {cmd:atkinson_2}, {cmd:palma} and
+{cmd:s80s20}{p_end}
 {p2col:{cmd:quantile}}by quantile group: {cmd:popshare}, {cmd:mean}, {cmd:share} (of total consumption), {cmd:inc_abs} (share of the total change, in {cmd:value}) and {cmd:ev}{p_end}
 {p2col:{cmd:gic}}percentiles 1 to 99 of consumption per person, base and simulated: {cmd:pct} is the growth incidence curve{p_end}
-{p2col:{cmd:shapley}}with {opt decompose}: for every measure of {cmd:summary} for all households and each channel, the base and the base plus the channel's contribution; {cmd:change} is the contribution{p_end}
+{p2col:{cmd:shapley}}with {opt decompose}: for every measure of {cmd:summary} for all households and each channel, the base and the base plus the channel's
+contribution; {cmd:change} is the contribution{p_end}
 {p2col:{cmd:growthred}}with {opt decompose}: the growth and redistribution components of each poverty measure{p_end}
-{p2col:{cmd:fiscal}}with {opt market()}: for each income concept ({cmd:channel}: {cmd:market}, {cmd:net_market}, {cmd:disposable}, {cmd:consumable}, {cmd:final}) {cmd:mean}, {cmd:gini}, {cmd:conc} and the poverty measures; for each instrument {cmd:total}, {cmd:pct_market}, {cmd:conc}, {cmd:kakwani}, {cmd:coverage}, {cmd:coverage_poor}, {cmd:mc_gini} and {cmd:mc_fgt0}; and {cmd:re}, {cmd:rs}, {cmd:rerank} and {cmd:fi}{p_end}
+{p2col:{cmd:fiscal}}with {opt market()}: for each income concept ({cmd:channel}: {cmd:market}, {cmd:net_market}, {cmd:disposable}, {cmd:consumable},
+{cmd:final}) {cmd:mean}, {cmd:gini}, {cmd:conc} and the poverty measures; for each instrument {cmd:total}, {cmd:pct_market}, {cmd:conc}, {cmd:kakwani},
+{cmd:coverage}, {cmd:coverage_poor}, {cmd:mc_gini} and {cmd:mc_fgt0}; and {cmd:re}, {cmd:rs}, {cmd:rerank} and {cmd:fi}{p_end}
 {p2col:{cmd:fiscalq}}with {opt market()}: by quantile of market income per person, each instrument's {cmd:share} and its {cmd:pct_market} of the quantile's market income{p_end}
 {p2col:{cmd:reweight}}with {opt reweight()}: each characteristic's weighted total, base and reweighted{p_end}
-{p2col:{cmd:bands}}with {opt bands()}: for every measure for all households, its percentiles {cmd:p5}, {cmd:p50} and {cmd:p95} and its standard deviation {cmd:sd} across the draws, in {cmd:value}{p_end}
+{p2col:{cmd:bands}}with {opt bands()}: for every measure for all households, its percentiles {cmd:p5}, {cmd:p50} and {cmd:p95} and its standard deviation
+{cmd:sd} across the draws, in {cmd:value}{p_end}
 {p2colreset}{...}
 
 
@@ -299,76 +329,128 @@ are 5 by 3.5 inches. The survey in memory is left as it was.
 {p2col:{cmd:incidence}}the per cent change in mean consumption per person of each quantile group of base consumption{p_end}
 {p2col:{cmd:poverty}}the change in the poverty headcount, in percentage points, at each line; needs {opt line()}{p_end}
 {p2col:{cmd:groups}}the per cent change in mean consumption per person of each household group{p_end}
-{p2col:{cmd:shapley}}the contribution of each channel to the change in the headcount at the first line, in percentage points, or to the change in mean consumption without a line; needs {opt decompose}{p_end}
+{p2col:{cmd:shapley}}the contribution of each channel to the change in the headcount at the first line, in percentage points, or to the change in mean
+consumption without a line; needs {opt decompose}{p_end}
 {p2col:{cmd:fiscal}}the Gini coefficient of each income concept, market to final, in the base and each simulation; needs {opt market()}{p_end}
-{p2col:{cmd:bands}}the median and the 5th to 95th percentiles across the draws of the per cent change in mean consumption, the headcount at each line and the Gini coefficient; needs {opt bands()}{p_end}
+{p2col:{cmd:bands}}the median and the 5th to 95th percentiles across the draws of the per cent change in mean consumption, the headcount at each line and the
+Gini coefficient; needs {opt bands()}{p_end}
 {p2colreset}{...}
 
 
 {title:Examples}
 
 {pstd}Setup: a tariff removal in the SYNTHETIC SAM of {helpb cge_synthetic}{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+
 {phang2}{cmd:. cge_shock, reset}{p_end}
+
 {phang2}{cmd:. cge_shock tm, scale(2)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(tariff2)}{p_end}
 
 {pstd}A SYNTHETIC survey of 1,000 households, all in the CGE household {cmd:hhd}{p_end}
+
 {phang2}{cmd:. clear}{p_end}
+
 {phang2}{cmd:. set seed 2026}{p_end}
+
 {phang2}{cmd:. set obs 1000}{p_end}
+
 {phang2}{cmd:. generate str3 group = "hhd"}{p_end}
+
 {phang2}{cmd:. generate double hhsize = 1 + floor(6 * runiform())}{p_end}
+
 {phang2}{cmd:. generate double weight = 100 + 50 * runiform()}{p_end}
+
 {phang2}{cmd:. generate double wage = exp(rnormal(5, 0.7)) * hhsize}{p_end}
+
 {phang2}{cmd:. generate double profit = cond(runiform() < 0.3, exp(rnormal(5, 1)), 0)}{p_end}
+
 {phang2}{cmd:. generate double cons = 0.9 * (wage + profit)}{p_end}
+
 {phang2}{cmd:. generate double food = 0.5 * cons}{p_end}
+
 {phang2}{cmd:. generate double goods = 0.5 * cons}{p_end}
+
 {phang2}{cmd:. generate double zreg = cond(runiform() < 0.5, 90, 110)}{p_end}
 
 {pstd}Consumption and poverty after the tariff removal, by household{p_end}
+
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) budget(food:com_agr goods:com_man) line(100) generate(nt)}{p_end}
 
 {pstd}Two simulations, a national and a regional line, and every table{p_end}
+
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) detail}{p_end}
 
 {pstd}Welfare by household, and the contributions of each channel{p_end}
-{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) budget(food:com_agr goods:com_man) line(100) generate(w1) decompose}{p_end}
+
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap)}
+{cmd:budget(food:com_agr goods:com_man) line(100) generate(w1) decompose}{p_end}
 
 {pstd}Fiscal incidence, with in-kind services that follow government purchases{p_end}
+
 {phang2}{cmd:. generate double market = wage + profit}{p_end}
+
 {phang2}{cmd:. generate double dtx = 0.1 * market}{p_end}
+
 {phang2}{cmd:. generate double itx = 0.05 * cons}{p_end}
+
 {phang2}{cmd:. generate double school = cond(runiform() < 0.4, 20 * runiform(), 0)}{p_end}
-{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) market(market) dtax(dtx) itax(itx) inkind(school:com_ser)}{p_end}
+
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100)}
+{cmd:market(market) dtax(dtx) itax(itx) inkind(school:com_ser)}{p_end}
 
 {pstd}Employment in agriculture as the model says, standard errors, and bands across 20 draws of the elasticities{p_end}
+
 {phang2}{cmd:. generate double agri = runiform() < 0.4}{p_end}
+
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) reweight(agri:lab.act_agr)}{p_end}
+
 {phang2}{cmd:. generate long psu = ceil(_n / 10)}{p_end}
+
 {phang2}{cmd:. svyset psu [pweight = weight]}{p_end}
+
 {phang2}{cmd:. cge_microsim, sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) svy}{p_end}
+
 {phang2}{cmd:. svyset, clear}{p_end}
+
 {phang2}{cmd:. program define scen_nt}{p_end}
+
 {phang2}{cmd:  1.     cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:  2. end}{p_end}
+
 {phang2}{cmd:. cge_sensitivity, scenario(scen_nt) draws(20) keep(dr) nodisplay}{p_end}
+
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100) bands(dr)}{p_end}
 
 {pstd}Graphs of both simulations, with labels, saved as PDF files for a journal (from version 0.9.6){p_end}
-{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) budget(food:com_agr goods:com_man) line(100 zreg) decompose graph(gic incidence poverty shapley) glabels("Tariffs removed" "Tariffs doubled") gexport(tariffs.pdf) nodisplay}{p_end}
+
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap)}
+{cmd:budget(food:com_agr goods:com_man) line(100 zreg) decompose graph(gic incidence poverty shapley) glabels("Tariffs removed"}
+{cmd:"Tariffs doubled") gexport(tariffs.pdf) nodisplay}{p_end}
 
 {pstd}The same graphs in colour, as PNG files{p_end}
-{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) graph(all) gcolor glabels("Tariffs removed" "Tariffs doubled") gexport(tariffs.png) nodisplay}{p_end}
+
+{phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap)}
+{cmd:line(100 zreg) graph(all) gcolor glabels("Tariffs removed" "Tariffs doubled") gexport(tariffs.png) nodisplay}{p_end}
 
 {pstd}The results as a dataset, and the growth incidence curve{p_end}
+
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) clear nodisplay}{p_end}
+
 {phang2}{cmd:. list q pct if sim == "notariff" & table == "gic" & inlist(q, 10, 50, 90), noobs}{p_end}
 
 
@@ -395,7 +477,8 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {synopt:{cmd:r(instlist)}}the fiscal instruments{p_end}
 {synopt:{cmd:r(graphs)}}with {opt graph()}: the names of the graphs drawn{p_end}
 {p2col 5 20 24 2: Matrices}{p_end}
-{synopt:{cmd:r(table)}}for all households and each group: mean real consumption per person, base and simulated, and its per cent change; FGT0, FGT1 and FGT2 at the first line, base and simulated; the Gini coefficient, base and simulated{p_end}
+{synopt:{cmd:r(table)}}for all households and each group: mean real consumption per person, base and simulated, and its per cent change; FGT0, FGT1 and FGT2 at
+the first line, base and simulated; the Gini coefficient, base and simulated{p_end}
 {synopt:{cmd:r(poverty)}}for each line ({cmd:line1}, {cmd:line2}, ...) and group: FGT0, FGT1, FGT2 and the number of poor, base and simulated{p_end}
 {synopt:{cmd:r(inequality)}}for each group: the nine inequality measures, base and simulated{p_end}
 {synopt:{cmd:r(quantiles)}}for each quantile group: population share, mean base and simulated, per cent change, share of consumption base and simulated, share of the total change{p_end}
@@ -403,7 +486,8 @@ The results in {cmd:r()} are those of the first simulation of {opt sim()}.
 {synopt:{cmd:r(welfare)}}for each group: EV and CV per person, and as per cent of base consumption{p_end}
 {synopt:{cmd:r(shapley)}}with {opt decompose}: for each measure, the base, the contribution of each channel, and the simulated value{p_end}
 {synopt:{cmd:r(growthred)}}with {opt decompose}: for each line and poverty measure, the base, growth, redistribution and the simulated value{p_end}
-{synopt:{cmd:r(concepts)}}with {opt market()}: for each income concept, mean per person, Gini, concentration coefficient and (with a line) FGT0 to FGT2 and the number of poor, base and simulated{p_end}
+{synopt:{cmd:r(concepts)}}with {opt market()}: for each income concept, mean per person, Gini, concentration coefficient and (with a line) FGT0 to FGT2 and the
+number of poor, base and simulated{p_end}
 {synopt:{cmd:r(instruments)}}with {opt market()}: for each instrument, the eight measures of the table {cmd:fiscal}, base and simulated{p_end}
 {synopt:{cmd:r(redistribution)}}with {opt market()}: redistributive effect, Reynolds-Smolensky index, reranking and fiscal impoverishment, base and simulated{p_end}
 {synopt:{cmd:r(fshare)}}with {opt market()}: the base share of each instrument by quantile of market income{p_end}

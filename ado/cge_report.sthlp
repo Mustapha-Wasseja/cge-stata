@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  22oct2026}{...}
+{* *! version 0.6.4  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 19 21 2}{...}
@@ -27,12 +27,14 @@ government consumption, investment, purchases of the health insurance fund,
 exports and imports, real value added, price indexes, the exchange rate and
 the real exchange rate, private savings, investment and foreign savings{p_end}
 {p2col:{cmd:government}}revenue, spending, savings and revenue by tax, including VAT{p_end}
-{p2col:{cmd:debt}}interest paid at home and abroad, the primary balance, and public debt at the end of the period, at home, abroad (in local and foreign currency), in total and in per cent of nominal GDP, when the model has debt (from version 0.3.1){p_end}
+{p2col:{cmd:debt}}interest paid at home and abroad, the primary balance, and public debt at the end of the period, at home, abroad (in local and foreign
+currency), in total and in per cent of nominal GDP, when the model has debt (from version 0.3.1){p_end}
 {p2col:{cmd:institutions}}income of households and enterprises; household consumption{p_end}
 {p2col:{cmd:factors}}wage, real wage, income and supply of each factor, and the labour force and unemployment rate (per cent) of factors with a labour force (from version 0.3.3){p_end}
 {p2col:{cmd:activities}}output, price and value added of each activity{p_end}
 {p2col:{cmd:commodities}}supply, price, output, domestic sales, exports and imports of each commodity{p_end}
-{p2col:{cmd:health}}health services and services per head, factor efficiency, the share of working time lost to illness (per cent) and days worked, the death rate (per 1,000) and the population index (from version 0.3.4), and the health insurance fund, when the model has them{p_end}
+{p2col:{cmd:health}}health services and services per head, factor efficiency, the share of working time lost to illness (per cent) and days worked, the death
+rate (per 1,000) and the population index (from version 0.3.4), and the health insurance fund, when the model has them{p_end}
 {p2col:{cmd:welfare}}equivalent and compensating variations of each household, in per cent of base consumption{p_end}
 {p2colreset}{...}
 
@@ -89,19 +91,32 @@ simulation; any other file is saved as a Stata dataset in the format of
 {title:Examples}
 
 {pstd}Setup: two simulations of the SYNTHETIC SAM of {helpb cge_synthetic}{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+
 {phang2}{cmd:. cge_shock, reset}{p_end}
+
 {phang2}{cmd:. cge_shock qg, scale(1.1)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(gov_up)}{p_end}
 
 {pstd}Report{p_end}
+
 {phang2}{cmd:. cge_report, sims(notariff gov_up)}{p_end}
+
 {phang2}{cmd:. cge_report, sims(_all) tables(all) saving(results.xlsx, replace)}{p_end}
+
 {phang2}{cmd:. cge_report, clear nodisplay}{p_end}
 
 

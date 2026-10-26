@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.18.0  25oct2026}{...}
+{* *! version 0.18.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -148,7 +148,9 @@ the SAM for PATH, CONOPT, IPOPT and KNITRO; other solvers use their defaults.
 {opt type(cns|nlp|mcp|minlp|mip)} chooses the GAMS model type:
 
 {phang2}o  {cmd:cns}, a constrained nonlinear system (PATH, CONOPT, KNITRO);{p_end}
+
 {phang2}o  {cmd:nlp}, the same equations with a constant objective, for NLP solvers;{p_end}
+
 {phang2}o  {cmd:mcp}, a mixed complementarity problem (PATH), which a scenario with constraints needs.{p_end}
 
 {pmore}
@@ -170,18 +172,27 @@ solver and type can also be set when GAMS is run, for example
 {title:Examples}
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
 
 {pstd}Write the model and the scenario, to solve in GAMS later{p_end}
+
 {phang2}{cmd:. cge_gams using gams_notariff, sim(notariff)}{p_end}
 
 {pstd}Solve it in GAMS with PATH, then with CONOPT, and compare with Stata;
 {cmd:gams()} gives the path of your GAMS installation{p_end}
+
 {phang2}{cmd:. cge_gams using gams_notariff, sim(notariff) replace run compare gams(C:/GAMS/54/gams.exe)}{p_end}
+
 {phang2}{cmd:. cge_gams using gams_notariff, sim(notariff) noexport run compare solver(conopt) gams(C:/GAMS/54/gams.exe)}{p_end}
 
 

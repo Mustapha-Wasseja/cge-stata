@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.13.0  24oct2026}{...}
+{* *! version 0.13.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -95,23 +95,34 @@ elements of the model.
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM with a health sector, mapped and calibrated{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear health}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_hlt) commodities(com_agr com_man com_ser com_hlt) factors(lab cap)}
+{cmd:households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) insurance(shi)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
 
 {pstd}The goods, the commodities other than services and health{p_end}
+
 {phang2}{cmd:. cge_set goods = c, except(com_ser com_hlt)}{p_end}
 
 {pstd}Spending on goods by the government, as a user variable{p_end}
+
 {phang2}{cmd:. cge_variable GGOODS = sum(goods, PQ(goods) * QG(goods)), nominal}{p_end}
 
 {pstd}Activities paired with the commodities they make; the value of their output, and a price ratio for the pairs only (from version 0.9.1){p_end}
+
 {phang2}{cmd:. cge_set map(a,c) = act_agr.com_agr act_hlt.com_hlt}{p_end}
+
 {phang2}{cmd:. cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal}{p_end}
+
 {phang2}{cmd:. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)}{p_end}
 
 {pstd}The user sets{p_end}
+
 {phang2}{cmd:. cge_set, list}{p_end}
 
 

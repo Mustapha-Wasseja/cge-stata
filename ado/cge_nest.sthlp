@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.11.0  24oct2026}{...}
+{* *! version 0.11.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 17 19 2}{...}
@@ -126,16 +126,28 @@ and {it:name}{cmd:_z}. {helpb cge_gams} writes them as other user equations.
 top at 0.8, and a payroll tax{p_end}
 
 {phang2}{cmd:. cge_synthetic, clear nests}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_ene) commodities(com_agr com_man com_ser com_ene) factors(lab_hi lab_lo cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab_hi)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser act_ene) commodities(com_agr com_man com_ser com_ene) factors(lab_hi lab_lo cap)}
+{cmd:households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp) factortax(tax_pay:lab_hi)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_nest begin va(a), output(QVA(a)) price(PVA(a)) s(0.8) efficiency(ad(a) / base(ad(a))) replace(Q3)}{p_end}
+
 {phang2}{cmd:. cge_nest nest labour, s(1.5)}{p_end}
+
 {phang2}{cmd:. cge_nest input QF(lab_hi, a), price(W(lab_hi) * WFDIST(lab_hi, a) * (1 + tf(lab_hi, a))) in(labour) replace(Q4(lab_hi, a))}{p_end}
+
 {phang2}{cmd:. cge_nest input QF(lab_lo, a), price(W(lab_lo) * WFDIST(lab_lo, a) * (1 + tf(lab_lo, a))) in(labour) replace(Q4(lab_lo, a))}{p_end}
+
 {phang2}{cmd:. cge_nest input QF(cap, a), price(W(cap) * WFDIST(cap, a) * (1 + tf(cap, a))) replace(Q4(cap, a))}{p_end}
+
 {phang2}{cmd:. cge_nest end}{p_end}
+
 {phang2}{cmd:. cge_shock QFS, elements(lab_hi) scale(1.1)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(skilled)}{p_end}
 
 

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.10.0  24oct2026}{...}
+{* *! version 0.10.0  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -99,21 +99,32 @@ default {cmd:gams} and {cmd:gdxdump} must be on the system path.
 {title:Examples}
 
 {pstd}Setup: the SYNTHETIC SAM, mapped, calibrated and solved{p_end}
+
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
+
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
-{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
+{phang2}{cmd:. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd)}
+{cmd:government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)}{p_end}
+
 {phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
 {phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
 {phang2}{cmd:. cge_solve, name(notariff)}{p_end}
 
 {pstd}The model and the simulation as a GDX file{p_end}
+
 {phang2}{cmd:. cge_gdx write using model.gdx, sims(notariff) gams(C:/GAMS/54/gams.exe)}{p_end}
 
 {pstd}Its symbols, and the levels read back{p_end}
+
 {phang2}{cmd:. cge_gdx list using model.gdx, gams(C:/GAMS/54/gams.exe)}{p_end}
+
 {phang2}{cmd:. cge_gdx read using model.gdx, symbol(LEVEL) clear gams(C:/GAMS/54/gams.exe)}{p_end}
 
 {pstd}A SAM from the GDX file of a GAMS model{p_end}
+
 {phang2}{cmd:. cge_sam using model.gdx, symbol(SAM) clear gams(C:/GAMS/54/gams.exe)}{p_end}
 
 
