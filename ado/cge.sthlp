@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.27.1  25oct2026}{...}
+{* *! version 0.27.1  26oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -16,19 +16,49 @@
 {title:Description}
 
 {pstd}
-{bf:cge-stata} builds, calibrates and solves static, single-country computable
-general equilibrium (CGE) models from a social accounting matrix (SAM), entirely
-in Stata and Mata. {cmd:cge} displays the package version and its commands.
+{bf:cge-stata} builds, calibrates and solves computable general equilibrium
+(CGE) models in Stata. The built-in model uses a social accounting matrix (SAM)
+and supports static simulations, recursive dynamics and perfect-foresight runs
+with user-specified forward-looking equations ({helpb cge_dynamic}). Calibrated
+single-country models can be linked through bilateral trade to form a
+multi-region model ({helpb cge_region}). {cmd:cge} displays the package version
+and its commands.
 
 {pstd}
-The model is documented equation by equation in the cge-stata Reference Manual
-(docs/manual/cge-stata-manual.pdf in the package repository), which also
-describes every command with examples: CES or Cobb-Douglas value added, Leontief intermediate
-inputs, CET exports, Armington imports, households with Cobb-Douglas demand,
-government, savings-investment and the rest of the world, with selectable
-closures. Fiscal instruments (from version 0.3.1) include VAT with
-input credits, closures in which a chosen tax replaces lost revenue, and public
-debt with interest.
+The standard model includes CES or Cobb-Douglas value added, Leontief
+intermediate inputs, CET exports, Armington imports, and households with
+Cobb-Douglas or linear expenditure system (LES) demand. Enterprises, government,
+savings-investment and the rest of the world are linked by income and transfer
+flows. Selectable closures and extensions cover taxes and VAT with input
+credits, public debt, labour-market regimes, health financing and outcomes,
+and binding limits such as quotas, capacity and borrowing ceilings.
+
+{pstd}
+Users can extend the built-in model or write a standalone model without a SAM,
+using sets, parameters, variables, equations and nested CES or CET blocks
+({helpb cge_model}, {helpb cge_equation}, {helpb cge_nest}). The package solves
+equilibrium and complementarity systems and nonlinear optimisation problems,
+including models with integer or binary variables. It also supports policy
+optimisation ({helpb cge_optimize}), Nash and Stackelberg games
+({helpb cge_nash}), and a library of ready-to-run examples ({helpb cge_modlib}).
+
+{pstd}
+The workflow includes SAM preparation and balancing, multiplier and structural
+path analysis, scenario loops, validation checks, sensitivity analysis and
+reporting. A link to household survey data measures poverty, inequality,
+welfare and fiscal incidence ({helpb cge_microsim}).
+
+{pstd}
+The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
+experimental links to SciPy's SuperLU and HiGHS require Stata 16 or later with
+Python and SciPy ({helpb cge_options}, {helpb cge_solve}). GAMS export and GDX
+data exchange are also available ({helpb cge_gams}, {helpb cge_gdx}); solving an
+exported model in GAMS requires GAMS and the selected solver.
+
+{pstd}
+The {browse "https://github.com/Mustapha-Wasseja/cge-stata/blob/main/docs/manual/cge-stata-manual.pdf":cge-stata Reference Manual}
+documents the model equation by equation and describes every command with
+examples. Its repository path is {cmd:docs/manual/cge-stata-manual.pdf}.
 
 
 {title:Preparing a SAM}

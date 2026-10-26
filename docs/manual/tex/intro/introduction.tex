@@ -2,11 +2,13 @@
 
 \section{What the package does}
 
-\pkg builds, calibrates and solves single-country computable general
-equilibrium (CGE) models from a social accounting matrix (SAM), within Stata
-and Mata, without an external modelling system. The model is the standard
-SAM-based model of the IFPRI and PEP traditions \citep{lofgren2002,decaluwe2013},
-stated in full in Part~\ref{part:model}:
+\pkg builds, calibrates and solves computable general equilibrium (CGE)
+models in Stata. The built-in model uses a social accounting matrix (SAM),
+supports static and dynamic simulations, and can be linked to other regions
+through bilateral trade. Users can also write standalone models with their
+own sets, parameters, variables and equations. The built-in SAM-based model
+follows the IFPRI and PEP traditions \citep{lofgren2002,decaluwe2013}; its
+equations are stated in full in Part~\ref{part:model}:
 \begin{itemize}
 \item production with CES or Cobb--Douglas value added and Leontief
 intermediate inputs, with an optional CES nest between them; activities may
@@ -25,8 +27,11 @@ Extensions cover public debt, home consumption, finite export demand, margins
 by market, labour-market regimes, a social health insurance fund, factor
 efficiency linked to health services, health outcomes, nests of value added,
 the aggregation of output from several activities, and limits that bind in
-some scenarios and not in others. The model can be solved for one period or
-as a recursive dynamic sequence. Its results can be passed to household survey
+some scenarios and not in others. The model can be solved for one period,
+as a recursive dynamic sequence, or with perfect foresight and user-specified
+forward-looking equations (\manref{cge_dynamic}). Calibrated regional models
+can be solved together with bilateral trade (\manref{cge_region}).
+Results can be passed to household survey
 data: poverty for several lines, inequality, incidence by decile and the
 growth incidence curve, each household's welfare, the contribution of each
 channel to every change, and fiscal incidence as the Commitment to Equity
@@ -40,9 +45,19 @@ analyse the SAM, and a library gives published elasticities with their
 sources. The model can also be written as a GAMS program, solved there and
 brought back.
 
-The package does not do intertemporal optimisation (agents do not look ahead),
-multi-region modelling, or the estimation of elasticities: its elasticities
-are inputs, stated by the user.
+Standalone models support equilibrium and complementarity systems and
+nonlinear optimisation, including integer or binary variables
+(\manref{cge_model}, \manref{cge_solve}). \manref{cge_nash} adds Nash and
+Stackelberg games, and \manref{cge_modlib} supplies ready-to-run examples,
+including a Ramsey growth model. Perfect foresight solves periods together;
+any forward-looking behaviour or intertemporal objective must be specified
+in the user's equations or optimisation model. Elasticities remain inputs
+supplied by the user or selected from the sourced library.
+
+The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
+experimental links to SciPy's SuperLU and HiGHS require Stata 16 or later
+with Python and SciPy (\manref{cge_options}, \manref{cge_solve}). Running an
+exported model in GAMS requires GAMS and the selected solver.
 
 \section{Installation}
 

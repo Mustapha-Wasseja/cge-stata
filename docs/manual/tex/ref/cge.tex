@@ -2,14 +2,33 @@
 
 \cgesec{Description}
 
-\pkg builds, calibrates and solves single-country computable general
-equilibrium (CGE) models from a social accounting matrix (SAM), in Stata and
-Mata, without an external modelling system. A model can be solved for one
-period or as a recursive dynamic sequence, its results can be reported in
-standard tables, passed to household survey data, or tested for their
-sensitivity to the elasticities, and the model can be written as a GAMS
-program. Tools read, aggregate and balance the SAM, and a library gives
-published elasticities with their sources.
+\pkg builds, calibrates and solves computable general equilibrium (CGE)
+models in Stata. The built-in model uses a social accounting matrix (SAM)
+and supports static simulations, recursive dynamics and perfect-foresight
+runs with user-specified forward-looking equations (\manref{cge_dynamic}).
+Calibrated single-country models can be linked through bilateral trade to
+form a multi-region model (\manref{cge_region}).
+
+Users can extend the built-in model or write a standalone model without a
+SAM, using sets, parameters, variables, equations and nested CES or CET
+blocks (\manref{cge_model}, \manref{cge_equation}, \manref{cge_nest}). The
+package solves equilibrium and complementarity systems and nonlinear
+optimisation problems, including models with integer or binary variables.
+It also supports policy optimisation (\manref{cge_optimize}), Nash and
+Stackelberg games (\manref{cge_nash}), and a library of ready-to-run examples
+(\manref{cge_modlib}).
+
+The workflow includes SAM preparation and balancing, multiplier and
+structural path analysis, scenario loops, validation checks, sensitivity
+analysis and reporting. A link to household survey data measures poverty,
+inequality, welfare and fiscal incidence (\manref{cge_microsim}).
+
+The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
+experimental links to SciPy's SuperLU and HiGHS require Stata 16 or later
+with Python and SciPy (\manref{cge_options}, \manref{cge_solve}). GAMS export
+and GDX data exchange are also available (\manref{cge_gams},
+\manref{cge_gdx}); solving an exported model in GAMS requires GAMS and the
+selected solver.
 
 The command \cmd{cge} displays the version of the package and its commands.
 
@@ -50,9 +69,13 @@ several activities. Limits that bind in some scenarios and not in others,
 such as quotas and capacity limits, are complementarity conditions solved with
 the model. Part~II of this manual gives every equation.
 
-The package has no intertemporal optimisation (agents do not look ahead), no
-multi-region model and no estimation of elasticities: the elasticities are
-inputs, stated by the user, and have no defaults.
+Perfect foresight solves periods together with the user's forward-looking
+equations and terminal conditions; it does not supply an intertemporal
+household objective. Such behaviour must be specified in user equations or
+a standalone optimisation model. Regional links use each region's own SAM,
+closure and shocks, together with bilateral trade data. Elasticities are
+inputs supplied by the user or selected from the sourced library; the
+package does not estimate them or assign defaults.
 
 \cgesubsec{The commands}
 
@@ -79,29 +102,40 @@ Command & Title\\
 \manref{cge_closure} & Choose the model closure\\
 \manref{cge_shock} & Change a parameter or a fixed variable\\
 \manref{cge_constraint} & Limits that bind in some scenarios and not in others\\
+\manref{cge_bound} & Variable bounds, scales, starting levels, fixed values and integrality\\
 \manref{cge_variable} & User variables, defined by an expression or determined by user equations\\
 \manref{cge_equation} & User equations: new relations among the model's variables\\
 \manref{cge_set} & User sets of elements, for indexes and sums\\
 \manref{cge_parameter} & User parameters for user variables and equations\\
+\manref{cge_macro} & Macros for user expressions\\
+\manref{cge_nest} & Declare nested CES or CET blocks\\
+\manref{cge_model} & Standalone models, named equation subsets and model statistics\\
+\manref{cge_modlib} & Ready-to-run models in the user language\\
 \manref{cge_solve} & Solve the model\\
+\manref{cge_options} & Solver settings\\
 \manref{cge_optimize} & Choose policy instruments to maximise an outcome or reach targets\\
-\manref{cge_dynamic} & Solve a recursive dynamic run\\
+\manref{cge_nash} & Nash equilibria and Stackelberg leaders\\
+\manref{cge_loop} & Scenario lists and grids, with optional parallel execution\\
+\manref{cge_dynamic} & Solve a dynamic run, recursive or with perfect foresight\\
+\manref{cge_region} & Link calibrated regions through bilateral trade\\
 \multicolumn{2}{@{}l}{\textit{Results}}\\
 \manref{cge_results} & Report simulation results\\
 \manref{cge_report} & Standard report tables for one or more simulations\\
 \manref{cge_dynresults} & Results of a dynamic run as a dataset\\
 \manref{cge_sensitivity} & Sensitivity of a scenario's results to the elasticities\\
 \manref{cge_microsim} & Pass simulations to household survey data\\
-\multicolumn{2}{@{}l}{\textit{Saving the model, and GAMS}}\\
+\manref{cge_listing} & Equation listing and infeasibility report\\
+\multicolumn{2}{@{}l}{\textit{Saving the model, and GAMS}}\\*
 \manref{cge_save} & Save the model and its simulations to a file\\
 \manref{cge_use} & Load a model saved with cge\_save\\
+\manref{cge_gdx} & Write, read and list GDX files\\
 \manref{cge_gams} & Write the model as a GAMS program, and solve it in GAMS\\
 \bottomrule
 \end{cgetable}
 
 \cgesubsec{The workflow}
 
-A model is built in a fixed order, one command for each step:
+The built-in SAM-based model follows this workflow:
 \begin{enumerate}
 \item read the SAM with \manref{cge_sam}, and prepare it if needed with
 \manref{cge_template}, \manref{cge_aggregate} and \manref{cge_balance};
@@ -125,7 +159,11 @@ the mapping or the calibration.
 
 \cgesubsec{Example 1: the package}
 
-\stlog{cge_display}
+\begin{stcode}
+. cge
+\end{stcode}
+The command displays the installed package version and links to its commands.
+Use \cmd{help cge} to open the overview and command index.
 
 \cgesubsec{Example 2: a complete model}
 
