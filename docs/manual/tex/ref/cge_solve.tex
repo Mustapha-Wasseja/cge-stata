@@ -367,6 +367,9 @@ to the tolerance, and the test suite checks that they do.
 \res{r(best_start)} & the start of the best solution, with \opt{}{starts} and no integers\\
 \res{r(N_starts_converged)} & the starts that converged\\
 \res{r(solver)} & \cmd{ipm}, \cmd{bb} or \cmd{highs} (from version 0.27.0)\\
+\res{r(hessian)} & the interior point's Hessians: \cmd{exact} or \cmd{differences} (from version 0.28.0)\\
+\res{r(N_hessian_exact)} & its iterations with exact Hessians\\
+\res{r(N_hessian_differences)} & its iterations with differences\\
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto} (from version 0.10.1)\\
 \res{r(closure)} & closure\\
 \res{r(constraints)} & the constraints and their regimes, if any\\

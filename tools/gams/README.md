@@ -5,8 +5,9 @@
 was written from the specification, not translated from the Stata or Python
 code, so that a third implementation, in the language most CGE modellers use,
 confirms the equations and the calibration. From version 0.4.3 the GAMS files
-are installed with the package: `cge_gams` writes a model in Stata for this
-GAMS program (docs/gams.md).
+are installed with the package (from version 0.27.1 as one bundle,
+`ado/cge_gams_model.txt`, which `tools/bundle_files.py` writes from them):
+`cge_gams` writes a model in Stata for this GAMS program (docs/gams.md).
 
 GAMS receives only what a user supplies:
 

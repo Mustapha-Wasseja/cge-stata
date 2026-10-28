@@ -2538,8 +2538,8 @@ without end at a gradient of 1.2e-10.
 ## 30. Model library and error positions (from version 0.21.0)
 
 `cge_modlib` lists, describes, runs (`do`) and copies the models of the
-library, do-files `cge_ml_NAME.do` installed with the package (`F` lines of
-`cge.pkg`) and found by `findfile`; each begins with `*!` lines giving its
+library, do-files `cge_ml_NAME.do` (from version 0.27.1 installed as one
+bundle, `cge_ml_library.txt`, Section 37); each begins with `*!` lines giving its
 title, kind, reference and expected result, which `cge_modlib list` and
 `describe` read. The models: an exchange economy ($P_2 = 8.2/5.4$), Robinson
 Crusoe as a planner's NLP ($N = 10/3$), two markets solved block by block
@@ -2839,6 +2839,87 @@ its closed form, 11 with marginal 2; the transportation problem against the
 interior point, its optimum 153.675 and its marginals; a knapsack and an
 assignment of six workers against enumeration; infeasible, unbounded and
 nonlinear programmes; on Stata 13 to 15, the errors).
+
+## 37. Package files (from version 0.27.1)
+
+Stata's package files take at most 100 files: `net install` stops with
+"package file too long" (error 640) beyond,
+as it did for versions 0.21.0 to 0.27.0, whose `cge.pkg` listed 118 to 120.
+The package now installs the fifteen SYNTHETIC SAMs, the nine models of the
+library and the four files of the GAMS model as three bundles,
+`cge_synthetic_sams.txt`, `cge_ml_library.txt` and `cge_gams_model.txt`,
+text files of sections that begin with a line `@@@ name`; `cge_synthetic`,
+`cge_modlib` and `cge_gams` take the section they need through
+`_cge_bundle_get`. The files stay in the repository as the sources, which
+`tools/bundle_files.py` writes into the bundles, and
+`reference/tests/test_package.py`, run by CI, checks that `cge.pkg` lists at
+most 100 files, that each exists and that the bundles are current. The
+package now has 95 files.
+
+In the same version, parallel runs of `cge_loop` (Section 28) wait for each
+worker's complete status record, its return code followed by a final
+marker, rather than for the file alone, which can exist before its
+contents: a worker's status was intermittently read empty.
+
+## 38. Exact second derivatives of nonlinear programmes (from version 0.28.0)
+
+The interior point (Section 24) needs, at each iteration, the Hessian of the
+Lagrangian $\mathcal{L}(z, \lambda) = s f(z)/\omega + \lambda'c(z)$ in the
+scaled free variables $z$, with $s$ the sense, $\omega$ the scale of the
+objective and $c$ the scaled residuals of the equations. Before, it came from
+central differences of the exact gradient, $2n$ evaluations of the gradient
+and of the Jacobian of the equations; from version 0.28.0 it is exact.
+
+`_cge_u_hvalue` differentiates the postfix rows of an expression twice by
+forward mode: each value on the stack carries its gradient and its Hessian,
+both sparse (positions and values; triplets of both triangles), and each
+operation combines those of its operands. For $u \cdot v$ the Hessian is
+$vH_u + uH_v + \nabla u\nabla v' + \nabla v\nabla u'$; for $u/v$,
+$H_u/v - (\nabla u\nabla v' + \nabla v\nabla u')/v^2 - uH_v/v^2 +
+2u\nabla v\nabla v'/v^3$; for a function $\varphi(u)$ (exp, ln, sqrt, abs,
+sqr, log10, $u^p$ with $p$ constant), $\varphi'H_u +
+\varphi''\nabla u\nabla u'$; $u^v$ with $v$ variable is $\exp(v\ln u)$; min,
+max and ifthen() take the derivatives of the argument they take.
+Parameters, lags, leads and the period are constants. Duplicates are summed
+when an outer product is formed and at the end, so that a sum of many
+separable terms keeps a sparse Hessian.
+
+`_cge_nlp_hess` assembles $W = (s/\omega)\nabla^2 f + \sum_k (\lambda_k/e_k)
+(\nabla^2 L_k - \nabla^2 R_k)$ over the user equations $L_k = R_k$ with
+scales $e_k$, in the units of $z$ ($\partial^2/\partial z_i\partial z_j =
+\sigma_i \sigma_j \partial^2/\partial x_i \partial x_j$ for the
+variables' scales $\sigma$). Every row of the system of a standalone model is
+a user equation, a defined variable having its own; otherwise, or where a
+value cannot be found, the method falls back to differences, as it does
+under `cge_options, hessian(differences)` (member `opthess`, saved with the
+model). `r(hessian)` reports which it used, with the counts
+`r(N_hessian_exact)` and `r(N_hessian_differences)`; branch and bound and
+multi-start use the same method.
+
+The iterations are those of the differences (they solve the same Newton
+systems to rounding); the time is not. On StataNow 19.5:
+
+| Programme | Variables, equations | Iterations | Exact (s) | Differences (s) |
+|---|---|---|---|---|
+| Ramsey (library) | 60, 30 | 8 | 0.18 | 4.9 |
+| Cross entropy, 20 x 20, SYNTHETIC | 400, 39 | 6 | 4.1 | 142.0 |
+
+A fix in the same version: the interior point now stops at its best point
+after fifteen iterations in a row with the error within $\max(10^3\,
+\text{tol}, 10^{-6})$ and the equations holding, as IPOPT's acceptable level.
+At a bound of a programme without equations the error of the dual
+conditions stayed near $10^{-9}$, above the tolerance of $10^{-10}$, until
+the iteration limit, so that branch and bound lost those nodes: integer
+least squares without an equation found no integer solution.
+
+Tests: `tests/test_hessian.do` (the Hessians of $x^2y$, Rosenbrock's
+function and $e^{xy}$ against closed forms; three expressions that use every
+operation and function against central differences of the exact gradient,
+to $3.5\times10^{-10}$; the Lagrangian's Hessian of HS071, a frontier,
+Rosenbrock's function and the Ramsey model against differences, to
+$10^{-10}$; the same optima and iterations with exact Hessians and with
+differences; branch and bound without equations; the setting saved with the
+model; errors).
 
 ## References
 

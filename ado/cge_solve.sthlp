@@ -69,7 +69,8 @@ the model's equations and the bounds of {helpb cge_bound}, as GAMS's
 {cmd:solve} ... {cmd:using nlp minimizing} does with CONOPT or IPOPT. The
 method is a primal-dual interior-point method after Waechter and Biegler
 (2006), with exact derivatives of the objective and the equations, the
-Hessian of the Lagrangian from differences of its exact gradient, and a line
+exact Hessian of the Lagrangian (from version 0.28.0; before, and with
+{cmd:cge_options, hessian(differences)}, differences of its exact gradient), and a line
 search on an l1 merit function. The solution is stored as a simulation, with
 the objective in {cmd:r(objective)} and the marginals of the equations, the
 change in the objective per unit increase in each right side, in
@@ -247,6 +248,9 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(best_start)}}the start of the best solution, with starts() and no integers{p_end}
 {synopt:{cmd:r(N_starts_converged)}}the starts that converged{p_end}
 {synopt:{cmd:r(solver)}}{cmd:ipm}, {cmd:bb} or {cmd:highs} (from version 0.27.0){p_end}
+{synopt:{cmd:r(hessian)}}the Hessians of the interior point: {cmd:exact} or {cmd:differences} (from version 0.28.0){p_end}
+{synopt:{cmd:r(N_hessian_exact)}}its iterations with exact Hessians{p_end}
+{synopt:{cmd:r(N_hessian_differences)}}its iterations with differences{p_end}
 {synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}

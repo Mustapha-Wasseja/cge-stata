@@ -464,8 +464,12 @@ at the start. The start is moved inside the bounds by $\min(10^{-2}\max(1,
 |b|), (U - L)/4)$ from each bound $b$; the multipliers of the equations
 start at their least-squares values and those of the bounds at $\mu/(z - L)$
 and $\mu/(U - z)$, with the barrier parameter $\mu = 0.1$. At each iterate
-the Hessian $W$ of the Lagrangian comes from central differences of its exact
-gradient with steps $10^{-6}\max(1, |z_j|)$, one-sided near a bound; the
+the Hessian $W$ of the Lagrangian is exact, from the second derivatives of
+the objective and the equations by forward differentiation of their
+compiled code (from version 0.28.0); with \cmd{cge_options,
+hessian(differences)}, or where it cannot be found, it comes from central
+differences of the exact gradient with steps $10^{-6}\max(1, |z_j|)$,
+one-sided near a bound; the
 step solves the primal-dual system
 \begin{equation*}
 \begin{pmatrix} W + \Sigma + \delta I & J' \\ J & 0 \end{pmatrix}

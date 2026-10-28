@@ -17,6 +17,13 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.28.0 gives nonlinear programmes exact second derivatives: the
+interior point's Hessian of the Lagrangian comes from differentiating the
+compiled objective and equations twice, in place of differences of exact
+gradients, with the same iterations (27 to 35 times faster on the test
+problems). Branch and bound also solves programmes without equations, whose
+nodes at a bound it used to lose.
+
 Version 0.27.1 fixes installation error `r(640)`, "package file too long".
 The package now installs 95 files, within Stata's limit of 100, by bundling
 the synthetic SAMs, model library and GAMS support files. Their original
@@ -25,7 +32,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.27.1 implements the standard single-country model described in
+Version 0.28.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -99,6 +106,14 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.28.0 gives nonlinear programmes exact second derivatives: the
+interior point's Hessian of the Lagrangian comes from differentiating the
+compiled objective and equations twice, in place of differences of exact
+gradients (35 times faster on a 400-variable cross-entropy problem).
+Version 0.27.1 fixes `net install`, which stopped with "package file too
+long" from version 0.21.0: Stata's package files take at most 100 files, and
+the package now installs its SYNTHETIC SAMs, model library and GAMS model as
+three bundles (95 files in all).
 Version 0.27.0 is an experimental prototype of links to solvers through
 Stata's Python, on Stata 16 and later with SciPy only: `cge_options,
 linsolver(python)` factorises Newton's Jacobians with SuperLU (2 to 2.5 times

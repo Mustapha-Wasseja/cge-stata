@@ -11,7 +11,7 @@
 
 {p 8 12 2}
 {cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto|python)} {opt mcp(semismooth|activeset)}
-{opt jac:obian(exact|differences)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
+{opt jac:obian(exact|differences)} {opt hes:sian(exact|differences)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
 
 
 {title:Description}
@@ -75,6 +75,15 @@ default), or {cmd:differences}, central differences over groups of columns
 at each step. Both give the same solution.
 
 {pstd}
+{opt hessian()} (from version 0.28.0) chooses the Hessian of the Lagrangian
+of nonlinear programmes ({helpb cge_solve} with {opt minimize()} or
+{opt maximize()}): {cmd:exact}, from the second derivatives of the
+objective and the equations (the default), or {cmd:differences}, central
+differences of their exact first derivatives. Both take the same
+iterations to the same solution; exact Hessians are much faster on larger
+programmes.
+
+{pstd}
 {opt tolerance(#)}, {opt iterate(#)} and {opt timelimit(#)} (from version
 0.16.0) set the tolerance, iteration limit and time limit in seconds of
 {helpb cge_solve} when it is not given them, as GAMS's {cmd:option iterlim}
@@ -107,7 +116,7 @@ restores every setting to its default.
 
 {pstd}
 {cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver ({cmd:python} for SuperLU), {cmd:r(mcp)},
-the method for constraints, and {cmd:r(jacobian)}, the Jacobian, as macros, and
+the method for constraints, {cmd:r(jacobian)}, the Jacobian, and {cmd:r(hessian)}, the Hessian, as macros, and
 {cmd:r(tolerance)}, {cmd:r(iterate)} and {cmd:r(timelimit)} (missing for none),
 the defaults of {helpb cge_solve}, as scalars.
 

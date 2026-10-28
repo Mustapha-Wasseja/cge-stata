@@ -58,6 +58,7 @@ cge_options
 \optarg{lin}{solver}{dense|sparse|auto|python} & the linear solver of Newton's steps\\
 \optarg{}{mcp}{semismooth|activeset} & the method for constraints and inequalities\\
 \optarg{jac}{obian}{exact|differences} & the Jacobian of Newton's method\\
+\optarg{hes}{sian}{exact|differences} & the Hessian of nonlinear programmes\\
 \optgroup{Defaults of cge\_solve}
 \optarg{tol}{erance}{\#} & tolerance on the largest scaled residual; default \texttt{1e-10}\\
 \optarg{iter}{ate}{\#} & iteration limit; default \texttt{100}\\
@@ -97,6 +98,15 @@ derivatives with Broyden's updates (the default), or \cmd{differences},
 central differences over groups of columns at each step, the fallback of
 section~\ref{sec:newton}. Both give the same solution; differences are slower
 and serve as a check.
+
+\item[\optarg{hes}{sian}{exact|differences}] (from version 0.28.0) chooses
+the Hessian of the Lagrangian of the nonlinear programmes of
+\manref{cge_solve}: \cmd{exact}, from the second derivatives of the
+objective and the equations, by forward differentiation of their compiled
+code (the default), or \cmd{differences}, central differences of their exact
+first derivatives, the method before. Both take the same iterations to the
+same solution; on a cross-entropy problem of 400 variables, exact Hessians
+took 4.1 seconds and differences 142.
 
 \item[\optarg{tol}{erance}{\#}], \optarg{iter}{ate}{\#} and
 \optarg{time}{limit}{\#} (from version 0.16.0) set the tolerance, the
@@ -160,6 +170,7 @@ after \opt{}{reset}, the solve converges with model status 16 (solved):
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse}, \cmd{auto} or \cmd{python}\\
 \res{r(mcp)} & the method for constraints: \cmd{semismooth} or \cmd{activeset}\\
 \res{r(jacobian)} & the Jacobian of Newton's method: \cmd{exact} or \cmd{differences}\\
+\res{r(hessian)} & the Hessian of nonlinear programmes: \cmd{exact} or \cmd{differences}\\
 \end{storedres}
 
 \cgesec{Methods and formulas}

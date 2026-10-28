@@ -232,6 +232,9 @@ struct cge_model {
     // limit (seconds) of cge_solve, and the Jacobian of Newton's method (0 or
     // missing exact, 1 central differences); missing for the defaults
     real scalar      opttol, optit, opttime, optjac
+    // the Hessian of nonlinear programmes (from version 0.28.0): missing or 0
+    // exact, 1 differences of exact gradients
+    real scalar      opthess
     // the model status and solver status of each stored simulation, in GAMS's
     // codes (from version 0.16.0); missing where unknown
     real matrix      simstat
@@ -264,7 +267,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.27.1")
+    return("0.28.0")
 }
 
 // =====================================================================
@@ -5213,7 +5216,7 @@ string scalar _cge_lin_name(struct cge_model scalar M)
 // and the Jacobian of Newton's method (negative: unchanged; missing: the
 // default), and reset, which restores every default
 void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real scalar it, real scalar tlim,
-                  string scalar jac, real scalar reset)
+                  string scalar jac, real scalar reset, string scalar hess)
 {
     struct cge_model scalar M
     real scalar ch
@@ -5223,11 +5226,12 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     if (args() < 5) tlim = -1
     if (args() < 6) jac = ""
     if (args() < 7) reset = 0
+    if (args() < 8) hess = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
     ch = 0
     if (reset) {
-        M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = .
+        M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = M.opthess = .
         ch = 1
     }
     // SciPy's SuperLU through Python (from version 0.27.0, Stata 16 and later)
@@ -5240,12 +5244,15 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     if (it >= 1 & it < .) M.optit = it
     if (tlim >= 0 & tlim < .) M.opttime = tlim
     if (jac != "") M.optjac = (jac == "differences")
-    if (lin != "" | mcp != "" | (tol > 0 & tol < .) | (it >= 1 & it < .) | (tlim >= 0 & tlim < .) | jac != "") ch = 1
+    // the Hessian of nonlinear programmes (from version 0.28.0)
+    if (hess != "") M.opthess = (hess == "differences")
+    if (lin != "" | mcp != "" | (tol > 0 & tol < .) | (it >= 1 & it < .) | (tlim >= 0 & tlim < .) | jac != "" | hess != "") ch = 1
     if (ch) _cge_store(M)
     printf("{txt}Linear solver of Newton's steps: {res}%s{txt}%s\n", _cge_lin_name(M),
            (M.linsolver == 2 ? " (the sparse LU from 1,000 equations)" : ""))
     printf("{txt}Method for constraints:          {res}%s\n", _cge_mcp_name(M))
     printf("{txt}Jacobian of Newton's method:     {res}%s\n", (M.optjac == 1 ? "differences" : "exact"))
+    printf("{txt}Hessian of nonlinear programmes: {res}%s\n", (M.opthess == 1 ? "differences" : "exact"))
     printf("{txt}Tolerance of cge_solve:          {res}%s\n", strtrim(sprintf("%9.0g", _cge_opttol(M, -1))))
     printf("{txt}Iteration limit of cge_solve:    {res}%g\n", _cge_optit(M, -1))
     printf("{txt}Time limit of cge_solve:         {res}%s\n", (_cge_opttime(M, -1) >= . ? "none" :
@@ -5253,6 +5260,7 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     st_global("r(linsolver)", _cge_lin_name(M))
     st_global("r(mcp)", _cge_mcp_name(M))
     st_global("r(jacobian)", (M.optjac == 1 ? "differences" : "exact"))
+    st_global("r(hessian)", (M.opthess == 1 ? "differences" : "exact"))
     st_numscalar("r(tolerance)", _cge_opttol(M, -1))
     st_numscalar("r(iterate)", _cge_optit(M, -1))
     st_numscalar("r(timelimit)", _cge_opttime(M, -1))
@@ -7423,6 +7431,283 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
     }
     grad = G[1, .]
     return(st[1])
+}
+
+// The value of the postfix rows tok at x with its exact first and second
+// derivatives with respect to the variables of x (from version 0.28.0): the
+// gradient as positions gi and values gv, the Hessian as triplets (hi, hj,
+// hv) of both triangles, duplicates summed. Second-order forward
+// differentiation: each value on the stack carries its gradient and Hessian,
+// sparse, through the operations and functions of the language; parameters,
+// lags, leads and the period are constants. Returns the value, missing
+// where it cannot be evaluated.
+real scalar _cge_u_hvalue(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real matrix tok,
+                          real colvector gi, real colvector gv, real colvector hi, real colvector hj, real colvector hv)
+{
+    pointer() colvector GI, GV, HI, HJ, HV
+    real colvector st, av, e0, ai, ag, ahi, ahj, ahv, bi, bg, bhi, bhj, bhv, ri, rg, rhi, rhj, rhv
+    real matrix v
+    real scalar n, K, i, sp, c, op, a, b, val, na, j, f1, f2, w
+    n = rows(tok)
+    K = rows(x)
+    st = J(n, 1, .)
+    GI = GV = HI = HJ = HV = J(n, 1, NULL)
+    e0 = J(0, 1, .)
+    sp = 0
+    for (i = 1; i <= n; i++) {
+        c = tok[i, 1]
+        if (c == 2) {
+            sp++
+            st[sp] = x[tok[i, 2]]
+            GI[sp] = &(J(1, 1, tok[i, 2]))
+            GV[sp] = &(J(1, 1, 1))
+            HI[sp] = HJ[sp] = HV[sp] = &e0
+        }
+        else if (c == 1 | c == 3 | c == 7 | c == 9 | c == 11 | c == 12) {
+            sp++
+            if (c == 1) st[sp] = tok[i, 2]
+            else if (c == 3) {
+                v = _cge_par_get(p, M.upar[tok[i, 2]])
+                st[sp] = _cge_u_parel(v, tok[i, 3])
+            }
+            else if (c == 7) st[sp] = p.upval[tok[i, 2]]
+            else if (c == 9) st[sp] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
+            else if (c == 11) st[sp] = _cge_u_leadval(M, p, tok[i, 2], tok[i, 3])
+            else st[sp] = _cge_u_tval(p, tok[i, 2])
+            GI[sp] = GV[sp] = HI[sp] = HJ[sp] = HV[sp] = &e0
+        }
+        else if (c == 4) {
+            b = st[sp]
+            bi = *GI[sp]
+            bg = *GV[sp]
+            bhi = *HI[sp]
+            bhj = *HJ[sp]
+            bhv = *HV[sp]
+            sp--
+            a = st[sp]
+            ai = *GI[sp]
+            ag = *GV[sp]
+            ahi = *HI[sp]
+            ahj = *HJ[sp]
+            ahv = *HV[sp]
+            op = tok[i, 2]
+            if (op == 1 | op == 2) {
+                w = (op == 1 ? 1 : -1)
+                val = a + w * b
+                ri = ai \ bi
+                rg = ag \ w :* bg
+                rhi = ahi \ bhi
+                rhj = ahj \ bhj
+                rhv = ahv \ w :* bhv
+            }
+            else if (op == 3) {
+                val = a * b
+                _cge_hd_gsum(ai, ag)
+                _cge_hd_gsum(bi, bg)
+                ri = ai \ bi
+                rg = b :* ag \ a :* bg
+                rhi = ahi \ bhi
+                rhj = ahj \ bhj
+                rhv = b :* ahv \ a :* bhv
+                _cge_hd_outer(ai, ag, bi, bg, 1, rhi, rhj, rhv)
+                _cge_hd_outer(bi, bg, ai, ag, 1, rhi, rhj, rhv)
+            }
+            else if (op == 4) {
+                val = a / b
+                _cge_hd_gsum(ai, ag)
+                _cge_hd_gsum(bi, bg)
+                ri = ai \ bi
+                rg = ag :/ b \ (-a / b^2) :* bg
+                rhi = ahi \ bhi
+                rhj = ahj \ bhj
+                rhv = ahv :/ b \ (-a / b^2) :* bhv
+                _cge_hd_outer(ai, ag, bi, bg, -1 / b^2, rhi, rhj, rhv)
+                _cge_hd_outer(bi, bg, ai, ag, -1 / b^2, rhi, rhj, rhv)
+                _cge_hd_outer(bi, bg, bi, bg, 2 * a / b^3, rhi, rhj, rhv)
+            }
+            else if (op == 5) {
+                val = a ^ b
+                if (!rows(bi)) {
+                    // a constant exponent
+                    ri = ai
+                    rg = ag
+                    rhi = ahi
+                    rhj = ahj
+                    rhv = ahv
+                    if (b == 0) ri = rg = rhi = rhj = rhv = e0
+                    else if (b != 1) _cge_hd_unary(b * a ^ (b - 1), (b == 2 ? 2 : b * (b - 1) * a ^ (b - 2)), ri, rg, rhi, rhj, rhv)
+                }
+                else {
+                    // a^b = exp(g) with g = b ln(a)
+                    _cge_hd_gsum(ai, ag)
+                    _cge_hd_gsum(bi, bg)
+                    ri = ai \ bi
+                    rg = (b / a) :* ag \ ln(a) :* bg
+                    rhi = ahi \ bhi
+                    rhj = ahj \ bhj
+                    rhv = (b / a) :* ahv \ ln(a) :* bhv
+                    _cge_hd_outer(ai, ag, bi, bg, 1 / a, rhi, rhj, rhv)
+                    _cge_hd_outer(bi, bg, ai, ag, 1 / a, rhi, rhj, rhv)
+                    _cge_hd_outer(ai, ag, ai, ag, -b / a^2, rhi, rhj, rhv)
+                    _cge_hd_unary(val, val, ri, rg, rhi, rhj, rhv)
+                }
+            }
+            else {
+                // comparisons and & |: no derivative
+                val = _cge_u_cmp(op, a, b)
+                ri = rg = rhi = rhj = rhv = e0
+            }
+            st[sp] = val
+            GI[sp] = &(ri :+ 0)
+            GV[sp] = &(rg :+ 0)
+            HI[sp] = &(rhi :+ 0)
+            HJ[sp] = &(rhj :+ 0)
+            HV[sp] = &(rhv :+ 0)
+        }
+        else if (c == 5) {
+            st[sp] = -st[sp]
+            GV[sp] = &(-(*GV[sp]))
+            HV[sp] = &(-(*HV[sp]))
+        }
+        else if (c == 8) {
+            st[sp] = (st[sp] >= . ? . : st[sp] == 0)
+            GI[sp] = GV[sp] = HI[sp] = HJ[sp] = HV[sp] = &e0
+        }
+        else if (c == 10) {
+            na = tok[i, 3]
+            op = tok[i, 2]
+            sp = sp - na + 1
+            av = st[|sp \ sp + na - 1|]
+            val = _cge_u_fn(op, av)
+            if (op <= 2 | op == 6) {
+                // min(), max() and ifthen(): the derivatives of the argument taken
+                j = _cge_u_fnarg(op, av)
+                if (!j) GI[sp] = GV[sp] = HI[sp] = HJ[sp] = HV[sp] = &e0
+                else if (j > 1) {
+                    GI[sp] = GI[sp + j - 1]
+                    GV[sp] = GV[sp + j - 1]
+                    HI[sp] = HI[sp + j - 1]
+                    HJ[sp] = HJ[sp + j - 1]
+                    HV[sp] = HV[sp + j - 1]
+                }
+            }
+            else {
+                ri = *GI[sp]
+                rg = *GV[sp]
+                rhi = *HI[sp]
+                rhj = *HJ[sp]
+                rhv = *HV[sp]
+                a = av[1]
+                if (op == 3) {
+                    w = sign(a)
+                    rg = w :* rg
+                    rhv = w :* rhv
+                }
+                else if (op == 4) _cge_hd_unary(2 * a, 2, ri, rg, rhi, rhj, rhv)
+                else _cge_hd_unary(1 / (a * ln(10)), -1 / (a^2 * ln(10)), ri, rg, rhi, rhj, rhv)
+                GI[sp] = &(ri :+ 0)
+                GV[sp] = &(rg :+ 0)
+                HI[sp] = &(rhi :+ 0)
+                HJ[sp] = &(rhj :+ 0)
+                HV[sp] = &(rhv :+ 0)
+            }
+            st[sp] = val
+        }
+        else {
+            // exp(), ln() and sqrt()
+            a = st[sp]
+            op = tok[i, 2]
+            ri = *GI[sp]
+            rg = *GV[sp]
+            rhi = *HI[sp]
+            rhj = *HJ[sp]
+            rhv = *HV[sp]
+            if (op == 1) {
+                val = exp(a)
+                f1 = f2 = val
+            }
+            else if (op == 2) {
+                val = ln(a)
+                f1 = 1 / a
+                f2 = -1 / a^2
+            }
+            else {
+                val = sqrt(a)
+                f1 = 1 / (2 * val)
+                f2 = -1 / (4 * a * val)
+            }
+            _cge_hd_unary(f1, f2, ri, rg, rhi, rhj, rhv)
+            st[sp] = val
+            GI[sp] = &(ri :+ 0)
+            GV[sp] = &(rg :+ 0)
+            HI[sp] = &(rhi :+ 0)
+            HJ[sp] = &(rhj :+ 0)
+            HV[sp] = &(rhv :+ 0)
+        }
+    }
+    gi = *GI[1]
+    gv = *GV[1]
+    _cge_hd_gsum(gi, gv)
+    hi = *HI[1]
+    hj = *HJ[1]
+    hv = *HV[1]
+    _cge_hd_hsum(hi, hj, hv, K)
+    return(st[1])
+}
+
+// A sparse gradient (positions i, values v) with duplicate positions summed,
+// in the order of the positions
+void _cge_hd_gsum(real colvector i, real colvector v)
+{
+    real colvector o
+    real matrix info
+    if (rows(i) <= 1) return
+    o = order(i, 1)
+    i = i[o]
+    v = v[o]
+    info = panelsetup(i, 1)
+    v = panelsum(v, info)
+    i = i[info[., 1]]
+}
+
+// Hessian triplets with duplicates summed, row by row; K bounds the positions
+void _cge_hd_hsum(real colvector hi, real colvector hj, real colvector hv, real scalar K)
+{
+    real colvector lin, o
+    real matrix info
+    if (rows(hv) <= 1) return
+    lin = (hi :- 1) :* K :+ hj
+    o = order(lin, 1)
+    lin = lin[o]
+    hv = hv[o]
+    info = panelsetup(lin, 1)
+    hv = panelsum(hv, info)
+    lin = lin[info[., 1]]
+    hi = floor((lin :- 1) :/ K) :+ 1
+    hj = lin :- (hi :- 1) :* K
+}
+
+// w times the outer product of the sparse vectors (i1, v1) and (i2, v2),
+// appended to the triplets (hi, hj, hv)
+void _cge_hd_outer(real colvector i1, real colvector v1, real colvector i2, real colvector v2, real scalar w,
+                   real colvector hi, real colvector hj, real colvector hv)
+{
+    if (!rows(i1) | !rows(i2)) return
+    if (w == 0) return
+    hi = hi \ vec(i1 * J(1, rows(i2), 1))
+    hj = hj \ vec(J(rows(i1), 1, 1) * i2')
+    hv = hv \ w :* vec(v1 * v2')
+}
+
+// The derivatives of phi(a) from those of a, with phi' = f1 and phi'' = f2:
+// gradient f1 g, Hessian f1 H + f2 g g'
+void _cge_hd_unary(real scalar f1, real scalar f2, real colvector gi, real colvector gv, real colvector hi,
+                   real colvector hj, real colvector hv)
+{
+    _cge_hd_gsum(gi, gv)
+    hv = f1 :* hv
+    if (f2 != 0) _cge_hd_outer(gi, gv, gi, gv, f2, hi, hj, hv)
+    gv = f1 :* gv
 }
 
 // The variables of the explicit definitions left out of the reduced system
@@ -24721,6 +25006,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     struct cge_model scalar M2
     real matrix tok
     real colvector x, lam, start, xs, usel, ipos
+    real rowvector hc
     real scalar sgn, conv, iter, err, fobj, k, keeplin, feas, ms, ss, nn, bnd, best, nconv
     string scalar g
     if (args() < 8) mname = ""
@@ -24742,6 +25028,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     keeplin = M.linsolver
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
     tok = _cge_nlp_tok(M, obj, sgn, g)
+    (void) _cge_hess_count(0)
     // a named model and a start from a stored simulation (from version
     // 0.17.0): the model's equations, the other free variables at their levels
     xs = _cge_named_start(M, from)
@@ -24808,6 +25095,11 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
     st_global("r(model)", mname)
     st_global("r(solver)", (solver == "highs" ? "highs" : (rows(ipos) ? "bb" : "ipm")))
+    // the Hessians of the interior point (from version 0.28.0)
+    hc = _cge_hess_count(-1)
+    st_global("r(hessian)", (hc[1] + hc[2] == 0 ? "" : (hc[2] == 0 ? "exact" : (hc[1] == 0 ? "differences" : "exact, differences where it failed"))))
+    st_numscalar("r(N_hessian_exact)", hc[1])
+    st_numscalar("r(N_hessian_differences)", hc[2])
     st_numscalar("r(starts)", starts)
     if (!rows(ipos) & starts > 1) {
         st_numscalar("r(best_start)", best)
@@ -24880,6 +25172,126 @@ real scalar _cge_nlp_eval(struct cge_model scalar M, struct cge_par scalar p, re
         Jm = _cge_trip_dense(jr, jc, jv, S.neq, rows(z))
     }
     return(1)
+}
+
+// The exact Hessian W of the Lagrangian of a nonlinear programme in the
+// scaled free variables z (from version 0.28.0): sgn / osc times the
+// objective's, and lam_s / e_k times that of each equation's two sides,
+// L - R, scaled by the variables' scales; by _cge_u_hvalue. Every row of the
+// system of a standalone model is a user equation (a defined variable has
+// its own); returns 0 if one is not, or where a value cannot be found
+real scalar _cge_nlp_hess(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                          struct cge_sys scalar S, real colvector z, real matrix tok, real scalar sgn,
+                          real scalar osc, real colvector map, real colvector lam, real matrix W)
+{
+    real colvector x, gi, gv, hi, hj, hv, ti, tj, tv, bo, rowsys, sel
+    real matrix tk1, tk2
+    real scalar n, k, kb, rk, s, nu, f
+    n = rows(z)
+    if (S.reduced) return(0)
+    x = xfix
+    x[S.free] = z :* M.xscale[S.free]
+    kb = _cge_find(M.ename, "U")
+    bo = runningsum(M.elen) - M.elen
+    rowsys = runningsum(S.mask) :* S.mask
+    nu = 0
+    if (kb) for (k = 1; k <= rows(M.uelab); k++) nu = nu + (rowsys[bo[kb] + k] > 0)
+    if (nu != S.neq) return(0)
+    f = _cge_u_hvalue(M, p, x, tok, gi, gv, hi, hj, hv)
+    if (f >= .) return(0)
+    ti = hi
+    tj = hj
+    tv = (sgn / osc) :* hv
+    if (kb) for (k = 1; k <= rows(M.uelab); k++) {
+        rk = bo[kb] + k
+        s = rowsys[rk]
+        if (!s) continue
+        if (lam[s] == 0) continue
+        tk1 = M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|]
+        tk2 = M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|]
+        if (_cge_u_hvalue(M, p, x, tk1, gi, gv, hi, hj, hv) >= .) return(0)
+        ti = ti \ hi
+        tj = tj \ hj
+        tv = tv \ (lam[s] / M.escale[rk]) :* hv
+        if (_cge_u_hvalue(M, p, x, tk2, gi, gv, hi, hj, hv) >= .) return(0)
+        ti = ti \ hi
+        tj = tj \ hj
+        tv = tv \ (-lam[s] / M.escale[rk]) :* hv
+    }
+    if (hasmissing(tv)) return(0)
+    W = J(n, n, 0)
+    if (!rows(tv)) return(1)
+    sel = selectindex((map[ti, 1] :> 0) :& (map[tj, 1] :> 0))
+    if (rows(sel) * cols(sel) == 0) return(1)
+    ti = ti[sel]
+    tj = tj[sel]
+    tv = tv[sel] :* M.xscale[ti, 1] :* M.xscale[tj, 1]
+    ti = map[ti, 1]
+    tj = map[tj, 1]
+    _cge_hd_hsum(ti, tj, tv, n)
+    W = _cge_trip_dense(ti, tj, tv, n, n)
+    return(1)
+}
+
+// The Hessians of the interior point's iterations, exact and by differences
+// (from version 0.28.0): mode 0 resets the counts, 1 and 2 add one; returns
+// the counts
+real rowvector _cge_hess_count(real scalar mode)
+{
+    pointer() scalar q
+    real rowvector c
+    if ((q = findexternal("cge__nhess")) == NULL) {
+        q = crexternal("cge__nhess")
+        *q = (0, 0)
+    }
+    c = *q
+    if (mode == 0) c = (0, 0)
+    else if (mode == 1) c[1] = c[1] + 1
+    else if (mode == 2) c[2] = c[2] + 1
+    *q = c
+    return(c)
+}
+
+// Test hook (from version 0.28.0): the largest difference between the exact
+// Hessian of the Lagrangian of the programme with objective obj ("min:..."
+// or "max:...") at the starting levels, with multipliers k / m, and central
+// differences of its exact gradient, relative to the largest entry; r(N)
+// the free variables
+real scalar _cge_hesscheck(string scalar obj)
+{
+    struct cge_model scalar M
+    struct cge_sys scalar S
+    real matrix tok, W, D, Jp, Jm
+    real colvector map, z, lam, e, gp, gm, cp, cm
+    real scalar sgn, n, m, i, h, osc, fp, fm
+    string scalar g
+    M = _cge_load()
+    tok = _cge_nlp_tok(M, obj, sgn, g)
+    S = _cge_sys_make(M, 0)
+    n = rows(S.free)
+    m = S.neq
+    map = J(rows(M.x0), 1, 0)
+    map[S.free] = (1::n)
+    z = M.x0[S.free] :/ M.xscale[S.free]
+    lam = (m ? (1::m) :/ m : J(0, 1, .))
+    osc = 1
+    if (!_cge_nlp_hess(M, M.p, M.x0, S, z, tok, sgn, osc, map, lam, W)) return(.)
+    D = J(n, n, .)
+    for (i = 1; i <= n; i++) {
+        h = 1e-5 * max((1, abs(z[i])))
+        e = J(n, 1, 0)
+        e[i] = h
+        if (!_cge_nlp_eval(M, M.p, M.x0, S, z + e, tok, sgn, osc, map, fp, gp, cp, Jp)) return(.)
+        if (!_cge_nlp_eval(M, M.p, M.x0, S, z - e, tok, sgn, osc, map, fm, gm, cm, Jm)) return(.)
+        if (m) {
+            gp = gp + Jp' * lam
+            gm = gm + Jm' * lam
+        }
+        D[., i] = (gp - gm) / (2 * h)
+    }
+    D = (D + D') / 2
+    st_numscalar("r(N)", n)
+    return(max(abs(W - D)) / max((1, max(abs(W)))))
 }
 
 // Multi-start (from version 0.24.0): the interior point from start and from
@@ -24964,7 +25376,7 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
     real scalar eb, epb, fb
     real matrix Jm, Jn, Jp, Jmm, W, Hs, K, Q, R, Z
     real scalar n, m, mu, f, fn, it, i, h, hp, hm, osc, sd, ed, ep, ec, emu, del, a, az, tau, nu, phi, phin
-    real scalar dphi, ok, k, lmin, fp, fm, ntry
+    real scalar dphi, ok, k, lmin, fp, fm, ntry, hexact, nacc
     S = _cge_sys_make(M, 0)
     n = rows(S.free)
     m = S.neq
@@ -25041,6 +25453,7 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
     eb = epb = fb = .
     zb = z
     lamb = lam
+    nacc = 0
     for (it = 0; it <= maxit; it++) {
         iter = it
         // the optimality conditions, scaled as in Wachter and Biegler (2006)
@@ -25069,6 +25482,21 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
             conv = 1
             break
         }
+        // IPOPT's acceptable level (from version 0.28.0): fifteen iterations
+        // in a row with the error within max(1e3 tol, 1e-6) and the equations
+        // holding end the method at the best point met; at a bound of a
+        // programme without equations the error of the dual conditions can
+        // stay near 1e-9, so that branch and bound lost such nodes
+        if (err < max((1e3 * tol, 1e-6)) & ep < max((tol, 1e-8))) nacc++
+        else nacc = 0
+        if (nacc >= 15) {
+            conv = 1
+            z = zb
+            lam = lamb
+            f = fb
+            err = eb
+            break
+        }
         if (it == maxit) {
             _cge_stop_set(2)
             break
@@ -25082,11 +25510,18 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
             if (emu > 10 * mu) break
             mu = max((tol / 10, min((0.2 * mu, mu^1.5))))
         }
-        // the Hessian of the Lagrangian: central differences of its exact
+        // the Hessian of the Lagrangian: exact (from version 0.28.0), by
+        // second-order forward differentiation of the objective and the
+        // equations, unless cge_options, hessian(differences); otherwise, or
+        // where it cannot be found, central differences of its exact
         // gradient, one-sided toward the inside near a bound
-        W = J(n, n, .)
+        W = J(0, 0, .)
+        if (M.opthess != 1) if (!_cge_nlp_hess(M, p, xfix, S, z, tok, sgn, osc, map, lam, W)) W = J(0, 0, .)
+        hexact = (rows(W) > 0)
+        (void) _cge_hess_count(hexact ? 1 : 2)
+        if (!hexact) W = J(n, n, .)
         ok = 1
-        for (i = 1; i <= n; i++) {
+        for (i = 1; i <= n & !hexact; i++) {
             h = 1e-6 * max((1, abs(z[i])))
             hp = hm = h
             if (L[i] < .) if (z[i] - h <= L[i]) hm = 0
@@ -25608,6 +26043,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "optit", M.optit)
     _cge_io_put(fh, "opttime", M.opttime)
     _cge_io_put(fh, "optjac", M.optjac)
+    _cge_io_put(fh, "opthess", M.opthess)
     _cge_io_put(fh, "simstat", M.simstat)
     _cge_io_put(fh, "mdef", M.mdef)
     _cge_io_put(fh, "simmodel", M.simmodel)
@@ -25770,6 +26206,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "optit") M.optit = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "opttime") M.opttime = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "optjac") M.optjac = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "opthess") M.opthess = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "simstat") M.simstat = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "mdef") M.mdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "simmodel") M.simmodel = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
