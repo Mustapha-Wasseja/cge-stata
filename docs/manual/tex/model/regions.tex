@@ -59,9 +59,14 @@ regions their base solutions.
 
 The linked system has the full system of each region and the link equations.
 It is solved by Newton's method with a line search and the sparse LU
-(section~\ref{sec:sparse}): each region's Jacobian is exact; the columns of the
-link variables in a region's equations, and the link equations, are central
-differences. Newton's method starts from the base, or from each region solved
+(section~\ref{sec:sparse}). The Jacobian is exact: each region's own, and,
+from version 0.31.0, the derivatives of a region's equations in its link
+variables, from the formulas of the equations that use $pwm_c$, $tm_c$ and
+$pwe_c$ (the import and export prices, exports, government income, the balance
+of payments and rents) and from the postfix rows of user equations, and those
+of the link equations, carried through the price indexes and the quantities
+of the routes, $dP = \sum_k \theta_k (P/x_k)^{\sigma} dx_k$; before, these
+were central differences. Newton's method starts from the base, or from each region solved
 on its own at the base links. Each region's solution is stored in its own
 model with its link variables as its parameters $pwm_c$, $tm_c$ and $pwe_c$, so
 it solves that model on its own, which the test suite checks; the routes are

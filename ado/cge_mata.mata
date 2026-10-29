@@ -267,7 +267,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.30.0")
+    return("0.31.0")
 }
 
 // =====================================================================
@@ -12947,6 +12947,95 @@ real colvector _cge_lk_eqs(struct cge_lk scalar L, struct cge_lw scalar W, real 
     return(out)
 }
 
+// The link equations of _cge_lk_eqs and, in D, their exact derivatives
+// (from version 0.31.0) with respect to the link variables ul (columns 1 to
+// nu) and the quantities g from the regions (columns nu + 1 on): each price
+// and quantity of _cge_lk_routes carries a row of derivatives. With P the
+// price index of an import pair and x_k the price with tariff of route k,
+// dP = sum_k th_k (P/x_k)^s dx_k (also for s = 1, Cobb-Douglas), and the
+// imports of route k, q_k = v_k R (P/x_k)^s, give dq_k = v_k (P/x_k)^s dR +
+// s q_k (dP/P - dx_k/x_k); exports to the rest of the world, q_k = v_k
+// (p_k/p_e)^-eta, give dq_k = -eta q_k dp_k/p_k
+real colvector _cge_lk_eqsd(struct cge_lk scalar L, struct cge_lw scalar W, real colvector ul, real colvector g,
+                            real matrix D)
+{
+    real colvector pr, q, P, out, sel, x, th, a, w
+    real matrix Dpr, Dq, DP, Dx
+    real rowvector DR
+    real scalar ni, nx, nr, nu, nv, k, i, j, e, s, pwm, tm, tm0, B, R
+    ni = rows(W.ip)
+    nx = rows(W.xp)
+    nr = rows(L.rv)
+    nu = W.nu
+    nv = nu + ni + nx
+    pr = q = J(nr, 1, .)
+    Dpr = Dq = J(nr, nv, 0)
+    P = J(ni, 1, .)
+    DP = J(ni, nv, 0)
+    // prices: of a region's exports (a link variable), or of the rest of the world
+    for (k = 1; k <= nr; k++) {
+        e = _cge_find(L.ec, L.rc[k])
+        if (W.kx[k]) {
+            pr[k] = ul[W.xp[W.kx[k], 4]]
+            Dpr[k, W.xp[W.kx[k], 4]] = 1
+        }
+        else pr[k] = L.pwrow[e]
+    }
+    // imports of each pair: a CES of its routes at prices with tariffs
+    for (i = 1; i <= ni; i++) {
+        sel = selectindex(W.ki :== i)
+        e = W.ip[i, 2]
+        s = L.es[e]
+        a = (1 :+ L.rt[sel]) :/ (1 :+ L.rt0[sel])
+        x = pr[sel] :* a
+        Dx = Dpr[sel, .] :* a
+        th = L.rv[sel] :* (1 :+ L.rt0[sel])
+        th = th / sum(th)
+        if (s == 1) P[i] = exp(sum(th :* ln(x)))
+        else P[i] = sum(th :* x :^ (1 - s)) ^ (1 / (1 - s))
+        w = th :* (P[i] :/ x) :^ s
+        DP[i, .] = colsum(w :* Dx)
+        q[sel] = L.rv[sel] :* (g[i] / W.ip[i, 9]) :* (P[i] :/ x) :^ s
+        DR = J(1, nv, 0)
+        DR[nu + i] = 1 / W.ip[i, 9]
+        Dq[sel, .] = (L.rv[sel] :* (P[i] :/ x) :^ s) * DR + (s :* q[sel]) :* (J(rows(sel), 1, 1) * (DP[i, .] / P[i]) - Dx :/ x)
+    }
+    // exports to the rest of the world, along its demand curve
+    for (k = 1; k <= nr; k++) {
+        if (L.rr[k] != 0) continue
+        e = _cge_find(L.ec, L.rc[k])
+        q[k] = L.rv[k] * (pr[k] / L.pwrowe[e]) ^ (-L.eta[e])
+        Dq[k, .] = (-L.eta[e] * q[k] / pr[k]) :* Dpr[k, .]
+    }
+    out = J(2 * ni + nx, 1, .)
+    D = J(2 * ni + nx, nv, 0)
+    for (i = 1; i <= ni; i++) {
+        pwm = ul[W.ip[i, 4]]
+        tm = ul[W.ip[i, 5]]
+        tm0 = W.ip[i, 8]
+        B = W.ip[i, 7]
+        sel = selectindex(W.ki :== i)
+        R = g[i] / W.ip[i, 9]
+        out[2 * i - 1] = (pwm * (1 + tm) - (1 + tm0) * P[i]) / (1 + tm0)
+        D[2 * i - 1, .] = -DP[i, .]
+        D[2 * i - 1, W.ip[i, 4]] = D[2 * i - 1, W.ip[i, 4]] + (1 + tm) / (1 + tm0)
+        D[2 * i - 1, W.ip[i, 5]] = D[2 * i - 1, W.ip[i, 5]] + pwm / (1 + tm0)
+        out[2 * i] = (tm * pwm * B * R - sum(L.rt[sel] :* pr[sel] :* q[sel])) / B
+        D[2 * i, .] = -colsum(L.rt[sel] :* (Dpr[sel, .] :* q[sel] + pr[sel] :* Dq[sel, .])) / B
+        D[2 * i, W.ip[i, 4]] = D[2 * i, W.ip[i, 4]] + tm * R
+        D[2 * i, W.ip[i, 5]] = D[2 * i, W.ip[i, 5]] + pwm * R
+        D[2 * i, nu + i] = D[2 * i, nu + i] + tm * pwm / W.ip[i, 9]
+    }
+    for (j = 1; j <= nx; j++) {
+        sel = selectindex(W.kx :== j)
+        B = W.xp[j, 7]
+        out[2 * ni + j] = (g[ni + j] / W.xp[j, 8] * B - sum(q[sel])) / B
+        D[2 * ni + j, .] = -colsum(Dq[sel, .]) / B
+        D[2 * ni + j, nu + ni + j] = D[2 * ni + j, nu + ni + j] + 1 / W.xp[j, 8]
+    }
+    return(out)
+}
+
 // The quantities the link equations take from the solutions of the regions:
 // the imports of each import pair, then the supply of exports of each export
 // pair
@@ -12988,16 +13077,176 @@ real colvector _cge_lk_resid(struct cge_lk scalar L, struct cge_lw scalar W, rea
     return(R)
 }
 
+// The derivatives of the residuals of the full system S of model M at z
+// with respect to world prices and tariffs (from version 0.31.0, for the
+// links between regions): column k for spec[k, .] = (kind, c), kind 1 pwm, 2
+// tm and 3 pwe of commodity c, each times mult[k]; rows ri of the system and
+// values v, scaled as the residuals. The built-in equations by their
+// formulas: the import price (P1), the export price (P2), exports from
+// composite supply (T9) and along a demand curve (T10), tariff and export tax
+// revenue (I8), the balance of payments (S3) and rents on imports and exports
+// (I1, I3, I8, S3); user equations by differentiating their postfix rows with
+// the parameter element as a variable. Returns 0 where the equations cannot be
+// evaluated.
+real scalar _cge_par_trip(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                          struct cge_sys scalar S, real colvector z, real matrix spec, real colvector mult,
+                          real colvector ri, real colvector ci, real colvector v)
+{
+    struct cge_trip scalar T
+    real colvector x, x2, bo, QM, QE, PQ, RM, RE, PWE, r, c, keep, rowsys, hit, lin, o
+    real matrix tk1, tk2, utk, info
+    real rowvector gl, gr
+    real scalar EXR, TMADJ, k, kind, cc, m, tmc, ned, kb, kk, K, f
+    string scalar pname
+    ri = ci = v = J(0, 1, .)
+    if (S.reduced) _cge_fail("cge internal error: _cge_par_trip takes the full system", 3498)
+    x = xfix
+    x[S.free] = z :* M.xscale[S.free]
+    if (min(x[M.positive]) <= 0 | hasmissing(x)) return(0)
+    bo = runningsum(M.elen) - M.elen
+    _cge_tinit(T)
+    if (!_cge_sa(M)) {
+        EXR = _cge_vn(M, x, "EXR")
+        TMADJ = _cge_vn(M, x, "TMADJ")
+        QM = _cge_vn(M, x, "QM")
+        QE = _cge_vn(M, x, "QE")
+        PQ = _cge_vn(M, x, "PQ")
+        RM = _cge_vn(M, x, "RM")
+        RE = _cge_vn(M, x, "RE")
+        PWE = _cge_vn(M, x, "PWE")
+        for (k = 1; k <= rows(spec); k++) {
+            kind = spec[k, 1]
+            cc = spec[k, 2]
+            m = mult[k]
+            tmc = p.tm[cc] * TMADJ
+            if (kind == 1) {
+                if (M.cm[cc]) _cge_pt_add(M, T, bo, "P1", cc, k, -m * (1 + tmc + RM[cc]) * EXR)
+                _cge_pt_add(M, T, bo, "I8", 1, k, -m * tmc * QM[cc] * EXR)
+                _cge_pt_add(M, T, bo, "S3", 1, k, m * QM[cc])
+                if (RM[cc] != 0) _cge_pt_rent(M, T, bo, p.rrm[cc], k, m * RM[cc] * QM[cc] * EXR, EXR)
+            }
+            else if (kind == 2) {
+                if (M.cm[cc]) _cge_pt_add(M, T, bo, "P1", cc, k, -m * p.pwm[cc] * TMADJ * EXR)
+                _cge_pt_add(M, T, bo, "I8", 1, k, -m * TMADJ * p.pwm[cc] * QM[cc] * EXR)
+            }
+            else {
+                // a commodity with a demand curve for its exports has its
+                // export price in PWE; pwe is then the price of the curve
+                ned = 1 - M.ced[cc]
+                if (M.ce[cc] & ned) _cge_pt_add(M, T, bo, "P2", cc, k, -m * (1 - p.te[cc] - RE[cc]) * EXR)
+                _cge_pt_add(M, T, bo, "I8", 1, k, -m * ned * p.te[cc] * QE[cc] * EXR)
+                _cge_pt_add(M, T, bo, "S3", 1, k, -m * ned * QE[cc])
+                if (ned & RE[cc] != 0) _cge_pt_rent(M, T, bo, p.rre[cc], k, m * RE[cc] * QE[cc] * EXR, EXR)
+                if (M.cr[cc]) {
+                    _cge_pt_add(M, T, bo, "T9", cc, k,
+                                -m * p.st[cc] * p.qer[cc] * (PQ[cc] / (EXR * p.pwe[cc])) ^ (-p.st[cc]) / p.pwe[cc])
+                }
+                if (M.ced[cc]) {
+                    _cge_pt_add(M, T, bo, "T10", cc, k,
+                                -m * p.etae[cc] * p.qe0[cc] * (PWE[cc] / p.pwe[cc]) ^ (-p.etae[cc]) / p.pwe[cc])
+                }
+            }
+        }
+    }
+    // user equations that use the parameters
+    kb = _cge_find(M.ename, "U")
+    K = rows(x)
+    for (kk = 1; kk <= rows(M.uelab); kk++) {
+        tk1 = M.utok[|M.ustart[kk], 1 \ M.ustart[kk] + M.ulen[kk] - 1, 3|]
+        tk2 = M.utok[|M.ustart[kk] + M.ulen[kk], 1 \ M.ustart[kk] + M.ulen[kk] + M.ulen2[kk] - 1, 3|]
+        utk = tk1 \ tk2
+        if (!any(utk[., 1] :== 3)) continue
+        for (k = 1; k <= rows(spec); k++) {
+            pname = (spec[k, 1] == 1 ? "pwm" : (spec[k, 1] == 2 ? "tm" : "pwe"))
+            hit = (utk[., 1] :== 3)
+            for (f = 1; f <= rows(utk); f++) if (hit[f]) hit[f] = (M.upar[utk[f, 2]] == pname & utk[f, 3] == spec[k, 2])
+            if (!any(hit)) continue
+            // the parameter element as a variable at position K + 1
+            x2 = x \ _cge_u_parel(_cge_par_get(p, pname), spec[k, 2])
+            (void) _cge_u_dvalue(M, p, x2, _cge_pt_var(tk1, pname, spec[k, 2], M, K + 1), K + 1, gl)
+            (void) _cge_u_dvalue(M, p, x2, _cge_pt_var(tk2, pname, spec[k, 2], M, K + 1), K + 1, gr)
+            if (gl[1] - gr[1] != 0) _cge_tadd(T, bo[kb] + kk, k, mult[k] * (gl[1] - gr[1]))
+        }
+    }
+    if (T.n == 0) return(1)
+    r = T.r[|1 \ T.n|]
+    c = T.c[|1 \ T.n|]
+    v = T.v[|1 \ T.n|]
+    rowsys = runningsum(S.mask) :* S.mask
+    keep = selectindex(M.emask[r, 1] :& (rowsys[r, 1] :> 0))
+    if (rows(keep) * cols(keep) == 0) {
+        v = J(0, 1, .)
+        return(1)
+    }
+    ri = rowsys[r[keep], 1]
+    ci = c[keep]
+    v = v[keep] :/ M.escale[r[keep], 1]
+    if (hasmissing(v)) return(0)
+    // duplicates summed, as two terms of one equation in one parameter
+    lin = (ri :- 1) :* rows(spec) :+ ci
+    o = order(lin, 1)
+    lin = lin[o]
+    v = v[o]
+    info = panelsetup(lin, 1)
+    v = panelsum(v, info)
+    lin = lin[info[., 1]]
+    ri = floor((lin :- 1) :/ rows(spec)) :+ 1
+    ci = lin - (ri :- 1) :* rows(spec)
+    return(1)
+}
+
+// Adds d(L - R)/d(parameter k) = val for element e of block blk
+void _cge_pt_add(struct cge_model scalar M, struct cge_trip scalar T, real colvector bo, string scalar blk,
+                 real scalar e, real scalar k, real scalar val)
+{
+    real scalar g
+    if (val == 0) return
+    g = _cge_find(M.ename, blk)
+    if (!g) return
+    if (M.elen[g] == 0) return
+    _cge_tadd(T, bo[g] + e, k, val)
+}
+
+// Adds the derivative val of a rent paid to recipient rcp (factors,
+// households and enterprises, the government, the rest of the world)
+void _cge_pt_rent(struct cge_model scalar M, struct cge_trip scalar T, real colvector bo, real scalar rcp,
+                  real scalar k, real scalar val, real scalar EXR)
+{
+    if (rcp <= M.nF) _cge_pt_add(M, T, bo, "I1", rcp, k, -val)
+    else if (rcp <= M.nF + M.nD) _cge_pt_add(M, T, bo, "I3", rcp - M.nF, k, -val)
+    else if (rcp == M.nF + M.nD + 1) _cge_pt_add(M, T, bo, "I8", 1, k, -val)
+    else _cge_pt_add(M, T, bo, "S3", 1, k, val / EXR)
+}
+
+// Postfix rows tok with each reference to element el of parameter pname
+// made a reference to the variable at position pos
+real matrix _cge_pt_var(real matrix tok, string scalar pname, real scalar el, struct cge_model scalar M,
+                        real scalar pos)
+{
+    real matrix t
+    real scalar f
+    t = tok
+    for (f = 1; f <= rows(t); f++) {
+        if (t[f, 1] != 3) continue
+        if (M.upar[t[f, 2]] == pname & t[f, 3] == el) t[f, .] = (2, pos, .)
+    }
+    return(t)
+}
+
 // The entries of the Jacobian of the linked system at u: each region's exact
-// Jacobian; central differences for the link variables in the regions'
-// equations, and for the link equations
+// Jacobian; from version 0.31.0 the derivatives of the regions' equations in
+// their link variables (_cge_par_trip) and of the link equations
+// (_cge_lk_eqsd) exact too. With fd, central differences for those, as
+// before (a test hook)
 real scalar _cge_lk_jac(struct cge_lk scalar L, struct cge_lw scalar W, real colvector u, real colvector ri,
-                        real colvector ci, real colvector v)
+                        real colvector ci, real colvector v, | real scalar fd)
 {
     struct cge_trip scalar T
     struct cge_par scalar p
-    real colvector ul, z, r, c, w, fp, fm, d, sel, g, gp, gm, up, um, ks, fidx
-    real scalar R, rr, k, h, ni, nx, j, col, pos, nr, m
+    real colvector ul, z, r, c, w, fp, fm, d, sel, g, gp, gm, up, um, ks, fidx, mult, lcol
+    real matrix spec, D
+    real scalar R, rr, k, h, ni, nx, j, col, pos, nr, m, cc
+    if (args() < 7) fd = 0
     R = rows(W.nf)
     ni = rows(W.ip)
     nx = rows(W.xp)
@@ -13008,10 +13257,31 @@ real scalar _cge_lk_jac(struct cge_lk scalar L, struct cge_lw scalar W, real col
         p = _cge_lk_par(*W.PM[rr], W, rr, ul)
         if (!_cge_jac_trip(*W.PM[rr], p, W.PM[rr]->xcur, *W.PS[rr], z, r, c, w)) return(0)
         _cge_tadd(T, W.zoff[rr] :+ r, W.zoff[rr] :+ c, w)
-        // the link variables of the region
+        // the link variables of the region: pwm = pwm0 ul and tm = ul of its
+        // imports, pwe = pwe0 ul of its exports
         ks = J(0, 1, .)
-        for (k = 1; k <= ni; k++) if (W.ip[k, 1] == rr) ks = ks \ W.ip[k, 4] \ W.ip[k, 5]
-        for (k = 1; k <= nx; k++) if (W.xp[k, 1] == rr) ks = ks \ W.xp[k, 4]
+        spec = J(0, 2, .)
+        mult = J(0, 1, .)
+        for (k = 1; k <= ni; k++) {
+            if (W.ip[k, 1] != rr) continue
+            cc = W.ip[k, 3]
+            ks = ks \ W.ip[k, 4] \ W.ip[k, 5]
+            spec = spec \ (1, cc) \ (2, cc)
+            mult = mult \ W.PM[rr]->p0.pwm[cc] \ 1
+        }
+        for (k = 1; k <= nx; k++) {
+            if (W.xp[k, 1] != rr) continue
+            cc = W.xp[k, 3]
+            ks = ks \ W.xp[k, 4]
+            spec = spec \ (3, cc)
+            mult = mult \ W.PM[rr]->p0.pwe[cc]
+        }
+        if (!rows(ks)) continue
+        if (!fd) {
+            if (!_cge_par_trip(*W.PM[rr], p, W.PM[rr]->xcur, *W.PS[rr], z, spec, mult, r, c, w)) return(0)
+            if (rows(r)) _cge_tadd(T, W.zoff[rr] :+ r, W.nz :+ ks[c], w)
+            continue
+        }
         for (k = 1; k <= rows(ks); k++) {
             h = 1e-6 * max((1, abs(ul[ks[k]])))
             up = um = ul
@@ -13028,23 +13298,30 @@ real scalar _cge_lk_jac(struct cge_lk scalar L, struct cge_lw scalar W, real col
     if (W.nu) {
         g = _cge_lk_g(W, u)
         nr = W.nz
+        if (!fd) (void) _cge_lk_eqsd(L, W, ul, g, D)
         // with respect to the link variables
         for (k = 1; k <= W.nu; k++) {
-            h = 1e-6 * max((1, abs(ul[k])))
-            up = um = ul
-            up[k] = ul[k] + h
-            um[k] = ul[k] - h
-            d = (_cge_lk_eqs(L, W, up, g) - _cge_lk_eqs(L, W, um, g)) / (2 * h)
+            if (!fd) d = D[., k]
+            else {
+                h = 1e-6 * max((1, abs(ul[k])))
+                up = um = ul
+                up[k] = ul[k] + h
+                um[k] = ul[k] - h
+                d = (_cge_lk_eqs(L, W, up, g) - _cge_lk_eqs(L, W, um, g)) / (2 * h)
+            }
             sel = selectindex(d :!= 0)
             if (rows(sel) & cols(sel)) _cge_tadd(T, nr :+ sel, J(rows(sel), 1, W.nz + k), d[sel])
         }
         // with respect to the quantities from the regions
         for (j = 1; j <= rows(g); j++) {
-            h = 1e-6 * max((1, abs(g[j])))
-            gp = gm = g
-            gp[j] = g[j] + h
-            gm[j] = g[j] - h
-            d = (_cge_lk_eqs(L, W, ul, gp) - _cge_lk_eqs(L, W, ul, gm)) / (2 * h)
+            if (!fd) d = D[., W.nu + j]
+            else {
+                h = 1e-6 * max((1, abs(g[j])))
+                gp = gm = g
+                gp[j] = g[j] + h
+                gm[j] = g[j] - h
+                d = (_cge_lk_eqs(L, W, ul, gp) - _cge_lk_eqs(L, W, ul, gm)) / (2 * h)
+            }
             sel = selectindex(d :!= 0)
             if (!rows(sel) | !cols(sel)) continue
             // the positions in x of quantity j, and their columns
@@ -13070,6 +13347,122 @@ real scalar _cge_lk_jac(struct cge_lk scalar L, struct cge_lw scalar W, real col
     ci = (T.n ? T.c[|1 \ T.n|] : J(0, 1, .))
     v = (T.n ? T.v[|1 \ T.n|] : J(0, 1, .))
     return(!hasmissing(v))
+}
+
+// Test hook (from version 0.31.0): the Jacobian of the linked system, exact
+// and with the differences used before, against central differences of the
+// residuals column by column, at the base links with every unknown moved by
+// perturb times a fixed pattern in (-0.5, 0.5), and by a tenth of that
+// added, so that unknowns at zero move too; r(maxdiff) and
+// r(maxdiff_fd), largest differences relative to 1 + |entry|; r(N) the
+// unknowns; r(t_exact) and r(t_fd), the seconds for one Jacobian
+void _cge_lk_jaccheck(| real scalar perturb)
+{
+    struct cge_lk scalar L
+    struct cge_lw scalar W
+    real colvector u, ul, ri, ci, v, up, um, fp, fm
+    real matrix A, B, C, E, w
+    real colvector i
+    real scalar r, k, n, h, j
+    if (args() == 0) perturb = 0
+    L = _cge_lk_load()
+    _cge_rg_sync()
+    _cge_lk_setup(L, W)
+    n = W.nz + W.nu
+    u = J(n, 1, .)
+    ul = J(W.nu, 1, 1)
+    for (k = 1; k <= rows(W.ip); k++) ul[W.ip[k, 5]] = W.ip[k, 8]
+    for (r = 1; r <= rows(W.nf); r++) {
+        u[|W.zoff[r] + 1 \ W.zoff[r] + W.nf[r]|] = W.PM[r]->x0[W.PS[r]->free] :/ W.PM[r]->xscale[W.PS[r]->free]
+    }
+    if (W.nu) u[|W.nz + 1 \ n|] = ul
+    u = u :* (1 :+ perturb :* (mod((1::n) :* 7, 11) :/ 10 :- 0.5)) :+ (perturb / 10) :* (mod((1::n) :* 3, 7) :/ 7 :- 0.5)
+    stata("timer clear 98")
+    stata("timer on 98")
+    if (!_cge_lk_jac(L, W, u, ri, ci, v)) _cge_fail("_cge_lk_jaccheck: the Jacobian cannot be evaluated", 459)
+    stata("timer off 98")
+    A = _cge_trip_dense(ri, ci, v, n, n)
+    stata("timer clear 99")
+    stata("timer on 99")
+    if (!_cge_lk_jac(L, W, u, ri, ci, v, 1)) _cge_fail("_cge_lk_jaccheck: the Jacobian cannot be evaluated", 459)
+    stata("timer off 99")
+    B = _cge_trip_dense(ri, ci, v, n, n)
+    C = J(n, n, .)
+    for (j = 1; j <= n; j++) {
+        h = 1e-6 * max((1, abs(u[j])))
+        up = um = u
+        up[j] = u[j] + h
+        um[j] = u[j] - h
+        fp = _cge_lk_resid(L, W, up)
+        fm = _cge_lk_resid(L, W, um)
+        C[., j] = (fp - fm) / (2 * h)
+    }
+    stata("quietly timer list")
+    st_numscalar("r(maxdiff)", max(abs(A - C) :/ (1 :+ abs(C))))
+    // where: row and column of the largest difference, with both values
+    E = abs(A - C) :/ (1 :+ abs(C))
+    maxindex(colshape(E, 1), 1, i, w)
+    i = i[1]
+    st_numscalar("r(row)", ceil(i / n))
+    st_numscalar("r(col)", i - (ceil(i / n) - 1) * n)
+    st_numscalar("r(exact)", A[ceil(i / n), i - (ceil(i / n) - 1) * n])
+    st_numscalar("r(differences)", C[ceil(i / n), i - (ceil(i / n) - 1) * n])
+    st_numscalar("r(maxdiff_fd)", max(abs(B - C) :/ (1 :+ abs(C))))
+    st_numscalar("r(maxdiff_ab)", max(abs(A - B) :/ (1 :+ abs(B))))
+    st_numscalar("r(N)", n)
+    st_numscalar("r(t_exact)", st_numscalar("r(t98)"))
+    st_numscalar("r(t_fd)", st_numscalar("r(t99)"))
+}
+
+// Test hook (from version 0.31.0): the derivatives of the residuals of the
+// full system of the model in memory in pwm, tm and pwe of every commodity,
+// by _cge_par_trip, against central differences, at the current point with
+// the free variables moved as in _cge_lk_jaccheck; r(maxdiff) the largest
+// difference relative to 1 + |entry|, r(N) the parameters, r(nonzero) the
+// entries
+void _cge_ptcheck(| real scalar perturb)
+{
+    struct cge_model scalar M
+    struct cge_sys scalar S
+    struct cge_par scalar p, pp
+    real matrix spec, A, C
+    real colvector mult, z, ri, ci, v, fp, fm
+    real scalar k, kind, c, h, n, nf, val
+    if (args() == 0) perturb = 0
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    S = _cge_sys_make(M, 0)
+    nf = rows(S.free)
+    z = M.xcur[S.free] :/ M.xscale[S.free]
+    z = z :* (1 :+ perturb :* (mod((1::nf) :* 7, 11) :/ 10 :- 0.5)) :+ (perturb / 10) :* (mod((1::nf) :* 3, 7) :/ 7 :- 0.5)
+    spec = J(0, 2, .)
+    for (c = 1; c <= M.nC; c++) spec = spec \ (1, c) \ (2, c) \ (3, c)
+    mult = J(rows(spec), 1, 1)
+    p = M.p
+    if (!_cge_par_trip(M, p, M.xcur, S, z, spec, mult, ri, ci, v)) _cge_fail("_cge_ptcheck: the equations cannot be evaluated", 459)
+    n = rows(_cge_F(M, p, M.xcur, S, z))
+    A = _cge_trip_dense(ri, ci, v, n, rows(spec))
+    C = J(n, rows(spec), .)
+    for (k = 1; k <= rows(spec); k++) {
+        kind = spec[k, 1]
+        c = spec[k, 2]
+        val = (kind == 1 ? p.pwm[c] : (kind == 2 ? p.tm[c] : p.pwe[c]))
+        h = 1e-6 * max((1, abs(val)))
+        pp = p
+        if (kind == 1) pp.pwm[c] = val + h
+        else if (kind == 2) pp.tm[c] = val + h
+        else pp.pwe[c] = val + h
+        fp = _cge_F(M, pp, M.xcur, S, z)
+        pp = p
+        if (kind == 1) pp.pwm[c] = val - h
+        else if (kind == 2) pp.tm[c] = val - h
+        else pp.pwe[c] = val - h
+        fm = _cge_F(M, pp, M.xcur, S, z)
+        C[., k] = (fp - fm) / (2 * h)
+    }
+    st_numscalar("r(maxdiff)", max(abs(A - C) :/ (1 :+ abs(C))))
+    st_numscalar("r(N)", rows(spec))
+    st_numscalar("r(nonzero)", sum(abs(C) :> 1e-12))
 }
 
 // Newton's method on the linked system, with a line search and the sparse LU

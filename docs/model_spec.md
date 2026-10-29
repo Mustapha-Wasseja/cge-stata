@@ -2071,10 +2071,10 @@ $(E^0 (QE + QER)/(QE^0 + QER^0) - \sum q_k)/E^0$. `cge_region solve` stacks the
 regions' scaled full systems and the link equations, starts from the base (or
 from each region solved alone at the base links, `start(alone)`) and solves by
 Newton's method with a line search and the sparse LU (`cge__slu_reg`): exact
-Jacobians of the regions (`_cge_jac_trip()`), central differences
-($h = 10^{-6}\max(1,|v|)$) for the link variables in a region's equations and
-for the link equations with respect to the link variables and the regions'
-QM, QE and QER. Shocks of a region to `pwm`, `tm` or `pwe` of a linked
+Jacobians of the regions (`_cge_jac_trip()`) and, from version 0.31.0
+(Section 41), exact derivatives of the regions' equations in their link
+variables and of the link equations; before, central differences
+($h = 10^{-6}\max(1,|v|)$) for those. Shocks of a region to `pwm`, `tm` or `pwe` of a linked
 commodity are an error (198). Each region's solution is stored in its model
 as simulation *name* with the link variables in its parameters (method
 `linked`), through the external so that it shares nothing with the model's
@@ -3066,6 +3066,70 @@ a dense row of 250 variables, a cross-entropy programme of 250 variables, a
 SAM-based model with user equations (its exact Jacobian against
 differences) and a run with foresight with lags and leads, each with the
 same solutions and iterations in every mode).
+
+## 41. Exact Jacobians of linked regions (from version 0.31.0)
+
+The linked system of `cge_region` (Section 21) stacks each region's full
+system and the link equations. Each region's Jacobian was exact; the columns
+of the link variables in a region's equations and the link equations used
+central differences, two evaluations of a region's whole system for each of
+its link variables. From version 0.31.0 the whole Jacobian is exact.
+
+**The regions' equations in their link variables.** A region's import pair
+sets $pwm_c = pwm^0_c u$ and $tm_c = u'$, an export pair $pwe_c = pwe^0_c
+u''$. `_cge_par_trip` gives the derivatives of the residuals $L - R$ of the
+full system in $pwm_c$, $tm_c$ and $pwe_c$, scaled as the residuals, with
+$t_c = tm_c\,TMADJ$, $\bar e_c = 1 - ced_c$ (the export price is $PWE$ for a
+commodity with a demand curve) and $R^M$, $R^E$ the rents:
+
+| Equation | $\partial/\partial pwm_c$ | $\partial/\partial tm_c$ | $\partial/\partial pwe_c$ |
+|---|---|---|---|
+| P1 (import price) | $-(1 + t_c + R^M_c)EXR$ | $-pwm_c\,TMADJ\,EXR$ | |
+| P2 (export price) | | | $-\bar e_c(1 - te_c - R^E_c)EXR$ |
+| T9 (exports from composite supply) | | | $-\sigma^t_c\,QER^{*}_c/pwe_c$ |
+| T10 (exports on a demand curve) | | | $-\eta_c\,QE^{*}_c/pwe_c$ |
+| I8 (government income) | $-t_c QM_c EXR$ | $-TMADJ\,pwm_c QM_c EXR$ | $-\bar e_c te_c QE_c EXR$ |
+| S3 (balance of payments) | $QM_c$ | | $-\bar e_c QE_c$ |
+
+with $QER^{*}$ and $QE^{*}$ the right-hand sides of T9 and T10; a rent on
+imports, $R^M_c pwm_c QM_c EXR$, and on exports, $R^E_c \bar e_c pwe_c QE_c
+EXR$, adds its derivative to the income equation of its recipient (I1 for a
+factor, I3 for a household or enterprise, I8 for the government) or, divided
+by $EXR$, to S3 for the rest of the world. User equations that use these
+parameters are differentiated by their postfix rows (Section 40), with the
+parameter element as a variable. Entries of one equation in one parameter
+are summed. The chain rule gives the columns of the link variables, times
+$pwm^0_c$, 1 and $pwe^0_c$.
+
+**The link equations.** `_cge_lk_eqsd` evaluates the link equations with a
+row of derivatives in the link variables and the regions' quantities for
+every price and quantity: with $x_k = p_k(1 + t_k)/(1 + t^0_k)$ the price
+with tariff of route $k$ into an import pair, $P$ its CES price index and
+$R = QM/QM^0$,
+$$dP = \sum_k \theta_k (P/x_k)^{\sigma} dx_k, \qquad
+dq_k = v_k (P/x_k)^{\sigma} dR + \sigma q_k \left(\frac{dP}{P} -
+\frac{dx_k}{x_k}\right),$$
+also for $\sigma = 1$ (Cobb-Douglas), and for exports to the rest of the
+world $dq_k = -\eta\, q_k\, dp_k/p_k$; the equations L1 to L3 follow from these.
+
+`cge_region solve` uses the exact Jacobian; the iterations are those of the
+differences or fewer, and the solutions agree with the Python reference as
+before. On the two-region test model a Jacobian took 0.03 seconds against
+0.07 with differences; the gain grows with the number of linked commodities.
+
+Test hooks: `_cge_lk_jaccheck(perturb)` compares the linked Jacobian, exact
+and with the differences, against central differences of the residuals
+column by column, at the base links with every unknown moved by a pattern
+of size `perturb` (and a tenth of that added, so that unknowns at zero, as
+rents, move); `_cge_ptcheck(perturb)` compares `_cge_par_trip` for every
+commodity of the model in memory against differences.
+
+Tests: `tests/test_linkjac.do` (two regions with user equations that use
+tariffs and world prices, free trade and an import quota paying rents; a
+region with a demand curve for exports and margins by market; a region with
+exports from composite supply, each at three points, to $10^{-6}$ of
+central differences; and each model alone, `_cge_ptcheck`, with rents on
+imports and exports to every kind of recipient, to $10^{-7}$).
 
 ## References
 

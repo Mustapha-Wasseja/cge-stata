@@ -17,6 +17,11 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.31.0 makes the Jacobian of linked regions (`cge_region`) exact:
+each region's equations in its world prices and tariffs, and the link
+equations through the price indexes and quantities of the trade routes,
+in place of central differences.
+
 Version 0.30.0 differentiates long expressions of the user language in
 reverse: a sum over a thousand elements, in an equation or the objective of
 a nonlinear programme, takes one pass back instead of a row of a thousand
@@ -47,7 +52,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.30.0 implements the standard single-country model described in
+Version 0.31.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -121,6 +126,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.31.0 makes the Jacobian of linked regions exact.
 Version 0.30.0 differentiates expressions of many variables in reverse.
 Version 0.29.0 adds set algebra: subsets with a domain, `+`, `*`, `-`,
 `not`, `yes`, `no` and conditions in `cge_set`, and sets of pairs from
