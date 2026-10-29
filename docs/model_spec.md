@@ -939,8 +939,8 @@ $(VA_t - (1 + g^Y_t) VA_{t-1})/VA^0$. Beyond the last period $T$,
 `lead(V, k)` is $V_T$ (constant), $V_T (V_T/V_{T-1})^{t+k-T}$ (growth, with a
 factor of 1 where either value is zero) or the base. `_cge_fs_jac()` gives the
 Jacobian: `_cge_jac_trip()` with the capital stocks as columns after the free
-ones, central differences ($h = 10^{-6}\max(1, |s|)$) for states of kinds 2
-to 6, `_cge_fs_ucross()` for the user equations with respect to lagged and
+ones, the derivatives in states of kinds 2 to 6 (`_cge_fs_sder()`, exact
+from version 0.32.0, Section 42; before, central differences), `_cge_fs_ucross()` for the user equations with respect to lagged and
 later values (codes $pos + k\,n_x$ for lags and $pos + (4 + k)\,n_x$ for leads
 in `_cge_u_dvalue()`), and the derivatives of the updates. `_cge_fs_newton()`
 solves the stacked system with a line search and the sparse LU (external
@@ -3130,6 +3130,40 @@ region with a demand curve for exports and margins by market; a region with
 exports from composite supply, each at three points, to $10^{-6}$ of
 central differences; and each model alone, `_cge_ptcheck`, with rents on
 imports and exports to every kind of recipient, to $10^{-7}$).
+
+## 42. Exact state derivatives in runs with foresight (from version 0.32.0)
+
+The stacked system of a run with foresight (Section 10.6) has, after the
+first period, the states of every period as unknowns. Capital stocks enter a
+period as fixed variables, and their columns came from the period's exact
+Jacobian; the other states enter through parameters and fixed values
+(`_cge_fs_map`), and their columns were central differences of the period's
+residuals, two evaluations of its system for each state. From version 0.32.0
+`_cge_fs_sder` gives them exactly, from the equations that use them:
+
+| State | Enters as | Equations, $\partial(L - R)/\partial s$ |
+|---|---|---|
+| domestic debt (2) | `ddebt` $= s$ | I3: $-hold_d\, r_d$; I9: $-r_d$ |
+| foreign debt (3) | `fdebt` $= s$ | I9: $-r_f\, EXR$; S3: $r_f$ |
+| efficiency of growth targets (4) | `ad` $= ad_t\, s$ | Q3: $-q3_a/s$ (value added is linear in `ad`) |
+| population (5) | $\gamma$, $\gamma^h$, `hs0` $\times s$ | I5, I5H: $-(PH\,\gamma_t + \beta\, dSN)$, $dSN = -(PH'\gamma_t + PA'\gamma^h_t)$; H2: $\eta (HS/hs0)^{\eta}/s$; H3: $-sick\,\epsilon (HS/hs0)^{\epsilon}/(s(1 - sick_0))$ |
+| labour force of a death factor (6) | `qlf` $\times s$ | L1, L2 through $u = 1 - QFS/qlf$, $du/ds = QFS/(qlf\, s)$ |
+
+with the period's parameters $p(s)$ and point. User equations that use these
+parameters are differentiated by their postfix rows (Section 40), each
+reference to an element replaced by its coefficient times the state as a
+variable (`_cge_fs_pvar`). The supplies of the factors that lose workers
+to deaths are fixed values $x = X s$; their columns come from the period's
+exact Jacobian, with those variables as extra columns as the capital stocks
+are, times $X$. The external `cge__fsfd` set to 1 gives the differences of
+before (a test hook).
+
+Tests: `tests/test_foresight.do` (the stacked Jacobian against central
+differences with debt, growth targets, deaths and population) and
+`tests/test_fsjac.do` (the same with a labour force and a wage curve, health
+efficiency, days lost to illness and user equations that use `ddebt`,
+`fdebt`, `ad`, `hs0` and `qlf`, in both modes, to $10^{-6}$ of central
+differences; runs in both modes agree to $10^{-10}$).
 
 ## References
 

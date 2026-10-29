@@ -267,7 +267,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.31.0")
+    return("0.32.0")
 }
 
 // =====================================================================
@@ -12018,6 +12018,183 @@ void _cge_fs_cols(struct cge_model scalar M, struct cge_fs scalar FS, real scala
     if (rows(sel) & cols(sel)) _cge_tadd(T, rr[sel], so :+ a[sel], vv[sel] :* FS.X[pos[sel], t])
 }
 
+// The derivatives of the residuals of the full system S of a period at
+// parameters p and point x (the states applied, _cge_fs_map), with respect to
+// a state other than capital, j, at value sv (from version 0.32.0): debt
+// (kinds 2 and 3), the efficiency factor of growth targets (4), population
+// (5) and the labour force of a factor that loses workers (6), from the
+// formulas of the equations that use them, and user equations by their
+// postfix rows; rows ri of the system and values v, scaled as the residuals.
+// The fixed variables that deaths scale enter through the columns of the
+// period's Jacobian (_cge_fs_jac).
+real scalar _cge_fs_sder(struct cge_model scalar M, struct cge_fs scalar FS, struct cge_par scalar p,
+                         real colvector x, struct cge_sys scalar S, real scalar j, real scalar sv,
+                         real colvector ri, real colvector v)
+{
+    struct cge_trip scalar T
+    real colvector bo, r, keep, rowsys, PQ, PA, PH, HS, QFS, W, LSW, A, coef, els, o
+    real matrix g0, gh0, dI5, dI5H, tk1, tk2, utk, info
+    real rowvector dSN, gl, gr
+    real scalar kind, f, EXR, CPI, d, c, h, a, kb, kk, K, un, du, ub, rq, k
+    string scalar pname
+    ri = v = J(0, 1, .)
+    kind = FS.skind[j]
+    f = FS.sfac[j]
+    if (min(x[M.positive]) <= 0 | hasmissing(x)) return(0)
+    bo = runningsum(M.elen) - M.elen
+    _cge_tinit(T)
+    EXR = _cge_vn(M, x, "EXR")
+    pname = ""
+    coef = els = J(0, 1, .)
+    if (kind == 2) {
+        // domestic debt: interest paid to households (I3) and by the government (I9)
+        for (d = 1; d <= M.nD; d++) _cge_pt_add(M, T, bo, "I3", d, 1, -p.hold[d] * p.rd)
+        _cge_pt_add(M, T, bo, "I9", 1, 1, -p.rd)
+        pname = "ddebt"
+        coef = 1
+    }
+    else if (kind == 3) {
+        // foreign debt: interest paid by the government (I9), abroad (S3)
+        _cge_pt_add(M, T, bo, "I9", 1, 1, -p.rf * EXR)
+        _cge_pt_add(M, T, bo, "S3", 1, 1, p.rf)
+        pname = "fdebt"
+        coef = 1
+    }
+    else if (kind == 4) {
+        // the efficiency factor scales ad, and value added (Q3) with it
+        A = _cge_fs_q3(M, p, x)
+        for (a = 1; a <= M.n; a++) _cge_pt_add(M, T, bo, "Q3", a, 1, -A[a] / sv)
+        pname = "ad"
+        coef = p.ad / sv
+    }
+    else if (kind == 5) {
+        // population scales the subsistence quantities of LES demand (I5,
+        // I5H) and the health services of the base (H2, H3)
+        PQ = _cge_vn(M, x, "PQ")
+        PA = _cge_vn(M, x, "PA")
+        PH = PQ :* (1 :+ p.tv :* _cge_vn(M, x, "TVADJ"))
+        g0 = p.gamma / sv
+        gh0 = p.gammah / sv
+        dSN = -(PH' * g0 + PA' * gh0)
+        dI5 = PH :* g0 + p.beta :* dSN
+        dI5H = PA :* gh0 + p.betah :* dSN
+        for (c = 1; c <= M.nC; c++) for (h = 1; h <= M.nH; h++) _cge_pt_add(M, T, bo, "I5", (c - 1) * M.nH + h, 1, -dI5[c, h])
+        for (a = 1; a <= M.n; a++) for (h = 1; h <= M.nH; h++) _cge_pt_add(M, T, bo, "I5H", (a - 1) * M.nH + h, 1, -dI5H[a, h])
+        HS = _cge_vn(M, x, "HS")
+        for (k = 1; k <= M.nF; k++) {
+            if (p.etah[k] != 0) _cge_pt_add(M, T, bo, "H2", k, 1, p.etah[k] * (HS / p.hs0) ^ p.etah[k] / sv)
+            if (p.ins[k]) _cge_pt_add(M, T, bo, "H3", k, 1, -p.sick[k] * p.epss[k] * (HS / p.hs0) ^ p.epss[k] / (sv * (1 - p.sick0[k])))
+        }
+        pname = "hs0"
+        coef = p.hs0 / sv
+    }
+    else if (kind == 6) {
+        // the labour force of factor f: unemployment in the wage curve (L1)
+        // and the minimum wage (L2)
+        if (M.p0.inlf[f]) {
+            QFS = _cge_vn(M, x, "QFS")
+            W = _cge_vn(M, x, "W")
+            CPI = _cge_vn(M, x, "CPI")
+            LSW = _cge_vn(M, x, "LSW")
+            un = 1 - QFS[f] / p.qlf[f]
+            du = QFS[f] / (p.qlf[f] * sv)
+            _cge_pt_add(M, T, bo, "L1", f, 1, p.wref[f] * p.epsw[f] * (un / p.u0[f]) ^ (-p.epsw[f] - 1) / p.u0[f] * du)
+            ub = W[f] / CPI / p.wmin[f] - 1
+            rq = sqrt(un ^ 2 + ub ^ 2 + 2 * p.mu)
+            _cge_pt_add(M, T, bo, "L2", f, 1, (1 - un / rq) * du)
+            pname = "qlf"
+            coef = J(M.nF, 1, 0)
+            coef[f] = p.qlf[f] / sv
+            els = f
+        }
+    }
+    // user equations that use the parameter: each reference to an element
+    // becomes coef x the state, a variable at position K + 1
+    if (pname != "") {
+        kb = _cge_find(M.ename, "U")
+        K = rows(x)
+        for (kk = 1; kk <= rows(M.uelab); kk++) {
+            tk1 = M.utok[|M.ustart[kk], 1 \ M.ustart[kk] + M.ulen[kk] - 1, 3|]
+            tk2 = M.utok[|M.ustart[kk] + M.ulen[kk], 1 \ M.ustart[kk] + M.ulen[kk] + M.ulen2[kk] - 1, 3|]
+            utk = tk1 \ tk2
+            if (!_cge_fs_uses(M, utk, pname, els)) continue
+            (void) _cge_u_dvalue(M, p, x \ sv, _cge_fs_pvar(M, tk1, pname, coef, els, K + 1), K + 1, gl)
+            (void) _cge_u_dvalue(M, p, x \ sv, _cge_fs_pvar(M, tk2, pname, coef, els, K + 1), K + 1, gr)
+            if (gl[1] - gr[1] != 0) _cge_tadd(T, bo[kb] + kk, 1, gl[1] - gr[1])
+        }
+    }
+    if (T.n == 0) return(1)
+    r = T.r[|1 \ T.n|]
+    v = T.v[|1 \ T.n|]
+    rowsys = runningsum(S.mask) :* S.mask
+    keep = selectindex(M.emask[r, 1] :& (rowsys[r, 1] :> 0))
+    if (rows(keep) * cols(keep) == 0) {
+        v = J(0, 1, .)
+        return(1)
+    }
+    ri = rowsys[r[keep], 1]
+    v = v[keep] :/ M.escale[r[keep], 1]
+    if (hasmissing(v)) return(0)
+    // two terms of one equation summed
+    o = order(ri, 1)
+    ri = ri[o]
+    v = v[o]
+    info = panelsetup(ri, 1)
+    v = panelsum(v, info)
+    ri = ri[info[., 1]]
+    return(1)
+}
+
+// Value added by activity, the right-hand side of Q3, at parameters p and
+// point x (from version 0.32.0)
+real colvector _cge_fs_q3(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    real colvector L, R, K, bo
+    real scalar g
+    _cge_eq(M, p, x, L, R, K, 0)
+    bo = runningsum(M.elen) - M.elen
+    g = _cge_find(M.ename, "Q3")
+    return(R[|bo[g] + 1 \ bo[g] + M.n|])
+}
+
+// 1 if postfix rows tok use parameter pname, of the elements els (all if
+// none)
+real scalar _cge_fs_uses(struct cge_model scalar M, real matrix tok, string scalar pname, real colvector els)
+{
+    real scalar f
+    for (f = 1; f <= rows(tok); f++) {
+        if (tok[f, 1] != 3) continue
+        if (M.upar[tok[f, 2]] != pname) continue
+        if (!rows(els)) return(1)
+        if (anyof(els, tok[f, 3])) return(1)
+    }
+    return(0)
+}
+
+// Postfix rows tok with each reference to an element e of parameter pname
+// (of els, or all) made coef[e] (coef if one value) times the variable at
+// position pos
+real matrix _cge_fs_pvar(struct cge_model scalar M, real matrix tok, string scalar pname, real colvector coef,
+                         real colvector els, real scalar pos)
+{
+    real matrix t
+    real scalar f, e
+    t = J(0, 3, .)
+    for (f = 1; f <= rows(tok); f++) {
+        if (tok[f, 1] == 3) {
+            if (M.upar[tok[f, 2]] == pname) {
+                e = tok[f, 3]
+                if (!rows(els) | anyof(els, e)) {
+                    t = t \ (1, (rows(coef) > 1 ? coef[e] : coef[1]), .) \ (2, pos, .) \ (4, 3, .)
+                    continue
+                }
+            }
+        }
+        t = t \ tok[f, .]
+    }
+    return(t)
+}
+
 // The entries of the Jacobian of the stacked system at u, scaled as
 // _cge_fs_resid: within each period, the exact Jacobian of its full system,
 // with its capital stocks as further columns, and central differences for
@@ -12032,8 +12209,10 @@ real scalar _cge_fs_jac(struct cge_model scalar M, struct cge_dyn scalar D, stru
     struct cge_trip scalar T
     struct cge_par scalar p, pt
     real colvector fidx, kidx, didx, kk, kpos, r, c, w, sel, sg, xf, fp, fm, d, ph, gva, pva, tr, rows_, nr
+    real colvector dpos, dm, xs, r2, v2
     real matrix DX, DS, PQI, GQ
-    real scalar N, nf, ns, nx, t, j, h, so, to, spo, j4, va0, hl
+    real scalar N, nf, ns, nx, t, j, h, so, to, spo, j4, va0, hl, fsfd
+    pointer() scalar q
     N = FS.N
     nf = rows(S.free)
     ns = rows(FS.skind)
@@ -12051,20 +12230,39 @@ real scalar _cge_fs_jac(struct cge_model scalar M, struct cge_dyn scalar D, stru
     else kk = J(0, 1, .)
     if (rows(FS.dmap)) didx[FS.dmap[., 2]] = FS.dmap[., 1]
     hl = (_cge_u_haslag(M) | _cge_u_haslead(M))
+    fsfd = ((q = findexternal("cge__fsfd")) == NULL ? 0 : *q)
+    dpos = (rows(FS.dmap) & !fsfd ? FS.dmap[., 2] : J(0, 1, .))
     _cge_tinit(T)
     for (t = 1; t <= N; t++) {
         so = N * nf + (t - 2) * ns
         // within the period, with its capital stocks as columns nf + 1, ...
         pt = _cge_fs_par(M, D, FS, W, t)
-        if (!_cge_jac_trip(M, pt, W.XF[., t], S, W.Z[., t], r, c, w, kpos)) return(0)
+        if (!_cge_jac_trip(M, pt, W.XF[., t], S, W.Z[., t], r, c, w, kpos \ dpos)) return(0)
         sel = selectindex(c :<= nf)
         if (rows(sel) & cols(sel)) _cge_tadd(T, (t - 1) * nf :+ r[sel], (t - 1) * nf :+ c[sel], w[sel])
         if (t >= 2) {
-            sel = selectindex(c :> nf)
+            sel = selectindex((c :> nf) :& (c :<= nf + rows(kpos)))
             if (rows(sel) & cols(sel)) _cge_tadd(T, (t - 1) * nf :+ r[sel], so :+ kk[c[sel] :- nf, 1], w[sel])
-            // the other states of the period, by central differences
+            // the fixed variables that deaths scale (from version 0.32.0):
+            // x = X s, so d/ds is the column of x times X, in the state's units
+            sel = selectindex(c :> nf + rows(kpos))
+            if (rows(sel) & cols(sel)) {
+                dm = c[sel] :- nf :- rows(kpos)
+                _cge_tadd(T, (t - 1) * nf :+ r[sel], so :+ FS.dmap[dm, 1],
+                          w[sel] :* FS.X[dpos[dm], t] :/ M.xscale[dpos[dm]] :* FS.sscale[FS.dmap[dm, 1]])
+            }
+            // the other states of the period, exactly from version 0.32.0;
+            // before, and with the external cge__fsfd set (a test hook), by
+            // central differences
             for (j = 1; j <= ns; j++) {
                 if (FS.skind[j] == 1) continue
+                if (!fsfd) {
+                    xs = W.XF[., t]
+                    xs[S.free] = W.Z[., t] :* M.xscale[S.free]
+                    if (!_cge_fs_sder(M, FS, pt, xs, S, j, W.Sg[j, t], r2, v2)) return(0)
+                    if (rows(r2)) _cge_tadd(T, (t - 1) * nf :+ r2, J(rows(r2), 1, so + j), v2 :* FS.sscale[j])
+                    continue
+                }
                 h = 1e-6 * max((1, abs(W.Sg[j, t])))
                 sg = W.Sg[., t]
                 sg[j] = sg[j] + h

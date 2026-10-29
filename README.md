@@ -17,6 +17,10 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.32.0 makes the Jacobian of runs with perfect foresight exact in
+every state: debt, the efficiency of growth targets, population and labour
+forces, in place of central differences, as capital stocks already were.
+
 Version 0.31.0 makes the Jacobian of linked regions (`cge_region`) exact:
 each region's equations in its world prices and tariffs, and the link
 equations through the price indexes and quantities of the trade routes,
@@ -52,7 +56,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.31.0 implements the standard single-country model described in
+Version 0.32.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -126,6 +130,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.32.0 makes the Jacobian of runs with foresight exact in every state.
 Version 0.31.0 makes the Jacobian of linked regions exact.
 Version 0.30.0 differentiates expressions of many variables in reverse.
 Version 0.29.0 adds set algebra: subsets with a domain, `+`, `*`, `-`,

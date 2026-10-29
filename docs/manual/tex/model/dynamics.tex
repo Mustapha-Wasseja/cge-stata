@@ -161,8 +161,10 @@ s_t - a_t - b_t \,\Phi\bigl(s_{t-1}, x_{t-1}, p(s_{t-1})\bigr) = 0,
 where $p(s)$ gives the parameters and fixed values of a period from its states
 and $\Phi$ is the update of step 1, 5 or section~\ref{sec:population}. It is
 solved by Newton's method with a line search and the sparse LU
-(section~\ref{sec:sparse}). Its Jacobian is exact within each period, with
-central differences for states that enter through parameters; across periods
+(section~\ref{sec:sparse}). Its Jacobian is exact within each period and, from
+version 0.32.0, in the states that enter through parameters (debt, the
+efficiency of growth targets, population and labour forces), from the
+equations that use them; before, those were central differences. Across periods
 it has the derivatives of the user equations with respect to the values that
 \cmd{lag()} and \cmd{lead()} refer to, through the terminal condition beyond
 the last period, and the derivatives of the updates, the allocation of new
