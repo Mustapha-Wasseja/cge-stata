@@ -267,7 +267,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.28.0")
+    return("0.29.0")
 }
 
 // =====================================================================
@@ -17942,23 +17942,43 @@ real scalar _cge_u_isindex(struct cge_model scalar M, string scalar s)
     return(0)
 }
 
+// The context of a set expression (from version 0.29.0): the elements of its
+// domain (labels of tuples joined by periods), the indexes and set code of
+// the domain, their number (0 without a domain), every label of the model,
+// and whether a standalone model may take new labels
+struct cge_usx {
+    string colvector dom, all
+    string scalar    idx, set
+    real scalar      n, newok
+}
+
 // cge_set name = elements [, except(elements)]: elements are labels, model
-// set letters (a c f h d i n) or user sets, written out
+// set letters (a c f h d i n) or user sets, written out. From version 0.29.0
+// a set expression (docs/model_spec.md, Section 39): unions (+, or elements
+// side by side), intersections (*), differences (-), complements (not), all
+// or none of the elements of a domain (yes, no) and conditions ($), with a
+// domain: name(i) for a subset of the set of index i, name(i,j) for a set of
+// pairs, and a condition on the elements, name(i)$(condition)
 void _cge_us_add(string scalar spec)
 {
     struct cge_model scalar M
-    string scalar head, expr, opts, name, ex, fv
-    string rowvector t, ot, so
-    string colvector lab, all, drop, raw
-    real scalar k, j
+    struct cge_usx scalar X
+    string scalar head, expr, opts, name, ex, fv, idx, set, cond, what
+    string rowvector t, so, ix
+    string colvector ot, raw
+    real scalar k, listed
     M = _cge_load()
     _cge_need(M, "calibrated")
     _cge_u_split(spec, head, expr, opts)
-    name = strtrim(head)
-    // a set of pairs (from version 0.9.1): cge_set map(a,c) = e1.e2 ...; of
-    // tuples (from version 0.25.0): cge_set m(i,j,k) = e1.e2.e3 ...
-    if (regexm(name, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*\(([^()]*,[^()]*)\)$")) {
-        _cge_us_addpairs(M, regexs(1), _cge_u_idxlist(regexs(2), "cge_set"), expr, opts)
+    head = strtrim(head)
+    t = _cge_us_lex(expr)
+    // a set of pairs (from version 0.9.1) or tuples (from version 0.25.0)
+    // written out, cge_set map(a,c) = e1.e2 ...
+    listed = _cge_us_listed(t, 1)
+    if (regexm(head, "^([A-Za-z_][A-Za-z_0-9]*)[ ]*\(([^()]*,[^()]*)\)$") & listed) {
+        name = regexs(1)
+        ix = _cge_u_idxlist(regexs(2), "cge_set")
+        _cge_us_addpairs(M, name, ix, expr, opts)
         return
     }
     // the elements from a string variable in memory (from version 0.13.0),
@@ -17967,57 +17987,369 @@ void _cge_us_add(string scalar spec)
     ex = so[1]
     fv = so[2]
     if ((expr == "") == (fv == "")) _cge_fail("cge_set: write cge_set name = elements, or cge_set name, from(varname)", 198)
+    // the name, a domain and a condition on the elements (from version 0.29.0)
+    idx = set = cond = ""
+    if (regexm(head, "^[A-Za-z_][A-Za-z_0-9]*$")) name = head
+    else {
+        if (!regexm(head, "^[A-Za-z_][A-Za-z_0-9]*[ ]*[(][^()]*[)][ ]*([$].*)?$")) {
+            _cge_fail("cge_set: write the name as name, name(i), name(i,j) or name(i)" + char(36) + "(condition)", 198)
+        }
+        _cge_u_head(M, head, name, idx, set, cond)
+    }
     _cge_u_newname(M, name, "set")
-    all = _cge_alllabels(M)
-    lab = J(0, 1, "")
+    if (anyof(("yes", "no", "not"), name)) _cge_fail("cge_set: " + name + " is a word of set expressions", 198)
+    X.n = (idx == "" ? 0 : _cge_nidx(set))
+    X.idx = idx
+    X.set = set
+    X.dom = (X.n ? _cge_us_domlab(M, set) : J(0, 1, ""))
+    X.all = _cge_alllabels(M)
+    // a standalone model takes new labels written out, without operators
+    X.newok = (_cge_us_listed(t, 0) | fv != "" ? 1 : -1)
+    what = (X.n == 2 ? "pairs" : "tuples")
+    if (X.n >= 2 & (fv != "" | ex != "")) _cge_fail("cge_set: a set of " + what + " takes no options", 198)
     if (fv != "") {
         if (_st_varindex(fv) >= .) _cge_fail("cge_set: from(): variable " + fv + " not found", 111)
         if (!st_isstrvar(fv)) _cge_fail("cge_set: from(): " + fv + " is not a string variable", 109)
         raw = st_sdata(., fv)
-        t = J(1, 0, "")
-        for (k = 1; k <= rows(raw); k++) if (strtrim(raw[k]) != "") t = t, strtrim(raw[k])
-        if (!cols(t)) _cge_fail("cge_set: from(): " + fv + " has no labels", 459)
+        ot = J(0, 1, "")
+        for (k = 1; k <= rows(raw); k++) if (strtrim(raw[k]) != "") ot = ot \ _cge_us_label(M, X, strtrim(raw[k]))
+        if (!rows(ot)) _cge_fail("cge_set: from(): " + fv + " has no labels", 459)
+        ot = _cge_us_union(ot, J(0, 1, ""))
     }
-    else t = tokens(expr)
-    for (k = 1; k <= cols(t); k++) {
-        if (fv == "" & !_cge_sa(M) & regexm(t[k], "^[acfhdin]$")) lab = lab \ _cge_setlab(M, strupper(t[k]))
-        else if (fv == "" & _cge_us_find(M, t[k])) lab = lab \ _cge_us_labels(M, _cge_us_find(M, t[k]))
-        else if (anyof(all, t[k])) lab = lab \ t[k]
-        // a new label of a standalone model (from version 0.13.0)
-        else if (_cge_sa(M)) lab = lab \ _cge_us_newlabel(M, t[k])
-        else _cge_fail("cge_set: " + t[k] + " is not an element, a model set (a c f h d i n) or a user set", 111)
+    else {
+        k = 1
+        ot = _cge_us_expr(M, X, t, k)
+        if (k <= cols(t)) _cge_fail("cge_set: " + t[k] + " is not expected here", 198)
     }
-    drop = J(0, 1, "")
-    t = tokens(ex)
-    for (k = 1; k <= cols(t); k++) {
-        if (!_cge_sa(M) & regexm(t[k], "^[acfhdin]$")) drop = drop \ _cge_setlab(M, strupper(t[k]))
-        else if (_cge_us_find(M, t[k])) drop = drop \ _cge_us_labels(M, _cge_us_find(M, t[k]))
-        else if (anyof(all, t[k])) drop = drop \ t[k]
-        else _cge_fail("cge_set: except(): " + t[k] + " is not an element, a model set or a user set", 111)
+    if (cond != "") ot = _cge_us_cond(M, X, ot, cond)
+    if (ex != "") {
+        X.newok = 0
+        t = _cge_us_lex(ex)
+        k = 1
+        ot = _cge_us_diff(ot, _cge_us_expr(M, X, t, k))
+        if (k <= cols(t)) _cge_fail("cge_set: except(): " + t[k] + " is not expected here", 198)
     }
-    // each element once, in the order given, less the exceptions
-    ot = J(1, 0, "")
-    for (k = 1; k <= rows(lab); k++) {
-        if (anyof(drop, lab[k])) continue
-        j = 0
-        if (cols(ot)) j = anyof(ot, lab[k])
-        if (!j) ot = ot, lab[k]
-    }
-    if (cols(ot) == 0) _cge_fail("cge_set: the set " + name + " has no elements", 198)
+    if (!rows(ot)) _cge_fail("cge_set: the set " + name + " has no elements", 198)
     _cge_us_widen(M)
-    M.usdef = M.usdef \ (name, invtokens(ot), "")
+    M.usdef = M.usdef \ (name, invtokens(ot'), (X.n >= 2 ? set : ""), (X.n == 1 ? set : ""))
     _cge_store(M)
-    printf("{txt}User set {res}%s{txt}: %f element(s): {res}%s\n", name, cols(ot), invtokens(ot[|1 \ min((cols(ot), 8))|]) + (cols(ot) > 8 ? " ..." : ""))
+    if (X.n >= 2) {
+        printf("{txt}User set {res}%s(%s){txt}: %f %s: {res}%s\n", name, idx, rows(ot), (X.n == 2 ? "pair(s)" : "tuple(s)"),
+               invtokens(ot[|1 \ min((rows(ot), 6))|]') + (rows(ot) > 6 ? " ..." : ""))
+    }
+    else {
+        printf("{txt}User set {res}%s%s{txt}: %f element(s): {res}%s\n", name, (X.n ? "(" + idx + ")" : ""), rows(ot),
+               invtokens(ot[|1 \ min((rows(ot), 8))|]') + (rows(ot) > 8 ? " ..." : ""))
+    }
     st_global("r(name)", name)
-    st_global("r(elements)", invtokens(ot))
-    st_numscalar("r(N_elements)", cols(ot))
+    st_global("r(elements)", invtokens(ot'))
+    st_global("r(domain)", idx)
+    st_numscalar("r(N_elements)", rows(ot))
+}
+
+// The elements of the domain over set code set, in the order of the
+// domains of user variables, labels of tuples joined by periods
+string colvector _cge_us_domlab(struct cge_model scalar M, string scalar set)
+{
+    string colvector e1, e2
+    real colvector o1, o2
+    _cge_u_els(M, set, e1, e2, o1, o2)
+    if (_cge_nidx(set) == 1) return(e1)
+    return(e1 :+ "." :+ e2)
+}
+
+// The tokens of a set expression: words (labels, sets, yes, no, not), the
+// operators + - * and parentheses, and conditions, each one token: a dollar
+// sign and $(condition) or $name(...) as written after it
+string rowvector _cge_us_lex(string scalar s)
+{
+    string rowvector t
+    string scalar ch, w
+    real scalar k, j, n, a
+    t = J(1, 0, "")
+    n = strlen(s)
+    k = 1
+    while (k <= n) {
+        ch = substr(s, k, 1)
+        if (ch == " " | ch == char(9)) k++
+        else if (strpos("+-*()", ch)) {
+            t = t, ch
+            k++
+        }
+        else if (ch == char(36)) {
+            // in parentheses: Stata reads a dollar sign and a name as a
+            // global macro
+            j = k + 1
+            while (j <= n & substr(s, j, 1) == " ") j++
+            if (j > n | substr(s, j, 1) != "(") _cge_fail("cge_set: write a condition as " + char(36) + "(condition)", 198)
+            a = j
+            j = _cge_us_close(s, j)
+            t = t, char(36) + substr(s, a, j - a + 1)
+            k = j + 1
+        }
+        else if (regexm(substr(s, k, .), "^([A-Za-z0-9_.]+)")) {
+            w = regexs(1)
+            t = t, w
+            k = k + strlen(w)
+        }
+        else _cge_fail("cge_set: " + ch + " is not expected in a set expression", 198)
+    }
+    return(t)
+}
+
+// The position of the parenthesis that closes the one at position a of s
+real scalar _cge_us_close(string scalar s, real scalar a)
+{
+    real scalar j, d
+    string scalar ch
+    d = 0
+    j = a
+    while (j <= strlen(s)) {
+        ch = substr(s, j, 1)
+        if (ch == "(") d++
+        else if (ch == ")") {
+            d--
+            if (!d) return(j)
+        }
+        j++
+    }
+    _cge_fail("cge_set: a parenthesis of a condition is not closed", 198)
+}
+
+// 1 if s is a word of a set expression: a label, a set, yes, no or not
+real scalar _cge_us_word(string scalar s)
+{
+    return(regexm(s, "^[A-Za-z0-9_.]+$"))
+}
+
+// 1 if the tokens are labels written out, with tup labels of tuples, e1.e2:
+// the form of version 0.9.1
+real scalar _cge_us_listed(string rowvector t, real scalar tup)
+{
+    real scalar k
+    if (!cols(t)) return(0)
+    for (k = 1; k <= cols(t); k++) {
+        if (!_cge_us_word(t[k]) | anyof(("yes", "no", "not"), t[k])) return(0)
+        if (tup & !strpos(t[k], ".")) return(0)
+    }
+    return(1)
+}
+
+// A set expression from token k: terms joined by + and -, or side by side
+// (a union); k moves past it
+string colvector _cge_us_expr(struct cge_model scalar M, struct cge_usx scalar X, string rowvector t, real scalar k)
+{
+    string colvector a
+    string scalar op
+    a = _cge_us_term(M, X, t, k)
+    while (k <= cols(t)) {
+        op = t[k]
+        if (op == "+" | op == "-") k++
+        else if (op == "(" | (_cge_us_word(op) & op != ")")) op = "+"
+        else break
+        if (k > cols(t)) _cge_fail("cge_set: the expression ends after " + op, 198)
+        if (op == "-") a = _cge_us_diff(a, _cge_us_term(M, X, t, k))
+        else a = _cge_us_union(a, _cge_us_term(M, X, t, k))
+    }
+    return(a)
+}
+
+// A term: factors joined by * (an intersection)
+string colvector _cge_us_term(struct cge_model scalar M, struct cge_usx scalar X, string rowvector t, real scalar k)
+{
+    string colvector a
+    a = _cge_us_factor(M, X, t, k)
+    while (k <= cols(t)) {
+        if (t[k] != "*") break
+        k++
+        if (k > cols(t)) _cge_fail("cge_set: the expression ends after *", 198)
+        a = _cge_us_inter(a, _cge_us_factor(M, X, t, k))
+    }
+    return(a)
+}
+
+// A factor: not and a factor (the complement in the domain), an expression
+// in parentheses, yes or no (every element of the domain or none), a label or
+// a set, each with any conditions after it
+string colvector _cge_us_factor(struct cge_model scalar M, struct cge_usx scalar X, string rowvector t, real scalar k)
+{
+    string colvector a
+    if (k > cols(t)) _cge_fail("cge_set: the expression ends too early", 198)
+    if (t[k] == "not") {
+        if (!X.n) _cge_fail("cge_set: not takes the complement in a domain: write cge_set name(i) = not ...", 198)
+        k++
+        return(_cge_us_diff(X.dom, _cge_us_factor(M, X, t, k)))
+    }
+    if (t[k] == "(") {
+        k++
+        a = _cge_us_expr(M, X, t, k)
+        if (k > cols(t)) _cge_fail("cge_set: a parenthesis is not closed", 198)
+        if (t[k] != ")") _cge_fail("cge_set: a parenthesis is not closed", 198)
+        k++
+    }
+    else if (t[k] == "yes" | t[k] == "no") {
+        if (!X.n) _cge_fail("cge_set: " + t[k] + " needs a domain: write cge_set name(i) = " + t[k] + " ...", 198)
+        a = (t[k] == "yes" ? X.dom : J(0, 1, ""))
+        k++
+    }
+    else if (_cge_us_word(t[k])) {
+        a = _cge_us_atom(M, X, t[k])
+        k++
+    }
+    else if (substr(t[k], 1, 1) == char(36)) _cge_fail("cge_set: a condition follows elements, as yes" + char(36) + "(condition)", 198)
+    else _cge_fail("cge_set: " + t[k] + " is not expected here", 198)
+    while (k <= cols(t)) {
+        if (substr(t[k], 1, 1) != char(36)) break
+        a = _cge_us_cond(M, X, a, substr(t[k], 2, .))
+        k++
+    }
+    return(a)
+}
+
+// The elements a word stands for: a label (of a tuple, e1.e2, in a domain of
+// several indexes), a model set letter or a user set
+string colvector _cge_us_atom(struct cge_model scalar M, struct cge_usx scalar X, string scalar w)
+{
+    string colvector a
+    real scalar k
+    if (X.n >= 2) {
+        if (strpos(w, ".")) {
+            if (cols(_cge_u_nodelim(tokens(w, "."), ".")) != X.n) {
+                _cge_fail("cge_set: " + w + ": write the " + (X.n == 2 ? "pairs as e1.e2" : "tuples as e1.e2.e3, one label of each index"), 198)
+            }
+            if (!anyof(X.dom, w)) _cge_fail("cge_set: " + w + " is not an element of the sets of " + X.idx, 111)
+            return(w)
+        }
+        k = _cge_us_find(M, w)
+        if (!k) _cge_fail("cge_set: " + w + ": write the " + (X.n == 2 ? "pairs as e1.e2" : "tuples as e1.e2.e3") + ", or name a set of " + (X.n == 2 ? "pairs" : "tuples"), 198)
+        if (!_cge_us_pairs(M, k)) {
+            _cge_fail("cge_set: " + w + " is a set of single elements; write its membership as a condition, as " + char(36) + "(" + w + "(i))", 198)
+        }
+        if (_cge_nidx(M.usdef[k, 3]) != X.n) {
+            _cge_fail("cge_set: " + w + " has " + strofreal(_cge_nidx(M.usdef[k, 3])) + " indexes, the domain (" + X.idx + ") " + strofreal(X.n), 198)
+        }
+        a = _cge_us_labels(M, k)
+        _cge_us_within(X, a, w)
+        return(a)
+    }
+    if (!_cge_sa(M) & regexm(w, "^[acfhdin]$")) a = _cge_setlab(M, strupper(w))
+    else if (_cge_us_find(M, w)) {
+        k = _cge_us_find(M, w)
+        if (_cge_us_pairs(M, k)) _cge_fail("cge_set: " + w + " is a set of " + (_cge_nidx(M.usdef[k, 3]) == 2 ? "pairs" : "tuples") + "; give its domain, cge_set name(i,j) = ...", 198)
+        a = _cge_us_labels(M, k)
+    }
+    else return(_cge_us_label(M, X, w))
+    if (X.n) _cge_us_within(X, a, w)
+    return(a)
+}
+
+// A label of a set of single elements: in the domain, or, without one, of the
+// model; a new label of a standalone model where X.newok
+string scalar _cge_us_label(struct cge_model scalar M, struct cge_usx scalar X, string scalar w)
+{
+    if (X.n) {
+        if (!anyof(X.dom, w)) _cge_fail("cge_set: " + w + " is not an element of the set of " + X.idx, 111)
+        return(w)
+    }
+    if (anyof(X.all, w)) return(w)
+    if (_cge_sa(M) & X.newok == 1) return(_cge_us_newlabel(M, w))
+    if (_cge_sa(M) & X.newok == -1) _cge_fail("cge_set: " + w + " is not a label of the model; new labels are written out, without operators", 198)
+    _cge_fail("cge_set: " + w + " is not an element, a model set (a c f h d i n) or a user set", 111)
+}
+
+// Stops unless every element of set w (labels a) is in the domain
+void _cge_us_within(struct cge_usx scalar X, string colvector a, string scalar w)
+{
+    real colvector m
+    real scalar j
+    m = _cge_us_in(a, X.dom)
+    for (j = 1; j <= rows(a); j++) {
+        if (!m[j]) _cge_fail("cge_set: " + w + " has the element " + a[j] + ", which is not in the set" + (X.n >= 2 ? "s" : "") + " of " + X.idx, 111)
+    }
+}
+
+// The elements of a that are in b, as a 0/1 column
+real colvector _cge_us_in(string colvector a, string colvector b)
+{
+    transmorphic A
+    real colvector m
+    real scalar j
+    m = J(rows(a), 1, 0)
+    if (!rows(a) | !rows(b)) return(m)
+    A = asarray_create()
+    for (j = 1; j <= rows(b); j++) asarray(A, b[j], 1)
+    for (j = 1; j <= rows(a); j++) m[j] = asarray_contains(A, a[j])
+    return(m)
+}
+
+// The elements of a where m is 1, in their order
+string colvector _cge_us_where(string colvector a, real colvector m)
+{
+    string colvector out
+    real scalar j, c
+    out = J(rows(a), 1, "")
+    c = 0
+    for (j = 1; j <= rows(a); j++) {
+        if (m[j]) {
+            c++
+            out[c] = a[j]
+        }
+    }
+    return(c ? out[|1 \ c|] : J(0, 1, ""))
+}
+
+// The union of a and b: the elements of a, then those of b not in a, each once
+string colvector _cge_us_union(string colvector a, string colvector b)
+{
+    transmorphic A
+    string colvector ab, out
+    real scalar j, c
+    ab = a \ b
+    out = J(rows(ab), 1, "")
+    c = 0
+    A = asarray_create()
+    for (j = 1; j <= rows(ab); j++) {
+        if (asarray_contains(A, ab[j])) continue
+        asarray(A, ab[j], 1)
+        c++
+        out[c] = ab[j]
+    }
+    return(c ? out[|1 \ c|] : J(0, 1, ""))
+}
+
+// The intersection of a and b, in the order of a
+string colvector _cge_us_inter(string colvector a, string colvector b)
+{
+    return(_cge_us_where(a, _cge_us_in(a, b)))
+}
+
+// The elements of a not in b, in the order of a
+string colvector _cge_us_diff(string colvector a, string colvector b)
+{
+    return(_cge_us_where(a, !_cge_us_in(a, b)))
+}
+
+// The elements of a for which condition cond holds at the base, with the
+// indexes of the domain written out, as the domains of user variables
+string colvector _cge_us_cond(struct cge_model scalar M, struct cge_usx scalar X, string colvector a, string scalar cond)
+{
+    struct cge_par scalar pb
+    real colvector m
+    if (!X.n) _cge_fail("cge_set: a condition needs a domain: write cge_set name(i) = ..." + char(36) + "(condition)", 198)
+    if (!rows(a)) return(a)
+    pb = M.p0
+    pb.xlag = J(1, _cge_maxlag(), M.x0)
+    pb.xlead = pb.xlag
+    m = _cge_u_domain(M, pb, M.x0, X.idx, X.set, cond)
+    return(_cge_us_inter(a, _cge_us_where(X.dom, m)))
 }
 
 // The user sets with the column of the sets of pairs (from version 0.9.1)
+// and, from version 0.29.0, of the domain of a subset
 void _cge_us_widen(struct cge_model scalar M)
 {
-    if (rows(M.usdef) == 0 & cols(M.usdef) != 3) M.usdef = J(0, 3, "")
-    if (cols(M.usdef) == 2) M.usdef = M.usdef, J(rows(M.usdef), 1, "")
+    if (rows(M.usdef) == 0) M.usdef = J(0, 4, "")
+    else if (cols(M.usdef) < 4) M.usdef = M.usdef, J(rows(M.usdef), 4 - cols(M.usdef), "")
 }
 
 // cge_set name(i,j) = e1.e2 ...: a set of pairs of elements of the sets of
@@ -18056,7 +18388,7 @@ void _cge_us_addpairs(struct cge_model scalar M, string scalar name, string rowv
     }
     if (!cols(ot)) _cge_fail("cge_set: the set " + name + " has no " + what, 198)
     _cge_us_widen(M)
-    M.usdef = M.usdef \ (name, invtokens(ot), code)
+    M.usdef = M.usdef \ (name, invtokens(ot), code, "")
     _cge_store(M)
     printf("{txt}User set {res}%s(%s){txt}: %f %s: {res}%s\n", name, invtokens(ix, ","), cols(ot), (n == 2 ? "pair(s)" : "tuple(s)"),
            invtokens(ot[|1 \ min((cols(ot), 6))|]) + (cols(ot) > 6 ? " ..." : ""))
@@ -18124,6 +18456,11 @@ void _cge_us_list()
             printf("{txt}set {res}%s(%s){txt} (%f %s): %s\n", M.usdef[k, 1], invtokens(sc, ","),
                    cols(tokens(M.usdef[k, 2])), (cols(sc) == 2 ? "pairs" : "tuples"), M.usdef[k, 2])
         }
+        // a subset with its domain (from version 0.29.0)
+        else if ((cols(M.usdef) >= 4 ? M.usdef[k, cols(M.usdef)] : "") != "") {
+            printf("{txt}set {res}%s(%s){txt} (%f): %s\n", M.usdef[k, 1], _cge_us_index(M.usdef[k, 4]),
+                   cols(tokens(M.usdef[k, 2])), M.usdef[k, 2])
+        }
         else printf("{txt}set {res}%s{txt} (%f): %s\n", M.usdef[k, 1], cols(tokens(M.usdef[k, 2])), M.usdef[k, 2])
     }
 }
@@ -18145,7 +18482,7 @@ void _cge_us_clear()
     for (k = 1; k <= rows(M.usdef); k++) {
         if (_cge_us_used(M, M.usdef[k, 1])) _cge_fail("set " + M.usdef[k, 1] + " is used by user variables, equations or parameters: remove them first", 459)
     }
-    M.usdef = J(0, 3, "")
+    M.usdef = J(0, 4, "")
     _cge_store(M)
     printf("{txt}User sets removed\n")
 }
@@ -23729,7 +24066,7 @@ void _cge_model_new()
     M.iA = M.iC = M.iF = M.iH = J(0, 1, .)
     M.igov = M.isav = M.irow = M.idirtax = M.isaltax = M.iimptax = M.iexptax = M.iacttax = 0
     M.ishi = M.ivattax = M.iFY = 0
-    M.usdef = J(0, 3, "")
+    M.usdef = J(0, 4, "")
     M.updef = J(0, 3, "")
     M.uvdef = J(0, 9, "")
     M.uedef = J(0, 8, "")

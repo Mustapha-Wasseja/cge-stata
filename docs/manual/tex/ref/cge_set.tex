@@ -9,7 +9,9 @@ definitions of user variables (\manref{cge_variable}), in user equations
 (\manref{cge_equation}), in sums, and in the indexes of user parameters
 (\manref{cge_parameter}). From version 0.9.1, a set of pairs records a mapping
 between two sets, such as the activities and the commodities they make, for
-sums and conditions.
+sums and conditions. From version 0.29.0, sets may be subsets of a domain and
+combine other sets by set algebra: unions, intersections, differences,
+complements and conditions on the elements.
 
 \cgesec{Quick start}
 
@@ -27,6 +29,15 @@ output
 cge_set map(a,c) = act_agr.com_agr act_hlt.com_hlt
 cge_variable VMAP = sum(map(a,c), PA(a) * QA(a)), nominal
 \end{stcode}
+The commodities with tariffs at the base, and the others (from version 0.29.0)
+\begin{stcode}
+cge_set imp(c) = yes$(tm(c) > 0)
+cge_set nonimp(c) = not imp
+\end{stcode}
+The pairs of factors and activities with large factor use
+\begin{stcode}
+cge_set large(f,a) = yes$(QF(f,a) > 20)
+\end{stcode}
 Display the user sets
 \begin{stcode}
 cge_set, list
@@ -40,7 +51,11 @@ Define a set
 \end{stsyntax}
 Define a set from a string variable of the data in memory (from version 0.13.0)
 \begin{stsyntax}
-\cmdb{cge_set} \argu{name}\texttt{,} \optarg{}{from}{varname} [\optarg{}{except}{elements}]
+\cmdb{cge_set} \argu{name}[\cmd{(}\argu{i}\cmd{)}]\texttt{,} \optarg{}{from}{varname} [\optarg{}{except}{elements}]
+\end{stsyntax}
+Define a set by set algebra, with a domain and a condition (from version 0.29.0)
+\begin{stsyntax}
+\cmdb{cge_set} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j} \dots]\cmd{)}][\cmd{$(}\argu{condition}\cmd{)}] \cmd{=} \argu{set expression} [\texttt{,} \optarg{}{except}{set expression}]
 \end{stsyntax}
 Define a set of pairs (from version 0.9.1)
 \begin{stsyntax}
@@ -66,9 +81,28 @@ nor an index letter of a model set. In a set of pairs, \argu{i} and
 pair \argu{e}\cmd{.}\argu{f} joins an element of the set of \argu{i} to one of
 the set of \argu{j}.
 
+A \argu{set expression} combines elements and sets with the operators of
+the table below. \cmd{*} binds before \cmd{+} and \cmd{-}, which are
+read from left to right; \cmd{not} and conditions apply to the factor after
+or before them; parentheses group. \cmd{yes}, \cmd{no} and \cmd{not} are
+words of set expressions and cannot name sets.
+
+\begin{cgetable}{>{\raggedright\arraybackslash}p{0.30\linewidth}>{\raggedright\arraybackslash}p{0.64\linewidth}}
+\toprule
+Expression & Elements \\
+\midrule\endhead
+\bottomrule\endlastfoot
+\argu{A} \cmd{+} \argu{B}, \argu{A} \argu{B} & those of \argu{A}, then those of \argu{B} not in \argu{A} \\
+\argu{A} \cmd{*} \argu{B} & those of \argu{A} that are in \argu{B} \\
+\argu{A} \cmd{-} \argu{B} & those of \argu{A} that are not in \argu{B} \\
+\cmd{not} \argu{A} & those of the domain that are not in \argu{A} \\
+\cmd{yes}, \cmd{no} & every element of the domain, in its order; none \\
+\argu{A}\cmd{$(}\argu{condition}\cmd{)} & those of \argu{A} for which the condition holds \\
+\end{cgetable}
+
 \begin{opttable}
 \optgroup{Main}
-\optarg{}{except}{elements} & elements left out\\
+\optarg{}{except}{elements} & elements left out; a set expression\\
 \optarg{}{from}{varname} & the elements from a string variable in memory\\
 \end{opttable}
 
@@ -76,7 +110,7 @@ the set of \argu{j}.
 
 \begin{optdesc}
 \item[\optarg{}{except}{elements}] leaves out the elements listed, given as
-for the set.
+for the set; from version 0.29.0 a set expression.
 
 \item[\optarg{}{from}{varname}] (from version 0.13.0) takes the elements
 from the string variable \argu{varname} of the data in memory, in the order
@@ -93,9 +127,9 @@ equation or parameter uses cannot be removed until they are.
 
 A set whose elements are those of another, \cmd{cge_set j = i}, is the
 analogue of GAMS's \cmd{alias}; the index of a set followed by digits, as
-\cmd{goods2}, also runs over the same set, so that \cmd{sum(goods2, \dots)}
+\cmd{goods2}, also runs over the same set, so that \cmd{sum(goods2, ...)}
 may appear in an equation over \cmd{goods}. An index that the domain of an
-equation already controls cannot be summed over: \cmd{sum(f, \dots)} in an
+equation already controls cannot be summed over: \cmd{sum(f, ...)} in an
 equation over \cmd{f} is an error, as in GAMS, and the sum is written over
 \cmd{f2}.
 
@@ -135,6 +169,36 @@ a condition it is 1 for a pair of the set, so that a variable with two indexes
 can be defined for the pairs only:
 \stlog{set_pairs}
 
+\cgesubsec{Example 5: set algebra}
+
+From version 0.29.0, \cmd{cge_set} \argu{name}\cmd{(}\argu{i}\cmd{)} defines a
+subset of the set of index \argu{i}, as GAMS's \cmd{set} \argu{name}\cmd{(}\argu{i}\cmd{)}
+does: each element must belong to that set, which may itself be a subset, as
+the staple goods within \cmd{goods} below. A condition is written as in the
+domains of user variables (\manref{cge_variable}), with the index of the
+domain, comparisons, \cmd{&} \cmd{|} \cmd{!}, membership of sets,
+\cmd{ord()} and \cmd{card()}, parameters, and variables at the base. It is
+evaluated when the set is defined, so the set, like a GAMS assignment to a
+dynamic set, does not follow later shocks. With two indexes the expression is
+one of pairs, and the conditions see both indexes:
+\stlog{set_algebra}
+The commodities with tariffs are found from the tariff rates, the labour
+intensive activities from their factor use, and the pairs of factors and
+activities from the base values of \cmd{QF}; the sum over the pairs is a
+user variable like any other.
+
+A condition is written in parentheses, \cmd{$(}\dots\cmd{)}: Stata reads a
+dollar sign followed by a name as a global macro, so \cmd{yes$imp(c)} would
+reach the command as \cmd{yes(c)}. A condition on the name applies to the
+whole expression: \cmd{cge_set imp(c)$(tm(c) > 0) = yes} is
+\cmd{cge_set imp(c) = yes$(tm(c) > 0)}.
+
+GAMS's \cmd{loop}, \cmd{if} and \cmd{while} over assignments are Stata's
+own \cmd{foreach}, \cmd{if} and \cmd{while} around \cmd{cge_set} and
+\cmd{cge_parameter}, which store the number of elements in
+\cmd{r(N_elements)}:
+\stlog{set_loop}
+
 \cgesec{Stored results}
 
 \cmd{cge_set} stores the following in \cmd{r()}:
@@ -145,6 +209,7 @@ can be defined for the pairs only:
 \resgroup{Macros}
 \res{r(name)} & name of the set defined\\
 \res{r(elements)} & its elements\\
+\res{r(domain)} & its domain, the indexes in parentheses (from version 0.29.0)\\
 \end{storedres}
 
 \cgesec{Methods and formulas}
@@ -161,6 +226,18 @@ written out as
 and in a condition $P(k,l)$ is 1 if $(k,l) \in P$ and 0 if not. In the GAMS
 program the equations are written out element by element, so user sets need
 no declaration there.
+
+A set expression (from version 0.29.0) is evaluated on ordered lists of
+labels. With $A = (a_1, \dots, a_m)$ and $B$,
+\begin{align*}
+A + B &= A \text{ followed by } (b \in B : b \notin A),\\
+A * B &= (a \in A : a \in B), \qquad A - B = (a \in A : a \notin B),\\
+\texttt{not}\ A &= (d \in D : d \notin A), \qquad
+A\texttt{\$(}q\texttt{)} = (a \in A : q[\,i = a\,] \neq 0 \text{ at the base}),
+\end{align*}
+with $D$ the elements of the domain in their order, a tuple's labels joined by
+periods. Every label named must belong to $D$; with a condition, $q$ is
+written out for each element of $D$ as the domain of a user variable is.
 
 \cgesec{Also see}
 

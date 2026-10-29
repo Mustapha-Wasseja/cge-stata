@@ -1,0 +1,29 @@
+. cge_set imp(c) = yes$(tm(c) > 0)
+User set imp(c): 2 element(s): com_agr com_man
+
+. cge_set nonimp(c) = not imp
+User set nonimp(c): 2 element(s): com_ser com_hlt
+
+. cge_set staples(goods) = goods - com_man
+User set staples(goods): 1 element(s): com_agr
+
+. cge_set labint(a) = yes$(QF(lab,a) > QF(cap,a))
+User set labint(a): 2 element(s): act_agr act_hlt
+
+. cge_set large(f,a) = yes$(QF(f,a) > 20)
+User set large(f,a): 6 pair(s): lab.act_agr lab.act_man lab.act_ser cap.act_agr cap.act_man cap.act_
+> ser
+
+. cge_variable QLARGE = sum(large(f,a), QF(f,a))
+User variable QLARGE: 1 element(s), base value 238
+and its definition, equation QLARGE
+
+. cge_set, list
+set goods (2): com_agr com_man
+set services (2): com_ser com_hlt
+set map(a,c) (3 pairs): act_agr.com_agr act_man.com_man act_hlt.com_hlt
+set imp(c) (2): com_agr com_man
+set nonimp(c) (2): com_ser com_hlt
+set staples(goods) (1): com_agr
+set labint(a) (2): act_agr act_hlt
+set large(f,a) (6 pairs): lab.act_agr lab.act_man lab.act_ser cap.act_agr cap.act_man cap.act_ser

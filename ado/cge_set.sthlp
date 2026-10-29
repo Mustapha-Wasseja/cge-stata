@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.13.0  26oct2026}{...}
+{* *! version 0.29.0  29oct2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -13,7 +13,11 @@
 {cmd:cge_set} {it:name} {cmd:=} {it:elements} [{cmd:,} {opt except(elements)}]
 
 {p 8 12 2}
-{cmd:cge_set} {it:name}{cmd:,} {opt from(varname)} [{opt except(elements)}]
+{cmd:cge_set} {it:name}[{cmd:(}{it:i}{cmd:)}]{cmd:,} {opt from(varname)} [{opt except(elements)}]
+
+{p 8 12 2}
+{cmd:cge_set} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j} ...]{cmd:)}][{cmd:$(}{it:condition}{cmd:)}] {cmd:=} {it:set expression}
+[{cmd:,} {opt except(set expression)}]
 
 {p 8 12 2}
 {cmd:cge_set} {it:name}{cmd:(}{it:i}{cmd:,}{it:j}[{cmd:,}{it:k} ...]{cmd:)} {cmd:=} {it:e1}{cmd:.}{it:f1}[{cmd:.}{it:g1} ...] [{it:e2}{cmd:.}{it:f2}[{cmd:.}{it:g2} ...] ...]
@@ -33,6 +37,14 @@ of value added) and the names of other user sets, separated by spaces. In a
 standalone model ({helpb cge_model}) there are no model sets: the elements
 are labels of the set's own, of letters, digits and underscores, at most 32
 characters, or the names of other user sets.
+
+{pstd}
+A {it:set expression} (from version 0.29.0) combines elements and sets with
+{cmd:+} (union; elements side by side are a union too), {cmd:*}
+(intersection), {cmd:-} (difference), {cmd:not} (the complement in the
+domain), {cmd:yes} and {cmd:no} (every element of the domain, none), and
+conditions, {cmd:$(}{it:condition}{cmd:)} after a factor, with parentheses
+for grouping; see {it:Set algebra} below.
 
 
 {title:Description}
@@ -71,6 +83,55 @@ of another, {cmd:cge_set j = i}, serves as GAMS's {cmd:alias}; the index of a
 set with digits after it, as {cmd:i2}, runs over the same set too.
 
 {pstd}
+{bf:Set algebra.} From version 0.29.0, {cmd:cge_set}
+{it:name}{cmd:(}{it:i}{cmd:)} defines a subset of the set of index {it:i},
+as GAMS's {cmd:set} {it:name}{cmd:(}{it:i}{cmd:)} does: every element must
+belong to that set (error 111 otherwise), and {it:i} may itself be a subset,
+as in {cmd:cge_set food(goods)}. The elements may be a set expression:
+
+{p2colset 9 30 32 2}{...}
+{p2col:{it:A} {cmd:+} {it:B}, {it:A} {it:B}}the elements of {it:A}, then those of {it:B} not in {it:A}{p_end}
+{p2col:{it:A} {cmd:*} {it:B}}the elements of {it:A} that are in {it:B}{p_end}
+{p2col:{it:A} {cmd:-} {it:B}}the elements of {it:A} that are not in {it:B}{p_end}
+{p2col:{cmd:not} {it:A}}the elements of the domain not in {it:A}{p_end}
+{p2col:{cmd:yes}, {cmd:no}}every element of the domain, in its order; none{p_end}
+{p2col:{it:A}{cmd:$(}{it:condition}{cmd:)}}the elements of {it:A} for which the condition holds{p_end}
+{p2colreset}{...}
+
+{pstd}
+{cmd:*} binds before {cmd:+} and {cmd:-}; {cmd:not} and conditions apply to
+the factor before or after them, so {cmd:not} {cmd:(}{it:A} {cmd:+}
+{it:B}{cmd:)} needs its parentheses. The result keeps the order in which the
+elements are first named. A condition is written as in the domains of
+{helpb cge_variable}: with the index of the domain, comparisons,
+{cmd:&} {cmd:|} {cmd:!}, membership of sets, {cmd:ord()} and {cmd:card()},
+parameters, and variables at the base, and it is evaluated at the base when
+the set is defined, so that the set does not change with later shocks, as a
+GAMS assignment to a dynamic set does not. The condition must be in
+parentheses: Stata reads a dollar sign followed by a name as a global macro.
+A condition on the name, {it:name}{cmd:(}{it:i}{cmd:)$(}{it:condition}{cmd:)}
+{cmd:=} {it:expression}, applies to the whole expression:
+{cmd:cge_set imp(c)$(tm(c) > 0) = yes} is {cmd:cge_set imp(c) = yes$(tm(c) > 0)}.
+
+{pstd}
+With two or more indexes, {it:name}{cmd:(}{it:i}{cmd:,}{it:j}{cmd:)},
+the expression is one of pairs: pairs of labels {it:e}{cmd:.}{it:f}, sets of
+pairs, {cmd:yes}, {cmd:no} and conditions on both indexes, as
+{cmd:cge_set used(f,a) = yes$(QF(f,a) > 0)}; single sets enter through
+their membership in a condition, {cmd:$(goods(c))}. Without a domain,
+{cmd:cge_set} {it:name} {cmd:=} {it:expression} combines sets of the model
+with {cmd:+}, {cmd:*} and {cmd:-}; {cmd:not}, {cmd:yes}, {cmd:no} and
+conditions need a domain. In a standalone model new labels are written out,
+without operators. {cmd:yes}, {cmd:no} and {cmd:not} are words of set
+expressions, not names of sets.
+
+{pstd}
+GAMS's {cmd:loop}, {cmd:if} and {cmd:while} over assignments are Stata's own
+{helpb foreach}, {helpb if} and {helpb while} around {cmd:cge_set} and
+{helpb cge_parameter}, which store the number of elements in
+{cmd:r(N_elements)}; see the examples.
+
+{pstd}
 From version 0.13.0, {opt from(varname)} takes the elements from a string
 variable of the data in memory, in the order they appear, each once, as the
 account labels of a SAM in memory: {cmd:cge_set ac, from(account)}.
@@ -84,7 +145,8 @@ once no user variable, equation or parameter uses them.
 {title:Options}
 
 {phang}
-{opt except(elements)} leaves out the elements listed, given as for the set.
+{opt except(elements)} leaves out the elements listed, given as for the set;
+from version 0.29.0 a set expression.
 
 {phang}
 {opt from(varname)} takes the elements from the string variable
@@ -121,6 +183,29 @@ elements of the model.
 
 {phang2}{cmd:. cge_variable PR(a,c)$(map(a,c)) = PA(a) / PQ(c)}{p_end}
 
+{pstd}Set algebra (from version 0.29.0): the commodities with tariffs, the others, and the labour-intensive activities{p_end}
+
+{phang2}{cmd:. cge_set imp(c) = yes$(tm(c) > 0)}{p_end}
+
+{phang2}{cmd:. cge_set nonimp(c) = not imp}{p_end}
+
+{phang2}{cmd:. cge_set staples(goods) = goods - com_man}{p_end}
+
+{phang2}{cmd:. cge_set labint(a) = yes$(QF(lab,a) > QF(cap,a))}{p_end}
+
+{pstd}The pairs of factors and activities with large factor use, and the factors they use{p_end}
+
+{phang2}{cmd:. cge_set large(f,a) = yes$(QF(f,a) > 20)}{p_end}
+
+{phang2}{cmd:. cge_variable QLARGE = sum(large(f,a), QF(f,a))}{p_end}
+
+{pstd}Stata's loops around cge_set: a set for each threshold, kept when it has elements{p_end}
+
+{p 8 8 2}{cmd:foreach v in 10 20 40 {c -(}}{break}
+{space 4}{cmd:capture cge_set above`v'(f,a) = yes$(QF(f,a) > `v')}{break}
+{space 4}{cmd:if !_rc display "above `v': " r(N_elements)}{break}
+{cmd:{c )-}}{p_end}
+
 {pstd}The user sets{p_end}
 
 {phang2}{cmd:. cge_set, list}{p_end}
@@ -135,6 +220,7 @@ elements of the model.
 {p2col 5 16 20 2: Macros}{p_end}
 {synopt:{cmd:r(name)}}name of the set defined{p_end}
 {synopt:{cmd:r(elements)}}its elements{p_end}
+{synopt:{cmd:r(domain)}}its domain, the indexes in parentheses (from version 0.29.0){p_end}
 
 
 {title:Also see}

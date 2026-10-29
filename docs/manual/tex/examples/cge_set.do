@@ -43,3 +43,21 @@ list variable element1 element2 base value if inlist(variable, "VMAP", "PR"), //
     noobs sepby(variable)
 cge_set, list
 *<<
+
+*>> set_algebra
+cge_set imp(c) = yes$(tm(c) > 0)
+cge_set nonimp(c) = not imp
+cge_set staples(goods) = goods - com_man
+cge_set labint(a) = yes$(QF(lab,a) > QF(cap,a))
+cge_set large(f,a) = yes$(QF(f,a) > 20)
+cge_variable QLARGE = sum(large(f,a), QF(f,a))
+cge_set, list
+*<<
+
+*>> set_loop
+foreach v in 10 20 40 {
+    capture cge_set above`v'(f,a) = yes$(QF(f,a) > `v')
+    if !_rc display as text "pairs above `v': " as result r(N_elements)
+    else display as text "pairs above `v': none"
+}
+*<<

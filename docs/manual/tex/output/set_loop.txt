@@ -1,0 +1,8 @@
+. foreach v in 10 20 40 {
+  2.     capture cge_set above`v'(f,a) = yes$(QF(f,a) > `v')
+  3.     if !_rc display as text "pairs above `v': " as result r(N_elements)
+  4.     else display as text "pairs above `v': none"
+  5. }
+pairs above 10: 7
+pairs above 20: 6
+pairs above 40: 2

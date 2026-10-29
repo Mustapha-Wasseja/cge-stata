@@ -11,7 +11,7 @@ and its definition, equation PR
 
 . cge_solve, name(notariff2)
 Simulation notariff2 solved in 7 iteration(s) (newton)
-Largest scaled residual  5.57e-15; WALRAS =  1.74e-14
+Largest scaled residual  3.79e-15; WALRAS =  5.99e-16
 
 . quietly cge_results, sim(notariff2) clear nodisplay
 

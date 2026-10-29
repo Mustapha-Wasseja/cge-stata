@@ -17,6 +17,12 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.29.0 adds set algebra to `cge_set`, as GAMS's subsets and dynamic
+sets: `cge_set imp(c) = yes$(tm(c) > 0)` for the commodities with tariffs,
+`cge_set others(c) = not imp`, unions, intersections and differences with
+`+`, `*` and `-`, subsets checked against their domain, and sets of pairs
+from conditions, `cge_set large(f,a) = yes$(QF(f,a) > 20)`.
+
 Version 0.28.0 gives nonlinear programmes exact second derivatives: the
 interior point's Hessian of the Lagrangian comes from differentiating the
 compiled objective and equations twice, in place of differences of exact
@@ -32,7 +38,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.28.0 implements the standard single-country model described in
+Version 0.29.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -106,6 +112,9 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.29.0 adds set algebra: subsets with a domain, `+`, `*`, `-`,
+`not`, `yes`, `no` and conditions in `cge_set`, and sets of pairs from
+conditions.
 Version 0.28.0 gives nonlinear programmes exact second derivatives: the
 interior point's Hessian of the Lagrangian comes from differentiating the
 compiled objective and equations twice, in place of differences of exact

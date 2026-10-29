@@ -1,4 +1,4 @@
-*! cge_set.ado  v0.9.1  2026-10-23
+*! cge_set.ado  v0.29.0  2026-10-29
 *! cge-stata: user sets of elements, for the indexes of user variables,
 *! equations, sums and parameters (Reference Manual, User variables and
 *! equations)

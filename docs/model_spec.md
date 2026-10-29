@@ -2921,6 +2921,88 @@ $10^{-10}$; the same optima and iterations with exact Hessians and with
 differences; branch and bound without equations; the setting saved with the
 model; errors).
 
+## 39. Set algebra (from version 0.29.0)
+
+User sets (Section 19) were lists of labels written out, with `except()`
+for a difference. From version 0.29.0 `cge_set` takes a domain and a set
+expression, as GAMS's subsets and dynamic sets do:
+
+```
+cge_set name(i) = expression           a subset of the set of index i
+cge_set name(i,j) = expression         a set of pairs (tuples with more)
+cge_set name(i)$(condition) = expression
+```
+
+An expression combines factors with `+` (union; factors side by side are a
+union too), `*` (intersection) and `-` (difference); `*` binds first, `+`
+and `-` are read from left to right. A factor is a label (a tuple of labels
+`e1.e2` in a domain of several indexes), a model set letter, a user set
+(a set of pairs or tuples of the same number of indexes in such a domain),
+`yes` or `no` (every element of the domain, none), an expression in
+parentheses, or `not` and a factor (the complement in the domain), each
+followed by any number of conditions `$(q)`. A condition on the name
+applies to the whole expression.
+
+Sets are ordered lists. With $A = (a_1, \dots, a_m)$, $B$ and $D$ the
+elements of the domain in their order (a tuple's labels joined by periods,
+the last index fastest, as the elements of user variables),
+
+$$A + B = A \text{ followed by } (b \in B: b \notin A), \qquad
+A * B = (a \in A: a \in B), \qquad A - B = (a \in A: a \notin B),$$
+
+$$\texttt{not}\ A = (d \in D: d \notin A), \qquad
+A\texttt{\$(}q\texttt{)} = (a \in A: q[i = a] \ne 0),$$
+
+each element once. A list written out keeps the order given, as before; a
+union keeps the order in which elements are first named. A condition is
+evaluated for every element of $D$ by `_cge_u_domain`, as the domain of a
+user variable (Section 20): the index written out, the condition compiled,
+and its value taken at the base (`M.x0`, `M.p0`, lags and leads at the
+base). The set is fixed when it is defined, as a GAMS assignment to a
+dynamic set is fixed until the next assignment; it does not change with
+later shocks or recalibration.
+
+Every label must belong to the domain (GAMS's domain check), error 111
+otherwise, and so must every element of a set named in the expression; the
+domain may itself be a subset, `cge_set food(goods) = ...`. `not`, `yes`,
+`no` and conditions need a domain. Without one, `+`, `*` and `-` combine
+the model's labels and sets; in a standalone model new labels are written
+out as a list, without operators. A set of pairs written out as before,
+`cge_set map(a,c) = e1.f1 ...`, keeps its own path, `_cge_us_addpairs`, so
+its messages and return codes do not change. A condition must be in
+parentheses: Stata reads `$name` as a global macro, so `yes$odd(i)` reaches
+the command as `yes(i)`.
+
+The domain of a subset is stored in a fourth column of `M.usdef` (set code,
+as `C` or `~goods`; empty for a list without a domain and for sets of pairs,
+whose third column holds theirs). Models saved before version 0.29.0 have
+three columns; `_cge_us_widen` adds the fourth when a set is added. Sets
+stay lists of labels, so nothing changes in variables, equations, sums,
+the solver or the GAMS program, which writes equations out element by
+element.
+
+GAMS's `loop`, `if` and `while` over assignments are Stata's own `foreach`,
+`if` and `while` around `cge_set` and `cge_parameter`; `r(N_elements)` gives
+the number of elements, as GAMS's `card()`.
+
+Implementation (`ado/cge_mata.mata`): `_cge_us_add` (head, domain,
+options), `_cge_us_lex` (tokens; a condition is one token), the recursive
+descent `_cge_us_expr`, `_cge_us_term`, `_cge_us_factor`, `_cge_us_atom`,
+`_cge_us_label`, the ordered operations `_cge_us_union`, `_cge_us_inter`,
+`_cge_us_diff` (hash membership through `asarray`), `_cge_us_cond` and the
+domain check `_cge_us_within`.
+
+Tests: `tests/test_setalgebra.do` (every operation, precedence, `not`,
+`yes`, `no`, conditions on the name, after factors and in sequence,
+membership, `except()` with an expression, `card()`; subsets of subsets and
+sets from variables; sets without a domain; sets of pairs and triples from
+conditions against enumeration; the sets in variables, equations and sums of
+a standalone model against closed forms; saving and loading, and models
+saved with three columns; Stata loops around the command; errors and their
+return codes; on a SAM-based model, the commodities with tariffs and the
+pairs of factors and activities with large factor use against the model's
+own base values, and a sum over them after a shock).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
