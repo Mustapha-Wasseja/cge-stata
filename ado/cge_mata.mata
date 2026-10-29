@@ -267,7 +267,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.29.0")
+    return("0.30.0")
 }
 
 // =====================================================================
@@ -7296,41 +7296,287 @@ void _cge_jtrip_ub(struct cge_model scalar M, struct cge_par scalar p, real colv
 }
 
 // The value of the postfix rows tok at x and, in grad, its derivatives with
-// respect to the variables at positions vpos of x (forward differentiation)
+// respect to the variables at positions vpos of x. From version 0.30.0 by
+// reverse differentiation (_cge_u_rvalue) when there are many variables, by
+// forward differentiation (_cge_u_fvalue) otherwise; the external cge__dmode
+// may choose one for tests (1 forward, 2 reverse; 0 or none, by the number
+// of variables), and cge__nrev counts the reverse passes
 real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real matrix tok,
                           real colvector vpos, real rowvector grad)
 {
-    real colvector st
+    pointer() scalar q
+    real scalar mode
+    mode = ((q = findexternal("cge__dmode")) == NULL ? 0 : *q)
+    if (mode == 1 | (mode != 2 & rows(vpos) < _cge_u_rmin())) return(_cge_u_fvalue(M, p, x, tok, vpos, grad))
+    if ((q = findexternal("cge__nrev")) == NULL) {
+        q = crexternal("cge__nrev")
+        *q = 0
+    }
+    *q = *q + 1
+    return(_cge_u_rvalue(M, p, x, tok, vpos, grad))
+}
+
+// The number of variables from which _cge_u_dvalue differentiates in reverse
+// (from version 0.30.0): below it, forward differentiation, whose rows of
+// derivatives are short, is as fast
+real scalar _cge_u_rmin()
+{
+    return(200)
+}
+
+// Sets the mode of differentiation of _cge_u_dvalue (0 by the number of
+// variables, 1 forward, 2 reverse) and resets the count of reverse passes;
+// returns that count before the reset (from version 0.30.0, for tests)
+real scalar _cge_dmode(real scalar mode)
+{
+    pointer() scalar q
+    real scalar n
+    if ((q = findexternal("cge__dmode")) == NULL) q = crexternal("cge__dmode")
+    *q = mode
+    n = 0
+    if ((q = findexternal("cge__nrev")) == NULL) q = crexternal("cge__nrev")
+    else n = *q
+    *q = 0
+    return(n)
+}
+
+// The value of the postfix rows tok at x and, in grad, its derivatives with
+// respect to the variables at positions vpos of x, by reverse
+// differentiation (from version 0.30.0). One pass forward evaluates each row
+// and records its operands (at most two; a function of several arguments
+// keeps the one it takes) with its partial derivatives in them; one pass
+// backward carries the adjoint of the value from each row to its operands.
+// The work grows with the number of rows, where forward differentiation,
+// with a row of derivatives for every value, grows with rows times
+// variables. Rows that do not depend on the variables of vpos pass nothing
+// back, so their partial derivatives are not needed.
+real scalar _cge_u_rvalue(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real matrix tok,
+                          real colvector vpos, real rowvector grad)
+{
+    real colvector val, o1, o2, d1, d2, dep, col, stk, adj, av
+    real matrix v
+    transmorphic A
+    real scalar n, nv, K, i, j, c, op, sp, a, b, ia, ib, na, k, w
+    n = rows(tok)
+    nv = rows(vpos)
+    K = rows(x)
+    grad = J(1, nv, 0)
+    // the column of each variable in grad
+    A = asarray_create("real")
+    for (j = 1; j <= nv; j++) asarray(A, vpos[j], j)
+    val = J(n, 1, .)
+    o1 = o2 = col = dep = J(n, 1, 0)
+    d1 = d2 = J(n, 1, 0)
+    stk = J(n, 1, 0)
+    sp = 0
+    for (i = 1; i <= n; i++) {
+        c = tok[i, 1]
+        if (c == 2 | c == 9 | c == 11) {
+            // a variable; a lagged value (from version 0.9.2) and, with
+            // foresight (from version 0.10.2), the value of a later period,
+            // whose codes in vpos are pos + k rows(x) and pos + (4 + k) rows(x)
+            if (c == 2) {
+                val[i] = x[tok[i, 2]]
+                k = tok[i, 2]
+            }
+            else if (c == 9) {
+                val[i] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
+                k = tok[i, 2] + tok[i, 3] * K
+            }
+            else {
+                val[i] = _cge_u_leadval(M, p, tok[i, 2], tok[i, 3])
+                k = tok[i, 2] + (4 + tok[i, 3]) * K
+            }
+            if (asarray_contains(A, k)) {
+                col[i] = asarray(A, k)
+                dep[i] = 1
+            }
+            sp++
+            stk[sp] = i
+        }
+        else if (c == 1 | c == 3 | c == 7 | c == 12) {
+            if (c == 1) val[i] = tok[i, 2]
+            else if (c == 3) {
+                v = _cge_par_get(p, M.upar[tok[i, 2]])
+                val[i] = _cge_u_parel(v, tok[i, 3])
+            }
+            else if (c == 7) val[i] = p.upval[tok[i, 2]]
+            else val[i] = _cge_u_tval(p, tok[i, 2])
+            sp++
+            stk[sp] = i
+        }
+        else if (c == 4) {
+            ib = stk[sp]
+            sp--
+            ia = stk[sp]
+            a = val[ia]
+            b = val[ib]
+            op = tok[i, 2]
+            o1[i] = ia
+            o2[i] = ib
+            if (op == 1) {
+                val[i] = a + b
+                d1[i] = 1
+                d2[i] = 1
+            }
+            else if (op == 2) {
+                val[i] = a - b
+                d1[i] = 1
+                d2[i] = -1
+            }
+            else if (op == 3) {
+                val[i] = a * b
+                d1[i] = b
+                d2[i] = a
+            }
+            else if (op == 4) {
+                val[i] = a / b
+                d1[i] = 1 / b
+                d2[i] = -a / b^2
+            }
+            else if (op >= 6) {
+                // comparisons and & |: no derivative
+                val[i] = _cge_u_cmp(op, a, b)
+                o1[i] = o2[i] = 0
+            }
+            else {
+                val[i] = a ^ b
+                // a constant exponent needs no logarithm of the base
+                if (!dep[ib]) {
+                    d1[i] = (b == 0 ? 0 : b * a ^ (b - 1))
+                    o2[i] = 0
+                }
+                else {
+                    d1[i] = val[i] * (b / a)
+                    d2[i] = val[i] * ln(a)
+                }
+            }
+            dep[i] = (o1[i] ? dep[ia] : 0) | (o2[i] ? dep[ib] : 0)
+            stk[sp] = i
+        }
+        else if (c == 5) {
+            ia = stk[sp]
+            val[i] = -val[ia]
+            o1[i] = ia
+            d1[i] = -1
+            dep[i] = dep[ia]
+            stk[sp] = i
+        }
+        else if (c == 8) {
+            ia = stk[sp]
+            val[i] = (val[ia] >= . ? . : val[ia] == 0)
+            stk[sp] = i
+        }
+        // a function of several arguments (from version 0.9.7): min(), max()
+        // and ifthen() take the derivative of the argument they take
+        else if (c == 10) {
+            na = tok[i, 3]
+            op = tok[i, 2]
+            sp = sp - na + 1
+            av = val[stk[|sp \ sp + na - 1|]]
+            val[i] = _cge_u_fn(op, av)
+            if (op <= 2 | op == 6) {
+                j = _cge_u_fnarg(op, av)
+                if (j) {
+                    o1[i] = stk[sp + j - 1]
+                    d1[i] = 1
+                }
+            }
+            else {
+                o1[i] = stk[sp]
+                if (op == 3) d1[i] = sign(av[1])
+                else if (op == 4) d1[i] = 2 * av[1]
+                else d1[i] = 1 / (av[1] * ln(10))
+            }
+            dep[i] = (o1[i] ? dep[o1[i]] : 0)
+            stk[sp] = i
+        }
+        else {
+            // exp(), ln() and sqrt()
+            ia = stk[sp]
+            a = val[ia]
+            op = tok[i, 2]
+            o1[i] = ia
+            if (op == 1) {
+                val[i] = exp(a)
+                d1[i] = val[i]
+            }
+            else if (op == 2) {
+                val[i] = ln(a)
+                d1[i] = 1 / a
+            }
+            else {
+                val[i] = sqrt(a)
+                d1[i] = 1 / (2 * val[i])
+            }
+            dep[i] = dep[ia]
+            stk[sp] = i
+        }
+    }
+    // backward: the adjoint of each row, from the last, to its operands
+    k = stk[1]
+    if (!dep[k]) return(val[k])
+    adj = J(n, 1, 0)
+    adj[k] = 1
+    for (i = k; i >= 1; i--) {
+        w = adj[i]
+        if (w == 0) continue
+        if (col[i]) grad[col[i]] = grad[col[i]] + w
+        if (o1[i]) {
+            if (dep[o1[i]]) adj[o1[i]] = adj[o1[i]] + w * d1[i]
+        }
+        if (o2[i]) {
+            if (dep[o2[i]]) adj[o2[i]] = adj[o2[i]] + w * d2[i]
+        }
+    }
+    return(val[k])
+}
+
+// The value of the postfix rows tok at x and, in grad, its derivatives with
+// respect to the variables at positions vpos of x, by forward
+// differentiation: a row of derivatives for every value on the stack. From
+// version 0.30.0 a value that does not depend on the variables (dp 0) keeps
+// a row of zeros, so that a constant whose derivative is undefined, as
+// sqrt(par) or par^0.5 with par = 0, no longer makes the derivatives missing
+real scalar _cge_u_fvalue(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real matrix tok,
+                          real colvector vpos, real rowvector grad)
+{
+    real colvector st, dp
     real matrix G, v
-    real rowvector ga, gb
-    real scalar i, sp, a, b, c, nv, op, val, na, j
+    real rowvector ga, gb, z
+    real scalar i, sp, a, b, c, nv, op, val, na, j, da, db
     real colvector av
     nv = rows(vpos)
-    st = J(rows(tok), 1, .)
+    st = dp = J(rows(tok), 1, .)
     G = J(rows(tok), nv, 0)
+    z = J(1, nv, 0)
     sp = 0
     for (i = 1; i <= rows(tok); i++) {
         c = tok[i, 1]
         if (c == 1) {
             sp = sp + 1
             st[sp] = tok[i, 2]
-            G[sp, .] = J(1, nv, 0)
+            G[sp, .] = z
+            dp[sp] = 0
         }
         else if (c == 2) {
             sp = sp + 1
             st[sp] = x[tok[i, 2]]
             G[sp, .] = (vpos' :== tok[i, 2])
+            dp[sp] = any(G[sp, .])
         }
         else if (c == 3) {
             v = _cge_par_get(p, M.upar[tok[i, 2]])
             sp = sp + 1
             st[sp] = _cge_u_parel(v, tok[i, 3])
-            G[sp, .] = J(1, nv, 0)
+            G[sp, .] = z
+            dp[sp] = 0
         }
         else if (c == 7) {
             sp = sp + 1
             st[sp] = p.upval[tok[i, 2]]
-            G[sp, .] = J(1, nv, 0)
+            G[sp, .] = z
+            dp[sp] = 0
         }
         // a lagged value (from version 0.9.2), given within the period; in a
         // run with foresight (from version 0.10.2), vpos may hold the codes
@@ -7340,24 +7586,29 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
             sp = sp + 1
             st[sp] = _cge_u_lagval(M, p, tok[i, 2], tok[i, 3])
             G[sp, .] = (vpos' :== tok[i, 2] + tok[i, 3] * rows(x))
+            dp[sp] = any(G[sp, .])
         }
         else if (c == 11) {
             sp = sp + 1
             st[sp] = _cge_u_leadval(M, p, tok[i, 2], tok[i, 3])
             G[sp, .] = (vpos' :== tok[i, 2] + (4 + tok[i, 3]) * rows(x))
+            dp[sp] = any(G[sp, .])
         }
         // the period (from version 0.10.2)
         else if (c == 12) {
             sp = sp + 1
             st[sp] = _cge_u_tval(p, tok[i, 2])
-            G[sp, .] = J(1, nv, 0)
+            G[sp, .] = z
+            dp[sp] = 0
         }
         else if (c == 4) {
             b = st[sp]
             gb = G[sp, .]
+            db = dp[sp]
             sp = sp - 1
             a = st[sp]
             ga = G[sp, .]
+            da = dp[sp]
             op = tok[i, 2]
             if (op == 1) {
                 st[sp] = a + b
@@ -7369,24 +7620,26 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
             }
             else if (op == 3) {
                 st[sp] = a * b
-                G[sp, .] = b :* ga + a :* gb
+                G[sp, .] = (da ? b :* ga : z) + (db ? a :* gb : z)
             }
             else if (op == 4) {
                 st[sp] = a / b
-                G[sp, .] = ga :/ b - (a / b^2) :* gb
+                G[sp, .] = (da ? ga :/ b : z) - (db ? (a / b^2) :* gb : z)
             }
             else if (op >= 6) {
                 // comparisons and & |: no derivative
                 st[sp] = _cge_u_cmp(op, a, b)
-                G[sp, .] = J(1, nv, 0)
+                G[sp, .] = z
+                da = db = 0
             }
             else {
                 val = a ^ b
                 st[sp] = val
                 // a constant exponent needs no logarithm of the base
-                if (!any(gb)) G[sp, .] = (b == 0 ? J(1, nv, 0) : (b * a ^ (b - 1)) :* ga)
-                else G[sp, .] = val :* ((b / a) :* ga + ln(a) :* gb)
+                if (!db) G[sp, .] = (b == 0 | !da ? z : (b * a ^ (b - 1)) :* ga)
+                else G[sp, .] = val :* ((da ? (b / a) :* ga : z) + ln(a) :* gb)
             }
+            dp[sp] = (da | db)
         }
         else if (c == 5) {
             st[sp] = -st[sp]
@@ -7394,7 +7647,8 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
         }
         else if (c == 8) {
             st[sp] = (st[sp] >= . ? . : st[sp] == 0)
-            G[sp, .] = J(1, nv, 0)
+            G[sp, .] = z
+            dp[sp] = 0
         }
         // a function of several arguments (from version 0.9.7): the
         // derivative of the argument that min(), max() or ifthen() takes
@@ -7406,26 +7660,29 @@ real scalar _cge_u_dvalue(struct cge_model scalar M, struct cge_par scalar p, re
             st[sp] = _cge_u_fn(op, av)
             if (op <= 2 | op == 6) {
                 j = _cge_u_fnarg(op, av)
-                G[sp, .] = (j ? G[sp + j - 1, .] : J(1, nv, 0))
+                G[sp, .] = (j ? G[sp + j - 1, .] : z)
+                dp[sp] = (j ? dp[sp + j - 1] : 0)
             }
-            else if (op == 3) G[sp, .] = sign(av[1]) :* G[sp, .]
-            else if (op == 4) G[sp, .] = (2 * av[1]) :* G[sp, .]
-            else G[sp, .] = G[sp, .] :/ (av[1] * ln(10))
+            else if (dp[sp]) {
+                if (op == 3) G[sp, .] = sign(av[1]) :* G[sp, .]
+                else if (op == 4) G[sp, .] = (2 * av[1]) :* G[sp, .]
+                else G[sp, .] = G[sp, .] :/ (av[1] * ln(10))
+            }
         }
         else {
             a = st[sp]
             op = tok[i, 2]
             if (op == 1) {
                 st[sp] = exp(a)
-                G[sp, .] = st[sp] :* G[sp, .]
+                if (dp[sp]) G[sp, .] = st[sp] :* G[sp, .]
             }
             else if (op == 2) {
                 st[sp] = ln(a)
-                G[sp, .] = G[sp, .] :/ a
+                if (dp[sp]) G[sp, .] = G[sp, .] :/ a
             }
             else {
                 st[sp] = sqrt(a)
-                G[sp, .] = G[sp, .] :/ (2 * st[sp])
+                if (dp[sp]) G[sp, .] = G[sp, .] :/ (2 * st[sp])
             }
         }
     }
@@ -21264,14 +21521,19 @@ void _cge_u_clear()
     M.ulen2 = J(0, 1, .)
     M.upar = J(0, 1, "")
     _cge_layout(M)
-    M.x0 = M.x0[|1 \ nkeep|]
-    M.xcur = M.xcur[|1 \ nkeep|]
-    M.xscale = M.xscale[|1 \ nkeep|]
-    M.exists = M.exists[|1 \ nkeep|]
-    M.fixed = M.fixed[|1 \ nkeep|]
-    M.nominal = M.nominal[|1 \ nkeep|]
-    if (cols(M.simx)) M.simx = M.simx[|1, 1 \ nkeep, cols(M.simx)|]
-    else M.simx = J(nkeep, 0, .)
+    // a standalone model keeps no variables (from version 0.30.0; before,
+    // the empty range stopped with error 3301)
+    if (nkeep) {
+        M.x0 = M.x0[|1 \ nkeep|]
+        M.xcur = M.xcur[|1 \ nkeep|]
+        M.xscale = M.xscale[|1 \ nkeep|]
+        M.exists = M.exists[|1 \ nkeep|]
+        M.fixed = M.fixed[|1 \ nkeep|]
+        M.nominal = M.nominal[|1 \ nkeep|]
+    }
+    else M.x0 = M.xcur = M.xscale = M.exists = M.fixed = M.nominal = J(0, 1, .)
+    if (cols(M.simx) & nkeep) M.simx = M.simx[|1, 1 \ nkeep, cols(M.simx)|]
+    else M.simx = J(nkeep, cols(M.simx), .)
     _cge_u_refresh(M)
     _cge_cons_rebuild(M)
     // the attributes of the user variables go with them (from version 0.9.8)

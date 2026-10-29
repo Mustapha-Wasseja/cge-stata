@@ -1989,7 +1989,8 @@ numbers, variables (positions in the stacked vector), parameters, operators
 and functions. Stata evaluates the postfix rows at every point; from
 version 0.7.0 their derivatives are exact, by forward differentiation of the
 postfix rows (`_cge_u_dvalue`), with respect to the variables each equation
-element uses. The equations are a block `U`
+element uses; from version 0.30.0 by reverse differentiation when an
+element uses many variables (Section 40). The equations are a block `U`
 of the system; they are saved with the model and compiled again when it is
 calibrated again.
 
@@ -3002,6 +3003,69 @@ saved with three columns; Stata loops around the command; errors and their
 return codes; on a SAM-based model, the commodities with tariffs and the
 pairs of factors and activities with large factor use against the model's
 own base values, and a sum over them after a shock).
+
+## 40. Reverse differentiation (from version 0.30.0)
+
+The derivatives of the user language (user equations, definitions,
+objectives of nonlinear programmes and of `cge_optimize`, and the rows of
+runs with foresight) came from forward differentiation of the postfix rows
+(Section 19, `_cge_u_dvalue`): each value on the stack carries a row of
+derivatives with respect to the $m$ variables of the expression, so an
+expression of $n$ rows costs $O(nm)$ in time and memory. A sum over many
+elements, as a market-clearing row, an aggregate or the objective of a
+cross-entropy problem, has $m$ proportional to $n$, and the cost grows as
+$n^2$.
+
+From version 0.30.0, `_cge_u_rvalue` differentiates in reverse. One pass
+forward evaluates each row $r$ and records its operands (at most two; a
+function of several arguments keeps the one it takes, as forward
+differentiation does) with the partial derivatives $\partial v_r/\partial
+v_{o}$; one pass backward, from the last row, adds to each operand's
+adjoint the row's adjoint times the partial,
+$$\bar v_o \mathrel{+}= \bar v_r\, \partial v_r/\partial v_o, \qquad \bar v_{\text{last}} = 1,$$
+and the adjoint of a variable's row is its derivative. The cost is $O(n)$.
+The partials are those of forward differentiation: $1, \pm1$ for sums and
+differences, $b, a$ for $a b$, $1/b, -a/b^2$ for $a/b$, $b a^{b-1}$ for a
+constant exponent, $a^b b/a$ and $a^b \ln a$ for a variable one, and the
+derivatives of exp, ln, sqrt, abs, sqr and log10; comparisons and `!` have
+none. A row that does not depend on the variables passes nothing back.
+
+`_cge_u_dvalue` now chooses: reverse when an expression has at least
+`_cge_u_rmin()` = RMIN variables, forward otherwise (`_cge_u_fvalue`). Mata
+interprets each row of the reverse passes one statement at a time, while
+the rows of forward differentiation are vector operations, so forward is as
+fast or faster for short rows. Timed per gradient on StataNow 19.5, a sum of
+$n$ terms in $m = n$ variables took (forward, reverse) 0.020 and 0.027
+seconds at $m = 128$, 0.086 and 0.061 at 256, 0.33 and 0.15 at 512 and 1.08
+and 0.26 at 1,024; forward differentiation of 10,000 variables would need a
+matrix of about 190,000 by 10,000.
+
+Fix, in the same version: forward differentiation gave missing derivatives
+for a whole expression when a part of it that does not depend on the
+variables had an undefined derivative, as `sqrt(par)` or `par^0.5` with
+`par` = 0 (a row of zeros divided by zero), though the value was finite; a
+Newton step then failed. Each value on the stack now carries whether it
+depends on the variables, and constants keep a row of zeros, as in reverse
+mode. A variable's own undefined derivative, as in `sqrt(X - 1)` at $X =
+1$, remains missing.
+
+Fix, also in version 0.30.0: `cge_equation, clear` in a standalone model,
+whose variables are all user variables, stopped with error 3301 (an empty
+range of the vector of variables); it now leaves a model without variables,
+to which new ones may be added (`tests/test_standalone.do`).
+
+Test hooks: `_cge_dmode(m)` sets the mode of `_cge_u_dvalue` (0 by the
+number of variables, 1 forward, 2 reverse) and returns the number of reverse
+passes since the last call.
+
+Tests: `tests/test_reverse.do` (eight expressions over every operation and
+function, reverse against forward to $10^{-13}$ and against central
+differences; constants with undefined derivatives in both modes; an
+expression of 300 variables and the choice of mode; a standalone model with
+a dense row of 250 variables, a cross-entropy programme of 250 variables, a
+SAM-based model with user equations (its exact Jacobian against
+differences) and a run with foresight with lags and leads, each with the
+same solutions and iterations in every mode).
 
 ## References
 

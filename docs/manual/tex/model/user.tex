@@ -449,7 +449,8 @@ expression of \cmd{minimize()} or the negative of that of \cmd{maximize()},
 and $L$ and $U$ the bounds of \manref{cge_bound},
 as in GAMS's \cmd{solve m using nlp minimizing obj}. The objective is compiled
 as an equation is and differentiated exactly, by forward differentiation of
-its postfix rows; the equations have the exact Jacobian of
+its postfix rows, or in reverse when it has many variables (from version
+0.30.0); the equations have the exact Jacobian of
 section~\ref{sec:jacobian}. An inequality is written as an equation with a
 slack bounded at zero, $g(x) - S = b$ with $S \ge 0$ for $g(x) \ge b$;
 inequalities paired with variables are complementarity conditions and stop
@@ -580,7 +581,17 @@ each conditional term as itself or 0, then compiled to postfix order: numbers, v
 0.7.0 their derivatives are exact, by forward differentiation of the postfix
 rows (section~\ref{sec:jacobian}): each value on the stack carries its
 derivatives with respect to the variables that the element uses. Before, they
-were found by grouped differences. The equations form a block \cmd{U} of the
+were found by grouped differences. From version 0.30.0 an element of 200
+variables or more, as a sum over many elements, is differentiated in
+reverse: one pass forward records each row's value, its operands and its
+partial derivatives in them, and one pass backward carries the adjoint of
+the result from each row to its operands, $\bar v_o \mathrel{+}= \bar v_r\,
+\partial v_r/\partial v_o$, so that the work grows with the length of the
+expression rather than with its length times its number of variables. A part
+of an expression that does not depend on the variables passes no
+derivatives, so a constant whose derivative is undefined, as
+\cmd{sqrt(par)} with \cmd{par} zero, no longer makes the derivatives
+missing. The equations form a block \cmd{U} of the
 system. They are saved with the model
 and compiled again when it is calibrated again.
 

@@ -272,3 +272,24 @@ capture noisily cge_model describe extra more
 assert _rc == 198
 
 mata: mata drop _ts_val() _ts_upval()
+
+* ---------------------------------------------------------------------
+* Removing the user variables and equations of a standalone model, all
+* of its variables (from version 0.30.0; before, error 3301), then
+* defining and solving new ones
+* ---------------------------------------------------------------------
+cge_model new
+cge_set i = r1 r2
+cge_variable X(i), value(1)
+cge_equation EX(i): X(i)^2 = 4
+cge_solve, name(before)
+assert r(converged) == 1
+cge_equation, clear
+cge_variable Y, value(1)
+cge_equation EY: Y^3 = 27
+cge_solve, name(after)
+assert r(converged) == 1
+quietly cge_results, sim(after) clear nodisplay
+quietly summarize value if variable == "Y"
+assert reldif(r(mean), 3) < 1e-10
+cge_equation, clear

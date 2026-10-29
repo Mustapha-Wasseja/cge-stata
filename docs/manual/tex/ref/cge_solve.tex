@@ -414,7 +414,8 @@ those left out of the reduced system; up to three more steps then bring the
 residual toward a thousandth of the tolerance.
 
 The Jacobian is exact: the derivatives of every equation are written out,
-user equations are differentiated in forward mode, and in the reduced system
+user equations are differentiated in forward mode, or from version 0.30.0
+in reverse mode when an equation has many variables, and in the reduced system
 the variables of the left-out definitions $D_k(d_k, y) = 0$ are eliminated
 by the chain rule, with $\partial d_k / \partial y_j = -(\partial D_k /
 \partial y_j) / (\partial D_k / \partial d_k)$. If Newton fails, it is tried
