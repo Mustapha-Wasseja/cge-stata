@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.16.0  26oct2026}{...}
+{* *! version 0.33.0  29oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -11,7 +11,8 @@
 
 {p 8 12 2}
 {cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto|python)} {opt mcp(semismooth|activeset)}
-{opt jac:obian(exact|differences)} {opt hes:sian(exact|differences)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
+{opt jac:obian(exact|differences)} {opt hes:sian(exact|differences)} {opt sca:ling(none|ruiz)}
+{opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
 
 
 {title:Description}
@@ -84,6 +85,18 @@ iterations to the same solution; exact Hessians are much faster on larger
 programmes.
 
 {pstd}
+{opt scaling()} (from version 0.33.0) chooses the scaling of the linear
+systems of Newton's method and of the semismooth method, beyond the scales
+of the variables and equations from the base: {cmd:none} (the default) or
+{cmd:ruiz}, Ruiz's equilibration of each Jacobian, which divides its rows
+and columns until their norms are close to 1, factorises the scaled matrix
+and undoes the scales in each solve. The Newton step is the same in exact
+arithmetic; the pivots and rounding are those of a better conditioned
+matrix, which can help models whose base scales are poor, as variables with
+a zero base that grow large. It applies with the dense and the sparse LU,
+to runs with foresight and to linked regions (the first region's setting).
+
+{pstd}
 {opt tolerance(#)}, {opt iterate(#)} and {opt timelimit(#)} (from version
 0.16.0) set the tolerance, iteration limit and time limit in seconds of
 {helpb cge_solve} when it is not given them, as GAMS's {cmd:option iterlim}
@@ -109,6 +122,8 @@ restores every setting to its default.
 
 {phang2}{cmd:. cge_options, iterate(30) timelimit(60) tolerance(1e-12)}{p_end}
 
+{phang2}{cmd:. cge_options, scaling(ruiz)}{p_end}
+
 {phang2}{cmd:. cge_options, reset}{p_end}
 
 
@@ -116,7 +131,8 @@ restores every setting to its default.
 
 {pstd}
 {cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver ({cmd:python} for SuperLU), {cmd:r(mcp)},
-the method for constraints, {cmd:r(jacobian)}, the Jacobian, and {cmd:r(hessian)}, the Hessian, as macros, and
+the method for constraints, {cmd:r(jacobian)}, the Jacobian, {cmd:r(hessian)}, the Hessian, and
+{cmd:r(scaling)}, the scaling, as macros, and
 {cmd:r(tolerance)}, {cmd:r(iterate)} and {cmd:r(timelimit)} (missing for none),
 the defaults of {helpb cge_solve}, as scalars.
 

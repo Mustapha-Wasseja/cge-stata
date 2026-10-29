@@ -59,6 +59,7 @@ cge_options
 \optarg{}{mcp}{semismooth|activeset} & the method for constraints and inequalities\\
 \optarg{jac}{obian}{exact|differences} & the Jacobian of Newton's method\\
 \optarg{hes}{sian}{exact|differences} & the Hessian of nonlinear programmes\\
+\optarg{sca}{ling}{none|ruiz} & the scaling of Newton's linear systems\\
 \optgroup{Defaults of cge\_solve}
 \optarg{tol}{erance}{\#} & tolerance on the largest scaled residual; default \texttt{1e-10}\\
 \optarg{iter}{ate}{\#} & iteration limit; default \texttt{100}\\
@@ -107,6 +108,22 @@ code (the default), or \cmd{differences}, central differences of their exact
 first derivatives, the method before. Both take the same iterations to the
 same solution; on a cross-entropy problem of 400 variables, exact Hessians
 took 4.1 seconds and differences 142.
+
+\item[\optarg{sca}{ling}{none|ruiz}] (from version 0.33.0) chooses the
+scaling of the linear systems of Newton's method and of the semismooth
+method, beyond the scales of the variables and equations from the base:
+\cmd{none}, the default, or \cmd{ruiz}, Ruiz's equilibration of each
+Jacobian. The rows and columns are divided by the square roots of their
+2-norms, ten times at most, until the norms are within 5 percent of 1
+\citep{ruiz2001}; the scaled matrix is factorised and the scales are undone in
+each solve. The Newton step is the same in exact arithmetic, the pivots and
+rounding those of a better conditioned matrix: on a model whose variables
+enter every equation with coefficients from $10^{-5}$ to $10^{5}$, the
+condition number of the Jacobian fell from $5.4\times10^{8}$ to 3.9, and on
+the SYNTHETIC SAM from 3,000 to 64. In the tests the solutions are the same
+with and without it, and the semismooth method took one or two iterations
+fewer with an import quota. It applies with the dense and the sparse LU, to
+runs with foresight and to linked regions (the setting of the first region).
 
 \item[\optarg{tol}{erance}{\#}], \optarg{iter}{ate}{\#} and
 \optarg{time}{limit}{\#} (from version 0.16.0) set the tolerance, the
@@ -171,6 +188,7 @@ after \opt{}{reset}, the solve converges with model status 16 (solved):
 \res{r(mcp)} & the method for constraints: \cmd{semismooth} or \cmd{activeset}\\
 \res{r(jacobian)} & the Jacobian of Newton's method: \cmd{exact} or \cmd{differences}\\
 \res{r(hessian)} & the Hessian of nonlinear programmes: \cmd{exact} or \cmd{differences}\\
+\res{r(scaling)} & the scaling of Newton's linear systems: \cmd{none} or \cmd{ruiz}\\
 \end{storedres}
 
 \cgesec{Methods and formulas}

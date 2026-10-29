@@ -3165,6 +3165,47 @@ efficiency, days lost to illness and user equations that use `ddebt`,
 `fdebt`, `ad`, `hs0` and `qlf`, in both modes, to $10^{-6}$ of central
 differences; runs in both modes agree to $10^{-10}$).
 
+## 43. Equilibration of Newton's linear systems (from version 0.33.0)
+
+The free variables are scaled by their base values ($z = x/s$, $s =
+|x^0|$ or 1) and the equations by the larger side of each at the base
+(`M.escale`), as CONOPT and PATH scale from the start point. Where these
+scales are poor (a variable with a zero base that grows large, a base far
+from the solution), the Jacobian's rows and columns may still differ by
+many orders of magnitude.
+
+`cge_options, scaling(ruiz)` (member `optscale`, saved with the model)
+equilibrates each Jacobian $A$ of Newton's method and of the semismooth
+method before it is factorised (Ruiz 2001): with $D_r = D_c = I$,
+
+$$D_r \leftarrow D_r\, \mathrm{diag}(\|a_{i\cdot}\|_2)^{-1/2}, \qquad
+D_c \leftarrow D_c\, \mathrm{diag}(\|a_{\cdot j}\|_2)^{-1/2},$$
+
+each pass on the matrix scaled so far, ten passes at most or until every
+norm is within 5 percent of 1; empty rows and columns keep 1. The factors
+are those of $D_r A D_c$, and a solve gives $x = D_c (D_r A D_c)^{-1} D_r b$,
+the same step in exact arithmetic. `_cge_ruiz` works on the entries of the
+sparse LU (row and column panels sorted once, group sums by `panelsum`),
+`_cge_ruizd` on a dense matrix; `_cge_slu_update` keeps the scales in the
+factors and `_cge_slu_solve` undoes them, so every user of the sparse LU
+(Newton's method, the semismooth method, runs with foresight, linked
+regions, Broyden's updates) has them; `_cge_dsolve` does the same for the
+dense LU. The setting is passed as the Python link's is, by
+`_cge_sparse_on` (external `cge__ruiz`), and by runs with foresight and
+linked regions (the first region's).
+
+Test hook: `_cge_ruizcheck()` (the Jacobian of the model in memory at its
+current point: condition numbers before and after, the norms of the scaled
+rows and columns, and the agreement of the dense and sparse scales).
+
+Tests: `tests/test_scaling.do` (the SYNTHETIC SAM, condition $3.0\times10^3$
+to 64 with rows and columns of norm 0.86 to 1.14; a standalone model whose
+variables enter every equation with coefficients from $10^{-5}$ to $10^5$,
+$5.4\times10^8$ to 3.9; the same solutions with and without scaling, with
+the dense and the sparse LU, for a tariff removal, that model, an import
+quota by the semismooth method (one or two iterations fewer), a run with
+foresight and linked regions; the setting saved, reset and checked).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
@@ -3211,6 +3252,9 @@ expenditures and health outcomes. *Health Economics* 16(3): 257-273.
 
 Li, X. S. (2005). An overview of SuperLU: algorithms, implementation, and
 user interface. *ACM Transactions on Mathematical Software* 31(3): 302-325.
+
+Ruiz, D. (2001). *A Scaling Algorithm to Equilibrate Both Rows and Columns Norms in
+Matrices*. Technical Report RAL-TR-2001-034, Rutherford Appleton Laboratory.
 
 Huangfu, Q. and J. A. J. Hall (2018). Parallelizing the dual revised simplex
 method. *Mathematical Programming Computation* 10(1): 119-142.

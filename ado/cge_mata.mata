@@ -235,6 +235,9 @@ struct cge_model {
     // the Hessian of nonlinear programmes (from version 0.28.0): missing or 0
     // exact, 1 differences of exact gradients
     real scalar      opthess
+    // the scaling of Newton's linear systems (from version 0.33.0): missing
+    // or 0 the base scales alone, 1 Ruiz's equilibration
+    real scalar      optscale
     // the model status and solver status of each stored simulation, in GAMS's
     // codes (from version 0.16.0); missing where unknown
     real matrix      simstat
@@ -267,7 +270,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.32.0")
+    return("0.33.0")
 }
 
 // =====================================================================
@@ -4651,6 +4654,9 @@ struct cge_slu {
     real colvector  r12, c12, v12, r21, c21, v21
     real matrix     i21, SL, SU
     real colvector  sp
+    // the row and column scales of the matrix factorised (from version
+    // 0.33.0, cge_options, scaling(ruiz)); empty without scaling
+    real colvector  dr, dc
 }
 
 // Compressed columns of the n x n matrix of entries (r, c, v): column starts
@@ -5095,8 +5101,16 @@ real matrix _cge_slu_solve11(struct cge_slu scalar F, real matrix B)
     return(Y)
 }
 
-// The solution of A x = b with the factors in F
+// The solution of A x = b with the factors in F; from version 0.33.0, with
+// the scales of Ruiz's equilibration undone
 real colvector _cge_slu_solve(struct cge_slu scalar F, real colvector b)
+{
+    if (rows(F.dr)) return(F.dc :* _cge_slu_solve1(F, F.dr :* b))
+    return(_cge_slu_solve1(F, b))
+}
+
+// The solution of the system factorised in F (scaled where F is)
+real colvector _cge_slu_solve1(struct cge_slu scalar F, real colvector b)
 {
     real colvector y, x, lr, ur, y2, t
     real scalar k, n, ns
@@ -5177,12 +5191,22 @@ real colvector _cge_slu_lin(real colvector cp, real colvector ri, real scalar n)
 real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colvector c, real colvector v,
                             real scalar n, | string scalar ext)
 {
-    real colvector cp, ri, vv, va
+    real colvector cp, ri, vv, va, vs, dr, dc
     if (args() < 6) ext = "cge__slu"
+    // Ruiz's equilibration (from version 0.33.0): the matrix factorised is
+    // diag(dr) A diag(dc), and _cge_slu_solve undoes the scales
+    F.dr = F.dc = J(0, 1, .)
+    vs = v
+    if (_cge_ruiz_on() & rows(v)) {
+        _cge_ruiz(r, c, v, n, dr, dc)
+        vs = dr[r] :* v :* dc[c]
+        F.dr = dr
+        F.dc = dc
+    }
     // SciPy's SuperLU (from version 0.27.0, linsolver(python))
-    if (_cge_pylu_on()) return(_cge_pylu_update(F, r, c, v, n, ext))
+    if (_cge_pylu_on()) return(_cge_pylu_update(F, r, c, vs, n, ext))
     if (F.ok == 2) F.ok = 0
-    _cge_slu_csc(r, c, v, n, cp, ri, vv)
+    _cge_slu_csc(r, c, vs, n, cp, ri, vv)
     if (hasmissing(vv)) return(0)
     // the same pattern, or part of it: factorised in the order analysed
     if (F.ok & F.n == n) {
@@ -5216,7 +5240,7 @@ string scalar _cge_lin_name(struct cge_model scalar M)
 // and the Jacobian of Newton's method (negative: unchanged; missing: the
 // default), and reset, which restores every default
 void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real scalar it, real scalar tlim,
-                  string scalar jac, real scalar reset, string scalar hess)
+                  string scalar jac, real scalar reset, string scalar hess, string scalar scale)
 {
     struct cge_model scalar M
     real scalar ch
@@ -5227,11 +5251,12 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     if (args() < 6) jac = ""
     if (args() < 7) reset = 0
     if (args() < 8) hess = ""
+    if (args() < 9) scale = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
     ch = 0
     if (reset) {
-        M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = M.opthess = .
+        M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = M.opthess = M.optscale = .
         ch = 1
     }
     // SciPy's SuperLU through Python (from version 0.27.0, Stata 16 and later)
@@ -5246,13 +5271,17 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     if (jac != "") M.optjac = (jac == "differences")
     // the Hessian of nonlinear programmes (from version 0.28.0)
     if (hess != "") M.opthess = (hess == "differences")
-    if (lin != "" | mcp != "" | (tol > 0 & tol < .) | (it >= 1 & it < .) | (tlim >= 0 & tlim < .) | jac != "" | hess != "") ch = 1
+    // the scaling of Newton's linear systems (from version 0.33.0)
+    if (scale != "") M.optscale = (scale == "ruiz")
+    if (lin != "" | mcp != "" | (tol > 0 & tol < .) | (it >= 1 & it < .) | (tlim >= 0 & tlim < .) | jac != "" | hess != "" |
+        scale != "") ch = 1
     if (ch) _cge_store(M)
     printf("{txt}Linear solver of Newton's steps: {res}%s{txt}%s\n", _cge_lin_name(M),
            (M.linsolver == 2 ? " (the sparse LU from 1,000 equations)" : ""))
     printf("{txt}Method for constraints:          {res}%s\n", _cge_mcp_name(M))
     printf("{txt}Jacobian of Newton's method:     {res}%s\n", (M.optjac == 1 ? "differences" : "exact"))
     printf("{txt}Hessian of nonlinear programmes: {res}%s\n", (M.opthess == 1 ? "differences" : "exact"))
+    printf("{txt}Scaling of Newton's systems:     {res}%s\n", (M.optscale == 1 ? "ruiz" : "none"))
     printf("{txt}Tolerance of cge_solve:          {res}%s\n", strtrim(sprintf("%9.0g", _cge_opttol(M, -1))))
     printf("{txt}Iteration limit of cge_solve:    {res}%g\n", _cge_optit(M, -1))
     printf("{txt}Time limit of cge_solve:         {res}%s\n", (_cge_opttime(M, -1) >= . ? "none" :
@@ -5261,6 +5290,7 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     st_global("r(mcp)", _cge_mcp_name(M))
     st_global("r(jacobian)", (M.optjac == 1 ? "differences" : "exact"))
     st_global("r(hessian)", (M.opthess == 1 ? "differences" : "exact"))
+    st_global("r(scaling)", (M.optscale == 1 ? "ruiz" : "none"))
     st_numscalar("r(tolerance)", _cge_opttol(M, -1))
     st_numscalar("r(iterate)", _cge_optit(M, -1))
     st_numscalar("r(timelimit)", _cge_opttime(M, -1))
@@ -5475,12 +5505,95 @@ struct cge_sys {
     real scalar    neq, reduced
 }
 
+// Ruiz's equilibration of Newton's linear systems (from version 0.33.0,
+// cge_options, scaling(ruiz)): on while the system solved asks for it (set
+// by _cge_sparse_on and by runs with foresight and linked regions)
+void _cge_ruiz_set(real scalar on)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__ruiz")) == NULL) q = crexternal("cge__ruiz")
+    *q = on
+}
+
+real scalar _cge_ruiz_on()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__ruiz")) == NULL) return(0)
+    return(*q == 1)
+}
+
+// Ruiz's equilibration of the n x n matrix of entries (r, c, v): row and
+// column scales dr and dc with which the entries dr_r v dc_c have rows and
+// columns of 2-norm close to 1, found by dividing each row and column by the
+// square root of its norm, ten times at most or until the norms are within
+// 5 percent of 1 (Ruiz 2001). Empty rows and columns keep a scale of 1.
+void _cge_ruiz(real colvector r, real colvector c, real colvector v, real scalar n,
+               real colvector dr, real colvector dc)
+{
+    real colvector a2, nr, nc, orr, orc, rs, cs
+    real matrix ir, ic
+    real scalar k
+    dr = dc = J(n, 1, 1)
+    if (!rows(v)) return
+    // the panels of the rows and of the columns, sorted once
+    orr = order(r, 1)
+    orc = order(c, 1)
+    rs = r[orr]
+    cs = c[orc]
+    ir = panelsetup(rs, 1)
+    ic = panelsetup(cs, 1)
+    a2 = v :^ 2
+    for (k = 1; k <= 10; k++) {
+        nr = nc = J(n, 1, 1)
+        nr[rs[ir[., 1]]] = sqrt(panelsum(a2[orr], ir))
+        nc[cs[ic[., 1]]] = sqrt(panelsum(a2[orc], ic))
+        nr = nr :+ (nr :== 0)
+        nc = nc :+ (nc :== 0)
+        if (max(abs(nr :- 1)) < 0.05 & max(abs(nc :- 1)) < 0.05) break
+        dr = dr :/ sqrt(nr)
+        dc = dc :/ sqrt(nc)
+        a2 = a2 :/ nr[r] :/ nc[c]
+    }
+}
+
+// The same for a dense matrix A
+void _cge_ruizd(real matrix A, real colvector dr, real colvector dc)
+{
+    real matrix B
+    real colvector nr, nc
+    real scalar k
+    dr = J(rows(A), 1, 1)
+    dc = J(cols(A), 1, 1)
+    B = A :^ 2
+    for (k = 1; k <= 10; k++) {
+        nr = sqrt(rowsum(B))
+        nc = sqrt(colsum(B))'
+        nr = nr :+ (nr :== 0)
+        nc = nc :+ (nc :== 0)
+        if (max(abs(nr :- 1)) < 0.05 & max(abs(nc :- 1)) < 0.05) break
+        dr = dr :/ sqrt(nr)
+        dc = dc :/ sqrt(nc)
+        B = B :/ nr :/ nc'
+    }
+}
+
+// The solution of A x = b from the dense LU factors of diag(dr) A diag(dc)
+// (empty dr and dc: of A), as _lud() gives them with perm inverted
+real colvector _cge_dsolve(real matrix LU, real matrix U, real colvector perm, real colvector dr,
+                           real colvector dc, real colvector b)
+{
+    if (rows(dr)) return(dc :* solveupper(U, solvelower(LU, (dr :* b)[perm])))
+    return(solveupper(U, solvelower(LU, b[perm])))
+}
+
 // 1 if Newton's steps on system S use the sparse LU (cge_options, linsolver())
 real scalar _cge_sparse_on(struct cge_model scalar M, struct cge_sys scalar S)
 {
     // the factors in SciPy's SuperLU (from version 0.27.0): linsolver(python),
     // code 3, the sparse LU's place
     _cge_pylu_set(M.linsolver == 3)
+    // Ruiz's equilibration (from version 0.33.0)
+    _cge_ruiz_set(M.optscale == 1)
     if (M.linsolver >= . | M.linsolver == 0) return(0)
     if (M.linsolver == 1 | M.linsolver == 3) return(1)
     return(S.neq >= 1000)
@@ -8335,11 +8448,12 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
 {
     struct cge_jpat scalar G
     struct cge_slu scalar SF
-    real colvector f, fn, dz, zn, perm, d, s, g, Hy, a, jr, jc, jv
+    real colvector f, fn, dz, zn, perm, d, s, g, Hy, a, jr, jc, jv, dr, dc
     real matrix LU, U, A, Sm
     real scalar norm0, step, it, have, njac, nbro, ns, npol, den, ok, smin, j, sp
 
     if (args() < 11) mode = 0
+    dr = dc = J(0, 1, .)
     // the sparse LU (from version 0.10.1), with the exact Jacobian or, in
     // modes 1 and 2, central or one-sided differences as entries
     sp = _cge_sparse_on(M, S)
@@ -8394,7 +8508,7 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             if (ok) {
                 s = step * d
                 if (sp) g = _cge_hsolve_s(SF, A, Sm, ns, fn)
-                else g = _cge_hsolve(LU, U, perm, A, Sm, ns, fn)
+                else g = _cge_hsolve(LU, U, perm, A, Sm, ns, fn, dr, dc)
                 Hy = g + d
                 den = s' * Hy
                 z = zn
@@ -8417,7 +8531,7 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
         else if (have) {
             // A step with the factors of the last Jacobian, without updates
             if (sp) dz = _cge_slu_solve(SF, -f)
-            else dz = solveupper(U, solvelower(LU, -f[perm]))
+            else dz = _cge_dsolve(LU, U, perm, dr, dc, -f)
             if (!hasmissing(dz)) {
                 zn = z + dz
                 fn = _cge_F(M, p, xfix, S, zn)
@@ -8452,10 +8566,16 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             else LU = _cge_jacobian_exact(M, p, xfix, S, z)
             njac++
             if (hasmissing(LU)) break
+            // Ruiz's equilibration (from version 0.33.0)
+            dr = dc = J(0, 1, .)
+            if (_cge_ruiz_on()) {
+                _cge_ruizd(LU, dr, dc)
+                LU = dr :* LU :* dc'
+            }
             // Mata's _lud() gives A = (L*U)[p, .], so A x = b is solved with b[invorder(p)]
             _lud(LU, U, perm)
             perm = invorder(perm)
-            dz = solveupper(U, solvelower(LU, -f[perm]))
+            dz = _cge_dsolve(LU, U, perm, dr, dc, -f)
         }
         if (hasmissing(dz)) break
         step = 1
@@ -8475,7 +8595,7 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
             ns = 0
             s = step * dz
             if (sp) g = _cge_slu_solve(SF, fn)
-            else g = solveupper(U, solvelower(LU, fn[perm]))
+            else g = _cge_dsolve(LU, U, perm, dr, dc, fn)
             Hy = g + dz
             den = s' * Hy
             have = 0
@@ -8502,13 +8622,45 @@ real scalar _cge_newton(struct cge_model scalar M, struct cge_par scalar p, real
 // H v, with H the inverse of the Jacobian from its LU factors times the
 // stored Broyden factors (I + a_j s_j'), applied in the order they were made
 real colvector _cge_hsolve(real matrix LU, real matrix U, real colvector perm, real matrix A, real matrix Sm,
-                           real scalar ns, real colvector v)
+                           real scalar ns, real colvector v, | real colvector dr, real colvector dc)
 {
     real colvector w
     real scalar j
-    w = solveupper(U, solvelower(LU, v[perm]))
+    if (args() < 9) dr = dc = J(0, 1, .)
+    w = _cge_dsolve(LU, U, perm, dr, dc, v)
     for (j = 1; j <= ns; j++) w = w + A[., j] * (Sm[., j]' * w)
     return(w)
+}
+
+// Test hook (from version 0.33.0): the Jacobian of the full system of the
+// model in memory at its current point, dense, and Ruiz's equilibration of
+// it, dense and from its entries: r(cond) and r(cond_ruiz) the condition
+// numbers, r(rmin) to r(cmax) the smallest and largest 2-norms of the rows
+// and columns scaled, r(sparse_dense) the largest difference between the
+// scales of the two forms
+void _cge_ruizcheck()
+{
+    struct cge_model scalar M
+    struct cge_sys scalar S
+    real colvector z, jr, jc, jv, dr, dc, er, ec
+    real matrix J, B
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    S = _cge_sys_make(M, 0)
+    z = M.xcur[S.free] :/ M.xscale[S.free]
+    if (!_cge_jac_trip(M, M.p, M.xcur, S, z, jr, jc, jv)) _cge_fail("_cge_ruizcheck: the Jacobian cannot be evaluated", 459)
+    J = _cge_trip_dense(jr, jc, jv, S.neq, rows(z))
+    _cge_ruizd(J, dr, dc)
+    B = dr :* J :* dc'
+    _cge_ruiz(jr, jc, jv, rows(z), er, ec)
+    st_numscalar("r(cond)", cond(J))
+    st_numscalar("r(cond_ruiz)", cond(B))
+    st_numscalar("r(rmin)", min(sqrt(rowsum(B :^ 2))))
+    st_numscalar("r(rmax)", max(sqrt(rowsum(B :^ 2))))
+    st_numscalar("r(cmin)", min(sqrt(colsum(B :^ 2))))
+    st_numscalar("r(cmax)", max(sqrt(colsum(B :^ 2))))
+    st_numscalar("r(sparse_dense)", max((max(abs(er - dr) :/ dr), max(abs(ec - dc) :/ dc))))
+    st_numscalar("r(N)", rows(z))
 }
 
 // Evaluator for solvenl(), which takes at most three extra arguments in Stata 13:
@@ -8644,7 +8796,7 @@ real scalar _cge_ssnewton(struct cge_model scalar M, struct cge_par scalar p, re
                           real scalar trace, real scalar iter, real scalar err)
 {
     struct cge_slu scalar SF
-    real colvector f, fn, dz, zn, jr, jc, jv, gr, perm, hist
+    real colvector f, fn, dz, zn, jr, jc, jv, gr, perm, hist, dr, dc
     real matrix LU, U
     real scalar it, sp, psi, step, ok, slope, ngr, nsd, nnw, pref
     sp = _cge_sparse_on(M, S)
@@ -8684,9 +8836,14 @@ real scalar _cge_ssnewton(struct cge_model scalar M, struct cge_par scalar p, re
         }
         else {
             LU = _cge_trip_dense(jr, jc, jv, S.neq, rows(z))
+            dr = dc = J(0, 1, .)
+            if (_cge_ruiz_on()) {
+                _cge_ruizd(LU, dr, dc)
+                LU = dr :* LU :* dc'
+            }
             _lud(LU, U, perm)
             perm = invorder(perm)
-            dz = solveupper(U, solvelower(LU, -f[perm]))
+            dz = _cge_dsolve(LU, U, perm, dr, dc, -f)
         }
         ok = 0
         if (rows(dz)) if (!hasmissing(dz)) {
@@ -12412,6 +12569,7 @@ real scalar _cge_fs_newton(struct cge_model scalar M, struct cge_dyn scalar D, s
     real colvector R, Rn, du, un, ri, ci, v
     real scalar it, step, n0
     _cge_slu_load(SF, "cge__slu_fs")
+    _cge_ruiz_set(M.optscale == 1)
     R = _cge_fs_resid(M, D, FS, S, u)
     iter = 0
     err = .
@@ -13671,6 +13829,7 @@ real scalar _cge_lk_newton(struct cge_lk scalar L, struct cge_lw scalar W, real 
     real colvector R, Rn, du, un, ri, ci, v
     real scalar it, step, n0
     _cge_slu_load(SF, "cge__slu_reg")
+    _cge_ruiz_set(W.PM[1]->optscale == 1)
     R = _cge_lk_resid(L, W, u)
     iter = 0
     err = .
@@ -27234,6 +27393,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "opttime", M.opttime)
     _cge_io_put(fh, "optjac", M.optjac)
     _cge_io_put(fh, "opthess", M.opthess)
+    _cge_io_put(fh, "optscale", M.optscale)
     _cge_io_put(fh, "simstat", M.simstat)
     _cge_io_put(fh, "mdef", M.mdef)
     _cge_io_put(fh, "simmodel", M.simmodel)
@@ -27397,6 +27557,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "opttime") M.opttime = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "optjac") M.optjac = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "opthess") M.opthess = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "optscale") M.optscale = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "simstat") M.simstat = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "mdef") M.mdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "simmodel") M.simmodel = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
