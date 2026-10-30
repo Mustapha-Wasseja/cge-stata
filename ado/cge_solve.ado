@@ -48,9 +48,10 @@ program define cge_solve, rclass
         display as error "starts() goes with minimize() or maximize()"
         exit 198
     }
-    * the solver of a programme (from version 0.27.0): HiGHS through SciPy
-    if "`solver'" != "" & "`solver'" != "highs" {
-        display as error "solver() takes highs"
+    * the solver of a programme (from version 0.27.0): HiGHS through SciPy,
+    * and from version 0.41.0 IPOPT through cyipopt
+    if "`solver'" != "" & !inlist("`solver'", "highs", "ipopt") {
+        display as error "solver() takes highs or ipopt"
         exit 198
     }
     if "`solver'" != "" & `"`maximize'`minimize'"' == "" {
@@ -58,7 +59,7 @@ program define cge_solve, rclass
         exit 198
     }
     if "`solver'" != "" & `starts' > 1 {
-        display as error "starts() is for the interior point, not solver(highs)"
+        display as error "starts() is for the interior point, not solver(`solver')"
         exit 198
     }
     if `timelimit' != -1 & !(`timelimit' >= 0) {

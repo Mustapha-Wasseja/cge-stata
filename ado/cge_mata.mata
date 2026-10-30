@@ -286,7 +286,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.40.0")
+    return("0.41.0")
 }
 
 // =====================================================================
@@ -15357,6 +15357,242 @@ void _cge_gams_add(struct cge_model scalar M, real scalar fh)
 }
 
 // =====================================================================
+// IPOPT through cyipopt (from version 0.41.0; Stata 16 and later with
+// Python and cyipopt; model_spec.md, Section 51)
+// =====================================================================
+
+// The context of a solve by IPOPT, kept in the external cge__ipctx for the
+// evaluations that IPOPT asks for: the model, its system, the fixed values,
+// the objective's postfix rows, its sense and scale, the position of each
+// variable among the free ones, and the position of each entry of the
+// Jacobian's structure (by (column - 1) * m + row, 0 outside it). The values
+// pass through the Mata matrices cge__ipz (the point), cge__ipl (the
+// multipliers and the objective's factor) and cge__ipo (the result).
+struct cge_ipctx {
+    struct cge_model scalar M
+    struct cge_sys scalar   S
+    real colvector          xfix, map, IDX
+    real matrix             tok
+    real scalar             sgn, osc, n, m, nnz
+}
+
+// 1 if Python module mod can be imported (Stata 16 and later), found out
+// once per session
+real scalar _cge_py_has(string scalar mod)
+{
+    pointer() scalar q
+    real scalar ok
+    if ((q = findexternal("cge__pyhas_" + mod)) != NULL) return(*q)
+    ok = 0
+    if (_cge_py_ready()) ok = !_stata("quietly python: import " + mod, 1)
+    q = crexternal("cge__pyhas_" + mod)
+    *q = ok
+    return(ok)
+}
+
+// cge_solve, solver(ipopt): a nonlinear programme of a standalone model by
+// IPOPT through cyipopt, in the scaled free variables z of the package's
+// interior point, with its scaling of the objective and the equations; the
+// exact Jacobian (sparse, on the structure of the system) and the exact
+// Hessian of the Lagrangian (dense, its lower triangle), or IPOPT's
+// limited-memory approximation with cge_options, hessian(differences) or
+// where the exact one cannot be found. Returns the solution, the marginals
+// lam of the equations as the interior point gives them, the statuses ms and
+// ss in GAMS's codes and the iterations
+real colvector _cge_ipopt(struct cge_model scalar M, real colvector xfix, real colvector start, real matrix tok,
+                          real scalar sgn, real scalar tol, real scalar maxit, real scalar trace,
+                          real scalar conv, real scalar iter, real scalar err, real scalar fobj, real colvector lam,
+                          real scalar ms, real scalar ss)
+{
+    struct cge_ipctx scalar C
+    struct cge_sys scalar S
+    pointer() scalar q
+    real colvector map, z0, L, U, gf, c, jr, jc, sel, out, x, esc
+    real matrix P, W, Jm
+    real scalar n, m, k, f, osc, exact, rc, tlim, feas
+    if (!_cge_py_has("cyipopt")) {
+        _cge_fail("solver(ipopt) needs Stata 16 or later with Python, SciPy and the package cyipopt (help python); without them, solve with the interior point", 198)
+    }
+    S = _cge_sys_make(M, 0)
+    n = rows(S.free)
+    m = S.neq
+    if (!n) _cge_fail("solver(ipopt): the programme has no free variables", 459)
+    map = J(rows(M.x0), 1, 0)
+    map[S.free] = (1::n)
+    // the bounds of the free variables, scaled, +-1e300 where none
+    L = J(n, 1, -1e300)
+    U = J(n, 1, 1e300)
+    for (k = 1; k <= rows(M.bdlp); k++) if (map[M.bdlp[k]]) L[map[M.bdlp[k]]] = M.bdlv[k] / M.xscale[M.bdlp[k]]
+    for (k = 1; k <= rows(M.bdup); k++) if (map[M.bdup[k]]) U[map[M.bdup[k]]] = M.bduv[k] / M.xscale[M.bdup[k]]
+    z0 = start[S.free] :/ M.xscale[S.free]
+    // the objective scaled so that its largest derivative at the start is at
+    // most 100, as in the interior point
+    if (!_cge_nlp_eval(M, M.p, xfix, S, z0, tok, sgn, 1, map, f, gf, c, Jm)) {
+        _cge_fail("solver(ipopt): the objective or the equations cannot be evaluated at the start", 459)
+    }
+    osc = max((1, max(abs(gf)) / 100))
+    // the structure of the Jacobian: the pattern of the system, in the free
+    // variables, and the entries at the start
+    jr = jc = J(0, 1, .)
+    if (m) {
+        sel = selectindex(map[S.jc] :> 0)
+        jr = S.jr[sel]
+        jc = map[S.jc[sel]]
+        P = uniqrows((jr, jc) \ _cge_nz_rc(Jm))
+        jr = P[., 1]
+        jc = P[., 2]
+    }
+    C.M = M
+    C.S = S
+    C.xfix = xfix
+    C.map = map
+    C.tok = tok
+    C.sgn = sgn
+    C.osc = osc
+    C.n = n
+    C.m = m
+    C.nnz = rows(jr)
+    C.IDX = J(n * m, 1, 0)
+    if (m) C.IDX[(jc :- 1) :* m :+ jr] = (1::rows(jr))
+    // the exact Hessian where it can be found at the start
+    exact = (M.opthess != 1)
+    if (exact) exact = _cge_nlp_hess(M, M.p, xfix, S, z0, tok, sgn, osc, map, J(m, 1, 0), W)
+    if (!exact & M.opthess != 1 & trace) printf("{txt}The exact Hessian cannot be found; IPOPT's limited-memory approximation\n")
+    if ((q = findexternal("cge__ipctx")) == NULL) q = crexternal("cge__ipctx")
+    *q = C
+    if ((q = findexternal("cge__ipz")) == NULL) q = crexternal("cge__ipz")
+    *q = J(n, 1, 0)
+    if ((q = findexternal("cge__ipl")) == NULL) q = crexternal("cge__ipl")
+    *q = J(m + 1, 1, 0)
+    if ((q = findexternal("cge__ipo")) == NULL) q = crexternal("cge__ipo")
+    *q = J(1, 1, 0)
+    tlim = _cge_opttime(M, -1)
+    _cge_binwrite(_cge_py_tmp(1), z0 \ L \ U \ jr \ jc)
+    // the output of IPOPT shown with trace
+    rc = _stata("python: " + _cge_py_pre() + "cge_scipy.ipopt(" + _cge_pystr(_cge_py_tmp(1)) + ", " +
+                _cge_pystr(_cge_py_tmp(3)) + ", " +
+                strofreal(n, "%12.0f") + ", " + strofreal(m, "%12.0f") + ", " + strofreal(C.nnz, "%12.0f") + ", " +
+                strofreal(tol, "%21.15g") + ", " + strofreal(maxit, "%12.0f") + ", " + strofreal(exact) + ", " +
+                strofreal(trace != 0) + ", " + (tlim < . ? strofreal(tlim, "%21.15g") : "-1") + ")", (trace == 0))
+    rmexternal("cge__ipctx")
+    rmexternal("cge__ipz")
+    rmexternal("cge__ipl")
+    rmexternal("cge__ipo")
+    if (rc) {
+        _cge_py_clean()
+        _cge_fail("solver(ipopt): the call of cyipopt failed", 459)
+    }
+    rc = _cge_py_rc()
+    iter = st_numscalar("CGE_HIT")
+    st_numscalar("CGE_HIT", J(0, 0, .))
+    st_numscalar("CGE_HOBJ", J(0, 0, .))
+    out = _cge_binread(_cge_py_tmp(3), n + m)
+    _cge_py_clean()
+    x = xfix
+    x[S.free] = out[|1 \ n|] :* M.xscale[S.free]
+    err = _cge_maxres(M, M.p, x)
+    feas = (err < max((tol, 1e-8)))
+    // IPOPT's statuses in GAMS's codes, as GAMS's link to IPOPT gives them
+    conv = (rc == 0 | rc == 1)
+    if (conv) {
+        ms = 2
+        ss = 1
+    }
+    else if (rc == 2) {
+        ms = 5
+        ss = 1
+    }
+    else if (rc == -1) {
+        ms = (feas ? 7 : 6)
+        ss = 2
+    }
+    else if (rc == -4 | rc == 5) {
+        ms = (feas ? 7 : 6)
+        ss = 3
+    }
+    else if (rc == -13) {
+        ms = (feas ? 7 : 6)
+        ss = 5
+    }
+    else if (rc == 3 | rc == 4 | rc == -2 | rc == -3 | rc == 6) {
+        ms = (feas ? 7 : 6)
+        ss = 4
+    }
+    else {
+        ms = 13
+        ss = 13
+    }
+    fobj = (rc < . ? _cge_u_value(M, M.p, x, tok) : .)
+    lam = J(0, 1, .)
+    if (m & conv) {
+        esc = select(M.escale, S.mask)
+        lam = -sgn * osc :* out[|n + 1 \ n + m|] :/ esc
+    }
+    return(x)
+}
+
+// The rows and columns of the entries of matrix A that are not zero
+real matrix _cge_nz_rc(real matrix A)
+{
+    real colvector v
+    if (!rows(A) | !cols(A)) return(J(0, 2, .))
+    v = selectindex(vec(A) :!= 0)
+    if (!rows(v) | !cols(v)) return(J(0, 2, .))
+    return((mod(v :- 1, rows(A)) :+ 1, floor((v :- 1) :/ rows(A)) :+ 1))
+}
+
+// An evaluation that IPOPT asks for, at the point in cge__ipz, into
+// cge__ipo: k 1 the objective, 2 its gradient, 3 the scaled residuals of the
+// equations, 4 the entries of their Jacobian on its structure, 5 the lower
+// triangle, column by column, of the Hessian of the Lagrangian with the
+// multipliers and the objective's factor in cge__ipl. A value that cannot
+// be found is missing, which IPOPT treats as an error of evaluation and
+// steps back from.
+void _cge_ipcb(real scalar k)
+{
+    pointer(struct cge_ipctx scalar) scalar C
+    pointer() scalar q
+    real colvector in, z, x, out, gf, jr, jc, jv, lam, pos, sel
+    real matrix W
+    real scalar f, sig, nh
+    // the context in place, without a copy of the model
+    C = findexternal("cge__ipctx")
+    z = *findexternal("cge__ipz")
+    in = *findexternal("cge__ipl")
+    x = C->xfix
+    x[C->S.free] = z :* C->M.xscale[C->S.free]
+    if (k == 1) {
+        f = _cge_u_value(C->M, C->M.p, x, C->tok)
+        out = (f < . ? C->sgn * f / C->osc : .)
+    }
+    else if (k == 2) {
+        f = _cge_nlp_f(C->M, C->M.p, x, C->tok, C->n, C->map, gf)
+        out = (f < . & !hasmissing(gf) ? C->sgn :* gf :/ C->osc : J(C->n, 1, .))
+    }
+    else if (k == 3) out = (C->m ? _cge_F(C->M, C->M.p, C->xfix, C->S, z) : J(0, 1, .))
+    else if (k == 4) {
+        out = J(C->nnz, 1, 0)
+        if (C->m) {
+            if (!_cge_jac_trip(C->M, C->M.p, C->xfix, C->S, z, jr, jc, jv)) out = J(C->nnz, 1, .)
+            else if (rows(jv)) {
+                pos = C->IDX[(jc :- 1) :* C->m :+ jr]
+                sel = selectindex(pos :> 0)
+                if (rows(sel) & cols(sel)) out = _cge_sumby(pos[sel], jv[sel], C->nnz)
+            }
+        }
+    }
+    else {
+        nh = C->n * (C->n + 1) / 2
+        lam = (C->m ? in[|1 \ C->m|] : J(0, 1, .))
+        sig = in[C->m + 1]
+        if (_cge_nlp_hess(C->M, C->M.p, C->xfix, C->S, z, C->tok, C->sgn * sig, C->osc, C->map, lam, W)) out = vech(W)
+        else out = J(nh, 1, .)
+    }
+    q = findexternal("cge__ipo")
+    *q = out
+}
+
+// =====================================================================
 // Link to household surveys (model_spec.md, Section 11; from version 0.2.2)
 // =====================================================================
 
@@ -26674,7 +26910,7 @@ string scalar _cge_py_tmp(real scalar k)
 void _cge_py_clean()
 {
     real scalar k
-    for (k = 1; k <= 3; k++) if (fileexists(_cge_py_tmp(k))) unlink(_cge_py_tmp(k))
+    for (k = 1; k <= 5; k++) if (fileexists(_cge_py_tmp(k))) unlink(_cge_py_tmp(k))
 }
 
 // A column of doubles written to file fn, little-endian, 8 bytes each
@@ -28347,6 +28583,11 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     if (solver == "highs") {
         x = _cge_highs(M2, xs, start, tok, sgn, ipos, conv, iter, err, fobj, lam, ms, ss, nn, bnd)
     }
+    // IPOPT through cyipopt (from version 0.41.0)
+    else if (solver == "ipopt") {
+        if (rows(ipos)) _cge_fail("solver(ipopt) solves continuous programmes; the model has integer or binary variables, which branch and bound takes", 198)
+        x = _cge_ipopt(M2, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, ms, ss)
+    }
     else if (rows(ipos)) {
         x = _cge_bb(M2, xs, start, tok, sgn, tol, maxit, trace, ipos, nodes, optcr, conv, iter, err, fobj, lam, nn, bnd, ms, ss, starts)
     }
@@ -28356,7 +28597,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     _cge_set_simobj(M, k, obj)
     _cge_set_simmodel(M, k, mname)
     // the statuses, in GAMS's codes (from version 0.16.0)
-    if (!rows(ipos) & solver != "highs") _cge_status(conv, 0, 1, feas, err, ms, ss)
+    if (!rows(ipos) & solver != "highs" & solver != "ipopt") _cge_status(conv, 0, 1, feas, err, ms, ss)
     _cge_set_simstat(M, k, ms, ss)
     _cge_store(M)
     if (solver == "highs") {
@@ -28367,6 +28608,13 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
             _cge_status_show(ms, ss)
         }
         if (bnd < .) printf("{txt}Best bound {res}%16.10g\n", bnd)
+    }
+    else if (solver == "ipopt") {
+        if (conv) printf("{txt}Simulation {res}%s{txt} solved by IPOPT (cyipopt): {res}%f{txt} iteration(s)\n", name, iter)
+        else {
+            printf("{err}Simulation %s: IPOPT found no optimum\n", name)
+            _cge_status_show(ms, ss)
+        }
     }
     else if (rows(ipos)) {
         if (conv) printf("{txt}Simulation {res}%s{txt} solved by branch and bound: {res}%f{txt} node(s), {res}%f{txt} iteration(s)\n",
@@ -28387,7 +28635,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     if (!rows(ipos) & starts > 1) printf("{txt}Multi-start: {res}%f{txt} of {res}%f{txt} start(s) converged; the best from start {res}%f\n",
                                          nconv, starts, best)
     printf("{txt}%s %s: {res}%16.10g\n", (sgn < 0 ? "Maximised" : "Minimised"), substr(obj, 5, .), fobj)
-    printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) | solver == "highs" ? "residual of the equations" : "error of the optimality conditions"), err)
+    printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) | solver == "highs" | solver == "ipopt" ? "residual of the equations" : "error of the optimality conditions"), err)
     st_numscalar("r(converged)", conv)
     st_numscalar("r(iterations)", iter)
     st_numscalar("r(max_residual)", err)
@@ -28397,7 +28645,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     S = _cge_sys_make(M2, 0)
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
     st_global("r(model)", mname)
-    st_global("r(solver)", (solver == "highs" ? "highs" : (rows(ipos) ? "bb" : "ipm")))
+    st_global("r(solver)", (solver == "highs" ? "highs" : (solver == "ipopt" ? "ipopt" : (rows(ipos) ? "bb" : "ipm"))))
     // the Hessians of the interior point (from version 0.28.0)
     hc = _cge_hess_count(-1)
     st_global("r(hessian)", (hc[1] + hc[2] == 0 ? "" : (hc[2] == 0 ? "exact" : (hc[1] == 0 ? "differences" : "exact, differences where it failed"))))

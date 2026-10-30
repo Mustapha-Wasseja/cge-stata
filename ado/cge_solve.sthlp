@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.24.0  25oct2026}{...}
+{* *! version 0.41.0  30oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt step:s(#)} {opt trace}
 {opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}
-{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)} {opt starts(#)} {opt sol:ver(highs)}
+{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)} {opt starts(#)} {opt sol:ver(name)}
 {opt block:s}]
 
 
@@ -222,6 +222,26 @@ equations. {bf:Caution:} it works only on Stata 16 and later with Python and
 SciPy; Stata 13 to 15 stop with an error.
 
 {phang}
+{opt solver(ipopt)} (from version 0.41.0, experimental) solves a nonlinear
+programme with IPOPT (Waechter and Biegler 2006), through the Python package
+{browse "https://cyipopt.readthedocs.io":cyipopt}, in place of the package's
+interior point, as GAMS does with {cmd:option nlp = ipopt}. IPOPT works in the
+scaled variables of the package's interior point and asks Mata for each value
+it needs: the objective and its gradient, the residuals of the equations and
+their sparse Jacobian, and the exact Hessian of the Lagrangian, or IPOPT's
+limited-memory approximation with {cmd:cge_options, hessian(differences)}
+(which may need {cmd:iterate(1000)}). {opt tolerance()}, {opt iterate()} and
+{opt timelimit()} pass to IPOPT, and {opt trace} displays its output. The
+marginals of the equations are in the units of the interior point's, and the
+statuses follow those of GAMS's link to IPOPT: 5 for a point that is locally
+infeasible, 6 or 7 for an iteration limit. It takes continuous programmes:
+integer and binary variables, and {opt starts()}, stop with error 198. The
+first solve of a session also loads IPOPT, which took about 7 seconds on
+Windows. {bf:Caution:} it works only on Stata 16 and later with Python,
+SciPy and cyipopt ({cmd:pip install cyipopt}, which needs a build of IPOPT);
+without them, the option stops with error 198.
+
+{phang}
 {opt blocks} (from version 0.35.0) solves a standalone model ({helpb cge_model})
 block by block: the blocks of its square part that {helpb cge_structure}
 finds, in an order in which each depends only on itself and on those before
@@ -275,7 +295,7 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(starts)}}starts of the interior point (from version 0.24.0){p_end}
 {synopt:{cmd:r(best_start)}}the start of the best solution, with starts() and no integers{p_end}
 {synopt:{cmd:r(N_starts_converged)}}the starts that converged{p_end}
-{synopt:{cmd:r(solver)}}{cmd:ipm}, {cmd:bb} or {cmd:highs} (from version 0.27.0){p_end}
+{synopt:{cmd:r(solver)}}{cmd:ipm}, {cmd:bb}, {cmd:highs} (from version 0.27.0) or {cmd:ipopt} (from version 0.41.0){p_end}
 {synopt:{cmd:r(hessian)}}the Hessians of the interior point: {cmd:exact} or {cmd:differences} (from version 0.28.0){p_end}
 {synopt:{cmd:r(N_hessian_exact)}}its iterations with exact Hessians{p_end}
 {synopt:{cmd:r(N_hessian_differences)}}its iterations with differences{p_end}

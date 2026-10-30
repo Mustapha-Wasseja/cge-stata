@@ -3550,6 +3550,67 @@ against central differences, 8e-10; a solve with difference Jacobians to
 and use; clear; errors). Export check: case `addterm` (I8, S2, P1, I7 with an
 index, and I9 with a term not zero at the base) against GAMS.
 
+## 51. IPOPT through cyipopt (from version 0.41.0; experimental)
+
+`cge_solve, minimize()|maximize() solver(ipopt)` solves a nonlinear programme
+of a standalone model with IPOPT (Wächter and Biegler 2006), through the
+Python package cyipopt, on Stata 16 and later with Python and SciPy, which
+the module `cge_scipy.py` needs (`_cge_py_ready`, Section 36).
+`_cge_py_has("cyipopt")` finds out once per session whether cyipopt can be
+imported (the external `cge__pyhas_cyipopt`); without them the option stops
+with error 198. Integer
+and binary variables, and `starts()`, also stop with error 198.
+
+The programme is that of the interior point (Section 30), in the scaled free
+variables z of `_cge_sys_make`: min s f(z)/o subject to the scaled residuals
+c(z) = 0 and the scaled bounds, with s the sense and o = max(1, max|grad
+f(z0)|/100) the scale of the objective. `_cge_ipopt` writes z0, the bounds
+(+-1e300 where there are none, which Python passes as +-1e20, IPOPT's
+infinity) and the structure of the Jacobian, the pattern of the system in
+the free variables together with the entries not zero at the start, to a
+binary file, and calls `cge_scipy.ipopt`. The context of the solve (the
+model, its system, the fixed values, the objective's postfix rows, s and o)
+is kept in the external `cge__ipctx`.
+
+IPOPT asks for each value through the callbacks of cyipopt's problem; each
+stores z in the Mata matrix `cge__ipz` (`sfi.Mata.store`), for the Hessian
+also the multipliers and the objective's factor in `cge__ipl`, runs `mata:
+_cge_ipcb(k)` (`SFIToolkit.stata`), and reads the result from `cge__ipo`
+(`sfi.Mata.get`): k = 1 the objective, 2 its gradient, 3 the residuals
+(`_cge_F`), 4 the entries of the Jacobian on its structure (`_cge_jac_trip`,
+summed by position), 5 the lower triangle of the Hessian of the Lagrangian,
+column by column (`vech` of `_cge_nlp_hess` with the objective's factor times
+s). Stata's missing values come back as NaN, which IPOPT treats as an error
+of evaluation. The exact Hessian is used unless `cge_options,
+hessian(differences)` is set or it cannot be found at the start; IPOPT's
+limited-memory approximation then takes its place. A file per evaluation
+took 38 s on Hock and Schittkowski's problem 71; the Mata matrices take
+about 1 ms per evaluation, and the first solve of a session about 7 s more,
+which is the loading of cyipopt and IPOPT.
+
+Options: `tolerance()` is IPOPT's `tol`, `iterate()` its `max_iter`,
+`timelimit()` its `max_wall_time`; `trace` sets `print_level` 5. The
+solution x is checked by the largest scaled residual. Statuses, as GAMS's
+link to IPOPT gives them: IPOPT's 0 and 1 (solved, to an acceptable level)
+model status 2, solver status 1; 2 (infeasible) 5 and 1; -1 (iteration
+limit) 6, or 7 if the point is feasible, and 2; -4 and 5 (time limit) 6 or 7
+and 3; -13 (an invalid number) 6 or 7 and 5; 3, 4, -2, -3, 6 6 or 7 and 4;
+anything else 13 and 13. The marginals of the equations are -s o y_k/e_k
+for IPOPT's multiplier y_k and the scale e_k of equation k, those of the
+interior point; `r(solver)` is `ipopt`.
+
+Tests: `tests/test_ipopt.do` (Hock and Schittkowski's problem 71 against its
+published optimum, 3e-7, and against the interior point, solution 1e-6 and
+marginals 1e-5; maximisation, the marginals of the opposite sign; the
+limited-memory Hessian; the iteration limit, statuses 6 and 2; a
+Cobb-Douglas utility on a budget against its closed form and the marginal
+utility of income; Wächter and Biegler's example from (-2, 3, 1), written as
+x1^2 = x2 + 1 and x1 = x3 + 1/2, to (1, 0, 1/2); Rosenbrock's function
+without equations; an infeasible programme, status 5; errors). On Stata 13
+to 15 the test checks error 198. Written as x1^2 - x2 - 1 = 0 and x1 - x3 -
+1/2 = 0, whose scaled residuals have a local minimum near x1 = -1 (Section
+46), the same start leaves IPOPT, like the interior point, near x1 = -1.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

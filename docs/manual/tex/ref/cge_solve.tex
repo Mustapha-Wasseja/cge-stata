@@ -59,6 +59,7 @@ cge_solve, name(ls) minimize(sum(i, X(i)^2))
 \optarg{}{optcr}{\#} & relative gap of branch and bound; default \texttt{0}\\
 \optarg{}{starts}{\#} & points the interior point starts from; default \texttt{1}\\
 \optarg{sol}{ver}{highs} & HiGHS through SciPy, Stata 16 and later\\
+\optarg{sol}{ver}{ipopt} & IPOPT through cyipopt, Stata 16 and later\\
 \opt{block}{s} & solve a standalone model block by block\\
 \optarg{step}{s}{\#} & apply the shocks in \argu{\#} equal steps; default \texttt{0}, only after a direct solve fails\\
 \optgroup{Nonlinear programmes of standalone models}
@@ -147,6 +148,28 @@ programme returns the marginals of its equations, in the units of the
 interior point's; the statuses follow GAMS's codes, 3 for an unbounded and 4
 for an infeasible programme. It works only on Stata 16 and later with Python
 and SciPy; Stata 13 to 15 stop with an error.
+
+\item[\optarg{sol}{ver}{ipopt}] (from version 0.41.0, experimental) solves a
+nonlinear programme with IPOPT (W\"achter and Biegler 2006), through the
+Python package cyipopt, in place of the package's interior point, as GAMS
+does with \cmd{option nlp = ipopt}. IPOPT works in the scaled variables of
+the interior point and asks Mata for each value it needs: the objective and
+its gradient, the residuals of the equations and their sparse Jacobian, and
+the exact Hessian of the Lagrangian, or IPOPT's limited-memory approximation
+with \cmd{cge_options, hessian(differences)}. \opt{tol}{erance()},
+\opt{iter}{ate()} and \opt{time}{limit()} pass to IPOPT, and \opt{}{trace}
+displays its output. The marginals of the equations are in the units of the
+interior point's, and the statuses follow those of GAMS's link to IPOPT: 5
+for a point that is locally infeasible, 6 or 7 for an iteration limit.
+Integer and binary variables, and \opt{}{starts()}, stop with error 198. On
+Hock and Schittkowski's (1981) problem 71, IPOPT reaches the published
+optimum, and the marginals of the interior point, in 26 iterations. The first
+solve of a session also loads IPOPT, which took about 7 seconds on Windows;
+later ones took 0.7 seconds on that problem, against 0.2 seconds for the
+interior point, as each value IPOPT asks for passes between Python and Mata.
+It works only on Stata 16 and later with Python, SciPy and cyipopt
+(\cmd{pip install cyipopt}, which needs a build of IPOPT); without them, the
+option stops with error 198.
 
 \item[\optarg{time}{limit}{\#}] (from version 0.16.0) sets a time limit in
 seconds, as GAMS's \cmd{reslim}; by default there is none, or the limit set by
@@ -404,7 +427,7 @@ to the tolerance, and the test suite checks that they do.
 \res{r(starts)} & starts of the interior point (from version 0.24.0)\\
 \res{r(best_start)} & the start of the best solution, with \opt{}{starts} and no integers\\
 \res{r(N_starts_converged)} & the starts that converged\\
-\res{r(solver)} & \cmd{ipm}, \cmd{bb} or \cmd{highs} (from version 0.27.0)\\
+\res{r(solver)} & \cmd{ipm}, \cmd{bb}, \cmd{highs} (from version 0.27.0) or \cmd{ipopt} (from version 0.41.0)\\
 \res{r(hessian)} & the interior point's Hessians: \cmd{exact} or \cmd{differences} (from version 0.28.0)\\
 \res{r(N_hessian_exact)} & its iterations with exact Hessians\\
 \res{r(N_hessian_differences)} & its iterations with differences\\
