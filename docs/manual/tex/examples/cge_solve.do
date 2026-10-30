@@ -76,3 +76,17 @@ cge_bound S, lower(0)
 cge_solve, name(knap) maximize(sum(i, v(i) * X(i)))
 cge_results, sim(knap)
 *<<
+
+*>> solve_restore
+cge_model new
+cge_variable X1, value(-2)
+cge_variable X2, value(3)
+cge_variable X3, value(1)
+cge_equation c1: X1^2 = X2 + 1
+cge_equation c2: X1 = X3 + 0.5
+cge_bound X2, lower(0)
+cge_bound X3, lower(0)
+cge_solve, name(wb) minimize(X1)
+display r(N_restorations)
+cge_results, sim(wb)
+*<<

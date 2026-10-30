@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.35.0  29oct2026}{...}
+{* *! version 0.36.0  30oct2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -107,6 +107,7 @@ examples. Its repository path is {cmd:docs/manual/cge-stata-manual.pdf}.
 {p2col:{helpb cge_check}}run validation checks{p_end}
 {p2col:{helpb cge_listing}}equation listing and infeasibility report{p_end}
 {p2col:{helpb cge_structure}}structure of the system: structural singularity and blocks{p_end}
+{p2col:{helpb cge_iis}}irreducible infeasible set of bounds and constraints{p_end}
 {p2col:{helpb cge_gdx}}GAMS data exchange (GDX) files: write, read and list{p_end}
 {p2col:{helpb cge_parameters}}calibrated parameters as a dataset{p_end}
 {p2col:{helpb cge_save}}save the model and its simulations{p_end}

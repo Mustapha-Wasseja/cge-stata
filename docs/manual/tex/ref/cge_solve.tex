@@ -327,6 +327,29 @@ The solution is the RAS balance of the prior, $X_{rc} = \rho_r A_{rc}
 \citep{mcdougall1999}, to $10^{-11}$, as the test suite checks.
 \manref{cge_balance} balances a SAM by these methods directly.
 
+\cgesubsec{Feasibility restoration}
+
+From version 0.36.0, the interior point has a feasibility restoration phase,
+after IPOPT's \citep{wachter2006}. Where it cannot find a step, its line
+search fails, or the step it takes is too short to move, at a point that
+does not satisfy the equations, it looks for a point of smaller
+infeasibility: it minimises the squared norm of the scaled residuals by
+projected Levenberg--Marquardt steps within the bounds, near the point at
+first, until the norm falls by a tenth, and goes on from there with its
+slacks and multipliers started again. Where the steps end at a stationary
+point of the infeasibility, the programme is locally infeasible (model
+status 5), and the method stops there rather than at its iteration limit.
+The example of \citet{wachter2000}, on which interior-point methods of this
+kind stall at an infeasible point, solves with two restorations:
+\stlog{solve_restore}
+The residuals are scaled by their base values, so the form of an equation
+matters to restoration as to Newton's method. Written as $x_1^2 - x_2 - 1 =
+0$ and $x_1 - x_3 - 1/2 = 0$, the scaled residuals have a local minimum near
+$x_1 = -1$, toward which the iterates go from the same start: restoration
+stops the method there after 10 iterations, locally infeasible, where it
+had used all its iterations before. \manref{cge_iis} finds the bounds and
+constraints that leave a scenario without a solution.
+
 \cgesubsec{Example 6: integer variables}
 
 From version 0.18.0, integer and binary variables (\manref{cge_bound}) make a
@@ -385,6 +408,7 @@ to the tolerance, and the test suite checks that they do.
 \res{r(hessian)} & the interior point's Hessians: \cmd{exact} or \cmd{differences} (from version 0.28.0)\\
 \res{r(N_hessian_exact)} & its iterations with exact Hessians\\
 \res{r(N_hessian_differences)} & its iterations with differences\\
+\res{r(N_restorations)} & its feasibility restorations (from version 0.36.0)\\
 \res{r(linsolver)} & the linear solver: \cmd{dense}, \cmd{sparse} or \cmd{auto} (from version 0.10.1)\\
 \res{r(closure)} & closure\\
 \res{r(constraints)} & the constraints and their regimes, if any\\

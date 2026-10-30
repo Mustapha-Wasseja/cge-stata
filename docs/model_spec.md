@@ -3317,6 +3317,83 @@ singular user addition named; errors) and `tests/test_blocksolve.do` (the
 solutions block by block against the whole system; the blocks counted; box
 pairs; errors).
 
+## 46. Feasibility restoration and irreducible infeasible sets (from version 0.36.0)
+
+**Restoration of the interior point.** `_cge_nlp_solve` enters restoration
+(`_cge_nlp_resto`) at a point whose largest scaled residual exceeds
+max(tol, 1e-8) where its KKT system cannot be solved even with the
+regularisation, where the line search fails, or where the step it accepts
+is too short to move, a times max|dz| at most 1e-10 max(1, max|z|). The last
+is the stall of Wachter and Biegler's (2000) example, where the linearised
+equations and the bounds cannot hold together and the fraction to the
+boundary cuts every step to nearly nothing. There are at most ten attempts
+in a solve.
+
+Restoration (`_cge_nlp_restore`) minimises
+phi(z) = (1/2)||c(z)||^2 + (zeta/2)||D(z - z0)||^2, D = diag(1/max(1, |z0|)),
+by projected Levenberg-Marquardt steps: (J'J + zeta D'D + lambda I) d =
+-grad phi over the variables not held at a bound (a variable is held where
+it lies at the margin of a bound, 1e-6 relative, and the gradient points out
+through it), the step projected into the bounds less that margin and halved
+until phi falls; lambda falls by 3 after a success and rises by 10 after a
+failure, to 1e10. The first phase has zeta = sqrt(mu), which keeps the point
+near z0; the second, from where the first ends, zeta = 0. Restoration
+succeeds when ||c|| falls to 0.9 of its value at z0, or max|c| below
+max(tol, 1e-8). The method then goes on from that point pushed inside its
+bounds as the start is, with the slacks started again, the bound
+multipliers mu/s capped at 1e3 (IPOPT's reset), and least-squares
+multipliers of the equations. Where it fails and the gradient of
+(1/2)||c||^2, projected on the bounds, is within 1e-5 max(1, max|c|) of zero
+at a point that does not satisfy the equations, the infeasibility has a
+local minimum: the method stops, and the status is 5 (locally infeasible).
+Otherwise the point is unchanged. `r(N_restorations)` counts the successes;
+the external `cge__norest` set to 1 leaves restoration out (a test hook).
+
+On Wachter and Biegler's example, min x1 subject to x1^2 = x2 + 1, x1 = x3 +
+1/2, x2, x3 >= 0, from (-2, 3, 1), the method stalled at x1 = -1.22 (model
+status 5); with restoration it reaches (1, 0, 1/2) after two, in 21
+iterations. Written as x1^2 - x2 - 1 = 0 and x1 - x3 - 1/2 = 0, whose
+scaled residuals (scaled by base values, Section 15) have a local minimum
+near x1 = -1, the same start stalls at x1 = -0.98 and used every iteration;
+with restoration it stops there after 10, locally infeasible. Over a grid of
+seven starts and three forms (21 runs, 200 iterations), 3 solved without
+restoration and 12 with it.
+Some starts reach the feasible region near the solution and then converge
+slowly, the bound multipliers far from the central path; that, and a
+feasible start from which the reduced Hessian of a linear objective is
+nearly singular, are left for later work. In branch and bound, relaxations
+that cannot be satisfied end sooner: the knapsack of the Reference Manual
+(cge_solve, Example 6) takes 294 iterations of the interior point instead of
+340 on Stata 13, with the same 28 nodes and the same optimum.
+
+**Irreducible infeasible sets.** `cge_iis [, tolerance(#) iterate(#) trace]`
+applies the deletion filter of Chinneck and Dravnieks (1991) to the bounds
+(cge_bound, lower then upper, in the order of `cge_bound, list`) and the
+constraints (cge_constraint, and inequalities of cge_equation, with their
+regimes reset): F(S), the scenario with the candidates S does not solve;
+F(empty) must be false and F(C) true; then, from S = C, each c in turn is
+dropped for good where F(S \ {c}). The result S has F(S) true and
+F(S \ {c}) false for each c in it (Chinneck 2008). A try copies the model,
+selects the bounds and constraints (`_cge_selcol`; constraints through
+`_cge_cons_rebuild`), and solves from `_cge_bd_start`; a bound on a fixed
+variable outside it fails without a solve. Each solve is at the first level
+at which the scenario without candidates solves: 0, Newton's method alone
+(the external `cge__nofb`, which `_cge_solve_sys` reads, leaves the
+fallbacks out; `_cge_load` clears it at every command, so an error inside a
+try does not leave it set); 1, with the fallbacks of `_cge_solve_sys`
+(central differences, Powell's hybrid method); 2, with them and then in 4
+and 16 steps (`_cge_continue`). On the SYNTHETIC SAM, a solve that fails on
+a bound takes about a minute in the fallbacks and the search at level 0 0.65
+seconds (10 solves).
+
+Tests: `tests/test_restore.do` (Wachter and Biegler's example solved with
+restoration and not without it, from three starts; the local minimum of the
+infeasibility of the other form, against the iteration limit without
+restoration; x + y = 5 with x, y <= 1, locally infeasible; a programme that
+solves without restoration unchanged; on the SYNTHETIC SAM, one bound among
+eight found in 10 solves, a scenario that solves, and a quota inequality
+with a cap on its rent found together among three; errors).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

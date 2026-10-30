@@ -1,0 +1,29 @@
+. cge_equation quota: QM(com_man) =l= 0.98 * base(QM(com_man)), perp(RM(com_man))
+User inequality quota: 1 element(s), QM(com_man) <= 0.98 * base(QM(com_man)), paired with RM(com_man
+> ), which may move up
+
+. cge_solve, name(quota)
+Simulation quota solved in 6 iteration(s) (semismooth)
+Largest scaled residual  1.14e-15; WALRAS =  1.19e-13
+Constraints
+  inequality quota, RM(com_man) up, rents to gov: binding
+      _S_quota =            0;  RM(com_man) =  .0974359998
+
+. cge_bound RM(com_man), upper(0.0487)
+Variable RM: upper bound 0.0487 for 1 element(s)
+
+. cge_bound QM(com_agr), lower(0.5) relative
+Variable QM: lower bound 0.5, times the base for 1 element(s)
+
+. cge_iis
+Bounds and constraints: 1 lower bound(s), 1 upper bound(s), 1 constraint(s)
+An irreducible infeasible set of 2 bound(s) and constraint(s), found in 5 solves:
+  upper bound of RM(com_man), .0487
+  constraint inequality quota, RM(com_man) up, rents to gov
+Without any one of them, the scenario solves
+
+. cge_bound, clear
+Attributes of variables removed
+
+. cge_equation, clear
+User variables and equations removed

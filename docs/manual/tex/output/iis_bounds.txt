@@ -1,0 +1,28 @@
+. cge_shock tm, value(0)
+Parameter tm changed for 3 element(s)
+
+. cge_bound QM(com_man), upper(1) relative
+Variable QM: upper bound 1, times the base for 1 element(s)
+
+. cge_bound QM(com_agr), lower(0.5) relative
+Variable QM: lower bound 0.5, times the base for 1 element(s)
+
+. cge_bound PQ, lower(0.5) upper(2) relative
+Variable PQ: lower bound 0.5, upper bound 2, times the base for 3 element(s)
+
+. cge_iis, trace
+Bounds and constraints: 4 lower bound(s), 4 upper bound(s), 0 constraint(s)
+  lower bound of PQ(com_agr), .5: left out
+  lower bound of PQ(com_man), .5: left out
+  lower bound of PQ(com_ser), .5: left out
+  lower bound of QM(com_agr), 10: left out
+  upper bound of PQ(com_agr), 2: left out
+  upper bound of PQ(com_man), 2: left out
+  upper bound of PQ(com_ser), 2: left out
+  upper bound of QM(com_man), 60: kept, the scenario solves without it
+An irreducible infeasible set of 1 bound(s) and constraint(s), found in 10 solves:
+  upper bound of QM(com_man), 60
+Without any one of them, the scenario solves
+
+. cge_bound, clear
+Attributes of variables removed

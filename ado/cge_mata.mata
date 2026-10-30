@@ -275,7 +275,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.35.0")
+    return("0.36.0")
 }
 
 // =====================================================================
@@ -285,6 +285,9 @@ string scalar _cge_version()
 struct cge_model scalar _cge_load()
 {
     pointer() scalar q
+    // the fallbacks of Newton's method are on again at each command (from
+    // version 0.36.0; _cge_nofb)
+    (void) _cge_nofb(0)
     q = findexternal("cge__model")
     if (q == NULL) {
         errprintf("no SAM in memory; load one with cge_sam\n")
@@ -8959,7 +8962,8 @@ real colvector _cge_solve_sys(struct cge_model scalar M, struct cge_par scalar p
     // no fallback once the time limit has passed or Newton has used the
     // iteration limit (from version 0.16.0), as a GAMS solver stops at its
     // limits
-    if (!conv & !force & (_cge_stop() == 3 | iter >= maxit)) {
+    // nor where cge_iis leaves them out (from version 0.36.0)
+    if (!conv & !force & (_cge_stop() == 3 | iter >= maxit | _cge_nofb(-1))) {
         x = xfix
         x[S.free] = z :* M.xscale[S.free]
         if (S.reduced) _cge_derive(M, p, x)
@@ -17472,6 +17476,326 @@ real matrix _cge_blk_J(struct cge_model scalar M, struct cge_par scalar p, real 
         Jb[r, .] = (gl - gr) :* M.xscale[pos]' :/ M.escale[ge[r]]
     }
     return(Jb)
+}
+
+// Feasibility restoration of the interior point (from version 0.36.0;
+// model_spec.md, Section 46), after IPOPT's restoration phase: from z0, a
+// point of smaller infeasibility, minimising
+//   phi(z) = (1/2) ||c(z)||^2 + (zeta/2) ||D (z - z0)||^2,  L < z < U,
+// by projected Levenberg-Marquardt steps: (J'J + zeta D'D + lambda I) d =
+// -grad phi over the variables that are not held at a bound, the step
+// projected into the bounds less a margin and shortened until phi falls. A
+// variable is held where it lies at the margin of a bound and the gradient
+// points out through it. D = diag(1 / max(1, |z0|)); zeta = sqrt(mu) keeps
+// the point near z0, then zeta = 0 where that is not enough. Returns 1 with z
+// when the norm of the scaled residuals falls to 0.9 of its value at z0, or
+// the largest below max(tol, 1e-8); otherwise 0 with z0, and infeas 1 where
+// the steps end at a
+// stationary point of the infeasibility, the gradient of (1/2)||c||^2
+// projected on the bounds vanishing at a point that does not satisfy the
+// equations: a local minimum of the infeasibility, where the programme is
+// locally infeasible.
+real scalar _cge_nlp_restore(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                             struct cge_sys scalar S, real colvector z, real matrix tok, real scalar sgn,
+                             real scalar osc, real colvector map, real colvector L, real colvector U,
+                             real scalar mu, real scalar tol, real scalar infeas)
+{
+    real colvector z0, D2, c, cn, gf, gfn, g, d, zn, Lm, Um, fr, sel
+    real matrix Jm, Jn, H
+    real scalar n, f, fn, c0, phi, phin, zeta, lam, it, a, i, ok, ph
+    n = rows(z)
+    infeas = 0
+    z0 = z
+    D2 = 1 :/ (rowmax((J(n, 1, 1), abs(z0))) :^ 2)
+    // the bounds less a margin, so that the point stays inside them
+    Lm = L
+    Um = U
+    for (i = 1; i <= n; i++) {
+        if (L[i] < .) Lm[i] = L[i] + min((1e-6 * max((1, abs(L[i]))), 0.5 * (z0[i] - L[i])))
+        if (U[i] < .) Um[i] = U[i] - min((1e-6 * max((1, abs(U[i]))), 0.5 * (U[i] - z0[i])))
+    }
+    if (!_cge_nlp_eval(M, p, xfix, S, z, tok, sgn, osc, map, f, gf, c, Jm)) return(0)
+    c0 = sqrt(c' * c)
+    for (ph = 1; ph <= 2; ph++) {
+        zeta = (ph == 1 ? sqrt(max((mu, 1e-12))) : 0)
+        phi = 0.5 * (c' * c) + 0.5 * zeta * sum(D2 :* (z - z0) :^ 2)
+        lam = 1e-4
+        for (it = 1; it <= 200; it++) {
+            g = Jm' * c + zeta * D2 :* (z - z0)
+            // the variables held at a bound
+            fr = J(n, 1, 1)
+            for (i = 1; i <= n; i++) {
+                if (L[i] < .) if (z[i] <= Lm[i] + 1e-12 * max((1, abs(Lm[i]))) & g[i] > 0) fr[i] = 0
+                if (U[i] < .) if (z[i] >= Um[i] - 1e-12 * max((1, abs(Um[i]))) & g[i] < 0) fr[i] = 0
+            }
+            sel = _cge_which(fr)
+            if (!rows(sel)) break
+            H = Jm' * Jm + diag(zeta * D2)
+            d = J(n, 1, 0)
+            d[sel] = lusolve(H[sel, sel] + lam * I(rows(sel)), -g[sel])
+            if (hasmissing(d)) {
+                lam = lam * 10
+                if (lam > 1e10) break
+                continue
+            }
+            // the projected step, shortened until phi falls
+            ok = 0
+            for (a = 1; a >= 1e-6; a = a / 4) {
+                zn = z + a * d
+                for (i = 1; i <= n; i++) {
+                    if (Lm[i] < .) zn[i] = max((zn[i], Lm[i]))
+                    if (Um[i] < .) zn[i] = min((zn[i], Um[i]))
+                }
+                if (!_cge_nlp_eval(M, p, xfix, S, zn, tok, sgn, osc, map, fn, gfn, cn, Jn)) continue
+                phin = 0.5 * (cn' * cn) + 0.5 * zeta * sum(D2 :* (zn - z0) :^ 2)
+                if (phin < phi - 1e-15 * max((1, phi))) {
+                    ok = 1
+                    break
+                }
+            }
+            if (ok) {
+                z = zn
+                c = cn
+                Jm = Jn
+                phi = phin
+                lam = max((1e-8, lam / 3))
+                if (sqrt(c' * c) <= 0.9 * c0 | max(abs(c)) <= max((tol, 1e-8))) return(1)
+                continue
+            }
+            lam = lam * 10
+            // no step reduces phi
+            if (lam > 1e10) break
+        }
+    }
+    // the gradient of the infeasibility, projected on the bounds: a component
+    // that points out through a bound the point lies at is zero
+    g = Jm' * c
+    for (i = 1; i <= n; i++) {
+        if (L[i] < .) if (z[i] - L[i] <= 1e-4 * max((1, abs(L[i]))) & g[i] > 0) g[i] = 0
+        if (U[i] < .) if (U[i] - z[i] <= 1e-4 * max((1, abs(U[i]))) & g[i] < 0) g[i] = 0
+    }
+    infeas = (max(abs(c)) > max((tol, 1e-8)) & max(abs(g)) <= 1e-5 * max((1, max(abs(c)))))
+    z = z0
+    return(0)
+}
+
+// One feasibility restoration of the interior point (from version 0.36.0):
+// 1 when it gives a point of smaller infeasibility, from which the method
+// goes on: the point pushed inside its bounds as the start is, the slacks
+// started again, the multipliers of the bounds at most 1e3 as in IPOPT's
+// reset, and least-squares multipliers of the equations; -1 at a local
+// minimum of the infeasibility; 0 otherwise, with the point unchanged
+real scalar _cge_nlp_resto(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                           struct cge_sys scalar S, real colvector z, real matrix tok, real scalar sgn,
+                           real scalar osc, real colvector map, real colvector L, real colvector U,
+                           real colvector il, real colvector iu, real scalar mu, real scalar tol,
+                           real scalar f, real colvector gf, real colvector c, real matrix Jm,
+                           real colvector sl, real colvector su, real colvector zl, real colvector zu,
+                           real colvector lam, real scalar trace)
+{
+    real colvector zr
+    real scalar rinf, m, i
+    zr = z
+    if (!_cge_nlp_restore(M, p, xfix, S, zr, tok, sgn, osc, map, L, U, mu, tol, rinf)) {
+        if (rinf & trace) printf("{txt}Restoration: the infeasibility has a local minimum here; the programme is locally infeasible\n")
+        else if (trace) printf("{txt}Restoration: no point of smaller infeasibility found\n")
+        return(rinf ? -1 : 0)
+    }
+    for (i = 1; i <= rows(zr); i++) {
+        if (L[i] < . & U[i] < .) {
+            zr[i] = max((zr[i], L[i] + min((1e-2 * max((1, abs(L[i]))), 0.25 * (U[i] - L[i])))))
+            zr[i] = min((zr[i], U[i] - min((1e-2 * max((1, abs(U[i]))), 0.25 * (U[i] - L[i])))))
+        }
+        else if (L[i] < .) zr[i] = max((zr[i], L[i] + 1e-2 * max((1, abs(L[i])))))
+        else if (U[i] < .) zr[i] = min((zr[i], U[i] - 1e-2 * max((1, abs(U[i])))))
+    }
+    if (!_cge_nlp_eval(M, p, xfix, S, zr, tok, sgn, osc, map, f, gf, c, Jm)) return(0)
+    z = zr
+    (void) _cge_rest_count(1)
+    if (rows(il)) {
+        sl[il] = z[il] - L[il]
+        zl[il] = rowmin((mu :/ sl[il], J(rows(il), 1, 1e3)))
+    }
+    if (rows(iu)) {
+        su[iu] = U[iu] - z[iu]
+        zu[iu] = rowmin((mu :/ su[iu], J(rows(iu), 1, 1e3)))
+    }
+    m = rows(c)
+    lam = -lusolve(Jm * Jm' + 1e-12 * I(m), Jm * gf)
+    if (hasmissing(lam)) lam = J(m, 1, 0)
+    else if (max(abs(lam)) > 1e3) lam = J(m, 1, 0)
+    if (trace) printf("{txt}Restoration: the largest scaled residual is now {res}%9.2e\n", max(abs(c)))
+    return(1)
+}
+
+// cge_iis (from version 0.36.0; model_spec.md, Section 46): an irreducible
+// infeasible set of the bounds (cge_bound) and constraints (cge_constraint,
+// inequalities of cge_equation) of the current scenario, by the deletion
+// filter: with every candidate the model cannot be solved, without them it
+// can; each candidate in turn is left out for good if the model still cannot
+// be solved without it. What remains cannot be solved together, and can
+// without any one of them. A failure to solve stands for infeasibility, so
+// the set is that of the solver as much as of the model. Each solve is at
+// the first level at which the scenario without its bounds and constraints
+// solves: 0, Newton's method alone, from the base; 1, with the fallbacks of
+// cge_solve (central differences, Powell's hybrid method); 2, with them and
+// then in 4 and 16 steps, as cge_solve.
+void _cge_iis(real scalar tol, real scalar maxit, real scalar trace)
+{
+    struct cge_model scalar M
+    real colvector keep, sel
+    string colvector lab
+    real scalar nl, nu, nc, n, k, ns, ok, lev
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (_cge_sa(M)) if (rows(_cge_int_pos(M))) _cge_fail("cge_iis: the model has integer variables", 459)
+    tol = _cge_opttol(M, tol)
+    maxit = _cge_optit(M, maxit)
+    nl = rows(M.bdlp)
+    nu = rows(M.bdup)
+    nc = rows(M.bY)
+    n = nl + nu + nc
+    if (!n) _cge_fail("cge_iis: the scenario has no bounds or constraints to look among", 459)
+    lab = J(n, 1, "")
+    for (k = 1; k <= nl; k++) lab[k] = "lower bound of " + _cge_poslabel(M, M.bdlp[k]) + ", " + strtrim(sprintf("%14.8g", M.bdlv[k]))
+    for (k = 1; k <= nu; k++) lab[nl + k] = "upper bound of " + _cge_poslabel(M, M.bdup[k]) + ", " + strtrim(sprintf("%14.8g", M.bduv[k]))
+    for (k = 1; k <= nc; k++) lab[nl + nu + k] = "constraint " + _cge_iis_cons(M, k)
+    ns = 0
+    printf("{txt}Bounds and constraints: {res}%f{txt} lower bound(s), {res}%f{txt} upper bound(s), {res}%f{txt} constraint(s)\n", nl, nu, nc)
+    // the level of the solves: the first at which the scenario without its
+    // bounds and constraints solves
+    for (lev = 0; lev <= 2; lev++) if (_cge_iis_try(M, J(n, 1, 0), tol, maxit, ns, lev)) break
+    if (lev > 2) {
+        _cge_fail("cge_iis: the scenario cannot be solved without its bounds and constraints either; cge_listing shows where the solve stops, cge_structure whether the system is singular", 459)
+    }
+    if (lev == 1) printf("{txt}Without its bounds and constraints the scenario needs the fallbacks of Newton's method; so does each solve of the search\n")
+    if (lev == 2) printf("{txt}Without its bounds and constraints the scenario solves in steps; so does each solve of the search\n")
+    if (_cge_iis_try(M, J(n, 1, 1), tol, maxit, ns, lev)) {
+        printf("{txt}The scenario solves with its bounds and constraints: none is infeasible\n")
+        st_numscalar("r(N_iis)", 0)
+        st_numscalar("r(N_solves)", ns)
+        st_numscalar("r(N_candidates)", n)
+        st_global("r(iis)", "")
+        return
+    }
+    keep = J(n, 1, 1)
+    for (k = 1; k <= n; k++) {
+        keep[k] = 0
+        ok = _cge_iis_try(M, keep, tol, maxit, ns, lev)
+        if (ok) keep[k] = 1
+        if (trace) printf("{txt}  %s: %s\n", lab[k], (ok ? "kept, the scenario solves without it" : "left out"))
+    }
+    sel = _cge_st_where(keep)
+    printf("{txt}An irreducible infeasible set of {res}%f{txt} bound(s) and constraint(s), found in {res}%f{txt} solves:\n", rows(sel), ns)
+    for (k = 1; k <= rows(sel); k++) printf("{res}  %s\n", lab[sel[k]])
+    printf("{txt}Without any one of them, the scenario solves\n")
+    st_numscalar("r(N_iis)", rows(sel))
+    st_numscalar("r(N_solves)", ns)
+    st_numscalar("r(N_candidates)", n)
+    st_global("r(iis)", _cge_st_join(lab[sel]))
+}
+
+// The description of constraint k, without its regime
+string scalar _cge_iis_cons(struct cge_model scalar M, real scalar k)
+{
+    struct cge_par scalar p
+    p = M.p
+    p.bmode[k] = 0
+    return(_cge_cons_one(M, p, M.xcur, k))
+}
+
+// 1 if the scenario solves with the candidates kept (bounds in the order of
+// M.bdlp and M.bdup, then the constraints) at level lev of _cge_iis; a
+// variable fixed outside a bound kept does not solve. ns counts the solves
+real scalar _cge_iis_try(struct cge_model scalar M, real colvector keep, real scalar tol, real scalar maxit,
+                         real scalar ns, real scalar lev)
+{
+    struct cge_model scalar Mt
+    real colvector start, x, kl, ku, kc
+    real scalar nl, nu, nc, conv, iter, err, k, done, mode
+    string scalar method
+    nl = rows(M.bdlp)
+    nu = rows(M.bdup)
+    nc = rows(M.bY)
+    Mt = M
+    kl = (nl ? keep[|1 \ nl|] : J(0, 1, .))
+    ku = (nu ? keep[|nl + 1 \ nl + nu|] : J(0, 1, .))
+    kc = (nc ? keep[|nl + nu + 1 \ nl + nu + nc|] : J(0, 1, .))
+    if (nl) {
+        Mt.bdlp = _cge_selcol(M.bdlp, kl)
+        Mt.bdlv = _cge_selcol(M.bdlv, kl)
+        if (rows(Mt.bdlp)) if (any(Mt.fixed[Mt.bdlp] :& (Mt.xcur[Mt.bdlp] :< Mt.bdlv))) return(0)
+    }
+    if (nu) {
+        Mt.bdup = _cge_selcol(M.bdup, ku)
+        Mt.bduv = _cge_selcol(M.bduv, ku)
+        if (rows(Mt.bdup)) if (any(Mt.fixed[Mt.bdup] :& (Mt.xcur[Mt.bdup] :> Mt.bduv))) return(0)
+    }
+    if (nc) if (!all(kc)) {
+        Mt.bY = _cge_selcol(M.bY, kc)
+        Mt.bX = _cge_selcol(M.bX, kc)
+        Mt.btype = _cge_selcol(M.btype, kc)
+        Mt.bdir = _cge_selcol(M.bdir, kc)
+        Mt.p.bmode = _cge_selcol(M.p.bmode, kc)
+        Mt.p.bval = _cge_selcol(M.p.bval, kc)
+        Mt.p.bxbar = _cge_selcol(M.p.bxbar, kc)
+        Mt.p0.bmode = _cge_selcol(M.p0.bmode, kc)
+        Mt.p0.bval = _cge_selcol(M.p0.bval, kc)
+        Mt.p0.bxbar = _cge_selcol(M.p0.bxbar, kc)
+        _cge_cons_rebuild(Mt)
+    }
+    mode = _cge_optmode(Mt)
+    start = _cge_bd_start(Mt, Mt.xcur)
+    ns++
+    _cge_deadline_set(_cge_opttime(Mt, -1))
+    (void) _cge_nofb(lev == 0 ? 1 : 0)
+    x = _cge_solve_point(Mt, Mt.p, Mt.xcur, start, tol, maxit, 0, conv, iter, err, method, 0, mode)
+    (void) _cge_nofb(0)
+    if (lev == 2 & !conv & _cge_stop() != 3) {
+        for (k = 1; k <= 2; k++) {
+            if (_cge_stop() == 3) break
+            x = _cge_continue(Mt, (k == 1 ? 4 : 16), tol, maxit, 0, conv, iter, err, method, 0, done, mode)
+            if (conv) break
+        }
+    }
+    _cge_deadline_set(.)
+    return(conv)
+}
+
+// Newton's method without its fallbacks (from version 0.36.0), for the
+// solves of cge_iis: mode 1 sets, 0 clears, -1 reads. _cge_load clears it,
+// so that a command stopped by an error does not leave it set
+real scalar _cge_nofb(real scalar mode)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__nofb")) == NULL) {
+        if (mode != 1) return(0)
+        q = crexternal("cge__nofb")
+    }
+    if (mode >= 0) *q = mode
+    return(*q)
+}
+
+// The restorations of the interior point (from version 0.36.0): mode 0
+// resets the count, 1 adds one; returns it. The external cge__norest set to 1
+// leaves restoration out (a test hook).
+real scalar _cge_rest_count(real scalar mode)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__nrest")) == NULL) {
+        q = crexternal("cge__nrest")
+        *q = 0
+    }
+    if (mode == 0) *q = 0
+    else if (mode == 1) *q = *q + 1
+    return(*q)
+}
+
+real scalar _cge_rest_off()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__norest")) == NULL) return(0)
+    return(*q == 1)
 }
 
 // The equation listing and infeasibility report (from version 0.9.5): every
@@ -27095,6 +27419,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
     tok = _cge_nlp_tok(M, obj, sgn, g)
     (void) _cge_hess_count(0)
+    (void) _cge_rest_count(0)
     // a named model and a start from a stored simulation (from version
     // 0.17.0): the model's equations, the other free variables at their levels
     xs = _cge_named_start(M, from)
@@ -27166,6 +27491,8 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     st_global("r(hessian)", (hc[1] + hc[2] == 0 ? "" : (hc[2] == 0 ? "exact" : (hc[1] == 0 ? "differences" : "exact, differences where it failed"))))
     st_numscalar("r(N_hessian_exact)", hc[1])
     st_numscalar("r(N_hessian_differences)", hc[2])
+    // feasibility restorations (from version 0.36.0)
+    st_numscalar("r(N_restorations)", _cge_rest_count(-1))
     st_numscalar("r(starts)", starts)
     if (!rows(ipos) & starts > 1) {
         st_numscalar("r(best_start)", best)
@@ -27442,7 +27769,7 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
     real scalar eb, epb, fb
     real matrix Jm, Jn, Jp, Jmm, W, Hs, K, Q, R, Z
     real scalar n, m, mu, f, fn, it, i, h, hp, hm, osc, sd, ed, ep, ec, emu, del, a, az, tau, nu, phi, phin
-    real scalar dphi, ok, k, lmin, fp, fm, ntry, hexact, nacc
+    real scalar dphi, ok, k, lmin, fp, fm, ntry, hexact, nacc, nrest, rr
     S = _cge_sys_make(M, 0)
     n = rows(S.free)
     m = S.neq
@@ -27520,6 +27847,7 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
     zb = z
     lamb = lam
     nacc = 0
+    nrest = 0
     for (it = 0; it <= maxit; it++) {
         iter = it
         // the optimality conditions, scaled as in Wachter and Biegler (2006)
@@ -27637,7 +27965,18 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
             if (!hasmissing(sol)) break
             del = max((1e-6, 10 * del))
         }
-        if (hasmissing(sol)) break
+        // feasibility restoration (from version 0.36.0) where the step cannot
+        // be found at a point that does not satisfy the equations; at most
+        // ten attempts
+        if (hasmissing(sol)) {
+            if (m & ep > max((tol, 1e-8)) & nrest < 10 & !_cge_rest_off()) {
+                nrest++
+                rr = _cge_nlp_resto(M, p, xfix, S, z, tok, sgn, osc, map, L, U, il, iu, mu, tol, f, gf, c, Jm,
+                                    sl, su, zl, zu, lam, trace)
+                if (rr == 1) continue
+            }
+            break
+        }
         dz = sol[|1 \ n|]
         lamn = (m ? sol[|n + 1 \ n + m|] : J(0, 1, .))
         dzl = dzu = J(n, 1, 0)
@@ -27672,6 +28011,22 @@ real colvector _cge_nlp_solve(struct cge_model scalar M, struct cge_par scalar p
                 ok = 1
                 break
             }
+        }
+        // feasibility restoration (from version 0.36.0) where the line search
+        // fails, or the step it takes is too short to move, at a point that
+        // does not satisfy the equations: a point of smaller infeasibility from
+        // which the method goes on; at most ten attempts. The short steps are
+        // those of Wachter and Biegler's (2000) example, where the linearised
+        // equations and the bounds cannot hold together. At a local minimum of
+        // the infeasibility the method stops: the programme is locally
+        // infeasible
+        if ((!ok | a * max(abs(dz)) <= 1e-10 * max((1, max(abs(z))))) & m & ep > max((tol, 1e-8)) & nrest < 10 &
+            !_cge_rest_off()) {
+            nrest++
+            rr = _cge_nlp_resto(M, p, xfix, S, z, tok, sgn, osc, map, L, U, il, iu, mu, tol, f, gf, c, Jm,
+                                sl, su, zl, zu, lam, trace)
+            if (rr == 1) continue
+            if (rr == -1) break
         }
         if (!ok) break
         z = zn

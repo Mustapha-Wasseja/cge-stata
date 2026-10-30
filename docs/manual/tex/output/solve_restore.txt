@@ -1,0 +1,48 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_variable X1, value(-2)
+User variable X1: 1 element(s), base value -2
+Add the equations that determine it with cge_equation
+
+. cge_variable X2, value(3)
+User variable X2: 1 element(s), base value 3
+Add the equations that determine it with cge_equation
+
+. cge_variable X3, value(1)
+User variable X3: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation c1: X1^2 = X2 + 1
+User equation c1: 1 element(s)
+
+. cge_equation c2: X1 = X3 + 0.5
+User equation c2: 1 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  1.75e+00)
+
+. cge_bound X2, lower(0)
+Variable X2: lower bound 0 for 1 element(s)
+
+. cge_bound X3, lower(0)
+Variable X3: lower bound 0 for 1 element(s)
+
+. cge_solve, name(wb) minimize(X1)
+Simulation wb solved in 21 iteration(s) (interior point)
+Minimised X1:                1
+Largest scaled error of the optimality conditions  1.00e-11
+
+. display r(N_restorations)
+2
+
+. cge_results, sim(wb)
+
+Simulation wb of a standalone model (solved, 21 iteration(s), largest scaled residual  1.00e-11)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+X1                                         -2            1  150.000
+X2                                          3  2.00000e-11 -100.000
+X3                                          1           .5  -50.000
+-------------------------------------------------------------------

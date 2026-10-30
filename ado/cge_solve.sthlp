@@ -81,6 +81,20 @@ zero. {helpb cge_gams} exports such a simulation as an NLP, solved with IPOPT
 by default.
 
 {pstd}
+From version 0.36.0, the interior point has a feasibility restoration phase,
+as IPOPT's: where it cannot find a step, its line search fails, or its step
+is too short to move, at a point that does not satisfy the equations, it
+minimises the norm of the scaled residuals near that point, within the
+bounds, until the norm falls by a tenth, and goes on from there. Where the
+infeasibility has a local minimum, the programme is locally infeasible
+(model status 5), and the method stops there rather than at its iteration
+limit. {cmd:r(N_restorations)} counts the restorations. The example of
+Waechter and Biegler (2000), min x1 subject to x1^2 = x2 + 1, x1 = x3 + 1/2,
+x2 >= 0 and x3 >= 0 from (-2, 3, 1), on which the method stalled at an
+infeasible point, solves with two. {helpb cge_iis} finds the bounds and
+constraints that leave a scenario without a solution.
+
+{pstd}
 From version 0.16.0, every solve reports GAMS's model status and solver
 status in {cmd:r(modelstat)} and {cmd:r(solvestat)}, stores them with the
 simulation and displays them after a failure. Model status 16 (solved) is a
@@ -265,6 +279,7 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(hessian)}}the Hessians of the interior point: {cmd:exact} or {cmd:differences} (from version 0.28.0){p_end}
 {synopt:{cmd:r(N_hessian_exact)}}its iterations with exact Hessians{p_end}
 {synopt:{cmd:r(N_hessian_differences)}}its iterations with differences{p_end}
+{synopt:{cmd:r(N_restorations)}}its feasibility restorations (from version 0.36.0){p_end}
 {synopt:{cmd:r(linsolver)}}the linear solver: {cmd:dense}, {cmd:sparse} or {cmd:auto} (from version 0.10.1){p_end}
 {synopt:{cmd:r(closure)}}closure{p_end}
 {synopt:{cmd:r(constraints)}}the constraints and their regimes, if any{p_end}

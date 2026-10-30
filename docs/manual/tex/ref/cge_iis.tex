@@ -1,0 +1,114 @@
+\cgeentry{cge_iis}{An irreducible infeasible set of bounds and constraints}
+
+\cgesec{Description}
+
+\cmd{cge_iis} (from version 0.36.0) looks for the reason a scenario cannot be
+solved among its bounds (\manref{cge_bound}) and constraints
+(\manref{cge_constraint}, and the inequalities of \manref{cge_equation}). It
+finds an irreducible infeasible set, as the IIS of CPLEX and Gurobi does for
+a linear programme: bounds and constraints that together leave the scenario
+without a solution, while it solves without any one of them. A scenario
+that fails with dozens of bounds and constraints is thereby reduced to the
+few that conflict.
+
+\cgesec{Quick start}
+
+The set among the bounds and constraints of the current scenario
+\begin{stcode}
+cge_iis
+\end{stcode}
+The same, with the outcome of each step
+\begin{stcode}
+cge_iis, trace
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_iis} [\texttt{,} \optarg{tol}{erance}{\#} \optarg{iter}{ate}{\#} \opt{}{trace}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{tol}{erance}{\#} & tolerance of each solve; default that of \manref{cge_options}\\
+\optarg{iter}{ate}{\#} & iteration limit of each solve; default that of \manref{cge_options}\\
+\opt{}{trace} & show the outcome of each step\\
+\end{opttable}
+
+\cgesec{Remarks and examples}
+
+The search is the deletion filter of \citet{chinneck1991}. The scenario must
+fail to solve with every bound and constraint, and solve without them all;
+each in turn is then left out for good if the scenario still fails without
+it. What remains is the set. The search takes one solve for each bound and
+constraint, and two more. A failure to solve stands for infeasibility, so the
+set is that of the solver as much as of the model \citep{chinneck2008}: a
+scenario that the solver fails on for another reason gives a set as well.
+
+Each solve is of the square system of the scenario, as \manref{cge_solve}
+without \opt{}{minimize()} or \opt{}{maximize()} makes it, and at the first of
+three levels at which the scenario without its bounds and constraints
+solves: Newton's method from the base; with the fallbacks of
+\manref{cge_solve} (Newton's method with central differences, then Powell's
+hybrid method); and with them in 4 and then 16 steps. Most scenarios solve
+at the first level, where a solve that fails stops at once: the search then
+takes seconds where the fallbacks would take minutes.
+
+The equations themselves are not candidates: without one, the system would
+not be square. When the scenario cannot be solved even without its bounds
+and constraints, \cmd{cge_iis} stops with an error; \manref{cge_listing}
+shows where the solve stops, and \manref{cge_structure} whether the system
+is structurally singular.
+
+The SAM is mapped and calibrated:
+\stlog{iis_setup}
+
+\cgesubsec{Example 1: a bound among bounds that do not bind}
+
+A tariff removal raises imports. With imports of manufactures held at
+most at their base, and bounds on other imports and on the composite
+prices that the solution does not reach, the scenario has no solution. The
+set is the one bound that cannot hold:
+\stlog{iis_bounds}
+
+\cgesubsec{Example 2: a constraint and a bound together}
+
+A quota holds imports of manufactures below 98\% of their base, with the
+rent of the quota adjusting; the scenario solves, with a rent of 0.0974.
+Capped at half that, the rent cannot rise far enough. Neither the
+inequality nor the cap is infeasible alone: the set is the two together.
+\stlog{iis_quota}
+
+\cgesec{Stored results}
+
+\cmd{cge_iis} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_candidates)} & bounds and constraints of the scenario\\
+\res{r(N_iis)} & bounds and constraints in the set (0 if the scenario solves)\\
+\res{r(N_solves)} & solves of the search\\
+\resgroup{Macros}
+\res{r(iis)} & the bounds and constraints of the set\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+With candidates $C = \{c_1, \ldots, c_n\}$, the bounds in the order of
+\cmd{cge_bound, list} and then the constraints, and $F(S)$ true when the
+scenario with the candidates in $S$ cannot be solved, the search checks
+$F(\emptyset)$ false and $F(C)$ true, and then, with $S = C$, for $k = 1,
+\ldots, n$, sets $S = S \setminus \{c_k\}$ where $F(S \setminus \{c_k\})$
+holds. The final $S$ has $F(S)$ true, and $F(S \setminus \{c\})$ false for
+each $c$ in it: when $c$ was examined, the set without it solved, and every
+set since is a subset of that one with $c$ \citep{chinneck1991}. A bound on
+a variable that the closure fixes outside it fails without a solve.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_bound}{Attributes of variables: bounds, scales, starting levels and fixed values}
+\seeentry{cge_constraint}{Constraints on variables, with an adjusting variable}
+\seeentry{cge_listing}{Equation listing, infeasibility report and solution listing}
+\seeentry{cge_structure}{Structure of the system: structural singularity and blocks}
+\seeentry{cge_solve}{Solve the model}
+\end{alsosee}

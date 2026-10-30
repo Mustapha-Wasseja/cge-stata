@@ -17,6 +17,12 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.36.0 adds a feasibility restoration phase to the interior point:
+where its steps cannot reduce the infeasibility, it minimises the residuals
+within the bounds and goes on, or stops at a local minimum of the
+infeasibility (model status 5). `cge_iis` finds an irreducible infeasible set
+of a scenario's bounds and constraints, by the deletion filter.
+
 Version 0.35.0 adds `cge_structure`: from the Jacobian's pattern, a maximum
 matching of equations and variables, the over- and under-determined parts of
 a structurally singular system (the equations and variables at fault, named),
@@ -72,7 +78,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.35.0 implements the standard single-country model described in
+Version 0.36.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -146,6 +152,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.36.0 adds feasibility restoration and cge_iis.
 Version 0.35.0 adds cge_structure, structural singularity and blocks.
 Version 0.34.0 adds box pairs, an equation paired with a variable between bounds.
 Version 0.33.0 adds Ruiz's equilibration of Newton's linear systems.

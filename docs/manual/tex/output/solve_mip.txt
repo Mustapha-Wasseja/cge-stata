@@ -31,14 +31,14 @@ Variable X: binary for 8 element(s), with bounds 0 and 1
 Variable S: lower bound 0 for 1 element(s)
 
 . cge_solve, name(knap) maximize(sum(i, v(i) * X(i)))
-Simulation knap solved by branch and bound: 28 node(s), 340 iteration(s)
+Simulation knap solved by branch and bound: 28 node(s), 294 iteration(s)
 Best bound               43; relative gap  0.00e+00
 Maximised sum(i, v(i) * X(i)):               43
 Largest scaled residual of the equations  0.00e+00
 
 . cge_results, sim(knap)
 
-Simulation knap of a standalone model (solved, 340 iteration(s), largest scaled residual  0.00e+00)
+Simulation knap of a standalone model (solved, 294 iteration(s), largest scaled residual  0.00e+00)
 -------------------------------------------------------------------
                                         start     solution % change
 -------------------------------------------------------------------
@@ -50,5 +50,5 @@ X(i5)                                      .5            0 -100.000
 X(i6)                                      .5            1  100.000
 X(i7)                                      .5            0 -100.000
 X(i8)                                      .5            1  100.000
-S                                           1  7.09819e-16 -100.000
+S                                           1  1.12158e-15 -100.000
 -------------------------------------------------------------------
