@@ -18,6 +18,11 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.43.0 evaluates the `$` conditions of user variables and equations
+at each solve, as GAMS does: with `cge_options, conditions(solve)`, a shock
+to a parameter that a condition uses brings elements into their domains, or
+takes them out, at the next `cge_solve` and in each scenario of `cge_loop`.
+
 Version 0.42.0 adds an experimental link to SCIP: `cge_solve,
 minimize(expression) solver(scip)` solves nonlinear and mixed-integer
 programmes, nonconvex ones included, to a global optimum within SCIP's
@@ -109,7 +114,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.42.0 implements the standard single-country model described in
+Version 0.43.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -183,6 +188,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.43.0 adds conditions evaluated at each solve.
 Version 0.42.0 adds global solutions of programmes by SCIP through PySCIPOpt.
 Version 0.41.0 adds nonlinear programmes by IPOPT through cyipopt.
 Version 0.40.0 adds variables added to built-in equations.

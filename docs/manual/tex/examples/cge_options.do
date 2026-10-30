@@ -66,3 +66,20 @@ cge_options, reset
 cge_solve, name(solved)
 display "model status " r(modelstat) ", solver status " r(solvestat)
 *<<
+
+*>> opt_conditions
+cge_model new
+cge_set i = a b c
+cge_parameter on(i), values(a:1 b:1 c:0)
+cge_parameter w(i), values(a:1 b:2 c:3)
+cge_variable Y, value(10) fixed
+cge_variable X(i)$(on(i)) = w(i) * Y
+cge_variable T = sum(i$(on(i)), X(i))
+cge_shock on, elements(c) value(1)
+quietly cge_solve, name(atbase)
+quietly cge_options, conditions(solve)
+quietly cge_solve, name(atsolve)
+cge_results, sim(atbase)
+cge_results, sim(atsolve)
+quietly cge_options, reset
+*<<

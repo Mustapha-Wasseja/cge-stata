@@ -238,6 +238,12 @@ struct cge_model {
     // the scaling of Newton's linear systems (from version 0.33.0): missing
     // or 0 the base scales alone, 1 Ruiz's equilibration
     real scalar      optscale
+    // the conditions ($) of the user definitions (from version 0.43.0;
+    // cge_options, conditions()): missing or 0 at the base, 1 at the
+    // parameters of each solve; and, for each stored simulation, 1 if it was
+    // solved so
+    real scalar      optcond
+    real colvector   simcond
     // the model status and solver status of each stored simulation, in GAMS's
     // codes (from version 0.16.0); missing where unknown
     real matrix      simstat
@@ -286,7 +292,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.42.0")
+    return("0.43.0")
 }
 
 // =====================================================================
@@ -299,6 +305,9 @@ struct cge_model scalar _cge_load()
     // the fallbacks of Newton's method are on again at each command (from
     // version 0.36.0; _cge_nofb)
     (void) _cge_nofb(0)
+    // and no command finds the parameters of the conditions of a solve that
+    // stopped with an error (from version 0.43.0; _cge_cond_set)
+    if (findexternal("cge__condp") != NULL) rmexternal("cge__condp")
     q = findexternal("cge__model")
     if (q == NULL) {
         errprintf("no SAM in memory; load one with cge_sam\n")
@@ -3523,6 +3532,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     M.simmethod = J(0, 1, "")
     M.simx = J(total, 0, .)
     M.simp = cge_par(1, 0)
+    M.simcond = J(0, 1, .)
     M.simconv = J(0, 1, .)
     M.simiter = J(0, 1, .)
     M.simres = J(0, 1, .)
@@ -5268,10 +5278,10 @@ string scalar _cge_lin_name(struct cge_model scalar M)
 // and the Jacobian of Newton's method (negative: unchanged; missing: the
 // default), and reset, which restores every default
 void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real scalar it, real scalar tlim,
-                  string scalar jac, real scalar reset, string scalar hess, string scalar scale)
+                  string scalar jac, real scalar reset, string scalar hess, string scalar scale, string scalar cond)
 {
     struct cge_model scalar M
-    real scalar ch
+    real scalar ch, was
     if (args() < 2) mcp = ""
     if (args() < 3) tol = -1
     if (args() < 4) it = -1
@@ -5280,11 +5290,13 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     if (args() < 7) reset = 0
     if (args() < 8) hess = ""
     if (args() < 9) scale = ""
+    if (args() < 10) cond = ""
     M = _cge_load()
     _cge_need(M, "calibrated")
     ch = 0
+    was = (M.optcond == 1)
     if (reset) {
-        M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = M.opthess = M.optscale = .
+        M.linsolver = M.mcpsolver = M.opttol = M.optit = M.opttime = M.optjac = M.opthess = M.optscale = M.optcond = .
         ch = 1
     }
     // SciPy's SuperLU through Python (from version 0.27.0, Stata 16 and later)
@@ -5301,8 +5313,13 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     if (hess != "") M.opthess = (hess == "differences")
     // the scaling of Newton's linear systems (from version 0.33.0)
     if (scale != "") M.optscale = (scale == "ruiz")
+    // the conditions of the user definitions (from version 0.43.0): at the
+    // base, or at the parameters of each solve; back at the base, the
+    // structure of the base
+    if (cond != "") M.optcond = (cond == "solve")
+    if (was & M.optcond != 1 & (rows(M.uvdef) | rows(M.uedef))) (void) _cge_cond_build(M, M.p0)
     if (lin != "" | mcp != "" | (tol > 0 & tol < .) | (it >= 1 & it < .) | (tlim >= 0 & tlim < .) | jac != "" | hess != "" |
-        scale != "") ch = 1
+        scale != "" | cond != "") ch = 1
     if (ch) _cge_store(M)
     printf("{txt}Linear solver of Newton's steps: {res}%s{txt}%s\n", _cge_lin_name(M),
            (M.linsolver == 2 ? " (the sparse LU from 1,000 equations)" : ""))
@@ -5310,6 +5327,7 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     printf("{txt}Jacobian of Newton's method:     {res}%s\n", (M.optjac == 1 ? "differences" : "exact"))
     printf("{txt}Hessian of nonlinear programmes: {res}%s\n", (M.opthess == 1 ? "differences" : "exact"))
     printf("{txt}Scaling of Newton's systems:     {res}%s\n", (M.optscale == 1 ? "ruiz" : "none"))
+    printf("{txt}Conditions of user definitions:  {res}%s\n", (M.optcond == 1 ? "at each solve" : "at the base"))
     printf("{txt}Tolerance of cge_solve:          {res}%s\n", strtrim(sprintf("%9.0g", _cge_opttol(M, -1))))
     printf("{txt}Iteration limit of cge_solve:    {res}%g\n", _cge_optit(M, -1))
     printf("{txt}Time limit of cge_solve:         {res}%s\n", (_cge_opttime(M, -1) >= . ? "none" :
@@ -5319,6 +5337,7 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
     st_global("r(jacobian)", (M.optjac == 1 ? "differences" : "exact"))
     st_global("r(hessian)", (M.opthess == 1 ? "differences" : "exact"))
     st_global("r(scaling)", (M.optscale == 1 ? "ruiz" : "none"))
+    st_global("r(conditions)", (M.optcond == 1 ? "solve" : "base"))
     st_numscalar("r(tolerance)", _cge_opttol(M, -1))
     st_numscalar("r(iterate)", _cge_optit(M, -1))
     st_numscalar("r(timelimit)", _cge_opttime(M, -1))
@@ -9097,6 +9116,7 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
         _cge_set_simobj(M, rows(M.simname), "")
         _cge_set_simstat(M, rows(M.simname), (conv ? (_cge_cons_on(M) ? 1 : 16) : 5), (conv ? 1 : 4))
         _cge_set_simmodel(M, rows(M.simname), "")
+        _cge_set_simcond(M, rows(M.simname), 0)
         return(rows(M.simname))
     }
     M.simclosure[k] = _cge_closure_text(M)
@@ -9113,6 +9133,7 @@ real scalar _cge_store_sim(struct cge_model scalar M, string scalar name, real c
     _cge_set_simobj(M, k, "")
     _cge_set_simstat(M, k, (conv ? (_cge_cons_on(M) ? 1 : 16) : 5), (conv ? 1 : 4))
     _cge_set_simmodel(M, k, "")
+    _cge_set_simcond(M, k, 0)
     return(k)
 }
 
@@ -9160,7 +9181,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
 {
     struct cge_model scalar M
     real colvector x, x2, start
-    real scalar conv, iter, err, k, walras, nsteps, done, it2, n, keeplin, mode, ms, ss, nbk, bigk
+    real scalar conv, iter, err, k, walras, nsteps, done, it2, n, keeplin, mode, ms, ss, nbk, bigk, cond
     string scalar method, m2
 
     if (args() < 5) full = 0
@@ -9194,9 +9215,16 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     maxit = _cge_optit(M, maxit)
     mode = _cge_optmode(M)
     _cge_deadline_set(_cge_opttime(M, tlim))
+    // the conditions ($) of the user definitions at the parameters of this
+    // solve (from version 0.43.0; cge_options, conditions(solve)), as GAMS
+    // generates its model at a solve
+    cond = _cge_cond_on(M)
+    if (cond) (void) _cge_cond_build(M, M.p)
+    if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
     // a nonlinear programme (from version 0.15.0)
     if (obj != "") {
         _cge_nlp_run(M, name, obj, tol, maxit, trace, lin, mname, from, hold, nodes, optcr, starts, solver)
+        _cge_cond_mark(M, name, cond)
         _cge_deadline_set(.)
         return
     }
@@ -9204,6 +9232,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     // their levels (from version 0.17.0)
     if (mname != "" | from != "" | hold != "") {
         _cge_solve_named(M, name, mname, from, tol, maxit, trace, mode, lin, hold)
+        _cge_cond_mark(M, name, cond)
         _cge_deadline_set(.)
         return
     }
@@ -9258,6 +9287,7 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     M.linsolver = keeplin
 
     k = _cge_store_sim(M, name, x, conv, iter, err, method)
+    _cge_set_simcond(M, k, cond)
     // the statuses, in GAMS's codes (from version 0.16.0)
     _cge_status(conv, _cge_cons_on(M), 0, 0, err, ms, ss)
     _cge_set_simstat(M, k, ms, ss)
@@ -9918,6 +9948,8 @@ void _cge_solution(string scalar sim, real scalar base, real scalar current, str
         if (rows(M.simname)) sim = M.simname[rows(M.simname)]
         else base = 1
     }
+    // the structure of the user definitions there (from version 0.43.0)
+    _cge_cond_for(M, (sim != "" ? _cge_sim_index(M, sim) : (base ? 0 : -1)))
     if (sim != "") {
         k = _cge_sim_index(M, sim)
         if (M.simrun[k] != "") _cge_fail("simulation " + sim + " is a period of dynamic run " + M.simrun[k] + "; give a static simulation", 198)
@@ -10173,12 +10205,16 @@ void _cge_results_data(string scalar sim)
 {
     struct cge_model scalar M
     string colvector v, e1, e2, l1, l2
-    real colvector base, value, pos, keep
+    real colvector base, value, pos, keep, sh
     real scalar k, s, N
 
     M = _cge_load()
     _cge_need(M, "calibrated")
     s = _cge_sim_index(M, sim)
+    // the structure the simulation was solved with, and the elements of a
+    // solve with conditions(solve) (from version 0.43.0)
+    _cge_cond_for(M, s)
+    sh = _cge_shown(M, M.simx[., s])
     v = J(0, 1, "")
     e1 = v
     e2 = v
@@ -10187,7 +10223,7 @@ void _cge_results_data(string scalar sim)
     for (k = 1; k <= rows(M.vname); k++) {
         _cge_vlabels(M, k, l1, l2)
         pos = _cge_vpos(M, k)
-        keep = M.exists[pos]
+        keep = sh[pos]
         // select() on a 1 x 1 matrix with a zero mask returns 1 x 0, not 0 x 1
         if (!any(keep)) continue
         v = v \ select(J(rows(pos), 1, M.vname[k]), keep)
@@ -10232,6 +10268,8 @@ void _cge_results_show(string scalar sim)
     st_numscalar("r(converged)", M.simconv[si])
     st_global("r(model)", _cge_simmodel(M, si))
     if (_cge_sa(M)) {
+        // the structure the simulation was solved with (from version 0.43.0)
+        _cge_cond_for(M, si)
         _cge_results_sa(M, si)
         return
     }
@@ -10272,9 +10310,11 @@ void _cge_results_show(string scalar sim)
 // the elements of its variables, at the start and in the solution
 void _cge_results_sa(struct cge_model scalar M, real scalar si)
 {
-    real colvector pos, x
+    real colvector pos, x, sh
     real scalar k, i, n, b, s
     x = M.simx[., si]
+    // with the elements of a solve with conditions(solve) (from version 0.43.0)
+    sh = _cge_shown(M, x)
     // the named model it solved (from version 0.17.0)
     printf("\n{txt}Simulation {res}%s{txt} of %s (%s, %f iteration(s), largest scaled residual %9.3e)\n",
            M.simname[si], (_cge_simmodel(M, si) != "" ? "model " + _cge_simmodel(M, si) + " of a standalone model" :
@@ -10287,7 +10327,7 @@ void _cge_results_sa(struct cge_model scalar M, real scalar si)
         if (substr(M.vname[k], 1, 1) == "_") continue
         pos = _cge_vpos(M, k)
         for (i = 1; i <= rows(pos); i++) {
-            if (!M.exists[pos[i]]) continue
+            if (!sh[pos[i]]) continue
             n++
             if (n > 40) continue
             b = M.x0[pos[i]]
@@ -11274,6 +11314,8 @@ void _cge_dyn_start(string scalar name, string scalar periods, string scalar cap
     M = _cge_load()
     _cge_need(M, "sam")
     _cge_need(M, "calibrated")
+    // the conditions of the user definitions at the base (from version 0.43.0)
+    if (_cge_cond_base(M)) _cge_store(M)
     // lead() refers to later periods, which only a run with foresight solves
     // (from version 0.10.2)
     if (args() < 19) fs = 0
@@ -14154,6 +14196,7 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
         M.simx = J(rows(M.simx), 0, .)
         M.simstat = J(0, 2, .)
         M.simmodel = J(0, 1, "")
+        M.simcond = J(0, 1, .)
         return
     }
     M.simname = M.simname[s]
@@ -14177,6 +14220,9 @@ void _cge_sims_keep(struct cge_model scalar M, real colvector s)
     // the named models (from version 0.17.0)
     if (rows(M.simmodel) < max(s)) M.simmodel = M.simmodel \ J(max(s) - rows(M.simmodel), 1, "")
     M.simmodel = M.simmodel[s]
+    // conditions at the solve (from version 0.43.0)
+    if (rows(M.simcond) < max(s)) M.simcond = M.simcond \ J(max(s) - rows(M.simcond), 1, 0)
+    M.simcond = M.simcond[s]
 }
 
 // Names of the simulations of a dynamic run, in period order
@@ -14761,22 +14807,24 @@ real scalar _cge_roles_on(struct cge_model scalar M)
 // at x
 void _cge_roles_at(struct cge_model scalar M, real colvector x, real colvector P, real matrix Q, real colvector Y)
 {
-    real colvector pp, pq, py
+    real colvector pp, pq, py, sh
     real scalar kq, ng, nc
+    // with the elements of a solve with conditions(solve) (from version 0.43.0)
+    sh = _cge_shown(M, x)
     ng = rows(_cge_us_labels(M, _cge_us_find(M, M.sarole[1])))
     nc = rows(_cge_us_labels(M, _cge_us_find(M, M.sarole[2])))
     pp = _cge_vpos(M, _cge_vidx(M, M.sarole[3]))
-    P = x[pp] :* M.exists[pp]
+    P = x[pp] :* sh[pp]
     kq = _cge_vidx(M, M.sarole[4])
     pq = _cge_vpos(M, kq)
-    Q = x[pq] :* M.exists[pq]
+    Q = x[pq] :* sh[pq]
     // elements in order, the first index the slowest
     if (M.vset[kq] == "~" + M.sarole[2] + "|~" + M.sarole[1]) Q = colshape(Q, ng)
     else Q = colshape(Q, nc)'
     Y = J(0, 1, .)
     if (M.sarole[5] != "") {
         py = _cge_vpos(M, _cge_vidx(M, M.sarole[5]))
-        Y = x[py] :* M.exists[py]
+        Y = x[py] :* sh[py]
     }
 }
 
@@ -14888,9 +14936,12 @@ void _cge_report_vars(struct cge_model scalar M, real colvector s, string scalar
 {
     string rowvector names
     string colvector e1, e2
-    real colvector pos, keep
+    real colvector pos, keep, sh
     real scalar i, k, j, n, ns
     ns = rows(s)
+    // with the elements of solves with conditions(solve) (from version 0.43.0)
+    sh = M.exists
+    for (j = 1; j <= ns; j++) sh = sh :| _cge_shown(M, M.simx[., s[j]])
     if (vars != "") names = tokens(vars)
     else {
         names = J(1, 0, "")
@@ -14903,7 +14954,7 @@ void _cge_report_vars(struct cge_model scalar M, real colvector s, string scalar
         if (!k | substr(names[i], 1, 1) == "_") _cge_fail("variables(): " + names[i] + " is not a variable of the model", 111)
         pos = _cge_vpos(M, k)
         _cge_vlabels(M, k, e1, e2)
-        keep = M.exists[pos]
+        keep = sh[pos]
         n = sum(keep)
         if (!n) continue
         pos = select(pos, keep)
@@ -15775,6 +15826,155 @@ real matrix _cge_scip_tok(struct cge_model scalar M, struct cge_par scalar p, re
         else T[i, .] = (6, tok[i, 2], 0)
     }
     return(T)
+}
+
+// =====================================================================
+// Conditions at each solve (from version 0.43.0; cge_options,
+// conditions(solve); model_spec.md, Section 53)
+// =====================================================================
+
+// 1 if the conditions of the user definitions are evaluated at the
+// parameters of each solve, as GAMS evaluates them when a solve generates the
+// model
+real scalar _cge_cond_on(struct cge_model scalar M)
+{
+    return(M.optcond == 1 & (rows(M.uvdef) | rows(M.uedef)))
+}
+
+// The user definitions made again with their conditions ($) evaluated at the
+// parameters p and the base levels: which elements of the user variables and
+// equations exist, and the terms of their sums and conditional terms, as
+// GAMS's model at a solve. Everything else is as at the base: the base
+// values, base(), the scales of the variables and of the equations. An
+// element that comes into its domain starts in M.xcur from its definition,
+// or its value(), at the base; one that leaves it is 0. Returns 1 if the
+// structure changed.
+real scalar _cge_cond_build(struct cge_model scalar M, struct cge_par scalar p)
+{
+    real colvector ex0, xb, k
+    string colvector lab0
+    ex0 = M.exists
+    lab0 = M.uelab
+    xb = M.x0
+    _cge_cond_set(M, p)
+    _cge_u_build(M, M.p0, xb)
+    rmexternal("cge__condp")
+    k = _cge_which(M.exists :& !ex0)
+    if (rows(k)) M.xcur[k] = xb[k]
+    k = _cge_which(!M.exists :& ex0)
+    if (rows(k)) M.xcur[k] = J(rows(k), 1, 0)
+    _cge_u_refresh(M)
+    // the inequalities and bounds of the elements that exist
+    if (_cge_u_cons_sync(M, 0)) {
+        if (_cge_sa(M)) _cge_closure_apply_sa(M)
+        else _cge_closure_apply(M, M.c_ext, M.c_gov, M.c_si, M.c_num, M.c_fac)
+    }
+    if (any(M.exists :!= ex0) | rows(lab0) != rows(M.uelab)) return(1)
+    if (!rows(lab0)) return(0)
+    return(any(lab0 :!= M.uelab))
+}
+
+// The parameters at which _cge_u_condval evaluates the conditions, in the
+// external cge__condp until it is removed; the lags and leads of a static
+// solve are the base levels
+void _cge_cond_set(struct cge_model scalar M, struct cge_par scalar p)
+{
+    struct cge_par scalar pc
+    pointer() scalar q
+    pc = p
+    pc.xlag = J(1, _cge_maxlag(), M.x0)
+    pc.xlead = pc.xlag
+    if ((q = findexternal("cge__condp")) == NULL) q = crexternal("cge__condp")
+    *q = pc
+}
+
+// The objective of a nonlinear programme compiled with its conditions at
+// the parameters of the solve, under conditions(solve)
+real matrix _cge_cond_tok(struct cge_model scalar M, string scalar obj, real scalar sgn, string scalar g)
+{
+    real matrix tok
+    if (!_cge_cond_on(M)) return(_cge_nlp_tok(M, obj, sgn, g))
+    _cge_cond_set(M, M.p)
+    tok = _cge_nlp_tok(M, obj, sgn, g)
+    rmexternal("cge__condp")
+    return(tok)
+}
+
+// Simulation name, stored by a solve, marked as solved with conditions(solve)
+void _cge_cond_mark(struct cge_model scalar M, string scalar name, real scalar cond)
+{
+    real scalar k
+    if (!cond) return
+    k = _cge_find(M.simname, name)
+    if (!k) return
+    _cge_set_simcond(M, k, 1)
+    _cge_store(M)
+}
+
+// The elements of positions pos to keep in the dataset of a loop under
+// conditions(solve): those that exist in the model or are not zero in a
+// scenario, the columns of X
+real colvector _cge_cond_els(struct cge_model scalar M, real matrix X, real colvector pos)
+{
+    real colvector sel
+    if (!rows(pos)) return(J(0, 1, .))
+    sel = _cge_which(M.exists[pos] :| (rowsum((X[pos, .] :!= 0) :& (X[pos, .] :< .)) :> 0))
+    return(rows(sel) ? pos[sel] : J(0, 1, .))
+}
+
+// cge_optimize and cge_dynamic evaluate the conditions at the base: the
+// structure in place may be that of a solve with conditions(solve). Returns
+// 1 if it was made again.
+real scalar _cge_cond_base(struct cge_model scalar M)
+{
+    if (!_cge_cond_on(M)) return(0)
+    (void) _cge_cond_build(M, M.p0)
+    return(1)
+}
+
+// The structure of the user definitions at stored simulation k, at the base
+// (k = 0) or at the current point (k < 0): conditions at the simulation's
+// parameters if it was solved with conditions(solve), at the current
+// parameters for the current point under conditions(solve), at the base
+// otherwise
+void _cge_cond_for(struct cge_model scalar M, real scalar k)
+{
+    if (!rows(M.uvdef) & !rows(M.uedef)) return
+    if (k > 0 & _cge_simcond(M, k)) (void) _cge_cond_build(M, M.simp[k])
+    else if (k < 0 & M.optcond == 1) (void) _cge_cond_build(M, M.p)
+    // the structure in place may be that of a solve
+    else if (M.optcond == 1) (void) _cge_cond_build(M, M.p0)
+}
+
+// 1 if stored simulation k was solved with conditions(solve)
+real scalar _cge_simcond(struct cge_model scalar M, real scalar k)
+{
+    if (k < 1 | k > rows(M.simcond)) return(0)
+    return(M.simcond[k] == 1)
+}
+
+void _cge_set_simcond(struct cge_model scalar M, real scalar k, real scalar v)
+{
+    real scalar n
+    n = rows(M.simname)
+    if (rows(M.simcond) < n) M.simcond = M.simcond \ J(n - rows(M.simcond), 1, 0)
+    if (rows(M.simcond) > n) M.simcond = (n ? M.simcond[|1 \ n|] : J(0, 1, .))
+    if (k >= 1 & k <= n) M.simcond[k] = v
+}
+
+// The elements to show for levels x: those that exist in the structure in
+// place, and the elements of user variables that are not zero in x, which a
+// solve with conditions(solve) may have brought into their domains
+real colvector _cge_shown(struct cge_model scalar M, real colvector x)
+{
+    real colvector sh, pos
+    real scalar k
+    sh = M.exists
+    for (k = rows(M.vname) - M.nuv + 1; k <= rows(M.vname); k++) {
+        pos = _cge_vpos(M, k)
+        if (rows(pos)) sh[pos] = sh[pos] :| ((x[pos] :!= 0) :& (x[pos] :< .))
+    }
+    return(sh)
 }
 
 // =====================================================================
@@ -19130,6 +19330,8 @@ void _cge_listing(string scalar sim, real scalar base, real scalar current, stri
         if (rows(M.simname)) sim = M.simname[rows(M.simname)]
         else base = 1
     }
+    // the structure of the user definitions there (from version 0.43.0)
+    _cge_cond_for(M, (sim != "" ? _cge_sim_index(M, sim) : (base ? 0 : -1)))
     if (sim != "") {
         k = _cge_sim_index(M, sim)
         p = M.simp[k]
@@ -19978,6 +20180,9 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
 
     M = _cge_load()
     _cge_need(M, "calibrated")
+    // the structure of the user definitions that the simulation was solved
+    // with (from version 0.43.0)
+    _cge_cond_for(M, (sim != "" ? _cge_sim_index(M, sim) : -1))
     // a standalone model (from version 0.13.0)
     if (_cge_sa(M)) {
         _cge_gams_export_sa(M, dir, sim, solver, type)
@@ -20589,6 +20794,9 @@ void _cge_gams_compare(string scalar dir, string scalar sim)
     else name = sim
     k = _cge_sim_index(M, sim)
     x = M.simx[., k]
+    // the elements of the structure that the simulation was solved with (from
+    // version 0.43.0)
+    _cge_cond_for(M, k)
     _cge_gams_read(dir + "/cge_base.csv", key, val, bstatus)
     db = _cge_gams_diff(M, A, key, val, M.x0, vb, nb)
     _cge_gams_read(dir + "/cge_" + name + ".csv", key, val, status)
@@ -20638,7 +20846,7 @@ void _cge_gdx_write(string scalar fgms, string scalar gdxname, string scalar s_s
     string matrix keys
     string colvector e1, e2, sn, rec, lab
     string rowvector tok
-    real colvector val, s, pos, x
+    real colvector val, s, pos, x, sh
     real scalar fh, k, i, j, n
     M = _cge_load()
     _cge_need(M, "calibrated")
@@ -20698,12 +20906,15 @@ void _cge_gdx_write(string scalar fgms, string scalar gdxname, string scalar s_s
     rec = J(0, 1, "")
     for (j = 1; j <= rows(sn); j++) {
         x = (j == 1 ? M.x0 : M.simx[., s[j - 1]])
+        sh = _cge_shown(M, x)
         for (k = 1; k <= rows(M.vname); k++) {
             pos = _cge_vpos(M, k)
             if (!rows(pos)) continue
             _cge_vlabels(M, k, e1, e2)
             for (i = 1; i <= rows(pos); i++) {
-                if (!M.exists[pos[i]] | x[pos[i]] == 0 | x[pos[i]] >= .) continue
+                // the elements of a solve with conditions(solve) too (from
+                // version 0.43.0)
+                if (!sh[pos[i]] | x[pos[i]] == 0 | x[pos[i]] >= .) continue
                 rec = rec \ ("    '" + sn[j] + "'.'" + M.vname[k] + "'.'" + (e1[i] == "" ? "-" : e1[i]) + "'.'" +
                              (e2[i] == "" ? "-" : e2[i]) + "' " + _cge_gnum17(x[pos[i]]))
             }
@@ -22434,16 +22645,22 @@ string rowvector _cge_u_rdollar(struct cge_model scalar M, struct cge_par scalar
 // (goods(com_agr)), parameters and variables at the base (from version 0.7.2).
 real scalar _cge_u_condval(struct cge_model scalar M, struct cge_par scalar p, real colvector x0, string rowvector t)
 {
+    pointer(struct cge_par scalar) scalar q
     real matrix tok
-    real scalar v
+    real scalar v, sv
     string scalar g
-    tok = _cge_u_compile(M, _cge_u_written(M, p, x0, t), x0, g, 1)
+    // at a solve with conditions(solve) (from version 0.43.0), the
+    // parameters of the solve (_cge_cond_build)
+    sv = ((q = findexternal("cge__condp")) != NULL)
+    if (!sv) q = &p
+    tok = _cge_u_compile(M, _cge_u_written(M, *q, x0, t), x0, g, 1)
     // the period changes from period to period (from version 0.10.2)
     if (any(tok[., 1] :== 12)) {
         _cge_fail("tperiod, tfirst and tlast change by period, but a condition ($) holds in every period; write ifthen(tlast, a, b)", 198)
     }
-    v = _cge_u_value(M, p, x0, tok)
-    if (v >= .) _cge_fail("a condition is missing at the base: " + invtokens(_cge_u_um(t), " "), 459)
+    v = _cge_u_value(M, *q, x0, tok)
+    if (v >= .) _cge_fail("a condition is missing at the " + (sv ? "parameters of the solve" : "base") + ": " +
+                          invtokens(_cge_u_um(t), " "), 459)
     return(v != 0)
 }
 
@@ -24060,10 +24277,12 @@ void _cge_u_addvar(string scalar spec)
     if (expr != "") M.uedef = M.uedef \ (name, idx, set, name + ix, dexpr, cond, "=", "")
     pos = _cge_u_newrow(M, (name, set, (expr != "" ? expr : value), idx, (nom ? "nominal" : ""), status, cond, lo, up), nom)
     x0 = M.x0
-    // the elements in the domain (from version 0.7.2)
-    pos = select(pos, M.exists[pos])
+    // the elements in the domain (from version 0.7.2); under
+    // conditions(solve), from version 0.43.0, none may meet it at the base
+    k = _cge_which(M.exists[pos])
+    pos = (rows(k) ? pos[k] : J(0, 1, .))
     len = rows(pos)
-    if (!len) _cge_fail("user variable " + name + ": no element meets the condition", 459)
+    if (!len & M.optcond != 1) _cge_fail("user variable " + name + ": no element meets the condition", 459)
     if (addspec != "") {
         if (cols(M.uadd) != 2) M.uadd = J(0, 2, "")
         M.uadd = M.uadd \ (name, addspec)
@@ -24071,9 +24290,11 @@ void _cge_u_addvar(string scalar spec)
     _cge_u_refresh(M)
     if (expr != "" & (lo != "" | up != "")) (void) _cge_u_cons_sync(M, 1)
     _cge_store(M)
-    printf("{txt}User variable {res}%s%s{txt}: %f element(s), base value%s {res}%s\n", name,
-           (idx != "" ? "(" + idx + ")" + (cond != "" ? "$" + cond : "") : ""), len, (len > 1 ? "s" : ""),
-           invtokens(strtrim(strofreal(x0[pos[|1 \ min((len, 5))|]]', "%12.6g"))) + (len > 5 ? " ..." : ""))
+    if (len) printf("{txt}User variable {res}%s%s{txt}: %f element(s), base value%s {res}%s\n", name,
+                    (idx != "" ? "(" + idx + ")" + (cond != "" ? "$" + cond : "") : ""), len, (len > 1 ? "s" : ""),
+                    invtokens(strtrim(strofreal(x0[pos[|1 \ min((len, 5))|]]', "%12.6g"))) + (len > 5 ? " ..." : ""))
+    else printf("{txt}User variable {res}%s%s{txt}: no element at the base; a solve may bring some into its domain\n", name,
+                "(" + idx + ")" + "$" + cond)
     if (expr != "") printf("{txt}and its definition, equation {res}%s%s\n", name,
                            (lo + up != "" ? ", held within its bounds" : ""))
     else if (status == "fixed") printf("{txt}It is exogenous%s\n", (lo + up != "" ? ": the paired variable of an inequality may move it from its bound" : ""))
@@ -24535,7 +24756,7 @@ void _cge_u_addeq(string scalar spec)
     _cge_u_widen(M)
     M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, rel, rep)
     _cge_u_build(M, M.p0, M.x0)
-    if (rows(M.uelab) == n0) _cge_fail("user equation " + name + ": no element meets the condition", 459)
+    if (rows(M.uelab) == n0 & M.optcond != 1) _cge_fail("user equation " + name + ": no element meets the condition", 459)
     if (rel == "box") _cge_u_boxcheck(M)
     _cge_u_refresh(M)
     // the base need not satisfy a new equation: it then acts as a shock
@@ -26088,6 +26309,8 @@ void _cge_optimize(string scalar s_ins, string scalar s_max, string scalar s_min
 
     M = _cge_load()
     _cge_need(M, "calibrated")
+    // the conditions of the user definitions at the base (from version 0.43.0)
+    (void) _cge_cond_base(M)
     ins = tokens(s_ins)
     n = cols(ins)
     if (!n) _cge_fail("give the instruments in instruments()", 198)
@@ -26513,7 +26736,9 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     real scalar T, S, k, j, s, conv, iter, err, nm, kd, pi, st, it2, done, haskey, nr, w, kk
     string scalar method, m2, pn
     pointer() scalar q
-    real scalar parrun, kr, pyok
+    real scalar parrun, kr, pyok, cond
+    struct cge_model scalar Mw
+    real colvector cw, xw
 
     // parallel runs across Stata processes and the number of the first
     // scenario (from version 0.19.0)
@@ -26583,6 +26808,12 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
     psave = M.p
     xsave = M.xcur
     xprev = _cge_bd_start(M, M.xcur)
+    // the conditions of the user definitions at each scenario's parameters
+    // (from version 0.43.0; cge_options, conditions(solve)), in a copy of the
+    // model
+    cond = _cge_cond_on(M)
+    Mw = M
+    cw = J(0, 1, .)
     R = J(S, nm, .)
     conv_v = it_v = res_v = J(S, 1, .)
     X = J(rows(M.x0), S, .)
@@ -26612,6 +26843,7 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
         xsave = M.xcur
         for (s = 1; s <= S; s++) {
             kr = _cge_find(M.simname, name + strofreal(first - 1 + s))
+            if (kr & cond) _cge_set_simcond(M, kr, 1)
             p = (kr ? M.simp[kr] : M.p)
             if (haskey) _cge_opt_rows(M, p, X[., s], keys, val)
             for (k = 1; k <= nm; k++) R[s, k] = _cge_opt_item(M, O, p, X[., s], keys, val, mkeys[k, .], mex[k], 0)
@@ -26623,28 +26855,37 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
         for (k = 1; k <= T; k++) if (v[k] >= .) v[k] = O.start[k]
         V[s, .] = v'
         _cge_opt_apply(M, O, v, p, xfix)
-        start = (cold ? _cge_bd_start(M, xfix) : xprev)
-        x = _cge_solve_point(M, p, xfix, start, tol, maxit, 0, conv, iter, err, method, 0)
+        // the elements that come into or leave their domains start from their
+        // definitions at the base, or at 0
+        if (cond) {
+            (void) _cge_cond_build(Mw, p)
+            cw = _cge_which(Mw.exists :!= M.exists)
+            if (rows(cw)) xfix[cw] = Mw.xcur[cw]
+        }
+        start = (cold ? _cge_bd_start(Mw, xfix) : xprev)
+        if (rows(cw) & !cold) start[cw] = xfix[cw]
+        x = _cge_solve_point(Mw, p, xfix, start, tol, maxit, 0, conv, iter, err, method, 0)
         if (!conv & !cold) {
-            x = _cge_solve_point(M, p, xfix, _cge_bd_start(M, xfix), tol, maxit, 0, conv, it2, err, method, 0)
+            x = _cge_solve_point(Mw, p, xfix, _cge_bd_start(Mw, xfix), tol, maxit, 0, conv, it2, err, method, 0)
             iter = iter + it2
         }
         if (!conv) {
             // continuation from the base, in 4 and then 16 steps
-            M.p = p
-            M.xcur = xfix
+            xw = Mw.xcur
+            Mw.p = p
+            Mw.xcur = xfix
             for (j = 1; j <= 2; j++) {
-                x = _cge_continue(M, (j == 1 ? 4 : 16), tol, maxit, 0, conv, it2, err, m2, 0, done)
+                x = _cge_continue(Mw, (j == 1 ? 4 : 16), tol, maxit, 0, conv, it2, err, m2, 0, done)
                 iter = iter + it2
                 if (conv) {
                     method = m2
                     break
                 }
             }
-            M.p = psave
-            M.xcur = xsave
+            Mw.p = psave
+            Mw.xcur = xw
         }
-        err = _cge_maxres(M, p, x)
+        err = _cge_maxres(Mw, p, x)
         conv_v[s] = conv
         it_v[s] = iter
         res_v[s] = err
@@ -26655,7 +26896,8 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
         if (store) {
             simn[s] = name + strofreal(first - 1 + s)
             M.p = p
-            (void) _cge_store_sim(M, simn[s], x, conv, iter, err, method)
+            kr = _cge_store_sim(M, simn[s], x, conv, iter, err, method)
+            _cge_set_simcond(M, kr, cond)
             M.p = psave
         }
     }
@@ -26698,6 +26940,8 @@ void _cge_loop(string scalar name, string scalar s_tar, string scalar s_lists, r
         for (kk = 1; kk <= rows(M.vname); kk++) {
             if (cols(kv)) if (!anyof(kv, M.vname[kk])) continue
             pos = _cge_bd_exist(M, _cge_vpos(M, kk))
+            // and the elements that a scenario brought in (from version 0.43.0)
+            if (cond) pos = _cge_cond_els(M, X, _cge_vpos(M, kk))
             if (!rows(pos)) continue
             _cge_vlabels(M, kk, e1, e2)
             cpos = cpos \ pos
@@ -27483,6 +27727,7 @@ void _cge_model_new()
     M.uaddp = J(0, 4, .)
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
+    M.simcond = J(0, 1, .)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
     _cge_u_refresh(M)
     _cge_store(M)
@@ -28750,7 +28995,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     }
     keeplin = M.linsolver
     if (name == "") name = "sim" + strofreal(rows(M.simname) + 1)
-    tok = _cge_nlp_tok(M, obj, sgn, g)
+    tok = _cge_cond_tok(M, obj, sgn, g)
     (void) _cge_hess_count(0)
     (void) _cge_rest_count(0)
     // a named model and a start from a stored simulation (from version
@@ -29827,6 +30072,8 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "optjac", M.optjac)
     _cge_io_put(fh, "opthess", M.opthess)
     _cge_io_put(fh, "optscale", M.optscale)
+    _cge_io_put(fh, "optcond", M.optcond)
+    _cge_io_put(fh, "simcond", M.simcond)
     _cge_io_put(fh, "simstat", M.simstat)
     _cge_io_put(fh, "mdef", M.mdef)
     _cge_io_put(fh, "simmodel", M.simmodel)
@@ -29995,6 +30242,8 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "optjac") M.optjac = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "opthess") M.opthess = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "optscale") M.optscale = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "optcond") M.optcond = (rows(v) * cols(v) == 0 ? . : v)
+    else if (name == "simcond") M.simcond = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "simstat") M.simstat = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "mdef") M.mdef = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "simmodel") M.simmodel = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)

@@ -3694,6 +3694,88 @@ gap; the node limit, statuses 7 and 2; an infeasible programme, status 4;
 errors; SCIP's log with trace). On Stata 13 to 15 the test checks error
 198.
 
+## 53. Conditions evaluated at each solve (from version 0.43.0)
+
+`cge_options, conditions(base|solve)` sets `M.optcond` (missing or 0 at the
+base, the default; 1 at each solve), saved with the model. Under `solve`,
+the conditions (`$`) of user variables, equations, sums and terms are
+evaluated at the parameters of each solve, as GAMS evaluates them when a
+`solve` statement generates the model; parameter assignments and sets keep
+their values from when they were defined, as GAMS's assignments do.
+
+`_cge_cond_build(M, p)` makes the user definitions again with
+`_cge_u_build(M, M.p0, x)` while the external `cge__condp` holds p
+(`_cge_cond_set`, with lags and leads at the base levels):
+`_cge_u_condval`, through which every condition of a domain
+(`_cge_u_domain`), a sum (`_cge_u_expand`) and a term (`_cge_u_rdollar`) is
+evaluated, takes its parameters from the external when it exists, and the
+levels of the variables from the base. Everything else is built as at the
+base: base values, `base()`, the scales of the variables. The existence of
+the user variables' elements, the equation elements and their compiled
+terms (and GAMS text) follow p. An element that comes into its domain
+starts (`M.xcur`) from its definition, or its `value()`, at the base; one
+that leaves it is 0; `M.x0` keeps the base. Then `_cge_u_refresh` (equation
+masks, scales at the base, the Jacobian's pattern), `_cge_u_cons_sync` and,
+when there are inequalities, the closure again. Returns whether the
+structure changed. The external is removed after each use, and by
+`_cge_load` at the start of every command, so that a solve that stops with
+an error inside the build leaves nothing for the next command.
+
+Where it applies. `_cge_solve` (every form of `cge_solve`: systems,
+constraints, named models, `from()`, `hold()`, nonlinear and mixed-integer
+programmes, whose objective is compiled under the same conditions,
+`_cge_cond_tok`) builds at `M.p` before solving, and the model keeps the
+structure of its last solve. `cge_sensitivity` and `cge_nash` solve through
+`cge_solve`. `cge_loop` builds each scenario's structure at its parameters
+in a copy of the model, adjusts the fixed levels and the start of elements
+that come in or leave, and solves the copy; the model keeps its structure,
+and the loop's dataset keeps the elements that a scenario brought in
+(`_cge_cond_els`). `cge_optimize` and `cge_dynamic` build at the base
+(`_cge_cond_base`).
+
+Simulations. `M.simcond` (one row per stored simulation, kept in step by
+`_cge_store_sim`, `_cge_sims_keep` and `_cge_set_simcond`) is 1 for a
+simulation solved under `solve`. `_cge_cond_for(M, k)` gives a stored
+simulation k its structure (at its parameters if `M.simcond[k]` is 1, at
+the base otherwise), the base (k = 0) the base's, and the current point
+(k < 0) that of the next solve; `cge_results`, `cge_listing`, the
+solution listing, `cge_gams` and the comparison with GAMS use it. Results,
+reports, the GDX file and the roles of a standalone model show an element of
+a user variable that exists in the structure in place or is not zero in a
+simulation shown (`_cge_shown`), as GAMS's displays leave out zeros; for
+`cge_results` the structure in place is the simulation's own.
+
+GAMS. The export of a simulation writes the model with the simulation's
+structure: its equation elements, with their base gaps times `UBASE`, and
+its user variables, those outside it fixed at 0. GAMS's base solve then
+reproduces Stata's base on the elements of that structure (an element that
+the scenario brings in is 0 there, as in Stata; an element that it takes
+out is fixed at 0 and not compared), and the scenario solve the simulation.
+
+Domains. Under `solve`, a user variable or equation whose domain no
+element meets at the base is allowed (it is error 459 at the base), so
+that it can be defined before a shock brings elements in. A domain of one
+element that the condition leaves out no longer reaches a subscript error
+(`select()` of a 1 x 1 matrix with a zero mask is 1 x 0).
+
+Tests: `tests/test_condsolve.do` (a conditional domain and sum switched on
+by a shock, against the model whose base meets the condition; an element
+that leaves its domain is 0; the default at the base; cge_results with the
+element brought in, and without it for the simulation at the base; cge_listing at each simulation, the base and after
+save and use, with r(N_equations) from the simulation's structure;
+conditions(base) and reset; a conditional variable, equation, term and sum
+in one model, every variable against the model with the subsidy at the
+base, 1e-14; a nonlinear programme whose objective has a conditional sum,
+min sum c_k Z_k^2 subject to sum Z_k = 10 at 100 / sum(1/c_k) with two and
+three technologies; cge_loop scenarios and their dataset; a model from a
+SAM with a conditional user variable; errors: conditions() values, a
+condition missing at the parameters of a solve, after which the next
+command evaluates its own conditions). Export check: cases
+`condsolve` (a tax on absorption added to government revenue, `add(I8)`,
+where on(c), the scenario taking one commodity out and bringing another
+in) and `sacond` (a standalone model with a conditional variable,
+equation, term and sum, one element in and one out).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

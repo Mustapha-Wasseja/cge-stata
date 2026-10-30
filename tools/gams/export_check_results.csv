@@ -89,6 +89,7 @@ bounds,path,cns,16,132,1.388e-17,1.366e-12
 boundscon,path,mcp,1,121,2.776e-17,8.807e-14
 boxpair,path,mcp,1,117,2.776e-17,4.335e-13
 addterm,path,cns,16,124,2.776e-17,1.971e-12
+condsolve,path,cns,16,146,0.000e+00,1.009e-15
 dyninst,path,cns,16,516,1.388e-17,2.938e-14
 dynhealth,path,cns,16,584,0.000e+00,2.036e-13
 dyndebt,path,cns,16,516,1.388e-17,2.558e-13
@@ -99,6 +100,7 @@ exchange,path,cns,16,12,0.000e+00,2.690e-16
 mcpjosephy,path,mcp,1,16,0.000e+00,8.816e-13
 mcptech,path,mcp,1,16,0.000e+00,0.000e+00
 manycons,path,mcp,1,127,2.776e-17,9.504e-14
+sacond,path,cns,16,6,0.000e+00,1.599e-16
 nlphs071,ipopt,nlp,2,5,0.000e+00,6.764e-13
 nlpentropy,ipopt,nlp,2,12,0.000e+00,3.055e-13
 nlpfrontier,ipopt,nlp,2,3,0.000e+00,3.948e-12

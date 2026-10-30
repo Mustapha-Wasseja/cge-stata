@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.33.0  29oct2026}{...}
+{* *! version 0.43.0  30oct2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -12,7 +12,7 @@
 {p 8 12 2}
 {cmd:cge_options} [{cmd:,} {opt lin:solver(dense|sparse|auto|python)} {opt mcp(semismooth|activeset)}
 {opt jac:obian(exact|differences)} {opt hes:sian(exact|differences)} {opt sca:ling(none|ruiz)}
-{opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
+{opt cond:itions(base|solve)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt reset}]
 
 
 {title:Description}
@@ -97,6 +97,31 @@ a zero base that grow large. It applies with the dense and the sparse LU,
 to runs with foresight and to linked regions (the first region's setting).
 
 {pstd}
+{opt conditions()} (from version 0.43.0) chooses when the conditions
+({cmd:$}) of user variables and equations ({helpb cge_equation}) are
+evaluated: {cmd:base} (the default), once, at the base, so that every
+simulation has the terms and elements of the base; or {cmd:solve}, at the
+parameters of each solve, as GAMS evaluates them when a {cmd:solve}
+statement generates the model. A shock to a parameter that a condition uses
+then brings elements of user variables and equations into their domains, or
+takes them out, and terms into sums and conditional terms, at the next
+{helpb cge_solve} and in each scenario of {helpb cge_loop}; the solves of
+{helpb cge_sensitivity} and {helpb cge_nash} are those of {cmd:cge_solve}.
+An element that comes into its domain starts from its definition, or its
+{opt value()}, at the base; one that leaves it is 0. Conditions on variables
+use their base levels. Under {cmd:solve}, a variable or equation whose
+domain no element meets at the base is allowed: define it after
+{cmd:cge_options, conditions(solve)}. {helpb cge_optimize} and
+{helpb cge_dynamic} evaluate the conditions at the base.
+{helpb cge_results}, {helpb cge_listing} and {helpb cge_gams} take each
+simulation with the elements it was solved with, and {helpb cge_report} the
+elements of every simulation it reports.
+Back to {cmd:base}, the model takes the structure of the base again. In a
+model from a SAM, the conditions are those of the user definitions; the
+built-in equations keep the flows of the SAM, where a zero flow calibrates
+to a zero share that no condition can switch on.
+
+{pstd}
 {opt tolerance(#)}, {opt iterate(#)} and {opt timelimit(#)} (from version
 0.16.0) set the tolerance, iteration limit and time limit in seconds of
 {helpb cge_solve} when it is not given them, as GAMS's {cmd:option iterlim}
@@ -124,6 +149,8 @@ restores every setting to its default.
 
 {phang2}{cmd:. cge_options, scaling(ruiz)}{p_end}
 
+{phang2}{cmd:. cge_options, conditions(solve)}{p_end}
+
 {phang2}{cmd:. cge_options, reset}{p_end}
 
 
@@ -132,7 +159,7 @@ restores every setting to its default.
 {pstd}
 {cmd:cge_options} stores {cmd:r(linsolver)}, the linear solver ({cmd:python} for SuperLU), {cmd:r(mcp)},
 the method for constraints, {cmd:r(jacobian)}, the Jacobian, {cmd:r(hessian)}, the Hessian, and
-{cmd:r(scaling)}, the scaling, as macros, and
+{cmd:r(scaling)}, the scaling, and {cmd:r(conditions)}, when conditions are evaluated (from version 0.43.0), as macros, and
 {cmd:r(tolerance)}, {cmd:r(iterate)} and {cmd:r(timelimit)} (missing for none),
 the defaults of {helpb cge_solve}, as scalars.
 

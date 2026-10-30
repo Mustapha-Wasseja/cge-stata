@@ -141,12 +141,16 @@ values, whatever the scenario. A shock to a parameter that a condition uses
 therefore changes the value of the terms but not which terms are included, so the
 system has the same size in every simulation, and {helpb cge_gams} writes out
 the same terms. The elements of a user variable outside its domain do not
-exist: the results leave them out, and a reference to one is 0.
+exist: the results leave them out, and a reference to one is 0. From version
+0.43.0, {cmd:cge_options, conditions(solve)} evaluates the conditions
+instead at the parameters of each solve, as GAMS does: see
+{helpb cge_options}.
 
 {pstd}
 Write the condition in parentheses after {cmd:$}: on a command line, Stata
 reads {cmd:$}{it:name} as a global macro. A condition that is missing at the
-base, or a domain that no element meets, stops the command with error 459.
+base, or a domain that no element meets, stops the command with error 459;
+under {cmd:conditions(solve)}, a domain may be empty at the base.
 
 
 {title:Two indexes and sets of pairs}

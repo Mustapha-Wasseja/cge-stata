@@ -1,4 +1,4 @@
-*! cge_options.ado  v0.33.0  2026-10-29
+*! cge_options.ado  v0.43.0  2026-10-30
 *! cge-stata: settings of the solver, as GAMS's option statement
 *! (Reference Manual, cge_options)
 *!
@@ -8,7 +8,7 @@
 program define cge_options, rclass
     version 13.0
     syntax [, LINsolver(name) MCP(name) TOLerance(real -1) ITERate(integer -1) TIMElimit(real -1) ///
-        JACobian(name) HESsian(name) SCAling(name) RESET]
+        JACobian(name) HESsian(name) SCAling(name) CONDitions(name) RESET]
     * python (from version 0.27.0): SciPy's SuperLU, Stata 16 and later
     if "`linsolver'" != "" & !inlist("`linsolver'", "dense", "sparse", "auto", "python") {
         display as error "linsolver() takes dense, sparse, auto or python"
@@ -47,8 +47,13 @@ program define cge_options, rclass
         display as error "scaling() takes none or ruiz"
         exit 198
     }
+    * the conditions of the user definitions (from version 0.43.0)
+    if "`conditions'" != "" & !inlist("`conditions'", "base", "solve") {
+        display as error "conditions() takes base or solve"
+        exit 198
+    }
     _cge_load
     mata: _cge_options("`linsolver'", "`mcp'", `tolerance', `iterate', `timelimit', "`jacobian'", ("`reset'" != ""), ///
-        "`hessian'", "`scaling'")
+        "`hessian'", "`scaling'", "`conditions'")
     return add
 end

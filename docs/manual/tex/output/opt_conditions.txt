@@ -1,0 +1,61 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set i = a b c
+User set i: 3 element(s): a b c
+
+. cge_parameter on(i), values(a:1 b:1 c:0)
+User parameter on(i): 3 value(s), from 0 to 1
+
+. cge_parameter w(i), values(a:1 b:2 c:3)
+User parameter w(i): 3 value(s), from 1 to 3
+
+. cge_variable Y, value(10) fixed
+User variable Y: 1 element(s), base value 10
+It is exogenous
+
+. cge_variable X(i)$(on(i)) = w(i) * Y
+User variable X(i)$(on(i)): 2 element(s), base values 10 20
+and its definition, equation X
+
+. cge_variable T = sum(i$(on(i)), X(i))
+User variable T: 1 element(s), base value 30
+and its definition, equation T
+
+. cge_shock on, elements(c) value(1)
+User parameter on changed for 1 element(s)
+
+. quietly cge_solve, name(atbase)
+
+. quietly cge_options, conditions(solve)
+
+. quietly cge_solve, name(atsolve)
+
+. cge_results, sim(atbase)
+
+Simulation atbase of a standalone model (solved, 0 iteration(s), largest scaled residual  0.00e+00)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+Y                                          10           10    0.000
+X(a)                                       10           10    0.000
+X(b)                                       20           20    0.000
+T                                          30           30    0.000
+-------------------------------------------------------------------
+
+. cge_results, sim(atsolve)
+
+Simulation atsolve of a standalone model (solved, 1 iteration(s), largest scaled residual  0.00e+00)
+-------------------------------------------------------------------
+                                        start     solution % change
+-------------------------------------------------------------------
+Y                                          10           10    0.000
+X(a)                                       10           10    0.000
+X(b)                                       20           20    0.000
+X(c)                                        0           30        .
+T                                          30           60  100.000
+-------------------------------------------------------------------
+
+. quietly cge_options, reset

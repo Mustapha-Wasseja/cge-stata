@@ -35,7 +35,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
     nests nestvat outces user usersets conditions inequalities pairs replace cgenest functions bounds boundscon boxpair ///
-    addterm
+    addterm condsolve
 local ncase : word count `cases'
 
 tempname post
@@ -503,6 +503,22 @@ foreach case of local cases {
         cge_constraint QE, elements(com_agr) upper(2) scale
         cge_shock tm, value(0)
     }
+    * conditions at the solve (version 0.43.0): a tax on the absorption of the
+    * goods where on(c), added to government revenue; the scenario takes
+    * com_agr out and brings com_man in, and GAMS solves the structure of the
+    * scenario
+    else if "`case'" == "condsolve" {
+        quietly cge_synthetic, clear health
+        quietly cge_sam, labels(account)
+        quietly cge_map, `hltmap'
+        quietly cge_calibrate, `sigmas'
+        cge_options, conditions(solve)
+        cge_parameter on(c), values(com_agr:1 com_man:0 com_ser:0 com_hlt:0)
+        cge_variable TXC(c)$(on(c)) = 0.05 * PQ(c) * QQ(c)
+        cge_variable TXS = sum(c$(on(c)), TXC(c)), add(I8)
+        cge_shock on, elements(com_man) value(1)
+        cge_shock on, elements(com_agr) value(0)
+    }
     quietly cge_solve, name(`case') tolerance(1e-12)
     assert r(converged) == 1
     if "`phase'" == "export" {
@@ -629,7 +645,7 @@ local exfile = subinstr(subinstr(`"`r(fn)'"', "\", "/", .), "ado/cge_model.ado",
 * method and by PATH as MCP: MCPLIB josephy, an economy in the form of MPSGE
 * with a technology that is not used, and many constraints of the standard
 * model at once
-foreach case in standalone exchange mcpjosephy mcptech manycons {
+foreach case in standalone exchange mcpjosephy mcptech manycons sacond {
     display as text _n "{hline 60}" _n "Case " as result "`case'"
     if "`case'" == "mcpjosephy" {
         quietly cge_model new
@@ -665,6 +681,25 @@ foreach case in standalone exchange mcpjosephy mcptech manycons {
         quietly cge_constraint QM, elements(com_agr) upper(0.98) scale adjust(RM com_agr) up
         quietly cge_constraint QM, elements(com_man) upper(0.98) scale adjust(RM com_man) up
         quietly cge_shock qinv, scale(1.5)
+    }
+    * conditions at the solve (version 0.43.0): a subsidy, its price
+    * effect and its total where sub(i) > 0; the scenario brings a in and
+    * takes b out
+    else if "`case'" == "sacond" {
+        quietly cge_model new
+        quietly cge_options, conditions(solve)
+        quietly cge_set i = a b
+        quietly cge_parameter sub(i), values(a:0 b:0.1)
+        quietly cge_parameter d0(i), values(a:5 b:8)
+        quietly cge_variable P(i), value(1)
+        quietly cge_variable Q(i), value(d0(i))
+        quietly cge_variable S(i)$(sub(i) > 0), value(sub(i) * d0(i))
+        quietly cge_equation price(i): P(i) = 1 - 0.1$(sub(i) > 0)
+        quietly cge_equation dem(i): Q(i) = d0(i) / P(i)
+        quietly cge_equation sdef(i)$(sub(i) > 0): S(i) = sub(i) * Q(i)
+        quietly cge_variable G = sum(i$(sub(i) > 0), S(i))
+        quietly cge_shock sub, elements(a) value(0.2)
+        quietly cge_shock sub, elements(b) value(0)
     }
     else if "`case'" == "standalone" {
         preserve

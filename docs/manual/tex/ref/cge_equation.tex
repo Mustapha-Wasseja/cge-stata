@@ -195,7 +195,9 @@ conditions.
 Conditions are evaluated with the variables and parameters at their base
 values, when the equation is added and when the model is calibrated again; they
 choose the terms and the equation elements, which stay the same in every
-scenario. A condition that is missing at the base, such as \cmd{1/tm(c) > 0}
+scenario. From version 0.43.0, \cmd{cge_options, conditions(solve)}
+evaluates them instead at the parameters of each solve, as GAMS does
+(\manref{cge_options}). A condition that is missing at the base, such as \cmd{1/tm(c) > 0}
 where a tariff is 0, and a domain that no element meets are errors. Stata
 reads \cmd{$}\argu{name} on a command line as a global macro, so the
 condition is always written in parentheses.

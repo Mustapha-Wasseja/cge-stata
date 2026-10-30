@@ -60,6 +60,7 @@ cge_options
 \optarg{jac}{obian}{exact|differences} & the Jacobian of Newton's method\\
 \optarg{hes}{sian}{exact|differences} & the Hessian of nonlinear programmes\\
 \optarg{sca}{ling}{none|ruiz} & the scaling of Newton's linear systems\\
+\optarg{cond}{itions}{base|solve} & when the conditions of user definitions are evaluated\\
 \optgroup{Defaults of cge\_solve}
 \optarg{tol}{erance}{\#} & tolerance on the largest scaled residual; default \texttt{1e-10}\\
 \optarg{iter}{ate}{\#} & iteration limit; default \texttt{100}\\
@@ -125,6 +126,31 @@ with and without it, and the semismooth method took one or two iterations
 fewer with an import quota. It applies with the dense and the sparse LU, to
 runs with foresight and to linked regions (the setting of the first region).
 
+\item[\optarg{cond}{itions}{base|solve}] (from version 0.43.0) chooses when
+the conditions (\cmd{$}) of user variables and equations
+(\manref{cge_equation}) are evaluated: \cmd{base}, the default, once, at the
+base, so that every simulation has the terms and elements of the base; or
+\cmd{solve}, at the parameters of each solve, as GAMS evaluates them when a
+\cmd{solve} statement generates the model. A shock to a parameter that a
+condition uses then brings elements of user variables and equations into
+their domains, or takes them out, and terms into sums and conditional
+terms, at the next \manref{cge_solve} and in each scenario of
+\manref{cge_loop}; the solves of \manref{cge_sensitivity} and
+\manref{cge_nash} are those of \cmd{cge_solve}. An element that comes into
+its domain starts from its definition, or its \opt{}{value()}, at the base;
+one that leaves it is 0. Conditions on variables use their base levels.
+Under \cmd{solve}, a variable or equation whose domain no element meets at
+the base is allowed, if it is defined after the option is set.
+\manref{cge_optimize} and \manref{cge_dynamic} evaluate the conditions at
+the base. \manref{cge_results}, \manref{cge_listing} and \manref{cge_gams}
+take each simulation with the elements it was solved with, and GAMS solves
+the structure of the scenario; \manref{cge_report} shows the elements of
+every simulation it reports. Back to \cmd{base}, the
+model takes the structure of the base again. In a model from a SAM the
+conditions are those of the user definitions: the built-in equations keep
+the flows of the SAM, where a zero flow calibrates to a zero share that no
+condition can switch on.
+
 \item[\optarg{tol}{erance}{\#}], \optarg{iter}{ate}{\#} and
 \optarg{time}{limit}{\#} (from version 0.16.0) set the tolerance, the
 iteration limit and the time limit, in seconds, of \manref{cge_solve} when
@@ -175,6 +201,17 @@ reports its model status, 6 (intermediate infeasible), and its solver status,
 after \opt{}{reset}, the solve converges with model status 16 (solved):
 \stlog{opt_limits}
 
+\cgesubsec{Example 4: conditions at each solve}
+
+From version 0.43.0, \opt{cond}{itions(solve)} evaluates the conditions of
+user definitions at the parameters of each solve. In a standalone model,
+$X_i = w_i Y$ is defined where $on_i$ is 1, and $T$ sums it over those
+elements; a shock switches element \cmd{c} on. Solved with the conditions of
+the base, $X_c$ does not exist and $T$ stays 30; solved with those of the
+scenario, $X_c = 30$ comes into its domain and $T$ is 60, as in a model whose
+base has $on_c = 1$:
+\stlog{opt_conditions}
+
 \cgesec{Stored results}
 
 \cmd{cge_options} stores the following in \cmd{r()}:
@@ -189,6 +226,7 @@ after \opt{}{reset}, the solve converges with model status 16 (solved):
 \res{r(jacobian)} & the Jacobian of Newton's method: \cmd{exact} or \cmd{differences}\\
 \res{r(hessian)} & the Hessian of nonlinear programmes: \cmd{exact} or \cmd{differences}\\
 \res{r(scaling)} & the scaling of Newton's linear systems: \cmd{none} or \cmd{ruiz}\\
+\res{r(conditions)} & when conditions are evaluated: \cmd{base} or \cmd{solve} (from version 0.43.0)\\
 \end{storedres}
 
 \cgesec{Methods and formulas}
