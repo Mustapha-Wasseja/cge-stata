@@ -3473,6 +3473,35 @@ kept as simulations; the model restored; errors, including a failing
 calibrate() program and a parameter assigned again outside it; items and
 variables in the sensitivity of the SYNTHETIC SAM model).
 
+## 49. The link to household surveys for standalone models (from version 0.39.0)
+
+`cge_microsim` on a standalone model needs the roles of `cge_model roles`
+(`_cge_roles_on`). The household groups are the labels of the groups' set
+and the commodities of `budget()` those of the goods' set. For each
+simulation, `_cge_ms_sa` gives what the built-in model's variables give
+otherwise: each group's base expenditure EH0 = sum_c P0_c Q0_cg and its
+ratio, kappa = 1 (no separate direct taxes or savings: the incomes of the
+sources are what consumption follows), the ratio of each income source for
+each group (`_cge_ms_ratio_sa`: the group's element of a variable indexed by
+the groups, a variable without index, or 1 for `fixed`; 1 where the base is
+0), the price relatives P1/P0 of the goods and the base budget shares wg.
+The rest of the command is shared: consumption, price indexes, poverty,
+inequality, quantiles, the growth incidence curve, `svy`, `bands()` and the
+decomposition, whose channels are the income sources and prices (the
+channel of taxes and savings is left out: `ktax` 0). `_cge_ms_evcv_sa`
+gives each household's variations, Cobb-Douglas in its own budget shares or
+its group's base shares: EV = C1/G - C0, CV = C1 - C0 G, with G the
+geometric price index. `market()` and the instruments, and `reweight()`,
+stop with error 198.
+
+Tests: `tests/test_microsim_sa.do` (a SYNTHETIC survey of 300 households
+and the model of Section 47: each household's nominal consumption, price
+index, real consumption per person, EV and CV against values computed in
+the test, to 1e-10, with own income components and budget shares and with
+the group's; the poverty headcount, base and simulated, against the
+generated consumption; the Shapley decomposition adding up, channels Y,
+PIDX and prices; bands from draws kept by cge_sensitivity; errors).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

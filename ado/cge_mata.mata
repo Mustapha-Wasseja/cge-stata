@@ -280,7 +280,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.38.0")
+    return("0.39.0")
 }
 
 // =====================================================================
@@ -15071,6 +15071,91 @@ real scalar _cge_recal(real scalar mode)
 }
 
 // =====================================================================
+// The link to household surveys for standalone models (from version
+// 0.39.0; model_spec.md, Section 49)
+// =====================================================================
+
+// Checks income source src of a standalone model: fixed, or a variable
+// indexed by the groups of cge_model roles, or without index
+void _cge_ms_srcchk(struct cge_model scalar M, string scalar src)
+{
+    real scalar k
+    if (src == "fixed") return
+    k = _cge_vidx(M, src)
+    if (!k | substr(src, 1, 1) == "_") _cge_fail("income(): " + src + " is not a variable of the model, or fixed", 111)
+    if (M.vset[k] != "" & M.vset[k] != "~" + M.sarole[1]) {
+        _cge_fail("income(): " + src + " must be indexed by the groups, " + M.sarole[1] + ", or have no index", 198)
+    }
+}
+
+// The ratio of the new to the base value of income source src for group h
+// of a standalone model: the group's element of a variable indexed by the
+// groups, a variable without index, or 1 for fixed; 1 where the base is 0
+real scalar _cge_ms_ratio_sa(struct cge_model scalar M, real colvector x, real scalar h, string scalar src)
+{
+    real colvector pos
+    real scalar b
+    if (src == "fixed") return(1)
+    pos = _cge_vpos(M, _cge_vidx(M, src))
+    if (rows(pos) > 1) pos = pos[h]
+    b = M.x0[pos[1]]
+    return(b == 0 ? 1 : x[pos[1]] / b)
+}
+
+// A simulation x of a standalone model for the link to surveys, from the
+// roles of its variables: each group's base expenditure EH0 and its ratio
+// grp, kappa 1 (no direct taxes or savings apart from the incomes of the
+// sources), the ratios rho of the income sources isrc, the price relatives
+// pr of the goods and the base budget shares wg (goods x groups)
+void _cge_ms_sa(struct cge_model scalar M, real colvector x, string rowvector isrc, real scalar hasinc,
+                real colvector EH0, real colvector grp, real colvector kappa, real matrix rho,
+                real colvector pr, real matrix wg)
+{
+    real colvector P0, P1, Y, EH
+    real matrix Q0, Q1
+    real scalar h, k, nH
+    _cge_roles_at(M, M.x0, P0, Q0, Y)
+    _cge_roles_at(M, x, P1, Q1, Y)
+    EH0 = colsum(P0 :* Q0)'
+    EH = colsum(P1 :* Q1)'
+    nH = rows(EH0)
+    grp = EH :/ EH0
+    kappa = J(nH, 1, 1)
+    if (hasinc) {
+        rho = J(nH, cols(isrc), .)
+        for (h = 1; h <= nH; h++) {
+            for (k = 1; k <= cols(isrc); k++) rho[h, k] = _cge_ms_ratio_sa(M, x, h, isrc[k])
+        }
+    }
+    pr = P1 :/ (P0 + (P0 :== 0))
+    wg = (P0 :* Q0) :/ (EH0' + (EH0' :== 0))
+}
+
+// The equivalent and compensating variations of each household of a
+// standalone model: Cobb-Douglas in its own budget shares, or in its
+// group's base shares wg
+void _cge_ms_evcv_sa(real matrix wg, real colvector hi, real colvector C0, real colvector C1, real colvector pr,
+                     real matrix B, real colvector ci, real colvector tot, real colvector ev, real colvector cv)
+{
+    real colvector lg, G
+    real scalar g
+    lg = J(cols(wg), 1, .)
+    for (g = 1; g <= cols(wg); g++) {
+        if (any((wg[., g] :> 0) :& (pr :<= 0))) continue
+        lg[g] = (any(wg[., g] :> 0) ? sum(select(wg[., g] :* ln(pr :+ (pr :<= 0)), wg[., g] :> 0)) : 0)
+    }
+    G = exp(lg)
+    G = G[hi, 1]
+    ev = C1 :/ G - C0
+    cv = C1 - C0 :* G
+    if (cols(B)) {
+        G = exp((B :/ (tot + (tot :== 0))) * ln(pr[ci]))
+        ev = (tot :> 0) :* (C1 :/ G - C0) + (tot :<= 0) :* ev
+        cv = (tot :> 0) :* (C1 - C0 :* G) + (tot :<= 0) :* cv
+    }
+}
+
+// =====================================================================
 // Link to household surveys (model_spec.md, Section 11; from version 0.2.2)
 // =====================================================================
 
@@ -15714,16 +15799,30 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
     real matrix XR, RWT, QF, QF0, SEI, SEA, BM, BT
     real rowvector CM, BB, vse
     real scalar s, n, k, h, j, nH, row, nz, ns, l, si, hasline, zv, d, nr, K, ktax, kgrp, mk, mu0, mu1, hasf, c
-    real scalar hasrw, kpr, kwt, rwit, rwdev, nb, f, aa
+    real scalar hasrw, kpr, kwt, rwit, rwdev, nb, f, aa, sa
+    string colvector hlab, clab
 
     M = _cge_load()
-    _cge_need(M, "sam")
     _cge_need(M, "calibrated")
+    // a standalone model (from version 0.39.0): its groups, goods, prices
+    // and consumption from cge_model roles
+    sa = _cge_sa(M)
+    if (sa) {
+        if (!_cge_roles_on(M)) _cge_fail("cge_microsim: give the roles of the standalone model's variables with cge_model roles", 459)
+        if (market != "" | inkind != "") _cge_fail("market() and the fiscal instruments need a model from a SAM", 198)
+        if (reweight != "") _cge_fail("reweight() needs a model from a SAM", 198)
+        hlab = _cge_us_labels(M, _cge_us_find(M, M.sarole[1]))
+        clab = _cge_us_labels(M, _cge_us_find(M, M.sarole[2]))
+    }
+    else {
+        hlab = M.H
+        clab = M.C
+    }
     simv = tokens(sims)
     ns = cols(simv)
     if (ns == 0) _cge_fail("sim(): give a simulation", 198)
     for (k = 1; k <= ns; k++) (void) _cge_sim_index(M, simv[k])
-    nH = M.nH
+    nH = rows(hlab)
     g = st_sdata(., gvar, touse)
     C0 = st_data(., cvar, touse)
     n = rows(C0)
@@ -15736,8 +15835,8 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
     hi = J(n, 1, 0)
     ug = uniqrows(g)
     for (k = 1; k <= rows(ug); k++) {
-        h = _cge_find(M.H, ug[k])
-        if (h == 0) _cge_fail("group(): " + ug[k] + " is not a household of the model (" + invtokens(M.H') + ")", 111)
+        h = _cge_find(hlab, ug[k])
+        if (h == 0) _cge_fail("group(): " + ug[k] + " is not a " + (sa ? "group" : "household") + " of the model (" + invtokens(hlab') + ")", 111)
         hi = hi + h :* (g :== ug[k])
     }
 
@@ -15760,7 +15859,8 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
     if (income != "") {
         _cge_ms_pairs(income, "income", ivars, isrc)
         for (k = 1; k <= cols(isrc); k++) {
-            if (!anyof(("gov", "row", "dom", "cpi", "fixed"), isrc[k]) & !_cge_find(M.F, isrc[k])) {
+            if (sa) _cge_ms_srcchk(M, isrc[k])
+            else if (!anyof(("gov", "row", "dom", "cpi", "fixed"), isrc[k]) & !_cge_find(M.F, isrc[k])) {
                 _cge_fail("income(): " + isrc[k] + " is not a factor of the model or one of gov, row, dom, cpi and fixed", 198)
             }
         }
@@ -15771,10 +15871,10 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
         _cge_ms_pairs(budget, "budget", bvars, bcom)
         ci = J(cols(bcom), 1, 0)
         for (k = 1; k <= cols(bcom); k++) {
-            ci[k] = _cge_find(M.C, bcom[k])
+            ci[k] = _cge_find(clab, bcom[k])
             // an activity: home consumption of its output, at its price
-            if (ci[k] == 0 & _cge_find(M.A, bcom[k])) ci[k] = M.nC + _cge_find(M.A, bcom[k])
-            if (ci[k] == 0) _cge_fail("budget(): " + bcom[k] + " is not a commodity or activity of the model", 111)
+            if (!sa & ci[k] == 0 & _cge_find(M.A, bcom[k])) ci[k] = M.nC + _cge_find(M.A, bcom[k])
+            if (ci[k] == 0) _cge_fail("budget(): " + bcom[k] + " is not a " + (sa ? "good" : "commodity or activity") + " of the model", 111)
         }
         B = st_data(., bvars, touse)
         if (min(B) < 0) _cge_fail("budget(): spending on an item cannot be negative", 459)
@@ -15788,7 +15888,7 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
     qg = _cge_wxtile(r0, pw, nq)
     pv = (1::99)
     present = uniqrows(hi)
-    rlab = "all" \ M.H[present]
+    rlab = "all" \ hlab[present]
     nr = rows(rlab)
     ineqn = _cge_ms_ineqnames()
     povn = ("fgt0", "fgt1", "fgt2", "npoor")
@@ -15896,8 +15996,11 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
             if (!anyof(chn, isrc[k])) chn = chn, isrc[k]
             cc[k] = _cge_find(chn', isrc[k])
         }
-        chn = chn, "taxsav"
-        ktax = cols(chn)
+        // a standalone model has no channel of direct taxes and savings
+        if (!sa) {
+            chn = chn, "taxsav"
+            ktax = cols(chn)
+        }
         if (any(Y0 :== 0)) {
             chn = chn, "group"
             kgrp = cols(chn)
@@ -15925,19 +16028,25 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
         x = M.simx[., s]
         p = M.simp[s]
 
-        // Nominal consumption
-        EH = _cge_vn(M, x, "EH")
-        EH0 = _cge_vn(M, M.x0, "EH")
-        MPS = _cge_vn(M, x, "MPS");      TINS = _cge_vn(M, x, "TINS")
-        MPS0 = _cge_vn(M, M.x0, "MPS");  TINS0 = _cge_vn(M, M.x0, "TINS")
-        kappa = ((1 :- MPS[|1 \ nH|]) :* (1 :- TINS[|1 \ nH|])) :/ ((1 :- MPS0[|1 \ nH|]) :* (1 :- TINS0[|1 \ nH|]))
-        grp = EH :/ EH0
+        // Nominal consumption; that of a standalone model from the roles of
+        // its variables (from version 0.39.0)
+        if (sa) _cge_ms_sa(M, x, isrc, (income != ""), EH0, grp, kappa, rho, pr, wg)
+        else {
+            EH = _cge_vn(M, x, "EH")
+            EH0 = _cge_vn(M, M.x0, "EH")
+            MPS = _cge_vn(M, x, "MPS");      TINS = _cge_vn(M, x, "TINS")
+            MPS0 = _cge_vn(M, M.x0, "MPS");  TINS0 = _cge_vn(M, M.x0, "TINS")
+            kappa = ((1 :- MPS[|1 \ nH|]) :* (1 :- TINS[|1 \ nH|])) :/ ((1 :- MPS0[|1 \ nH|]) :* (1 :- TINS0[|1 \ nH|]))
+            grp = EH :/ EH0
+            if (income != "") {
+                rho = J(nH, cols(isrc), .)
+                for (h = 1; h <= nH; h++) {
+                    for (k = 1; k <= cols(isrc); k++) rho[h, k] = _cge_ms_ratio(M, p, x, h, isrc[k])
+                }
+            }
+        }
         if (income == "") ratio = grp[hi, 1]
         else {
-            rho = J(nH, cols(isrc), .)
-            for (h = 1; h <= nH; h++) {
-                for (k = 1; k <= cols(isrc); k++) rho[h, k] = _cge_ms_ratio(M, p, x, h, isrc[k])
-            }
             Y1 = rowsum(Y :* rho[hi, .])
             ratio = (Y0 :!= 0) :* (Y1 :/ (Y0 + (Y0 :== 0))) :* kappa[hi, 1] + (Y0 :== 0) :* grp[hi, 1]
         }
@@ -15947,11 +16056,13 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
         // Prices households pay (including VAT): the household's budget
         // shares, or its group's (home consumption, from version 0.3.2, at
         // the activity price)
-        PQ = _cge_ph(M, p, x) \ _cge_vn(M, x, "PA")
-        PQ0 = _cge_ph(M, M.p0, M.x0) \ _cge_vn(M, M.x0, "PA")
-        pr = PQ :/ PQ0
-        QH0 = _cge_vn(M, M.x0, "QH") \ _cge_vn(M, M.x0, "QHA")
-        wg = (PQ0 :* QH0) :/ (EH0' + (EH0' :== 0))
+        if (!sa) {
+            PQ = _cge_ph(M, p, x) \ _cge_vn(M, x, "PA")
+            PQ0 = _cge_ph(M, M.p0, M.x0) \ _cge_vn(M, M.x0, "PA")
+            pr = PQ :/ PQ0
+            QH0 = _cge_vn(M, M.x0, "QH") \ _cge_vn(M, M.x0, "QHA")
+            wg = (PQ0 :* QH0) :/ (EH0' + (EH0' :== 0))
+        }
         Pg = wg' * pr
         if (budget == "") P = Pg[hi, 1]
         else P = (tot :> 0) :* ((B * pr[ci]) :/ (tot + (tot :== 0))) + (tot :<= 0) :* Pg[hi, 1]
@@ -15985,7 +16096,8 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
         pws = ws :* nsz
 
         // Equivalent and compensating variations (from version 0.8.1)
-        _cge_ms_evcv(M, p, x, hi, C0, C1, pr, B, ci, tot, ev, cv)
+        if (sa) _cge_ms_evcv_sa(wg, hi, C0, C1, pr, B, ci, tot, ev, cv)
+        else _cge_ms_evcv(M, p, x, hi, C0, C1, pr, B, ci, tot, ev, cv)
 
         // A draw for the bands: its measures for all households only
         if (si > ns) {
@@ -16139,7 +16251,7 @@ void _cge_microsim(string scalar sims, string scalar touse, string scalar gvar, 
                         mm = J(1, cols(isrc), 0)
                         for (k = 1; k <= cols(isrc); k++) if (cc[k]) mm[k] = _cge_ms_on(mk, cc[k])
                         Ys = rowsum(Y :* (RH :^ mm))
-                        fn = (Y0 :!= 0) :* (Ys :/ (Y0 + (Y0 :== 0))) :* (_cge_ms_on(mk, ktax) ? kap : J(n, 1, 1))
+                        fn = (Y0 :!= 0) :* (Ys :/ (Y0 + (Y0 :== 0))) :* (ktax ? (_cge_ms_on(mk, ktax) ? kap : J(n, 1, 1)) : J(n, 1, 1))
                         if (kgrp) fn = fn + (Y0 :== 0) :* (_cge_ms_on(mk, kgrp) ? gi : J(n, 1, 1))
                         else fn = fn + (Y0 :== 0)
                     }

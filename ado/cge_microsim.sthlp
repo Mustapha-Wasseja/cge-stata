@@ -69,6 +69,18 @@ fiscal impoverishment, in the base and after the simulation, with in-kind health
 errors from the survey design; with {opt bands()}, the range of the results across draws of the elasticities (from version 0.8.3).{p_end}
 
 {pstd}
+From version 0.39.0, the model may be a standalone model ({helpb cge_model})
+whose variables have roles ({cmd:cge_model roles}): its groups are the
+household groups, its goods the commodities, its prices those households
+pay and its consumption gives each group's expenditure and base budget
+shares. An income source is then a variable of the model, indexed by the
+groups or without index, or {cmd:fixed}; nominal consumption follows the
+household's income from its sources, or its group's expenditure, without a
+separate channel of direct taxes and savings; and the variations are those
+of Cobb-Douglas preferences. Fiscal incidence and {opt reweight()} need a
+model from a SAM.
+
+{pstd}
 The survey's own income and consumption data drive the results. The CGE
 supplies only the changes, by source, price and group. All results can be
 saved as a dataset, and the new consumption of each household added to the
@@ -109,6 +121,12 @@ their sources:
 {phang2}- {cmd:cpi}, income indexed to the CPI;{p_end}
 
 {phang2}- {cmd:fixed}, unchanged nominal income.{p_end}
+
+{pmore}
+With a standalone model (from version 0.39.0), a source is a variable of
+the model, indexed by the groups (its element of the household's group) or
+without index, or {cmd:fixed}. A source whose base value is 0 does not
+change.
 
 {pmore}
 Without {opt income()}, every household's nominal consumption changes as its
@@ -452,6 +470,61 @@ Gini coefficient; needs {opt bands()}{p_end}
 {phang2}{cmd:. cge_microsim [pweight = weight], sim(notariff tariff2) group(group) consumption(cons) size(hhsize) income(wage:lab profit:cap) line(100 zreg) clear nodisplay}{p_end}
 
 {phang2}{cmd:. list q pct if sim == "notariff" & table == "gic" & inlist(q, 10, 50, 90), noobs}{p_end}
+
+{pstd}A standalone model with the roles of its variables, and a SYNTHETIC survey{p_end}
+
+{phang2}{cmd:. cge_model new}{p_end}
+
+{phang2}{cmd:. cge_set c = g1 g2 g3}{p_end}
+
+{phang2}{cmd:. cge_set h = h1 h2}{p_end}
+
+{phang2}{cmd:. cge_parameter alpha(c,h), values(g1.h1:0.5 g2.h1:0.3 g3.h1:0.2 g1.h2:0.2 g2.h2:0.3 g3.h2:0.5)}{p_end}
+
+{phang2}{cmd:. cge_parameter ybar(h), values(h1:100 h2:50)}{p_end}
+
+{phang2}{cmd:. cge_parameter A(c) = sum(h, alpha(c,h) * ybar(h))}{p_end}
+
+{phang2}{cmd:. cge_variable P(c), value(1)}{p_end}
+
+{phang2}{cmd:. cge_variable Y(h) = ybar(h)}{p_end}
+
+{phang2}{cmd:. cge_variable X(c) = A(c) * P(c)}{p_end}
+
+{phang2}{cmd:. cge_variable Q(c,h) = alpha(c,h) * Y(h) / P(c)}{p_end}
+
+{phang2}{cmd:. cge_equation MKT(c): sum(h, Q(c,h)) = X(c)}{p_end}
+
+{phang2}{cmd:. cge_model roles, groups(h) goods(c) prices(P) consumption(Q) income(Y)}{p_end}
+
+{phang2}{cmd:. cge_shock ybar, elements(h1) scale(1.1)}{p_end}
+
+{phang2}{cmd:. cge_solve, name(richer)}{p_end}
+
+{phang2}{cmd:. clear}{p_end}
+
+{phang2}{cmd:. set obs 300}{p_end}
+
+{phang2}{cmd:. set seed 4242}{p_end}
+
+{phang2}{cmd:. generate grp = cond(_n <= 180, "h1", "h2")}{p_end}
+
+{phang2}{cmd:. generate size = 1 + floor(runiform() * 5)}{p_end}
+
+{phang2}{cmd:. generate inc_y = 50 + 200 * runiform()}{p_end}
+
+{phang2}{cmd:. generate inc_f = 20 * runiform()}{p_end}
+
+{phang2}{cmd:. generate cons = 0.9 * (inc_y + inc_f)}{p_end}
+
+{phang2}{cmd:. generate b1 = cons * (0.2 + 0.3 * runiform())}{p_end}
+
+{phang2}{cmd:. generate b2 = cons * (0.2 + 0.2 * runiform())}{p_end}
+
+{phang2}{cmd:. generate b3 = cons - b1 - b2}{p_end}
+
+{phang2}{cmd:. cge_microsim, sim(richer) group(grp) consumption(cons) size(size) income(inc_y:Y inc_f:fixed) budget(b1:g1 b2:g2 b3:g3) line(40) decompose}{p_end}
+
 
 
 {title:Stored results}

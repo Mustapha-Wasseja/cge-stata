@@ -170,3 +170,34 @@ cge_microsim [pweight = weight], sim(notariff tariff2) group(group)        ///
     glabels("Tariffs removed" "Tariffs doubled") gexport(fig_ms.pdf) nodisplay
 display "`r(graphs)'"
 *<<
+
+*>> ms_standalone
+cge_model new
+cge_set c = g1 g2 g3
+cge_set h = h1 h2
+cge_parameter alpha(c,h), values(g1.h1:0.5 g2.h1:0.3 g3.h1:0.2 g1.h2:0.2 g2.h2:0.3 g3.h2:0.5)
+cge_parameter ybar(h), values(h1:100 h2:50)
+cge_parameter A(c) = sum(h, alpha(c,h) * ybar(h))
+cge_variable P(c), value(1)
+cge_variable Y(h) = ybar(h)
+cge_variable X(c) = A(c) * P(c)
+cge_variable Q(c,h) = alpha(c,h) * Y(h) / P(c)
+cge_equation MKT(c): sum(h, Q(c,h)) = X(c)
+cge_model roles, groups(h) goods(c) prices(P) consumption(Q) income(Y)
+cge_shock ybar, elements(h1) scale(1.1)
+cge_solve, name(richer)
+clear
+set obs 300
+set seed 4242
+generate grp = cond(_n <= 180, "h1", "h2")
+generate size = 1 + floor(runiform() * 5)
+generate inc_y = 50 + 200 * runiform()
+generate inc_f = 20 * runiform()
+generate cons = 0.9 * (inc_y + inc_f)
+generate b1 = cons * (0.2 + 0.3 * runiform())
+generate b2 = cons * (0.2 + 0.2 * runiform())
+generate b3 = cons - b1 - b2
+set linesize 110
+cge_microsim, sim(richer) group(grp) consumption(cons) size(size) income(inc_y:Y inc_f:fixed) budget(b1:g1 b2:g2 b3:g3) line(40) decompose
+*<<
+set linesize 100

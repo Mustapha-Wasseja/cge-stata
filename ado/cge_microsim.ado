@@ -1,4 +1,4 @@
-*! cge_microsim.ado  v0.9.6  2026-10-23
+*! cge_microsim.ado  v0.39.0  2026-10-30
 *! cge-stata: pass one or more simulations to household survey data
 *! (model_spec.md, Section 11): consumption, prices, poverty, inequality and
 *! incidence by household; welfare, the decomposition of the changes and
@@ -10,9 +10,8 @@
 
 program define cge_microsim, rclass
     version 13.0
-    * a standalone model has no SAM (from version 0.13.0)
+    * a standalone model needs the roles of its variables (from version 0.39.0)
     _cge_load
-    mata: _cge_need_sam()
     syntax [if] [in] [pweight aweight fweight iweight], SIM(string) GROUP(varname)   ///
         CONSumption(varname numeric) [SIZE(varname numeric) INCome(string)          ///
         BUDget(string) LINE(string) QUANTiles(integer 10) GENerate(name) REPLACE     ///

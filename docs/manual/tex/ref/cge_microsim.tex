@@ -23,6 +23,8 @@ version 0.8.2, fiscal incidence as the Commitment to Equity method measures
 it, before and after the simulation; from version 0.8.3, it can reweight the
 survey to the model's employment, give standard errors from the survey
 design, and give the range of the results across draws of the elasticities.
+From version 0.39.0 the model may be a standalone model whose variables have
+roles (\manref{cge_model}).
 
 \cgesec{Quick start}
 
@@ -507,6 +509,27 @@ Graph & Content\\
 \cmd{fiscal} & the Gini coefficient of each income concept, market to final, in the base and each simulation; needs \cmd{market()}\\
 \cmd{bands} & the median and the 5th to 95th percentiles across the draws of the per cent change in mean consumption, the headcount at each line and the Gini coefficient; needs \cmd{bands()}\\
 \end{cgetable}
+
+\cgesubsec{Example 10: a standalone model}
+
+From version 0.39.0, the results of a standalone model (\manref{cge_model})
+pass to a survey once \cmd{cge_model roles} has named the variables of its
+groups, goods, prices, consumption and incomes. Its groups are the household
+groups of the survey's \opt{}{group()}, its goods those of \opt{bud}{get()},
+and an income source of \opt{inc}{ome()} is a variable of the model, indexed
+by the groups or without index, or \cmd{fixed}. Nominal consumption follows
+the household's income from its sources, or its group's expenditure, without
+a separate channel of direct taxes and savings, which the model's incomes
+include if it has them; the variations are those of Cobb--Douglas
+preferences in the household's budget shares, or its group's. Fiscal
+incidence and \opt{rew}{eight()} need a model from a SAM. Here the first
+group's income rises by a tenth, in the model of \manref{cge_report},
+Example~5, and a SYNTHETIC survey of 300 households follows:
+\stlog[\scriptsize]{ms_standalone}
+The first group's households gain from their higher incomes; the second
+group's, whose incomes do not change, lose from the prices that the first
+group's spending raises. The decomposition has the channels \cmd{Y}, the
+income source, and \cmd{prices}.
 
 \cgesubsec{Results as a dataset}
 

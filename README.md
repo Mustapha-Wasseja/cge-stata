@@ -17,6 +17,10 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.39.0 passes the results of standalone models to household surveys:
+with the roles of its variables, `cge_microsim` takes a standalone model's
+groups, goods, prices and incomes as it takes those of a model from a SAM.
+
 Version 0.38.0 extends `cge_sensitivity` to standalone models: it draws the
 parameters named in `vary()`, runs an optional `calibrate()` program, and
 measures each draw from its own benchmark.
@@ -88,7 +92,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.38.0 implements the standard single-country model described in
+Version 0.39.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -162,6 +166,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.39.0 adds the link to household surveys for standalone models.
 Version 0.38.0 adds sensitivity analysis of standalone models.
 Version 0.37.0 adds reports of standalone models and report items.
 Version 0.36.0 adds feasibility restoration and cge_iis.
