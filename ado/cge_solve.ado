@@ -49,9 +49,10 @@ program define cge_solve, rclass
         exit 198
     }
     * the solver of a programme (from version 0.27.0): HiGHS through SciPy,
-    * and from version 0.41.0 IPOPT through cyipopt
-    if "`solver'" != "" & !inlist("`solver'", "highs", "ipopt") {
-        display as error "solver() takes highs or ipopt"
+    * from version 0.41.0 IPOPT through cyipopt, and from version 0.42.0 SCIP
+    * through PySCIPOpt
+    if "`solver'" != "" & !inlist("`solver'", "highs", "ipopt", "scip") {
+        display as error "solver() takes highs, ipopt or scip"
         exit 198
     }
     if "`solver'" != "" & `"`maximize'`minimize'"' == "" {

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.41.0  30oct2026}{...}
+{* *! version 0.42.0  30oct2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -106,8 +106,9 @@ solution) equations that cannot be evaluated at the start; for branch and
 bound (from version 0.18.0), 1 is an integer solution after a complete search,
 8 (integer solution) one found before a limit stopped the search, 10 (integer
 infeasible) a complete search without one and 14 (no solution returned) a
-limit reached without one. Solver status 1 is
-normal completion, 2 an iteration interrupt, 3 a resource (time) interrupt,
+limit reached without one; for HiGHS and SCIP, 3 (unbounded) and 4
+(infeasible), and for SCIP (from version 0.42.0), 1 is a global optimum.
+Solver status 1 is normal completion, 2 an iteration interrupt, 3 a resource (time) interrupt,
 4 termination by the solver and 5 an evaluation error.
 
 {pstd}
@@ -242,6 +243,36 @@ SciPy and cyipopt ({cmd:pip install cyipopt}, which needs a build of IPOPT);
 without them, the option stops with error 198.
 
 {phang}
+{opt solver(scip)} (from version 0.42.0, experimental) solves a programme
+with SCIP (Bolusani and others 2024), through the Python package
+{browse "https://github.com/scipopt/PySCIPOpt":PySCIPOpt}, in place of the
+interior point and branch and bound, as GAMS does with {cmd:option nlp = scip}
+or {cmd:option minlp = scip}: nonlinear and mixed-integer programmes,
+nonconvex ones included, to a global optimum within SCIP's tolerances, by
+spatial branch and bound. The objective and the equations go to SCIP as
+expressions, with the parameters and the fixed variables as numbers; min(),
+max(), ifthen(), comparisons and {cmd:not} have no form there and stop with
+error 459. SCIP's feasibility tolerance is {opt tolerance()}, within 1e-9 and
+1e-6; {opt nodes()}, {opt optcr()} and {opt timelimit()} set its node limit,
+relative gap and time limit, and {opt trace} displays its log when it ends.
+A global optimum, or one within {opt optcr()}, has model status 1, and
+{cmd:r(nodes)}, {cmd:r(bestbound)} and {cmd:r(gap)} report the search;
+{cmd:r(iterations)} counts its LP iterations. Where the objective is 0 at
+the optimum, a relative gap is not defined: add a constant to the objective
+and set {opt optcr()}. SCIP's point is as accurate as its tolerances allow,
+3e-5 from the published optimum of Hock and Schittkowski's problem 71
+against 3e-7 for the interior point; solving again with the interior point,
+{opt from()} the simulation of SCIP, polishes it and gives the marginals of
+the equations, which SCIP does not. SCIP solves in a separate Python
+process: its libraries bring a runtime of OpenMP that cannot share Stata's
+process with Stata's own. Each solve starts that process, which took
+about 1 second, after a first solve of about 8 seconds that also starts
+Stata's Python and SciPy, on Windows. {opt starts()} stops with error 198.
+{bf:Caution:} it works only on Stata 16 and later with Python, SciPy and
+PySCIPOpt ({cmd:pip install pyscipopt}, whose wheels include SCIP); without
+them, the option stops with error 198.
+
+{phang}
 {opt blocks} (from version 0.35.0) solves a standalone model ({helpb cge_model})
 block by block: the blocks of its square part that {helpb cge_structure}
 finds, in an order in which each depends only on itself and on those before
@@ -289,13 +320,13 @@ solve stopped (from version 0.9.5).
 {synopt:{cmd:r(from)}}the simulation the solve started from, if any{p_end}
 {synopt:{cmd:r(hold)}}the variables held, if any{p_end}
 {synopt:{cmd:r(N_integer)}}integer and binary elements, for a nonlinear programme (from version 0.18.0){p_end}
-{synopt:{cmd:r(nodes)}}nodes of branch and bound{p_end}
+{synopt:{cmd:r(nodes)}}nodes of branch and bound, or of SCIP (from version 0.42.0){p_end}
 {synopt:{cmd:r(bestbound)}}its best bound{p_end}
 {synopt:{cmd:r(gap)}}its relative gap{p_end}
 {synopt:{cmd:r(starts)}}starts of the interior point (from version 0.24.0){p_end}
 {synopt:{cmd:r(best_start)}}the start of the best solution, with starts() and no integers{p_end}
 {synopt:{cmd:r(N_starts_converged)}}the starts that converged{p_end}
-{synopt:{cmd:r(solver)}}{cmd:ipm}, {cmd:bb}, {cmd:highs} (from version 0.27.0) or {cmd:ipopt} (from version 0.41.0){p_end}
+{synopt:{cmd:r(solver)}}{cmd:ipm}, {cmd:bb}, {cmd:highs} (from version 0.27.0), {cmd:ipopt} (from version 0.41.0) or {cmd:scip} (from version 0.42.0){p_end}
 {synopt:{cmd:r(hessian)}}the Hessians of the interior point: {cmd:exact} or {cmd:differences} (from version 0.28.0){p_end}
 {synopt:{cmd:r(N_hessian_exact)}}its iterations with exact Hessians{p_end}
 {synopt:{cmd:r(N_hessian_differences)}}its iterations with differences{p_end}

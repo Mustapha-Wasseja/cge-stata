@@ -56,8 +56,8 @@ supplied by the user or selected from the sourced library.
 
 The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
 experimental links to SciPy's SuperLU and HiGHS require Stata 16 or later
-with Python and SciPy, and the link to IPOPT the Python package cyipopt as
-well (\manref{cge_options}, \manref{cge_solve}). Running an
+with Python and SciPy, and the links to IPOPT and SCIP the Python packages
+cyipopt and PySCIPOpt as well (\manref{cge_options}, \manref{cge_solve}). Running an
 exported model in GAMS requires GAMS and the selected solver.
 
 \section{Installation}
@@ -135,6 +135,7 @@ Version & Additions & Where\\
 0.39.0 & The link to household surveys for standalone models & \manref{cge_microsim}\\
 0.40.0 & Variables added to the model's own equations, those with exact derivatives included & \manref{cge_variable}\\
 0.41.0 & Nonlinear programmes by IPOPT through cyipopt (Stata 16 and later, experimental) & \manref{cge_solve}\\
+0.42.0 & Global solutions of nonlinear and mixed-integer programmes by SCIP through PySCIPOpt (Stata 16 and later, experimental) & \manref{cge_solve}\\
 0.24.0 & Nash equilibria by Newton's method and damped best responses; multi-start; parallel runs from batch mode on Stata 16 and later & \manref{cge_nash}, \manref{cge_solve}, \manref{cge_loop}\\
 \end{cgetable}
 

@@ -60,6 +60,7 @@ cge_solve, name(ls) minimize(sum(i, X(i)^2))
 \optarg{}{starts}{\#} & points the interior point starts from; default \texttt{1}\\
 \optarg{sol}{ver}{highs} & HiGHS through SciPy, Stata 16 and later\\
 \optarg{sol}{ver}{ipopt} & IPOPT through cyipopt, Stata 16 and later\\
+\optarg{sol}{ver}{scip} & SCIP through PySCIPOpt, Stata 16 and later\\
 \opt{block}{s} & solve a standalone model block by block\\
 \optarg{step}{s}{\#} & apply the shocks in \argu{\#} equal steps; default \texttt{0}, only after a direct solve fails\\
 \optgroup{Nonlinear programmes of standalone models}
@@ -169,6 +170,38 @@ later ones took 0.7 seconds on that problem, against 0.2 seconds for the
 interior point, as each value IPOPT asks for passes between Python and Mata.
 It works only on Stata 16 and later with Python, SciPy and cyipopt
 (\cmd{pip install cyipopt}, which needs a build of IPOPT); without them, the
+option stops with error 198.
+
+\item[\optarg{sol}{ver}{scip}] (from version 0.42.0, experimental) solves a
+programme with SCIP (Bolusani and others 2024), through the Python package
+PySCIPOpt (Maher and others 2016), in place of the interior point and branch
+and bound, as GAMS does with \cmd{option nlp = scip} or \cmd{option minlp =
+scip}: nonlinear and mixed-integer programmes, nonconvex ones included, to a
+global optimum within SCIP's tolerances, by spatial branch and bound. The
+objective and the equations go to SCIP as expressions, with the parameters
+and the fixed variables as numbers; \cmd{min()}, \cmd{max()},
+\cmd{ifthen()}, comparisons and \cmd{not} have no form there and stop with
+error 459. SCIP's feasibility tolerance is \opt{tol}{erance()}, within
+$10^{-9}$ and $10^{-6}$; \opt{nod}{es()}, \opt{}{optcr()} and
+\opt{time}{limit()} set its node limit, relative gap and time limit, and
+\opt{}{trace} displays its log when it ends. A global optimum, or one within
+\opt{}{optcr()}, has model status 1, and \res{r(nodes)}, \res{r(bestbound)}
+and \res{r(gap)} report the search; \res{r(iterations)} counts its LP
+iterations. Where the objective is 0 at the optimum, a relative gap is not
+defined: add a constant to the objective and set \opt{}{optcr()}. SCIP's point
+is as accurate as its tolerances allow: on Hock and Schittkowski's problem
+71, $3\times10^{-5}$ from the published optimum, against $3\times10^{-7}$
+for the interior point. Solving again with the interior point,
+\opt{}{from()} the simulation of SCIP, polishes it and gives the marginals of
+the equations, which SCIP does not. On $x^4 - 3x^2 + x$ over $[-2, 2]$, the
+interior point from $x = 1$ stops at the local minimum near 1.13, and SCIP
+finds the global one near $-1.30$, in 21 nodes. SCIP solves in a separate
+Python process: its libraries bring a runtime of OpenMP that cannot share
+Stata's process with Stata's own. Each solve starts that process, which took
+about 1 second, after a first solve of about 8 seconds that also starts
+Stata's Python and SciPy, on Windows. \opt{}{starts()} stops with error 198. It
+works only on Stata 16 and later with Python, SciPy and PySCIPOpt
+(\cmd{pip install pyscipopt}, whose wheels include SCIP); without them, the
 option stops with error 198.
 
 \item[\optarg{time}{limit}{\#}] (from version 0.16.0) sets a time limit in
@@ -304,8 +337,10 @@ the simulation, for \manref{cge_results}. A solve that fails displays them:
 \hline
 Model status & Meaning & When\\
 \hline
-1 & optimal & a solution of a system with constraints\\
+1 & optimal & a solution of a system with constraints, or SCIP's global optimum\\
 2 & locally optimal & a nonlinear programme or an optimisation that converged\\
+3 & unbounded & HiGHS or SCIP found the programme unbounded\\
+4 & infeasible & HiGHS or SCIP found the programme infeasible\\
 5 & locally infeasible & the solver stopped without a solution\\
 6 & intermediate infeasible & an iteration or time limit stopped the solve\\
 7 & feasible solution & a nonlinear programme stopped short at a feasible point\\
@@ -421,13 +456,13 @@ to the tolerance, and the test suite checks that they do.
 \res{r(from)} & the simulation the solve started from, if any\\
 \res{r(hold)} & the variables held, if any\\
 \res{r(N_integer)} & integer and binary elements, for a nonlinear programme (from version 0.18.0)\\
-\res{r(nodes)} & nodes of branch and bound\\
+\res{r(nodes)} & nodes of branch and bound, or of SCIP (from version 0.42.0)\\
 \res{r(bestbound)} & the best bound of branch and bound\\
 \res{r(gap)} & its relative gap from the objective\\
 \res{r(starts)} & starts of the interior point (from version 0.24.0)\\
 \res{r(best_start)} & the start of the best solution, with \opt{}{starts} and no integers\\
 \res{r(N_starts_converged)} & the starts that converged\\
-\res{r(solver)} & \cmd{ipm}, \cmd{bb}, \cmd{highs} (from version 0.27.0) or \cmd{ipopt} (from version 0.41.0)\\
+\res{r(solver)} & \cmd{ipm}, \cmd{bb}, \cmd{highs} (from version 0.27.0), \cmd{ipopt} (from version 0.41.0) or \cmd{scip} (from version 0.42.0)\\
 \res{r(hessian)} & the interior point's Hessians: \cmd{exact} or \cmd{differences} (from version 0.28.0)\\
 \res{r(N_hessian_exact)} & its iterations with exact Hessians\\
 \res{r(N_hessian_differences)} & its iterations with differences\\

@@ -3611,6 +3611,89 @@ to 15 the test checks error 198. Written as x1^2 - x2 - 1 = 0 and x1 - x3 -
 1/2 = 0, whose scaled residuals have a local minimum near x1 = -1 (Section
 46), the same start leaves IPOPT, like the interior point, near x1 = -1.
 
+## 52. SCIP through PySCIPOpt (from version 0.42.0; experimental)
+
+`cge_solve, minimize()|maximize() solver(scip)` solves a programme of a
+standalone model, with or without integer and binary variables, by SCIP
+(Bolusani et al. 2024) through PySCIPOpt (Maher et al. 2016), to global
+optimality within SCIP's tolerances; the tests use SCIP 10.0, which
+PySCIPOpt 6.3 includes. It needs Stata 16 and later with Python
+and SciPy (`_cge_py_ready`, Section 36) and PySCIPOpt, which
+`_cge_py_spec("pyscipopt")` finds with `importlib.util.find_spec`, without
+importing it into Stata's process (the external `cge__pyspec_pyscipopt`);
+without them the option stops with error 198, as does `starts()`.
+
+Expressions. Unlike IPOPT (Section 51), SCIP needs the formulas of the
+objective and the equations, not their values: it bounds them over boxes.
+`_cge_scip_tok` rewrites the postfix rows of the objective and of the two
+sides of each equation element (Section 19) with the parameters, the values
+of other periods and the fixed variables as numbers (a leaf alone,
+evaluated by `_cge_u_value`) and the free variables by their position among
+the free ones. Operators, negation, exp, ln, sqrt, abs, sqr and log10 stay;
+min(), max(), ifthen(), comparisons and not have no form in SCIP's
+expressions (error 459). The objective's rows are followed by its sense, s,
+times. Every row of the system must be a user equation. `_cge_scip` writes
+the bounds (in the variables' own units, +-1e300 where none), the types
+(`_cge_int_type`: 0 continuous, 1 integer, 2 binary), the start, the scales
+e_k of the equations, the number of rows of each expression and the rows to
+a binary file.
+
+`cge_scipy._scip_expr` builds each expression with PySCIPOpt's operators,
+folding numbers: a power with a numeric exponent is a power (squares of sums
+expanded, higher powers kept as powers), a number to a variable power
+exp(b ln a), a variable to a variable power exp(b ln a); log10 is ln / ln 10.
+`_scip_solve` adds each equation as (L - R)/e_k = 0, an equation whose two
+sides are numbers being checked instead; a linear objective is SCIP's own,
+a nonlinear one the variable t of the epigraph s f(x) <= t. Parameters:
+`numerics/feastol` the tolerance within [1e-9, 1e-6], `limits/nodes`
+`nodes()` (10,000 by default), `limits/gap` `optcr()`, `limits/time` the
+time limit; the start is a partial solution, which SCIP may complete. SCIP's
+status, the best solution, the LP iterations, the nodes and the dual bound
+come back.
+
+Process. SCIP's wheels bring Intel's OpenMP runtime, and Stata loads its own
+(`utilities/openmp`); with both in one process, Stata stopped on Hock and
+Schittkowski's problem 71, even with SCIP's NLP heuristics off, though a
+quadratic programme solved. As SCIP needs
+nothing from Mata while it solves, `cge_scipy.scip` runs `_scip_solve` in a
+separate Python process, the interpreter of Stata's Python
+(`sys.base_prefix`), which loads `cge_scipy.py` by its path (with `-P` on
+Python 3.11 and later, so that no folder is put before the standard
+library), without SciPy, whose import took 2.4 s of the 3.6 s that a solve
+took with it, and returns the results in a file. With trace, its output is displayed when
+it ends. A process that fails gives error 459.
+
+Statuses, in GAMS's codes: optimal, or within the gap (gaplimit), model
+status 1 and solver status 1, as for branch and bound; infeasible 4, or 10
+with integers; unbounded 3; a node limit 7 or 8 with a solution (8 with
+integers), 6 or 14 without, solver status 2; the time and memory limits
+the same with solver status 3; infeasible or unbounded, an interrupt and any
+other status 13, or 7 or 8 with a solution, solver status 13 (8 for an
+interrupt). The solution's integer variables are rounded, as branch and
+bound gives them; the best bound is s
+times SCIP's dual bound; there are no marginals. `r(nodes)`, `r(bestbound)`
+and `r(gap)` are set for SCIP as for branch and bound, `r(iterations)` is
+its LP iterations and `r(solver)` is `scip`.
+
+Accuracy. SCIP's point is feasible to its tolerance and optimal to its gap:
+on Hock and Schittkowski's problem 71 the objective agrees with the
+published optimum to its seven decimals and the point is within 3e-5, as
+the optimum is flat;
+solving again with the interior point from SCIP's simulation (`from()`)
+brings it to 3e-7 and gives the marginals.
+
+Tests: `tests/test_scip.do` (problem 71: model status 1, the objective to
+1e-6, the best bound and the gap, the point to 1e-4, polished by the
+interior point to 1e-6; maximisation; x^4 - 3x^2 + x on [-2, 2], where the
+interior point from x = 1 reaches the local minimum at 1.1309 and SCIP the
+global one at -1.3008, with and without an equation y = x^2; max x + y on a
+circle whose radius is a parameter times a fixed variable; exp, ln, sqrt,
+log10, sqr, abs, 2^q and P^q against their closed forms; a mixed-integer
+programme against branch and bound; a binary choice of a fixed cost; the
+gap; the node limit, statuses 7 and 2; an infeasible programme, status 4;
+errors; SCIP's log with trace). On Stata 13 to 15 the test checks error
+198.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
@@ -3663,3 +3746,11 @@ Matrices*. Technical Report RAL-TR-2001-034, Rutherford Appleton Laboratory.
 
 Huangfu, Q. and J. A. J. Hall (2018). Parallelizing the dual revised simplex
 method. *Mathematical Programming Computation* 10(1): 119-142.
+
+Bolusani, S. et al. (2024). *The SCIP Optimization Suite 9.0*. ZIB-Report
+24-02, Zuse Institute Berlin.
+
+Maher, S., M. Miltenberger, J. P. Pedroso, D. Rehfeldt, R. Schwarz and F.
+Serrano (2016). PySCIPOpt: Mathematical programming in Python with the SCIP
+Optimization Suite. In *Mathematical Software - ICMS 2016*, Lecture Notes in
+Computer Science 9725: 301-307. Springer.

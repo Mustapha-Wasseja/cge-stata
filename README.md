@@ -12,11 +12,16 @@ Stackelberg games, sensitivity analysis and household microsimulation.
 
 The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
 experimental solver links require Stata 16 or later with Python and SciPy,
-and the link to IPOPT the Python package cyipopt as well. GAMS export and
-GDX data exchange are also available; solving an exported model in GAMS
-requires GAMS and the selected solver.
+and the links to IPOPT and SCIP the Python packages cyipopt and PySCIPOpt
+as well. GAMS export and GDX data exchange are also available; solving an
+exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
+
+Version 0.42.0 adds an experimental link to SCIP: `cge_solve,
+minimize(expression) solver(scip)` solves nonlinear and mixed-integer
+programmes, nonconvex ones included, to a global optimum within SCIP's
+tolerances, through the Python package PySCIPOpt, on Stata 16 and later.
 
 Version 0.41.0 adds an experimental link to IPOPT: `cge_solve,
 minimize(expression) solver(ipopt)` solves a nonlinear programme with IPOPT
@@ -104,7 +109,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.41.0 implements the standard single-country model described in
+Version 0.42.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -178,6 +183,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.42.0 adds global solutions of programmes by SCIP through PySCIPOpt.
 Version 0.41.0 adds nonlinear programmes by IPOPT through cyipopt.
 Version 0.40.0 adds variables added to built-in equations.
 Version 0.39.0 adds the link to household surveys for standalone models.

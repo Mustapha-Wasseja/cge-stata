@@ -286,7 +286,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.41.0")
+    return("0.42.0")
 }
 
 // =====================================================================
@@ -15593,6 +15593,191 @@ void _cge_ipcb(real scalar k)
 }
 
 // =====================================================================
+// SCIP through PySCIPOpt (from version 0.42.0; Stata 16 and later with
+// Python and PySCIPOpt; model_spec.md, Section 52)
+// =====================================================================
+
+// 1 if Python module mod can be found (Stata 16 and later), without
+// importing it into Stata's process, found out once per session
+real scalar _cge_py_spec(string scalar mod)
+{
+    pointer() scalar q
+    real scalar ok
+    if ((q = findexternal("cge__pyspec_" + mod)) != NULL) return(*q)
+    ok = 0
+    if (_cge_py_ready()) ok = !_stata("quietly python: import importlib.util; assert importlib.util.find_spec(" + _cge_pystr(mod) + ") is not None", 1)
+    q = crexternal("cge__pyspec_" + mod)
+    *q = ok
+    return(ok)
+}
+
+// cge_solve, solver(scip): a programme of a standalone model, nonlinear,
+// mixed-integer or both, by SCIP through PySCIPOpt, to global optimality
+// within SCIP's tolerances. The objective and the equations go to SCIP as
+// expressions, their postfix rows with the parameters and the fixed
+// variables as numbers (_cge_scip_tok), in the variables' own units, each
+// equation divided by its scale, and SCIP solves them in a separate Python
+// process (cge_scipy.scip). SCIP's feasibility tolerance is the tolerance,
+// within [1e-9, 1e-6]. Returns the solution, the statuses ms and
+// ss in GAMS's codes, the LP iterations, the nodes nn and the best bound
+real colvector _cge_scip(struct cge_model scalar M, real colvector xfix, real colvector start, real matrix tok,
+                         real scalar sgn, real scalar tol, real scalar nodes, real scalar optcr, real scalar trace,
+                         real scalar conv, real scalar iter, real scalar err, real scalar fobj,
+                         real scalar ms, real scalar ss, real scalar nn, real scalar bnd)
+{
+    struct cge_sys scalar S
+    real colvector map, L, U, ty, z0, bo, rowsys, ks, esc, lens, out, x, ipos
+    real matrix T, tk
+    real scalar n, m, k, kb, rc, tlim, nint, sol, ft, a, b
+    if (!_cge_py_spec("pyscipopt")) {
+        _cge_fail("solver(scip) needs Stata 16 or later with Python and the package PySCIPOpt (help python); without them, solve with the interior point and branch and bound", 198)
+    }
+    S = _cge_sys_make(M, 0)
+    n = rows(S.free)
+    m = S.neq
+    if (!n) _cge_fail("solver(scip): the programme has no free variables", 459)
+    map = J(rows(M.x0), 1, 0)
+    map[S.free] = (1::n)
+    // the bounds in the variables' units, +-1e300 where none
+    L = J(n, 1, -1e300)
+    U = J(n, 1, 1e300)
+    for (k = 1; k <= rows(M.bdlp); k++) if (map[M.bdlp[k]]) L[map[M.bdlp[k]]] = M.bdlv[k]
+    for (k = 1; k <= rows(M.bdup); k++) if (map[M.bdup[k]]) U[map[M.bdup[k]]] = M.bduv[k]
+    ty = _cge_int_type(M)
+    ty = ty[S.free]
+    nint = sum(ty :> 0)
+    z0 = start[S.free]
+    // every row of the system is a user equation: its element
+    kb = _cge_find(M.ename, "U")
+    bo = runningsum(M.elen) - M.elen
+    rowsys = runningsum(S.mask) :* S.mask
+    ks = J(m, 1, 0)
+    if (kb) for (k = 1; k <= rows(M.uelab); k++) if (rowsys[bo[kb] + k]) ks[rowsys[bo[kb] + k]] = k
+    if (m) if (!all(ks)) _cge_fail("solver(scip): every equation of the programme must be a user equation", 459)
+    esc = select(M.escale, S.mask)
+    // the objective times its sense, then the two sides of each equation
+    T = _cge_scip_tok(M, M.p, xfix, tok, map, "the objective") \ (1, sgn, 0) \ (4, 3, 0)
+    lens = rows(T)
+    for (k = 1; k <= m; k++) {
+        a = M.ustart[ks[k]]
+        b = a + M.ulen[ks[k]]
+        tk = _cge_scip_tok(M, M.p, xfix, M.utok[|a, 1 \ b - 1, 3|], map, "equation " + M.uelab[ks[k]])
+        T = T \ tk
+        lens = lens \ rows(tk)
+        tk = _cge_scip_tok(M, M.p, xfix, M.utok[|b, 1 \ b + M.ulen2[ks[k]] - 1, 3|], map, "equation " + M.uelab[ks[k]])
+        T = T \ tk
+        lens = lens \ rows(tk)
+    }
+    ft = min((1e-6, max((tol, 1e-9))))
+    tlim = _cge_opttime(M, -1)
+    _cge_binwrite(_cge_py_tmp(1), L \ U \ ty \ z0 \ esc \ lens \ vec(T'))
+    // the output of SCIP shown with trace
+    rc = _stata("python: " + _cge_py_pre() + "cge_scipy.scip(" + _cge_pystr(_cge_py_tmp(1)) + ", " +
+                _cge_pystr(_cge_py_tmp(3)) + ", " + _cge_pystr(_cge_py_tmp(4)) + ", " + strofreal(n, "%12.0f") + ", " + strofreal(m, "%12.0f") + ", " +
+                strofreal(rows(T), "%12.0f") + ", " + strofreal(ft, "%21.15g") + ", " + strofreal(nodes, "%12.0f") + ", " +
+                strofreal(optcr, "%21.15g") + ", " + strofreal(trace != 0) + ", " +
+                (tlim < . ? strofreal(tlim, "%21.15g") : "-1") + ")", (trace == 0))
+    if (rc) {
+        _cge_py_clean()
+        _cge_fail("solver(scip): the call of PySCIPOpt failed", 459)
+    }
+    rc = _cge_py_rc()
+    sol = st_numscalar("CGE_HSOL")
+    iter = st_numscalar("CGE_HIT")
+    nn = st_numscalar("CGE_HNOD")
+    bnd = st_numscalar("CGE_HBND")
+    st_numscalar("CGE_HSOL", J(0, 0, .))
+    st_numscalar("CGE_HIT", J(0, 0, .))
+    st_numscalar("CGE_HNOD", J(0, 0, .))
+    st_numscalar("CGE_HBND", J(0, 0, .))
+    if (rc == 10 | rc == 12) {
+        _cge_py_clean()
+        if (rc == 12) _cge_fail("solver(scip): the process of SCIP failed; trace displays its messages", 459)
+        _cge_fail("solver(scip): an expression cannot be written for SCIP, such as a power of a number that is not positive", 459)
+    }
+    x = xfix
+    if (sol == 1) {
+        out = _cge_binread(_cge_py_tmp(3), n)
+        x[S.free] = out
+        // integer variables at their integers, as branch and bound gives them
+        ipos = _cge_int_pos(M)
+        if (rows(ipos)) x[ipos] = round(x[ipos])
+    }
+    else x[S.free] = z0
+    _cge_py_clean()
+    // the statuses, in GAMS's codes: a global optimum, or one within the gap
+    // optcr, has model status 1, as for branch and bound
+    conv = (sol == 1 & (rc == 0 | rc == 6))
+    if (conv) {
+        ms = 1
+        ss = 1
+    }
+    else if (rc == 1 | rc == 11) {
+        ms = (nint ? 10 : 4)
+        ss = 1
+    }
+    else if (rc == 2) {
+        ms = 3
+        ss = 1
+    }
+    else if (rc == 4 | rc == 5 | rc == 7) {
+        ms = (sol == 1 ? (nint ? 8 : 7) : (nint ? 14 : 6))
+        ss = (rc == 4 ? 2 : 3)
+    }
+    else {
+        ms = (sol == 1 ? (nint ? 8 : 7) : 13)
+        ss = (rc == 8 ? 8 : 13)
+    }
+    fobj = (sol == 1 ? _cge_u_value(M, M.p, x, tok) : .)
+    // the best bound in the objective's units
+    bnd = (bnd < . ? sgn * bnd : .)
+    err = (sol == 1 ? _cge_maxres(M, M.p, x) : .)
+    return(x)
+}
+
+// The postfix rows tok of the objective or a side of an equation, for SCIP
+// (from version 0.42.0): the parameters, the values of other periods and the
+// fixed variables as numbers (1, value, 0), the free variables by their
+// position among the free ones (2, position, 0); operators, negation and
+// functions as they are. min(), max(), ifthen(), comparisons and not have no
+// form in SCIP's expressions (error 459)
+real matrix _cge_scip_tok(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix, real matrix tok,
+                          real colvector map, string scalar what)
+{
+    real matrix T
+    real scalar i, c, v
+    T = J(rows(tok), 3, 0)
+    for (i = 1; i <= rows(tok); i++) {
+        c = tok[i, 1]
+        if (c == 2) {
+            if (map[tok[i, 2]]) T[i, .] = (2, map[tok[i, 2]], 0)
+            else T[i, .] = (1, xfix[tok[i, 2]], 0)
+        }
+        else if (c == 1 | c == 3 | c == 7 | c == 9 | c == 11 | c == 12) {
+            // a leaf alone is its value
+            v = _cge_u_value(M, p, xfix, tok[i, .])
+            if (v >= .) _cge_fail("solver(scip): a value in " + what + " is missing", 459)
+            T[i, .] = (1, v, 0)
+        }
+        else if (c == 4) {
+            if (tok[i, 2] > 5) _cge_fail("solver(scip): " + what + " has a comparison, which SCIP's expressions do not take", 459)
+            T[i, .] = (4, tok[i, 2], 0)
+        }
+        else if (c == 5) T[i, .] = (5, 0, 0)
+        else if (c == 10) {
+            if (tok[i, 2] == 1 | tok[i, 2] == 2 | tok[i, 2] == 6) {
+                _cge_fail("solver(scip): " + what + " has " + (tok[i, 2] == 1 ? "min()" : (tok[i, 2] == 2 ? "max()" : "ifthen()")) +
+                          ", which SCIP's expressions do not take", 459)
+            }
+            T[i, .] = (10, tok[i, 2], tok[i, 3])
+        }
+        else if (c == 8) _cge_fail("solver(scip): " + what + " has not, which SCIP's expressions do not take", 459)
+        else T[i, .] = (6, tok[i, 2], 0)
+    }
+    return(T)
+}
+
+// =====================================================================
 // Link to household surveys (model_spec.md, Section 11; from version 0.2.2)
 // =====================================================================
 
@@ -28588,6 +28773,11 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
         if (rows(ipos)) _cge_fail("solver(ipopt) solves continuous programmes; the model has integer or binary variables, which branch and bound takes", 198)
         x = _cge_ipopt(M2, xs, start, tok, sgn, tol, maxit, trace, conv, iter, err, fobj, lam, ms, ss)
     }
+    // SCIP through PySCIPOpt (from version 0.42.0), with or without integers
+    else if (solver == "scip") {
+        lam = J(0, 1, .)
+        x = _cge_scip(M2, xs, start, tok, sgn, tol, nodes, optcr, trace, conv, iter, err, fobj, ms, ss, nn, bnd)
+    }
     else if (rows(ipos)) {
         x = _cge_bb(M2, xs, start, tok, sgn, tol, maxit, trace, ipos, nodes, optcr, conv, iter, err, fobj, lam, nn, bnd, ms, ss, starts)
     }
@@ -28597,7 +28787,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     _cge_set_simobj(M, k, obj)
     _cge_set_simmodel(M, k, mname)
     // the statuses, in GAMS's codes (from version 0.16.0)
-    if (!rows(ipos) & solver != "highs" & solver != "ipopt") _cge_status(conv, 0, 1, feas, err, ms, ss)
+    if (!rows(ipos) & solver != "highs" & solver != "ipopt" & solver != "scip") _cge_status(conv, 0, 1, feas, err, ms, ss)
     _cge_set_simstat(M, k, ms, ss)
     _cge_store(M)
     if (solver == "highs") {
@@ -28615,6 +28805,16 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
             printf("{err}Simulation %s: IPOPT found no optimum\n", name)
             _cge_status_show(ms, ss)
         }
+    }
+    else if (solver == "scip") {
+        if (conv) printf("{txt}Simulation {res}%s{txt} solved by SCIP (PySCIPOpt): {res}%f{txt} node(s), {res}%f{txt} LP iteration(s)\n",
+                         name, nn, iter)
+        else {
+            printf("{err}Simulation %s: SCIP found no optimum%s\n", name, (fobj < . ? ", only a feasible point" : ""))
+            _cge_status_show(ms, ss)
+        }
+        if (bnd < .) printf("{txt}Best bound {res}%16.10g{txt}; relative gap {res}%9.3e\n", bnd,
+                            (fobj < . ? abs(fobj - bnd) / max((1e-10, abs(fobj))) : .))
     }
     else if (rows(ipos)) {
         if (conv) printf("{txt}Simulation {res}%s{txt} solved by branch and bound: {res}%f{txt} node(s), {res}%f{txt} iteration(s)\n",
@@ -28635,7 +28835,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     if (!rows(ipos) & starts > 1) printf("{txt}Multi-start: {res}%f{txt} of {res}%f{txt} start(s) converged; the best from start {res}%f\n",
                                          nconv, starts, best)
     printf("{txt}%s %s: {res}%16.10g\n", (sgn < 0 ? "Maximised" : "Minimised"), substr(obj, 5, .), fobj)
-    printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) | solver == "highs" | solver == "ipopt" ? "residual of the equations" : "error of the optimality conditions"), err)
+    printf("{txt}Largest scaled %s {res}%9.3e\n", (rows(ipos) | solver == "highs" | solver == "ipopt" | solver == "scip" ? "residual of the equations" : "error of the optimality conditions"), err)
     st_numscalar("r(converged)", conv)
     st_numscalar("r(iterations)", iter)
     st_numscalar("r(max_residual)", err)
@@ -28645,7 +28845,7 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     S = _cge_sys_make(M2, 0)
     st_numscalar("r(N_dof)", rows(S.free) - S.neq)
     st_global("r(model)", mname)
-    st_global("r(solver)", (solver == "highs" ? "highs" : (solver == "ipopt" ? "ipopt" : (rows(ipos) ? "bb" : "ipm"))))
+    st_global("r(solver)", (solver == "highs" | solver == "ipopt" | solver == "scip" ? solver : (rows(ipos) ? "bb" : "ipm")))
     // the Hessians of the interior point (from version 0.28.0)
     hc = _cge_hess_count(-1)
     st_global("r(hessian)", (hc[1] + hc[2] == 0 ? "" : (hc[2] == 0 ? "exact" : (hc[1] == 0 ? "differences" : "exact, differences where it failed"))))
@@ -28660,7 +28860,8 @@ void _cge_nlp_run(struct cge_model scalar M, string scalar name, string scalar o
     }
     // branch and bound (from version 0.18.0)
     st_numscalar("r(N_integer)", rows(ipos))
-    if (rows(ipos)) {
+    // and SCIP's (from version 0.42.0)
+    if (rows(ipos) | solver == "scip") {
         st_numscalar("r(nodes)", nn)
         st_numscalar("r(bestbound)", bnd)
         st_numscalar("r(gap)", (fobj < . & bnd < . ? abs(fobj - bnd) / max((1e-10, abs(fobj))) : .))
