@@ -12,7 +12,8 @@
 {p 8 12 2}
 {cmd:cge_solve} [{cmd:,} {opt name(name)} {opt tol:erance(#)} {opt iter:ate(#)} {opt time:limit(#)} {opt step:s(#)} {opt trace}
 {opt diag:nose} {opt full} {opt sp:arse} {opt den:se} {opt min:imize(expression)} {opt max:imize(expression)}
-{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)} {opt starts(#)} {opt sol:ver(highs)}]
+{opt mod:el(name)} {opt from(sim)} {opt hold(varlist)} {opt nod:es(#)} {opt optcr(#)} {opt starts(#)} {opt sol:ver(highs)}
+{opt block:s}]
 
 
 {title:Description}
@@ -205,6 +206,19 @@ and branch and bound. The equations and the objective must be linear
 (error 459 otherwise); a linear programme returns the marginals of its
 equations. {bf:Caution:} it works only on Stata 16 and later with Python and
 SciPy; Stata 13 to 15 stop with an error.
+
+{phang}
+{opt blocks} (from version 0.35.0) solves a standalone model ({helpb cge_model})
+block by block: the blocks of its square part that {helpb cge_structure}
+finds, in an order in which each depends only on itself and on those before
+it, each by Newton's method on its own equations and variables, each
+equation evaluated and differentiated alone. The whole system is then
+checked, and polished by Newton's method if it is not within the tolerance.
+The solution is that of the whole system; a recursive model is solved one
+equation at a time. A structurally singular system stops with error 459, and
+{helpb cge_structure} names its parts. It is for standalone models without
+constraints or inequalities; {cmd:r(N_blocks)} and {cmd:r(largest_block)}
+give the blocks.
 
 {phang}
 {opt diagnose} displays the diagnostics after a solve that converges too.

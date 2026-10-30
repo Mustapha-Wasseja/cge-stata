@@ -17,6 +17,12 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.35.0 adds `cge_structure`: from the Jacobian's pattern, a maximum
+matching of equations and variables, the over- and under-determined parts of
+a structurally singular system (the equations and variables at fault, named),
+and the blocks of its square part in the order they can be solved;
+`cge_solve, blocks` solves a standalone model block by block.
+
 Version 0.34.0 adds box pairs, `cge_equation NAME: lhs = rhs, perp(VAR)
 lower(#) upper(#)`: an equation paired with a variable between bounds, as
 PATH writes a mixed complementarity problem, for tariff-rate quotas and
@@ -66,7 +72,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.34.0 implements the standard single-country model described in
+Version 0.35.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -140,6 +146,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.35.0 adds cge_structure, structural singularity and blocks.
 Version 0.34.0 adds box pairs, an equation paired with a variable between bounds.
 Version 0.33.0 adds Ruiz's equilibration of Newton's linear systems.
 Version 0.32.0 makes the Jacobian of runs with foresight exact in every state.

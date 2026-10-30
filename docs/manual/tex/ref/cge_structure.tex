@@ -1,0 +1,140 @@
+\cgeentry{cge_structure}{Structure of the system: structural singularity and blocks}
+
+\cgesec{Description}
+
+\cmd{cge_structure} (from version 0.35.0) analyses the structure of the system
+that \manref{cge_solve} solves under the closure: which free variables each
+equation contains, from the nonzeros of its exact Jacobian at a point. A
+maximum matching assigns variables to equations. If it covers every equation
+and every variable, the system is structurally nonsingular; if not, it is
+singular whatever its values, and the Dulmage--Mendelsohn decomposition names
+its parts: the over-determined part, equations that together contain fewer
+free variables than they number, and the under-determined part, variables
+that the equations cannot all determine. The square part is split into
+blocks that can be solved in turn, each given the ones before it, as CONOPT
+finds a model's pre-triangular, simultaneous and post-triangular parts.
+
+\cgesec{Quick start}
+
+The structure of the system under the current closure
+\begin{stcode}
+cge_structure
+\end{stcode}
+The full system at the base, with the twenty largest blocks
+\begin{stcode}
+cge_structure, base full top(20)
+\end{stcode}
+
+\cgesec{Syntax}
+
+\begin{stsyntax}
+\cmdb{cge_structure} [\texttt{,} \optarg{}{sim}{name} \opt{}{base} \opt{}{full} \optarg{}{top}{\#}]
+\end{stsyntax}
+
+\begin{opttable}
+\optgroup{Main}
+\optarg{}{sim}{name} & the system at simulation \argu{name}\\
+\opt{}{base} & the system at the base\\
+\opt{}{full} & the full system, with the definitions that the reduced one leaves out\\
+\optarg{}{top}{\#} & the labels and blocks listed; default \texttt{10}\\
+\end{opttable}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{}{sim}{name}, \opt{}{base}] choose the point: a stored
+simulation or the base. By default, the current point, with the current
+shocks and closure, from which the next solve starts.
+
+\item[\opt{}{full}] analyses the full system. By default, the system the
+solver uses: the reduced one for a model from a SAM (section~\ref{sec:reduced}).
+
+\item[\optarg{}{top}{\#}] limits the labels of each part and the blocks
+listed.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+A change of closure, a swap or a user equation can leave a system that is
+square, as many free variables as equations, yet singular whatever its
+values: some equations contain too few free variables between them, and some
+variables appear in too few equations. Newton's method then meets a singular
+Jacobian, or converges to a point that the system does not determine.
+\cmd{cge_structure} finds such a system before it is solved and names the
+equations and variables at fault.
+
+The SAM is mapped and calibrated:
+\stlog{struct_setup}
+
+\cgesubsec{Example 1: the structure under a closure}
+
+The reduced system has a maximum matching that covers it: it is structurally
+nonsingular. Its equations fall into blocks that can be solved in turn; most
+are single equations, and one block holds the simultaneous core of prices
+and quantities:
+\stlog{struct_default}
+
+\cgesubsec{Example 2: a structurally singular system}
+
+A user variable that no equation contains, and a user equation in the
+numeraire alone, keep the system square but make it singular. The equation
+is over-determined, with no free variable to determine; the variable is
+under-determined, with no equation to determine it:
+\stlog{struct_singular}
+
+\cgesubsec{Example 3: a standalone model}
+
+A standalone model (\manref{cge_model}) decomposes in the same way. Here
+the first three equations can be solved one after the other, the next two
+together, and the last given those:
+\stlog{struct_standalone}
+
+\cgesec{Stored results}
+
+\cmd{cge_structure} stores the following in \cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_equations)} & equations of the system\\
+\res{r(N_variables)} & free variables\\
+\res{r(rank)} & structural rank, the size of a maximum matching\\
+\res{r(singular)} & 1 if the system is structurally singular\\
+\res{r(N_over_eq)} & equations of the over-determined part\\
+\res{r(N_over_var)} & its variables\\
+\res{r(N_under_eq)} & equations of the under-determined part\\
+\res{r(N_under_var)} & its variables\\
+\res{r(N_square)} & equations of the square part\\
+\res{r(N_blocks)} & blocks of the square part\\
+\res{r(largest_block)} & equations of the largest block\\
+\res{r(N_singletons)} & blocks of one equation\\
+\resgroup{Macros}
+\res{r(over_equations)} & equations of the over-determined part\\
+\res{r(over_variables)} & its variables\\
+\res{r(under_equations)} & equations of the under-determined part\\
+\res{r(under_variables)} & its variables\\
+\end{storedres}
+
+\cgesec{Methods and formulas}
+
+The pattern is the set of nonzero entries of the exact Jacobian at the point
+(chapter~\ref{chap:solution}), rows of the system and its free columns. A
+maximum matching is found by assigning each row, in order of its number of
+entries, to its first unmatched column, and then from each row left
+unmatched by a depth-first search for an augmenting path. With $R_0$ the
+unmatched rows and $C_0$ the unmatched columns, the over-determined part is
+every row and column reached from $R_0$ by alternating paths (a row to its
+columns, a column to the row matched to it), and the under-determined part
+every column and row reached from $C_0$ (a column to its rows, a row to the
+column matched to it) \citep{dulmage1958}. In the square part the rows form a
+directed graph, row $i$ pointing to row $k$ when $i$ contains the column
+matched to $k$; its strongly connected components, found by Tarjan's
+algorithm \citep{tarjan1972}, are the blocks, in an order in which each
+depends only on itself and on those before it.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_listing}{Equation listing, infeasibility report and solution listing}
+\seeentry{cge_closure}{Choose the model closure}
+\seeentry{cge_solve}{Solve the model}
+\seeentry{cge_model}{A standalone model, written whole in the user language}
+\end{alsosee}

@@ -1,0 +1,57 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_variable X1, value(1)
+User variable X1: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_variable X2, value(1)
+User variable X2: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_variable X3, value(1)
+User variable X3: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_variable X4, value(1)
+User variable X4: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_variable X5, value(1)
+User variable X5: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_variable X6, value(1)
+User variable X6: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation e1: X1 = 1
+User equation e1: 1 element(s)
+
+. cge_equation e2: X2 = X1 + 1
+User equation e2: 1 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  5.00e-01)
+
+. cge_equation e3: X3 = 2 * X2
+User equation e3: 1 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  5.00e-01)
+
+. cge_equation e4: X4 + X5 = 3
+User equation e4: 1 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  3.33e-01)
+
+. cge_equation e5: X4 - X5 = 1
+User equation e5: 1 element(s)
+Note: the starting levels do not satisfy it (largest relative gap  1.00e+00)
+
+. cge_equation e6: X6 = X5 * X3
+User equation e6: 1 element(s)
+
+. cge_structure
+Structure of the full system at the current point
+  6 equations, 6 free variables; structural rank 6
+Square part: 6 equation(s) in 5 block(s), solvable in turn
+  4 block(s) of one equation; the largest of 2
+  block 4 (2 equation(s)): U(e4) U(e5)

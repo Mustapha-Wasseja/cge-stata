@@ -1,0 +1,6 @@
+. cge_structure, top(3)
+Structure of the reduced system at the current point
+  69 equations, 69 free variables; structural rank 69
+Square part: 69 equation(s) in 15 block(s), solvable in turn
+  14 block(s) of one equation; the largest of 55
+  block 8 (55 equation(s)): P3(com_agr) P3(com_man) P3(com_ser) P4(com_agr) ...

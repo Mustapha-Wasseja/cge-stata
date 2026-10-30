@@ -59,6 +59,7 @@ cge_solve, name(ls) minimize(sum(i, X(i)^2))
 \optarg{}{optcr}{\#} & relative gap of branch and bound; default \texttt{0}\\
 \optarg{}{starts}{\#} & points the interior point starts from; default \texttt{1}\\
 \optarg{sol}{ver}{highs} & HiGHS through SciPy, Stata 16 and later\\
+\opt{block}{s} & solve a standalone model block by block\\
 \optarg{step}{s}{\#} & apply the shocks in \argu{\#} equal steps; default \texttt{0}, only after a direct solve fails\\
 \optgroup{Nonlinear programmes of standalone models}
 \optarg{min}{imize}{expression} & minimise \argu{expression} subject to the equations\\
@@ -121,6 +122,20 @@ node whose relaxation has a poor local optimum is less likely to be pruned.
 The points come from a generator of the package's own and repeat from run
 to run; Stata's random numbers are left alone. Multi-start makes a global
 optimum of a nonconvex problem more likely, not certain.
+
+\item[\opt{block}{s}] (from version 0.35.0) solves a standalone model
+(\manref{cge_model}) block by block: the blocks of the square part of its
+system that \manref{cge_structure} finds, in an order in which each depends
+only on itself and on those before it, as CONOPT solves a model's
+pre-triangular and post-triangular parts apart from its simultaneous core.
+Each block is solved by Newton's method on its own equations and variables,
+with the exact derivatives of each equation alone, the others held at their
+solutions; then the whole system is checked, and polished by Newton's method
+if it is not within the tolerance. The solution is that of the whole system:
+in the tests, to $10^{-15}$, on a model of five blocks and on a recursive
+chain of 600 equations with a simultaneous block of 20, solved in about the
+same time either way. A structurally singular system stops with error 459.
+It is for standalone models without constraints or inequalities.
 
 \item[\optarg{sol}{ver}{highs}] (from version 0.27.0, an experimental
 prototype) solves a linear or mixed-integer linear programme with HiGHS

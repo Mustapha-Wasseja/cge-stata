@@ -1,4 +1,4 @@
-*! cge_solve.ado  v0.27.0  2026-10-25
+*! cge_solve.ado  v0.35.0  2026-10-29
 *! cge-stata: solve the model and store a named simulation
 *!
 *! Author: Mustapha Wasseja Mohammed
@@ -12,7 +12,7 @@ program define cge_solve, rclass
     * model, and a start from a stored simulation
     syntax [, NAME(name) TOLerance(real -1) ITERate(integer -1) TIMElimit(real -1) TRACE FULL STEPs(integer 0) ///
         DIAGnose SParse DENse MAXimize(string) MINimize(string) MODel(name) FROM(name) HOLD(string) ///
-        NODes(integer -1) OPTCR(real -1) STARTS(integer 1) SOLver(name)]
+        NODes(integer -1) OPTCR(real -1) STARTS(integer 1) SOLver(name) BLOCKs]
     if "`sparse'" != "" & "`dense'" != "" {
         display as error "give sparse or dense, not both"
         exit 198
@@ -73,11 +73,17 @@ program define cge_solve, rclass
     local obj
     if `"`maximize'"' != "" local obj `"max:`maximize'"'
     if `"`minimize'"' != "" local obj `"min:`minimize'"'
+    * block by block (from version 0.35.0): the equations of a standalone model
+    if "`blocks'" != "" & (`"`obj'"' != "" | "`model'`from'" != "" | `"`hold'"' != "") {
+        display as error "blocks solves a standalone model's equations block by block; it takes no maximize(), minimize(), model(), from() or hold()"
+        exit 198
+    }
     _cge_load
     * the deadline of the time limit is cleared even when the solve stops with
     * an error
     capture noisily mata: _cge_solve("`name'", `tolerance', `iterate', ("`trace'" != ""), ("`full'" != ""), `steps', ///
-        ("`diagnose'" != ""), "`sparse'`dense'", st_local("obj"), `timelimit', "`model'", "`from'", st_local("hold"), `nodes', `optcr', `starts', "`solver'")
+        ("`diagnose'" != ""), "`sparse'`dense'", st_local("obj"), `timelimit', "`model'", "`from'", st_local("hold"), `nodes', `optcr', `starts', "`solver'", ///
+        ("`blocks'" != ""))
     local rc = _rc
     mata: _cge_deadline_set(.)
     if `rc' exit `rc'

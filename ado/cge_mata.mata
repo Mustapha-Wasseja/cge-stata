@@ -275,7 +275,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.34.0")
+    return("0.35.0")
 }
 
 // =====================================================================
@@ -9117,11 +9117,11 @@ void _cge_set_simobj(struct cge_model scalar M, real scalar k, string scalar obj
 void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real scalar trace, | real scalar full,
                 real scalar steps, real scalar diagnose, string scalar lin, string scalar obj, real scalar tlim,
                 string scalar mname, string scalar from, string scalar hold, real scalar nodes, real scalar optcr,
-                real scalar starts, string scalar solver)
+                real scalar starts, string scalar solver, real scalar blocks)
 {
     struct cge_model scalar M
     real colvector x, x2, start
-    real scalar conv, iter, err, k, walras, nsteps, done, it2, n, keeplin, mode, ms, ss
+    real scalar conv, iter, err, k, walras, nsteps, done, it2, n, keeplin, mode, ms, ss, nbk, bigk
     string scalar method, m2
 
     if (args() < 5) full = 0
@@ -9141,6 +9141,9 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     if (args() < 16) starts = 1
     // the solver of a programme (from version 0.27.0): "" or highs
     if (args() < 17) solver = ""
+    // block by block (from version 0.35.0)
+    if (args() < 18) blocks = 0
+    nbk = bigk = 0
     M = _cge_load()
     _cge_need(M, "calibrated")
     if (obj == "" & _cge_sa(M)) if (rows(_cge_int_pos(M))) {
@@ -9176,7 +9179,15 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     // Continuation (from version 0.4.5): steps(n) applies the shock in n
     // steps; by default (steps 0) a failed solve is tried again in 4, then 16
     nsteps = 0
-    if (steps > 1) {
+    // block by block (from version 0.35.0): a standalone model without
+    // constraints, the blocks of its square part in turn
+    if (blocks) {
+        if (!_cge_sa(M)) _cge_fail("blocks: solving block by block is for standalone models (cge_model new); a model from a SAM is solved whole", 198)
+        if (rows(M.bY)) _cge_fail("blocks: the model has constraints or inequalities; solve it whole", 198)
+        if (steps > 1) _cge_fail("blocks: give blocks or steps(), not both", 198)
+        x = _cge_blocksolve(M, M.p, M.xcur, start, tol, maxit, trace, conv, iter, err, method, nbk, bigk)
+    }
+    else if (steps > 1) {
         x = _cge_continue(M, steps, tol, maxit, trace, conv, iter, err, method, full, done, mode)
         nsteps = (conv ? steps : done)
     }
@@ -9235,6 +9246,10 @@ void _cge_solve(string scalar name, real scalar tol, real scalar maxit, real sca
     st_numscalar("r(tolerance)", tol)
     st_numscalar("r(iterate)", maxit)
     st_numscalar("r(N_solved)", (full ? M.neq : sum(M.rmask)))
+    if (blocks) {
+        st_numscalar("r(N_blocks)", nbk)
+        st_numscalar("r(largest_block)", bigk)
+    }
     // Constraints (Section 16): regimes
     if (rows(M.bY)) {
         _cge_cons_show(M, M.p, x)
@@ -16926,6 +16941,537 @@ void _cge_eqlabel(struct cge_model scalar M, real scalar g, string scalar blk, s
         j = mod(e - 1, n2) + 1
         el = s1[i] + "," + s2[j]
     }
+}
+
+// =====================================================================
+// The structure of the system (from version 0.35.0; model_spec.md,
+// Section 45): a maximum matching of equations and variables, the
+// Dulmage-Mendelsohn decomposition of a structurally singular system, and
+// the block-triangular order of its square part
+// =====================================================================
+
+// The structure of the system at a point: its entries are the nonzeros of
+// the exact Jacobian there (rows of the system, free columns); the results
+// in the externals and r()
+struct cge_struct {
+    real scalar     m, n, rank
+    // the matching: column of each row, row of each column (0 if none)
+    real colvector  rmate, cmate
+    // the parts: 1 over-determined, 2 under-determined, 3 square
+    real colvector  rpart, cpart
+    // the blocks of the square part, in the order they can be solved: the
+    // block of each row (0 outside the square part), and their number
+    real colvector  rblock
+    real scalar     nblocks
+}
+
+// The rows of a pattern as compressed rows (rp, rc) and its columns as
+// compressed columns (cp, cr), for m rows and n columns
+void _cge_st_csr(real colvector r, real colvector c, real scalar m, real scalar n, real colvector rp,
+                 real colvector rc, real colvector cp, real colvector cr)
+{
+    real colvector o, cnt
+    o = order((r, c), (1, 2))
+    rc = c[o]
+    cnt = _cge_sumby(r, J(rows(r), 1, 1), m)
+    rp = 1 \ (runningsum(cnt) :+ 1)
+    o = order((c, r), (1, 2))
+    cr = r[o]
+    cnt = _cge_sumby(c, J(rows(c), 1, 1), n)
+    cp = 1 \ (runningsum(cnt) :+ 1)
+}
+
+// A maximum matching of the rows and columns of a pattern: rows in order of
+// their number of entries, each to its first unmatched column, then an
+// augmenting path, by depth-first search, from each row left unmatched
+void _cge_st_match(real colvector rp, real colvector rc, real scalar m, real scalar n, real colvector rmate,
+                   real colvector cmate)
+{
+    real colvector deg, o, visit, sr, sp, sc
+    real scalar k, i, a, c, stamp, top, lev
+    rmate = J(m, 1, 0)
+    cmate = J(n, 1, 0)
+    deg = rp[|2 \ m + 1|] - rp[|1 \ m|]
+    o = order(deg, 1)
+    for (k = 1; k <= m; k++) {
+        i = o[k]
+        for (a = rp[i]; a < rp[i + 1]; a++) {
+            c = rc[a]
+            if (!cmate[c]) {
+                rmate[i] = c
+                cmate[c] = i
+                break
+            }
+        }
+    }
+    visit = J(n, 1, 0)
+    sr = sp = sc = J(m + 1, 1, 0)
+    stamp = 0
+    for (k = 1; k <= m; k++) {
+        if (rmate[k] | rp[k] == rp[k + 1]) continue
+        stamp++
+        top = 1
+        sr[1] = k
+        sp[1] = rp[k]
+        while (top > 0) {
+            i = sr[top]
+            if (sp[top] >= rp[i + 1]) {
+                top--
+                continue
+            }
+            c = rc[sp[top]]
+            sp[top] = sp[top] + 1
+            if (visit[c] == stamp) continue
+            visit[c] = stamp
+            sc[top] = c
+            if (!cmate[c]) {
+                for (lev = top; lev >= 1; lev--) {
+                    rmate[sr[lev]] = sc[lev]
+                    cmate[sc[lev]] = sr[lev]
+                }
+                break
+            }
+            top++
+            sr[top] = cmate[c]
+            sp[top] = rp[sr[top]]
+        }
+    }
+}
+
+// The Dulmage-Mendelsohn parts: rows and columns reached by alternating paths
+// from the unmatched rows (over-determined, 1) and from the unmatched
+// columns (under-determined, 2); the others form the square part (3)
+void _cge_st_parts(struct cge_struct scalar T, real colvector rp, real colvector rc, real colvector cp,
+                   real colvector cr)
+{
+    real colvector q
+    real scalar h, t, i, c, a, j
+    T.rpart = J(T.m, 1, 3)
+    T.cpart = J(T.n, 1, 3)
+    // over-determined: row -> its columns -> their matched rows
+    q = select((1::T.m), T.rmate :== 0)
+    if (rows(q)) {
+        T.rpart[q] = J(rows(q), 1, 1)
+        q = q \ J(T.m, 1, 0)
+        h = 1
+        t = sum(T.rmate :== 0)
+        while (h <= t) {
+            i = q[h]
+            h++
+            for (a = rp[i]; a < rp[i + 1]; a++) {
+                c = rc[a]
+                if (T.cpart[c] == 1) continue
+                T.cpart[c] = 1
+                j = T.cmate[c]
+                if (j) if (T.rpart[j] != 1) {
+                    T.rpart[j] = 1
+                    t++
+                    q[t] = j
+                }
+            }
+        }
+    }
+    // under-determined: column -> its rows -> their matched columns
+    q = select((1::T.n), T.cmate :== 0)
+    if (rows(q)) {
+        T.cpart[q] = J(rows(q), 1, 2)
+        q = q \ J(T.n, 1, 0)
+        h = 1
+        t = sum(T.cmate :== 0)
+        while (h <= t) {
+            c = q[h]
+            h++
+            for (a = cp[c]; a < cp[c + 1]; a++) {
+                i = cr[a]
+                if (T.rpart[i] == 2 | T.rpart[i] == 1) continue
+                T.rpart[i] = 2
+                j = T.rmate[i]
+                if (j) if (T.cpart[j] != 2) {
+                    T.cpart[j] = 2
+                    t++
+                    q[t] = j
+                }
+            }
+        }
+    }
+}
+
+// The blocks of the square part, the strongly connected components of the
+// graph in which row i points to row k when i contains the column matched to
+// k (Tarjan's algorithm, without recursion): in the order Tarjan's algorithm
+// finds them, each block depends only on itself and the blocks before it
+void _cge_st_blocks(struct cge_struct scalar T, real colvector rp, real colvector rc)
+{
+    real colvector idx, low, onst, st, cs, cp2
+    real scalar counter, sp, csp, v, w, a, root, k, c
+    idx = low = onst = J(T.m, 1, 0)
+    st = cs = cp2 = J(T.m + 1, 1, 0)
+    T.rblock = J(T.m, 1, 0)
+    T.nblocks = 0
+    counter = 0
+    sp = 0
+    for (root = 1; root <= T.m; root++) {
+        if (T.rpart[root] != 3 | idx[root]) continue
+        // the call stack: node and its next entry
+        csp = 1
+        cs[1] = root
+        cp2[1] = rp[root]
+        counter++
+        idx[root] = low[root] = counter
+        sp++
+        st[sp] = root
+        onst[root] = 1
+        while (csp > 0) {
+            v = cs[csp]
+            a = cp2[csp]
+            if (a < rp[v + 1]) {
+                cp2[csp] = a + 1
+                c = rc[a]
+                if (T.cpart[c] != 3) continue
+                w = T.cmate[c]
+                if (!w | w == v) continue
+                if (!idx[w]) {
+                    counter++
+                    idx[w] = low[w] = counter
+                    sp++
+                    st[sp] = w
+                    onst[w] = 1
+                    csp++
+                    cs[csp] = w
+                    cp2[csp] = rp[w]
+                }
+                else if (onst[w]) low[v] = min((low[v], idx[w]))
+                continue
+            }
+            // v is done: a block if it is its root, then back to its parent
+            if (low[v] == idx[v]) {
+                T.nblocks = T.nblocks + 1
+                do {
+                    w = st[sp]
+                    sp--
+                    onst[w] = 0
+                    T.rblock[w] = T.nblocks
+                } while (w != v)
+            }
+            csp--
+            if (csp > 0) {
+                k = cs[csp]
+                low[k] = min((low[k], low[v]))
+            }
+        }
+    }
+}
+
+// The structure of the system of model M at parameters p and point x:
+// reduced, the system the solver uses; the Jacobian's nonzeros as entries
+real scalar _cge_st_make(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real scalar reduced,
+                         struct cge_sys scalar S, struct cge_struct scalar T)
+{
+    real colvector z, jr, jc, jv, keep, rp, rc, cp, cr
+    S = _cge_sys_make(M, reduced)
+    z = x[S.free] :/ M.xscale[S.free]
+    if (!_cge_jac_trip(M, p, x, S, z, jr, jc, jv)) return(0)
+    keep = selectindex(jv :!= 0)
+    if (rows(keep) & cols(keep)) {
+        jr = jr[keep]
+        jc = jc[keep]
+    }
+    else jr = jc = J(0, 1, .)
+    T.m = S.neq
+    T.n = rows(S.free)
+    _cge_st_csr(jr, jc, T.m, T.n, rp, rc, cp, cr)
+    _cge_st_match(rp, rc, T.m, T.n, T.rmate, T.cmate)
+    T.rank = sum(T.rmate :> 0)
+    _cge_st_parts(T, rp, rc, cp, cr)
+    _cge_st_blocks(T, rp, rc)
+    return(1)
+}
+
+// The labels of rows rr of system S (elements g of the model's equations)
+// and of free columns cc, as the listing gives them
+string colvector _cge_st_rlab(struct cge_model scalar M, real colvector g, real colvector rr)
+{
+    string colvector out
+    string scalar blk, el, desc
+    real scalar i
+    out = J(rows(rr), 1, "")
+    for (i = 1; i <= rows(rr); i++) {
+        _cge_eqlabel(M, g[rr[i]], blk, el, desc)
+        out[i] = blk + (el != "" ? "(" + el + ")" : "")
+    }
+    return(out)
+}
+
+string colvector _cge_st_clab(struct cge_model scalar M, struct cge_sys scalar S, real colvector cc)
+{
+    string colvector out
+    real scalar i
+    out = J(rows(cc), 1, "")
+    for (i = 1; i <= rows(cc); i++) out[i] = _cge_poslabel(M, S.free[cc[i]])
+    return(out)
+}
+
+// The positions where m is 1, as a column (0 x 1 when none)
+real colvector _cge_st_where(real colvector m)
+{
+    real colvector out
+    real scalar i, k
+    out = J(sum(m :!= 0), 1, .)
+    k = 0
+    for (i = 1; i <= rows(m); i++) {
+        if (m[i]) {
+            k++
+            out[k] = i
+        }
+    }
+    return(out)
+}
+
+// The labels joined by spaces ("" for none)
+string scalar _cge_st_join(string colvector lab)
+{
+    string scalar s
+    real scalar i
+    s = ""
+    for (i = 1; i <= rows(lab); i++) s = s + (i > 1 ? " " : "") + lab[i]
+    return(s)
+}
+
+// cge_structure: the report, from the point of a simulation, the base or the
+// current point (by default)
+void _cge_structure(string scalar sim, real scalar base, real scalar full, real scalar top)
+{
+    struct cge_model scalar M
+    struct cge_par scalar p
+    struct cge_sys scalar S
+    struct cge_struct scalar T
+    real colvector x, sz, o, rows_, g, orow, ocol, urow, ucol
+    string colvector lor, loc, lur, luc, lb
+    string scalar what
+    real scalar k, b, nsq
+    M = _cge_load()
+    _cge_need(M, "calibrated")
+    if (sim != "" & base) _cge_fail("give sim() or base, not both", 198)
+    if (sim != "") {
+        k = _cge_sim_index(M, sim)
+        p = M.simp[k]
+        x = M.simx[., k]
+        what = "simulation " + sim
+    }
+    else if (base) {
+        p = M.p0
+        x = M.x0
+        what = "the base"
+    }
+    else {
+        p = M.p
+        x = M.xcur
+        what = "the current point"
+    }
+    if (rows(M.bY)) p.bxbar = x[M.bX]
+    if (!_cge_st_make(M, p, x, !full, S, T)) _cge_fail("cge_structure: the equations cannot be evaluated at " + what, 459)
+    g = selectindex(S.mask)
+    printf("{txt}Structure of the %s system at %s\n", (full | _cge_sa(M) ? "full" : "reduced"), what)
+    printf("{txt}  {res}%f{txt} equations, {res}%f{txt} free variables; structural rank {res}%f\n", T.m, T.n, T.rank)
+    orow = _cge_st_where(T.rpart :== 1)
+    ocol = _cge_st_where(T.cpart :== 1)
+    urow = _cge_st_where(T.rpart :== 2)
+    ucol = _cge_st_where(T.cpart :== 2)
+    lor = _cge_st_rlab(M, g, orow)
+    loc = _cge_st_clab(M, S, ocol)
+    lur = _cge_st_rlab(M, g, urow)
+    luc = _cge_st_clab(M, S, ucol)
+    st_numscalar("r(N_equations)", T.m)
+    st_numscalar("r(N_variables)", T.n)
+    st_numscalar("r(rank)", T.rank)
+    st_numscalar("r(singular)", (T.rank < T.m | T.rank < T.n))
+    st_numscalar("r(N_over_eq)", rows(orow))
+    st_numscalar("r(N_over_var)", rows(ocol))
+    st_numscalar("r(N_under_eq)", rows(urow))
+    st_numscalar("r(N_under_var)", rows(ucol))
+    st_global("r(over_equations)", _cge_st_join(lor))
+    st_global("r(over_variables)", _cge_st_join(loc))
+    st_global("r(under_equations)", _cge_st_join(lur))
+    st_global("r(under_variables)", _cge_st_join(luc))
+    // the parts of a structurally singular system
+    if (T.rank < T.m | T.rank < T.n) {
+        printf("{err}The system is structurally singular: no matching covers all its equations and variables\n")
+        if (rows(orow)) {
+            printf("{txt}Over-determined: {res}%f{txt} equation(s) in {res}%f{txt} variable(s); an equation too many, or a variable to free:\n",
+                   rows(orow), rows(ocol))
+            _cge_st_show(lor, "equations", top)
+            _cge_st_show(loc, "variables", top)
+        }
+        if (rows(ucol)) {
+            printf("{txt}Under-determined: {res}%f{txt} variable(s) in {res}%f{txt} equation(s); a variable to fix, or an equation to add:\n",
+                   rows(ucol), rows(urow))
+            _cge_st_show(luc, "variables", top)
+            _cge_st_show(lur, "equations", top)
+        }
+    }
+    // the blocks of the square part
+    nsq = sum(T.rpart :== 3)
+    sz = (T.nblocks ? _cge_sumby(select(T.rblock, T.rblock :> 0), J(nsq, 1, 1), T.nblocks) : J(0, 1, .))
+    st_numscalar("r(N_square)", nsq)
+    st_numscalar("r(N_blocks)", T.nblocks)
+    st_numscalar("r(largest_block)", (T.nblocks ? max(sz) : 0))
+    st_numscalar("r(N_singletons)", (T.nblocks ? sum(sz :== 1) : 0))
+    if (!T.nblocks) return
+    printf("{txt}Square part: {res}%f{txt} equation(s) in {res}%f{txt} block(s), solvable in turn\n", nsq, T.nblocks)
+    printf("{txt}  {res}%f{txt} block(s) of one equation; the largest of {res}%f\n", sum(sz :== 1), max(sz))
+    o = order(-sz, 1)
+    for (k = 1; k <= min((top, T.nblocks)); k++) {
+        b = o[k]
+        if (sz[b] == 1 & k > 1) break
+        rows_ = _cge_st_where(T.rblock :== b)
+        lb = _cge_st_rlab(M, g, rows_[|1 \ min((rows(rows_), 4))|])
+        printf("{txt}  block %f (%f equation(s)): %s%s\n", b, sz[b], _cge_st_join(lb), (rows(rows_) > 4 ? " ..." : ""))
+    }
+}
+
+// Up to top labels of a part
+void _cge_st_show(string colvector lab, string scalar what, real scalar top)
+{
+    if (!rows(lab)) return
+    printf("{txt}  %s: {res}%s%s\n", what, _cge_st_join(lab[|1 \ min((rows(lab), top))|]),
+           (rows(lab) > top ? sprintf(" {txt}and %f more", rows(lab) - top) : ""))
+}
+
+// Solve a standalone model block by block (from version 0.35.0;
+// model_spec.md, Section 45): the blocks of the square part of its system
+// (_cge_st_blocks), in an order in which each depends only on itself and on
+// those before it, each by Newton's method on its own equations and
+// variables, the others held at their solutions; each equation of a block is
+// evaluated and differentiated alone, from its postfix rows. Then the whole
+// system is checked, and polished by Newton's method if it is not within the
+// tolerance. conv, iter, err and method as _cge_solve_point gives them; nb
+// and big the number of blocks and the size of the largest.
+real colvector _cge_blocksolve(struct cge_model scalar M, struct cge_par scalar p, real colvector xfix,
+                               real colvector start, real scalar tol, real scalar maxit, real scalar trace,
+                               real scalar conv, real scalar iter, real scalar err, string scalar method,
+                               real scalar nb, real scalar big)
+{
+    struct cge_sys scalar S
+    struct cge_struct scalar T
+    real colvector x, g, bo, uel, rws, cls, x2
+    real scalar kb, b, it, it2, err2, conv2
+    string scalar m2
+    conv = 0
+    iter = 0
+    err = .
+    method = "blocks"
+    nb = big = 0
+    x = xfix
+    S = _cge_sys_make(M, 0)
+    x[S.free] = start[S.free]
+    if (!_cge_st_make(M, p, x, 0, S, T)) return(x)
+    if (T.rank < T.m | T.rank < T.n) {
+        _cge_fail("blocks: the system is structurally singular; cge_structure names the equations and variables at fault", 459)
+    }
+    g = selectindex(S.mask)
+    bo = runningsum(M.elen) - M.elen
+    kb = _cge_find(M.ename, "U")
+    uel = g :- bo[kb]
+    nb = T.nblocks
+    for (b = 1; b <= nb; b++) {
+        rws = _cge_st_where(T.rblock :== b)
+        cls = T.rmate[rws]
+        big = max((big, rows(rws)))
+        if (!_cge_blk_newton(M, p, x, uel[rws], g[rws], S.free[cls], tol, maxit, it)) {
+            if (trace) printf("{txt}Block %f of %f (%f equation(s)) not solved; Newton's method on the whole system\n", b, nb, rows(rws))
+            iter = iter + it
+            break
+        }
+        iter = iter + it
+        if (trace & rows(rws) > 1) printf("{txt}Block %f of %f: %f equations, %f iteration(s)\n", b, nb, rows(rws), it)
+    }
+    err = _cge_maxres(M, p, x)
+    conv = (err < tol)
+    if (conv) return(x)
+    // the whole system, from the blocks' solution
+    x2 = _cge_solve_point(M, p, xfix, x, tol, maxit, trace, conv2, it2, err2, m2)
+    iter = iter + it2
+    if (conv2) {
+        x = x2
+        conv = 1
+        err = err2
+        method = "blocks+" + m2
+    }
+    return(x)
+}
+
+// Newton's method on one block: the user equation elements ue (rows ge of
+// the model's equations, for their scales) in the variables at positions
+// pos of x, which the solution replaces; a line search on the norm of the
+// scaled residuals. Returns 1 when the largest scaled residual is below
+// tol / 10.
+real scalar _cge_blk_newton(struct cge_model scalar M, struct cge_par scalar p, real colvector x,
+                            real colvector ue, real colvector ge, real colvector pos, real scalar tol,
+                            real scalar maxit, real scalar it)
+{
+    real colvector F, Fn, dz, xn
+    real matrix Jb
+    real scalar step, ls, n0
+    for (it = 0; it <= maxit; it++) {
+        F = _cge_blk_F(M, p, x, ue, ge)
+        if (hasmissing(F)) return(0)
+        if (max(abs(F)) < tol / 10) return(1)
+        if (it == maxit) return(0)
+        Jb = _cge_blk_J(M, p, x, ue, ge, pos)
+        if (hasmissing(Jb)) return(0)
+        dz = lusolve(Jb, -F)
+        if (hasmissing(dz)) return(0)
+        n0 = norm(F)
+        step = 1
+        for (ls = 1; ls <= 30; ls++) {
+            xn = x
+            xn[pos] = x[pos] + step :* dz :* M.xscale[pos]
+            Fn = _cge_blk_F(M, p, xn, ue, ge)
+            if (!hasmissing(Fn)) {
+                if (norm(Fn) <= (1 - 1e-4 * step) * n0 | max(abs(Fn)) < tol / 10) break
+            }
+            step = step / 2
+        }
+        if (ls > 30) return(0)
+        x = xn
+    }
+    return(0)
+}
+
+// The scaled residuals of user equation elements ue (rows ge) at x
+real colvector _cge_blk_F(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector ue,
+                          real colvector ge)
+{
+    real colvector F
+    real matrix tk1, tk2
+    real scalar r, k
+    F = J(rows(ue), 1, .)
+    for (r = 1; r <= rows(ue); r++) {
+        k = ue[r]
+        tk1 = M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|]
+        tk2 = M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|]
+        F[r] = (_cge_u_value(M, p, x, tk1) - _cge_u_value(M, p, x, tk2)) / M.escale[ge[r]]
+    }
+    return(F)
+}
+
+// Their exact Jacobian in the scaled variables at positions pos
+real matrix _cge_blk_J(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector ue,
+                       real colvector ge, real colvector pos)
+{
+    real matrix Jb, tk1, tk2
+    real rowvector gl, gr
+    real scalar r, k
+    Jb = J(rows(ue), rows(pos), 0)
+    for (r = 1; r <= rows(ue); r++) {
+        k = ue[r]
+        tk1 = M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|]
+        tk2 = M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|]
+        (void) _cge_u_dvalue(M, p, x, tk1, pos, gl)
+        (void) _cge_u_dvalue(M, p, x, tk2, pos, gr)
+        Jb[r, .] = (gl - gr) :* M.xscale[pos]' :/ M.escale[ge[r]]
+    }
+    return(Jb)
 }
 
 // The equation listing and infeasibility report (from version 0.9.5): every

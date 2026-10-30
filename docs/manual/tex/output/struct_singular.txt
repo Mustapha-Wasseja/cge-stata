@@ -1,0 +1,41 @@
+. cge_variable Z, value(1)
+User variable Z: 1 element(s), base value 1
+Add the equations that determine it with cge_equation
+
+. cge_equation ez: CPI = base(CPI)
+User equation ez: 1 element(s)
+
+. cge_structure, top(3)
+Structure of the reduced system at the current point
+  70 equations, 70 free variables; structural rank 69
+The system is structurally singular: no matching covers all its equations and variables
+Over-determined: 1 equation(s) in 0 variable(s); an equation too many, or a variable to free:
+  equations: U(ez)
+Under-determined: 1 variable(s) in 0 equation(s); a variable to fix, or an equation to add:
+  variables: Z
+Square part: 69 equation(s) in 15 block(s), solvable in turn
+  14 block(s) of one equation; the largest of 55
+  block 8 (55 equation(s)): P3(com_agr) P3(com_man) P3(com_ser) P4(com_agr) ...
+
+. return list
+
+scalars:
+       r(N_singletons) =  14
+      r(largest_block) =  55
+           r(N_blocks) =  15
+           r(N_square) =  69
+        r(N_under_var) =  1
+         r(N_under_eq) =  0
+         r(N_over_var) =  0
+          r(N_over_eq) =  1
+           r(singular) =  1
+               r(rank) =  69
+        r(N_variables) =  70
+        r(N_equations) =  70
+
+macros:
+    r(under_variables) : "Z"
+     r(over_equations) : "U(ez)"
+
+. cge_equation, clear
+User variables and equations removed

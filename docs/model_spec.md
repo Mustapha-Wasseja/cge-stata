@@ -3255,6 +3255,68 @@ cap binding, the rent at the cap and imports over the quota; listing, saving
 and loading; the GAMS files; errors) and the export check's case `boxpair`
 (PATH, model status 1, 117 values to $4.3\times10^{-13}$).
 
+## 45. The structure of the system, and solving block by block (from version 0.35.0)
+
+`cge_structure [, sim(name) base full top(#)]` analyses the system that
+`cge_solve` solves under the closure (the reduced system for a model from a
+SAM, the full one with `full`): its pattern is the set of nonzero entries of
+the exact Jacobian at the point (`_cge_jac_trip`), rows of the system and
+free columns. The pattern that `_cge_pattern` keeps for grouped differences
+leaves out the dense rows, so it is not used.
+
+**Matching.** A maximum matching of rows and columns (`_cge_st_match`):
+each row, in increasing order of its number of entries, takes its first
+unmatched column; from each row left unmatched, a depth-first search looks
+for an augmenting path (rows and columns alternately, the last column
+unmatched) and flips it. The structural rank is the number of rows matched;
+the system is structurally singular when it is below the number of rows or
+of columns, whatever the values of the entries.
+
+**Dulmage-Mendelsohn parts** (`_cge_st_parts`). From the unmatched rows,
+alternating paths (a row to all its columns, a column to the row matched to
+it) reach the over-determined part: its rows outnumber its columns, so an
+equation is redundant or a variable must be freed. From the unmatched
+columns (a column to all its rows, a row to the column matched to it) they
+reach the under-determined part: its columns outnumber its rows, so a
+variable must be fixed or an equation added. The rest is the square part.
+
+**Blocks** (`_cge_st_blocks`). In the square part, row $i$ points to row
+$k$ when $i$ contains the column matched to $k$; the strongly connected
+components of that graph, by Tarjan's algorithm without recursion, are the
+blocks of the block-triangular form, in an order in which each depends only
+on itself and on those before it (the order the algorithm finds them). On
+the SYNTHETIC SAM the reduced system of 69 equations has 15 blocks, 14 of
+one equation and one of 55 (the simultaneous core of prices and
+quantities); the full system of 93 has 15, the largest of 79.
+
+The report names the parts of a singular system (block and element of each
+equation, as `cge_listing` gives them; each variable's label) and the
+largest blocks; r() gives the counts and the labels of the parts.
+
+**Solving block by block.** `cge_solve, blocks` (for a standalone model
+without constraints) solves the blocks in that order (`_cge_blocksolve`):
+for each, Newton's method on its own equations and their matched variables
+(`_cge_blk_newton`), the residuals and exact Jacobian of each equation
+evaluated alone from its postfix rows (`_cge_blk_F`, `_cge_blk_J`, through
+`_cge_u_dvalue`), with a line search on the norm of the scaled residuals,
+each block to a tenth of the tolerance; the other variables hold their
+values, the solutions of the blocks before. The largest scaled residual of
+the whole system is then checked, and Newton's method on the whole system
+polishes the point if it is not within the tolerance (method
+`blocks+newton`). A structurally singular system stops with error 459. In
+the tests the solutions equal those of the whole system to
+$1.3\times10^{-15}$ (five blocks; a recursive chain of 600 equations with a
+block of 20 at its end, 0.42 seconds against 0.36 for the whole system on
+Stata 13), and box pairs, each its own block, solve the same.
+
+Tests: `tests/test_structure.do` (a standalone model of five blocks, one of
+two equations; a singular one with known over- and under-determined parts;
+an equation without a free variable and a variable in no equation; the SAM
+model, reduced and full, at the current point, the base and a simulation; a
+singular user addition named; errors) and `tests/test_blocksolve.do` (the
+solutions block by block against the whole system; the blocks counted; box
+pairs; errors).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

@@ -1,0 +1,19 @@
+. cge_synthetic, clear
+(16 vars, 15 obs)
+
+Synthetic SAM loaded (standard layout): 15 accounts, total   1743.00
+Largest row-column imbalance:  0.00e+00
+
+. cge_sam, labels(account)
+SAM read: 15 accounts, total 1743
+Largest row-column imbalance:  0.00e+00
+
+. cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) ///
+>     factors(lab cap) households(hhd) government(gov) savinv(sav) row(row)          ///
+>     dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+Accounts mapped: 3 activities, 3 commodities, 2 factors, 1 households, 0 enterprises, 0 margin accou
+> nts
+
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+Calibrated: 93 equations, 93 free variables
+Benchmark replication: largest scaled residual  3.55e-16

@@ -95,6 +95,8 @@ f ado/cge_check.ado
 f ado/cge_check.sthlp
 f ado/cge_listing.ado
 f ado/cge_listing.sthlp
+f ado/cge_structure.ado
+f ado/cge_structure.sthlp
 f ado/cge_report.ado
 f ado/cge_report.sthlp
 f ado/cge_parameters.ado
