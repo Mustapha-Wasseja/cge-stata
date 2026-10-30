@@ -3502,6 +3502,54 @@ the group's; the poverty headcount, base and simulated, against the
 generated consumption; the Shapley decomposition adding up, channels Y,
 PIDX and prices; bands from draws kept by cge_sensitivity; errors).
 
+## 50. Variables added to built-in equations (from version 0.40.0)
+
+`cge_variable NAME[(i)] ... , add(BLOCK[(e)])` adds the variable to the right
+side of elements of a built-in equation block. The block and its elements are
+checked as for `replace()` (`_cge_u_repcheck` with option `add`), with the
+domains of `_cge_adddom`, which, unlike `_cge_blockdom`, includes the blocks
+with exact derivatives of their own (P7, P8, P9, I1, I8, I9, S1, S2, S3, S5)
+and leaves out only the constraints B1 and the user equations U. `M.uadd`
+holds each variable and its block; `M.uaddp`, recorded at the end of `_cge_eq`
+in record mode (`_cge_u_addrows`), holds for each existing element the row of
+the equation element, the position of the variable, the block and the
+element in it. An element must be in the model and not replaced by a user
+equation; several variables may be added to one element.
+
+The residual of each element gains the variable on its right side: R_r =
+R_r + x_v. The exact Jacobian gains -1 at (r, v): in `_cge_jtrip` through
+`_cge_u_addtrip` for every row but those of `_cge_dense`, which, with
+`_cge_dense2` (S2 and P7), add it in `_cge_u_adddense`, so that the exact
+Jacobian, the difference Jacobians (whose rows with exact derivatives come
+from these functions) and the sparse LU all have it once. The pattern of
+grouped differences (`_cge_pattern`) gains (r, v) for the other rows. A
+definition among the candidates of the reduced system (P1, P2, P6, Q5, Q6,
+I5, T8, I13, H2, H3) with a variable added stays in the system
+(`_cge_reduce_setup`), as `_cge_derive` computes the definitions without it.
+In standalone models, which have no built-in equations, `add()` is an error.
+
+GAMS: every equation of `cge_model.gms` (70) adds
+`XADV('B', e1, e2)$XADS('B', e1, e2)` on its right side, with the indexes of
+its `XRP` guard, or the block's own for the rows with exact derivatives, and
+'0' for an index the block lacks; the set `XADS(*,*,*)` and the variable
+`XADV(*,*,*)` are declared there. `cge_user.inc` (`_cge_gams_add`) sets
+`XADS` for each element with variables added and defines `XADV` by an
+equation, XADV = sum of the variables - (their base value) * UBASE, so that
+GAMS solves Stata's base point when a term is not zero at the base, and the
+whole term in the scenario, where UBASE is 0. GAMS's MCP matches these
+unpaired equations with the free XADV.
+
+Tests: `tests/test_addterm.do` (a variable added to I7, S4 and P1 gives the
+solution of the element replaced by its own equation with the variable on its
+right side, to 1e-10, P1 a definition otherwise left out; I8 against the same
+amount less spending in S4, every variable but YG to 1e-10 and YG higher by
+the amount; S2 against government purchases that the government does not pay
+for, through I7 and I9, every variable but QG(com_man); the exact Jacobian
+against central differences, 8e-10; a solve with difference Jacobians to
+1e-13; two variables on one element; an indexed variable; a defined tax; save
+and use; clear; errors). Export check: case `addterm` (I8, S2, P1, I7 with an
+index, and I9 with a term not zero at the base) against GAMS.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

@@ -418,6 +418,13 @@ $macro RENTTO(rr) (sum(C, rmto(rr, C) * RM(C) * pwm(C) * QM(C)) * EXR + sum(C, r
 * block does not have; the equations below leave them out
 parameter XRP(*, *, *) "built-in equation elements replaced by user equations";
 XRP('-', '-', '-') = 0;
+* Variables added to built-in equation elements (from version 0.40.0):
+* XADS(block, e1, e2), set in cge_user.inc with '0' for an index a block
+* does not have, marks the elements; XADV, defined there, is added to their
+* right side
+set XADS(*, *, *) "built-in equation elements with variables added";
+XADS('-', '-', '-') = no;
+variable XADV(*, *, *) "variables added to built-in equation elements";
 
 equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP9,
      EQ1(AC), EQ2(AC), EQ1C(AC), EQ2C(AC), EQ1D(AC), EQ2D(AC), EQ3C(AC), EQ3D(AC), EQ4C(AC, AC),
@@ -429,106 +436,106 @@ equations EP1(AC), EP2(AC), EP3(AC), EP4(AC), EP5(AC), EP6(AC), EP7(AC), EP8, EP
      EI12, EI13(AC), EI14, EL1(AC), EL2(AC), ES1(AC), ES2(AC), ES3, ES4, ES5;
 
 * 5.1 Prices
-EP1(C)$(CM(C) and not XRP('P1', C, '0'))..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ + RM(C)) * EXR + sum(CP$ici(CP, C), PQ(CP) * ici(CP, C));
+EP1(C)$(CM(C) and not XRP('P1', C, '0'))..  PM(C) =e= pwm(C) * (1 + tm(C) * TMADJ + RM(C)) * EXR + sum(CP$ici(CP, C), PQ(CP) * ici(CP, C)) + XADV('P1', C, '0')$XADS('P1', C, '0');
 EP2(C)$(CE(C) and not XRP('P2', C, '0'))..  PE(C) =e= (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * (1 - te(C) - RE(C)) * EXR
-                          - sum(CP$ice(CP, C), PQ(CP) * ice(CP, C));
+                          - sum(CP$ice(CP, C), PQ(CP) * ice(CP, C)) + XADV('P2', C, '0')$XADS('P2', C, '0');
 EP3(C)$(CQ(C) and not XRP('P3', C, '0'))..  PQ(C) * (1 - tq(C) * TQADJ) * QQ(C) =e=
                 ((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) * QD(C))$CDO(C) + (PM(C) * QM(C))$CM(C)
-                + sum(CP$CT(CP), PQ(CP) * icm(CP, C)) * QQ(C);
-EP4(C)$(CX(C) and not XRP('P4', C, '0'))..  PX(C) * QX(C) =e= (PD(C) * QD(C))$CDO(C) + (PE(C) * QE(C))$CE(C);
-EP5(A)$(not XRP('P5', A, '0'))..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * (PXAC(A, C)$XAC(A, C) + PX(C)$(not XAC(A, C))));
-EP6(A)$(not XRP('P6', A, '0'))..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * ica(C, A));
-EP7(A)..        PA(A) * (1 - ta(A) - RA(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A);
-EP8..           CPI =e= sum(C$cwts(C), cwts(C) * PQ(C) * (1 + tv(C) * TVADJ));
-EP9..           DPI =e= sum(C$dwts(C), dwts(C) * PD(C));
+                + sum(CP$CT(CP), PQ(CP) * icm(CP, C)) * QQ(C) + XADV('P3', C, '0')$XADS('P3', C, '0');
+EP4(C)$(CX(C) and not XRP('P4', C, '0'))..  PX(C) * QX(C) =e= (PD(C) * QD(C))$CDO(C) + (PE(C) * QE(C))$CE(C) + XADV('P4', C, '0')$XADS('P4', C, '0');
+EP5(A)$(not XRP('P5', A, '0'))..        PA(A) =e= sum(C$theta(A, C), theta(A, C) * (PXAC(A, C)$XAC(A, C) + PX(C)$(not XAC(A, C)))) + XADV('P5', A, '0')$XADS('P5', A, '0');
+EP6(A)$(not XRP('P6', A, '0'))..        PINTA(A) =e= sum(C$ica(C, A), PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * ica(C, A)) + XADV('P6', A, '0')$XADS('P6', A, '0');
+EP7(A)..        PA(A) * (1 - ta(A) - RA(A)) * QA(A) =e= PVA(A) * QVA(A) + PINTA(A) * QINTA(A) + XADV('P7', A, '0')$XADS('P7', A, '0');
+EP8..           CPI =e= sum(C$cwts(C), cwts(C) * PQ(C) * (1 + tv(C) * TVADJ)) + XADV('P8', '0', '0')$XADS('P8', '0', '0');
+EP9..           DPI =e= sum(C$dwts(C), dwts(C) * PD(C)) + XADV('P9', '0', '0')$XADS('P9', '0', '0');
 
 * 5.2 Production; factors in efficiency units af * EFF * QF
-EQ1(A)$(LT(A) and not XRP('Q1', A, '0'))..  QVA(A) =e= iva(A) * QA(A);
-EQ2(A)$(LT(A) and not XRP('Q2', A, '0'))..  QINTA(A) =e= inta(A) * QA(A);
+EQ1(A)$(LT(A) and not XRP('Q1', A, '0'))..  QVA(A) =e= iva(A) * QA(A) + XADV('Q1', A, '0')$XADS('Q1', A, '0');
+EQ2(A)$(LT(A) and not XRP('Q2', A, '0'))..  QINTA(A) =e= inta(A) * QA(A) + XADV('Q2', A, '0')$XADS('Q2', A, '0');
 EQ1C(A)$(not LT(A) and not CDA(A) and not XRP('Q1C', A, '0'))..
-    QA(A) =e= aa(A) * (dla(A) * QVA(A)**(-rha(A)) + dlac(A) * QINTA(A)**(-rha(A)))**(-1 / rha(A));
+    QA(A) =e= aa(A) * (dla(A) * QVA(A)**(-rha(A)) + dlac(A) * QINTA(A)**(-rha(A)))**(-1 / rha(A)) + XADV('Q1C', A, '0')$XADS('Q1C', A, '0');
 EQ2C(A)$(not LT(A) and not CDA(A) and not XRP('Q2C', A, '0'))..
-    QVA(A) =e= QINTA(A) * ((PINTA(A) / PVA(A)) * dla(A) / dlac(A))**(1 / (1 + rha(A)));
-EQ1D(A)$(CDA(A) and not XRP('Q1C', A, '0'))..  QA(A) =e= aa(A) * QVA(A)**dla(A) * QINTA(A)**dlac(A);
-EQ2D(A)$(CDA(A) and not XRP('Q2C', A, '0'))..  PVA(A) * QVA(A) * dlac(A) =e= PINTA(A) * QINTA(A) * dla(A);
-EQ3C(A)$(not CDV(A) and not XRP('Q3', A, '0'))..  QVA(A) =e= ad(A) * TOPSUM(A)**(-1 / rva(A));
+    QVA(A) =e= QINTA(A) * ((PINTA(A) / PVA(A)) * dla(A) / dlac(A))**(1 / (1 + rha(A))) + XADV('Q2C', A, '0')$XADS('Q2C', A, '0');
+EQ1D(A)$(CDA(A) and not XRP('Q1C', A, '0'))..  QA(A) =e= aa(A) * QVA(A)**dla(A) * QINTA(A)**dlac(A) + XADV('Q1C', A, '0')$XADS('Q1C', A, '0');
+EQ2D(A)$(CDA(A) and not XRP('Q2C', A, '0'))..  PVA(A) * QVA(A) * dlac(A) =e= PINTA(A) * QINTA(A) * dla(A) + XADV('Q2C', A, '0')$XADS('Q2C', A, '0');
+EQ3C(A)$(not CDV(A) and not XRP('Q3', A, '0'))..  QVA(A) =e= ad(A) * TOPSUM(A)**(-1 / rva(A)) + XADV('Q3', A, '0')$XADS('Q3', A, '0');
 EQ3D(A)$(CDV(A) and not XRP('Q3', A, '0'))..
     QVA(A) =e= ad(A) * prod(F$(FA(F, A) and NFREE(F)), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A))
-                     * prod(NST$NNA(NST, A), QNA(NST, A)**dvn(NST, A));
+                     * prod(NST$NNA(NST, A), QNA(NST, A)**dvn(NST, A)) + XADV('Q3', A, '0')$XADS('Q3', A, '0');
 EQ4C(F, A)$(FA(F, A) and NFREE(F) and not CDV(A) and not XRP('Q4', F, A))..
     W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PVA(A) * QVA(A) / TOPSUM(A)
-        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F) * DW(F);
+        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rva(A) - 1) * af(F) * EFF(F) * DW(F) + XADV('Q4', F, A)$XADS('Q4', F, A);
 EQ4D(F, A)$(FA(F, A) and NFREE(F) and CDV(A) and not XRP('Q4', F, A))..
-    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A);
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PVA(A) * QVA(A) + XADV('Q4', F, A)$XADS('Q4', F, A);
 * 17.2 Nests of value added: demand for the factors in a nest (EQ4N, EQ4M),
 * the quantity (EN1C, EN1D) and price (EN2C, EN2D) of each nest, and the
 * demand for the commodities in nests (EN3C, EN3D)
 EQ4N(NST, F, A)$(NSTF(NST, F) and FA(F, A) and not CDN(NST) and not XRP('Q4', F, A))..
     W(F) * WFDIST(F, A) * (1 + tf(F, A)) =e= PNA(NST, A) * QNA(NST, A) / NSUM(NST, A)
-        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rhn(NST) - 1) * af(F) * EFF(F) * DW(F);
+        * dva(F, A) * (af(F) * EFF(F) * DW(F) * QF(F, A))**(-rhn(NST) - 1) * af(F) * EFF(F) * DW(F) + XADV('Q4', F, A)$XADS('Q4', F, A);
 EQ4M(NST, F, A)$(NSTF(NST, F) and FA(F, A) and CDN(NST) and not XRP('Q4', F, A))..
-    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PNA(NST, A) * QNA(NST, A);
-EN1C(NST, A)$(NNA(NST, A) and not CDN(NST) and not XRP('N1', NST, A))..  QNA(NST, A) =e= an(NST, A) * NSUM(NST, A)**(-1 / rhn(NST));
+    W(F) * WFDIST(F, A) * (1 + tf(F, A)) * QF(F, A) =e= dva(F, A) * PNA(NST, A) * QNA(NST, A) + XADV('Q4', F, A)$XADS('Q4', F, A);
+EN1C(NST, A)$(NNA(NST, A) and not CDN(NST) and not XRP('N1', NST, A))..  QNA(NST, A) =e= an(NST, A) * NSUM(NST, A)**(-1 / rhn(NST)) + XADV('N1', NST, A)$XADS('N1', NST, A);
 EN1D(NST, A)$(NNA(NST, A) and CDN(NST) and not XRP('N1', NST, A))..
     QNA(NST, A) =e= an(NST, A) * prod(F$(NSTF(NST, F) and FA(F, A)), (af(F) * EFF(F) * DW(F) * QF(F, A))**dva(F, A))
-                               * prod(C$(NSTF(NST, C) and NE(C, A)), QINT(C, A)**dce(C, A));
+                               * prod(C$(NSTF(NST, C) and NE(C, A)), QINT(C, A)**dce(C, A)) + XADV('N1', NST, A)$XADS('N1', NST, A);
 EN2C(NST, A)$(NNA(NST, A) and not CDV(A) and not XRP('N2', NST, A))..
-    PNA(NST, A) =e= PVA(A) * QVA(A) / TOPSUM(A) * dvn(NST, A) * QNA(NST, A)**(-rva(A) - 1);
-EN2D(NST, A)$(NNA(NST, A) and CDV(A) and not XRP('N2', NST, A))..  PNA(NST, A) * QNA(NST, A) =e= dvn(NST, A) * PVA(A) * QVA(A);
+    PNA(NST, A) =e= PVA(A) * QVA(A) / TOPSUM(A) * dvn(NST, A) * QNA(NST, A)**(-rva(A) - 1) + XADV('N2', NST, A)$XADS('N2', NST, A);
+EN2D(NST, A)$(NNA(NST, A) and CDV(A) and not XRP('N2', NST, A))..  PNA(NST, A) * QNA(NST, A) =e= dvn(NST, A) * PVA(A) * QVA(A) + XADV('N2', NST, A)$XADS('N2', NST, A);
 EN3C(NST, C, A)$(NSTF(NST, C) and NE(C, A) and not CDN(NST) and not XRP('N3', C, A))..
     PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) =e= PNA(NST, A) * QNA(NST, A) / NSUM(NST, A)
-        * dce(C, A) * QINT(C, A)**(-rhn(NST) - 1);
+        * dce(C, A) * QINT(C, A)**(-rhn(NST) - 1) + XADV('N3', C, A)$XADS('N3', C, A);
 EN3D(NST, C, A)$(NSTF(NST, C) and NE(C, A) and CDN(NST) and not XRP('N3', C, A))..
-    PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * QINT(C, A) =e= dce(C, A) * PNA(NST, A) * QNA(NST, A);
-EQ5(C, A)$(ica(C, A) and not XRP('Q5', C, A))..  QINT(C, A) =e= ica(C, A) * QINTA(A);
-EQ6(C)$(CX(C) and not CAC(C) and not XRP('Q6', C, '0'))..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))));
+    PQ(C) * (1 + tv(C) * TVADJ * (1 - kappa(A))) * QINT(C, A) =e= dce(C, A) * PNA(NST, A) * QNA(NST, A) + XADV('N3', C, A)$XADS('N3', C, A);
+EQ5(C, A)$(ica(C, A) and not XRP('Q5', C, A))..  QINT(C, A) =e= ica(C, A) * QINTA(A) + XADV('Q5', C, A)$XADS('Q5', C, A);
+EQ6(C)$(CX(C) and not CAC(C) and not XRP('Q6', C, '0'))..  QX(C) =e= sum(A$theta(A, C), theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H)))) + XADV('Q6', C, '0')$XADS('Q6', C, '0');
 * 17.3 Output from several activities: commodity output (EQ6A, EQ6D), each
 * activity's output (EQ6B) and price (EP5A, EP5D)
 EQ6A(C)$(CAC(C) and not CDAC(C) and not XRP('Q6A', C, '0'))..
-    QX(C) =e= aac(C) * sum(A$XAC(A, C), dac(A, C) * QXAC(A, C)**(-rac(C)))**(-1 / rac(C));
-EQ6D(C)$(CDAC(C) and not XRP('Q6A', C, '0'))..  QX(C) =e= aac(C) * prod(A$XAC(A, C), QXAC(A, C)**dac(A, C));
-EQ6B(A, C)$(XAC(A, C) and not XRP('Q6B', A, C))..  QXAC(A, C) =e= theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H)));
+    QX(C) =e= aac(C) * sum(A$XAC(A, C), dac(A, C) * QXAC(A, C)**(-rac(C)))**(-1 / rac(C)) + XADV('Q6A', C, '0')$XADS('Q6A', C, '0');
+EQ6D(C)$(CDAC(C) and not XRP('Q6A', C, '0'))..  QX(C) =e= aac(C) * prod(A$XAC(A, C), QXAC(A, C)**dac(A, C)) + XADV('Q6A', C, '0')$XADS('Q6A', C, '0');
+EQ6B(A, C)$(XAC(A, C) and not XRP('Q6B', A, C))..  QXAC(A, C) =e= theta(A, C) * (QA(A) - sum(H$betah(A, H), QHA(A, H))) + XADV('Q6B', A, C)$XADS('Q6B', A, C);
 EP5A(A, C)$(XAC(A, C) and not CDAC(C) and not XRP('P5A', A, C))..
     PXAC(A, C) =e= PX(C) * QX(C) / sum(AP$XAC(AP, C), dac(AP, C) * QXAC(AP, C)**(-rac(C)))
-                   * dac(A, C) * QXAC(A, C)**(-rac(C) - 1);
-EP5D(A, C)$(XAC(A, C) and CDAC(C) and not XRP('P5A', A, C))..  PXAC(A, C) * QXAC(A, C) =e= dac(A, C) * PX(C) * QX(C);
-EH1$(linked and not XRP('H1', '0', '0'))..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C));
-EH2(F)$(eta(F) and not XRP('H2', F, '0')).. EFF(F) =e= (HS / hs0)**eta(F);
-EH3(F)$(FS(F) and not XRP('H3', F, '0'))..  DW(F) =e= (1 - sick(F) * (HS / hs0)**epss(F)) / (1 - sick0(F));
+                   * dac(A, C) * QXAC(A, C)**(-rac(C) - 1) + XADV('P5A', A, C)$XADS('P5A', A, C);
+EP5D(A, C)$(XAC(A, C) and CDAC(C) and not XRP('P5A', A, C))..  PXAC(A, C) * QXAC(A, C) =e= dac(A, C) * PX(C) * QX(C) + XADV('P5A', A, C)$XADS('P5A', A, C);
+EH1$(linked and not XRP('H1', '0', '0'))..    HS =e= sum(C$HCOM(C), sum(H$beta(C, H), QH(C, H)) + QG(C) + QSHI(C)$qshibar(C)) + XADV('H1', '0', '0')$XADS('H1', '0', '0');
+EH2(F)$(eta(F) and not XRP('H2', F, '0')).. EFF(F) =e= (HS / hs0)**eta(F) + XADV('H2', F, '0')$XADS('H2', F, '0');
+EH3(F)$(FS(F) and not XRP('H3', F, '0'))..  DW(F) =e= (1 - sick(F) * (HS / hs0)**epss(F)) / (1 - sick0(F)) + XADV('H3', F, '0')$XADS('H3', F, '0');
 
 * 5.3 Trade
-ET1(C)$(CE(C) and not XO(C) and not XRP('T1', C, '0'))..  QX(C) =e= at(C) * (dt(C) * QE(C)**rt(C) + dtc(C) * QD(C)**rt(C))**(1 / rt(C));
-ET2(C)$(CE(C) and not XO(C) and not XRP('T2', C, '0'))..  QE(C) =e= QD(C) * ((PE(C) / PD(C)) * dtc(C) / dt(C))**(1 / (rt(C) - 1));
-ET3(C)$(CX(C) and not CE(C) and not XRP('T3', C, '0'))..  QX(C) =e= QD(C);
-ET3E(C)$(XO(C) and not XRP('T3E', C, '0'))..  QX(C) =e= QE(C);
+ET1(C)$(CE(C) and not XO(C) and not XRP('T1', C, '0'))..  QX(C) =e= at(C) * (dt(C) * QE(C)**rt(C) + dtc(C) * QD(C)**rt(C))**(1 / rt(C)) + XADV('T1', C, '0')$XADS('T1', C, '0');
+ET2(C)$(CE(C) and not XO(C) and not XRP('T2', C, '0'))..  QE(C) =e= QD(C) * ((PE(C) / PD(C)) * dtc(C) / dt(C))**(1 / (rt(C) - 1)) + XADV('T2', C, '0')$XADS('T2', C, '0');
+ET3(C)$(CX(C) and not CE(C) and not XRP('T3', C, '0'))..  QX(C) =e= QD(C) + XADV('T3', C, '0')$XADS('T3', C, '0');
+ET3E(C)$(XO(C) and not XRP('T3E', C, '0'))..  QX(C) =e= QE(C) + XADV('T3E', C, '0')$XADS('T3E', C, '0');
 ET4(C)$(CM(C) and CDO(C) and not XRP('T4', C, '0'))..
-    QQ(C) =e= aq(C) * (dq(C) * QM(C)**(-rq(C)) + dqc(C) * QD(C)**(-rq(C)))**(-1 / rq(C));
+    QQ(C) =e= aq(C) * (dq(C) * QM(C)**(-rq(C)) + dqc(C) * QD(C)**(-rq(C)))**(-1 / rq(C)) + XADV('T4', C, '0')$XADS('T4', C, '0');
 ET5(C)$(CM(C) and CDO(C) and not XRP('T5', C, '0'))..  QM(C) =e= QD(C) * (((PD(C) + sum(CP$icd(CP, C), PQ(CP) * icd(CP, C))) / PM(C))
-                                               * dq(C) / dqc(C))**(1 / (1 + rq(C)));
-ET6(C)$(CDO(C) and not CM(C) and not XRP('T6', C, '0'))..  QQ(C) =e= aq(C) * QD(C);
-ET7(C)$(CM(C) and not CDO(C) and not XRP('T7', C, '0'))..  QQ(C) =e= aq(C) * QM(C);
+                                               * dq(C) / dqc(C))**(1 / (1 + rq(C))) + XADV('T5', C, '0')$XADS('T5', C, '0');
+ET6(C)$(CDO(C) and not CM(C) and not XRP('T6', C, '0'))..  QQ(C) =e= aq(C) * QD(C) + XADV('T6', C, '0')$XADS('T6', C, '0');
+ET7(C)$(CM(C) and not CDO(C) and not XRP('T7', C, '0'))..  QQ(C) =e= aq(C) * QM(C) + XADV('T7', C, '0')$XADS('T7', C, '0');
 ET8(C)$(CT(C) and not XRP('T8', C, '0'))..  QT(C) =e= sum(CP$icm(C, CP), icm(C, CP) * QQ(CP)) + sum(CP$icd(C, CP), icd(C, CP) * QD(CP))
-                          + sum(CP$ici(C, CP), ici(C, CP) * QM(CP)) + sum(CP$ice(C, CP), ice(C, CP) * QE(CP));
-ET10(C)$(CED(C) and not XRP('T10', C, '0'))..  QE(C) =e= qebar(C) * (PWEV(C) / pwe(C))**(-etae(C));
-ET9(C)$(CR(C) and not XRP('T9', C, '0'))..  QER(C) =e= qerbar(C) * (PQ(C) / (EXR * pwe(C)))**(-sigt(C));
+                          + sum(CP$ici(C, CP), ici(C, CP) * QM(CP)) + sum(CP$ice(C, CP), ice(C, CP) * QE(CP)) + XADV('T8', C, '0')$XADS('T8', C, '0');
+ET10(C)$(CED(C) and not XRP('T10', C, '0'))..  QE(C) =e= qebar(C) * (PWEV(C) / pwe(C))**(-etae(C)) + XADV('T10', C, '0')$XADS('T10', C, '0');
+ET9(C)$(CR(C) and not XRP('T9', C, '0'))..  QER(C) =e= qerbar(C) * (PQ(C) / (EXR * pwe(C)))**(-sigt(C)) + XADV('T9', C, '0')$XADS('T9', C, '0');
 
 * 5.4 Institutions
-EI1(F)..  YF(F) =e= sum(A$FA(F, A), W(F) * WFDIST(F, A) * QF(F, A)) + trfr(F) * EXR + RENTTO(F);
+EI1(F)..  YF(F) =e= sum(A$FA(F, A), W(F) * WFDIST(F, A) * QF(F, A)) + trfr(F) * EXR + RENTTO(F) + XADV('I1', F, '0')$XADS('I1', F, '0');
 EI2(INS, F)$(not XRP('I2', INS, F))..  YIF(INS, F) =e= (shif(INS, F) * (1 - tshi(F) - tfy(F)) * YF(F))$(not SHIS(INS))
-                               + (tshi(F) * YF(F))$SHIS(INS);
+                               + (tshi(F) * YF(F))$SHIS(INS) + XADV('I2', INS, F)$XADS('I2', INS, F);
 EI3(D)$(not XRP('I3', D, '0'))..  YI(D) =e= sum(F, YIF(D, F)) + sum(DP$shii(D, DP), shii(D, DP) * (1 - MPS(DP)) * (1 - TINS(DP)) * YI(DP))
-                    + trdg(D) * CPI + trdr(D) * EXR + hold(D) * rd * ddebt + RENTTO(D);
-EI4(H)$(not XRP('I4', H, '0'))..  EH(H) =e= hc(H) * (1 - MPS(H)) * (1 - TINS(H)) * YI(H);
+                    + trdg(D) * CPI + trdr(D) * EXR + hold(D) * rd * ddebt + RENTTO(D) + XADV('I3', D, '0')$XADS('I3', D, '0');
+EI4(H)$(not XRP('I4', H, '0'))..  EH(H) =e= hc(H) * (1 - MPS(H)) * (1 - TINS(H)) * YI(H) + XADV('I4', H, '0')$XADS('I4', H, '0');
 EI5(C, H)$(beta(C, H) and not XRP('I5', C, H))..
     PQ(C) * (1 + tv(C) * TVADJ) * QH(C, H) =e= PQ(C) * (1 + tv(C) * TVADJ) * gamma(C, H)
         + beta(C, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H))
-                        - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H)));
+                        - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H))) + XADV('I5', C, H)$XADS('I5', C, H);
 EI5H(A, H)$(betah(A, H) and not XRP('I5H', A, H))..
     PA(A) * QHA(A, H) =e= PA(A) * gammah(A, H)
         + betah(A, H) * (EH(H) - sum(CP$gamma(CP, H), PQ(CP) * (1 + tv(CP) * TVADJ) * gamma(CP, H))
-                         - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H)));
-EI6(C)$(not XRP('I6', C, '0'))..  QINV(C) =e= qinvbar(C) * IADJ;
-EI7(C)$(not XRP('I7', C, '0'))..  QG(C) =e= qgbar(C) * GADJ;
+                         - sum(AP$gammah(AP, H), PA(AP) * gammah(AP, H))) + XADV('I5H', A, H)$XADS('I5H', A, H);
+EI6(C)$(not XRP('I6', C, '0'))..  QINV(C) =e= qinvbar(C) * IADJ + XADV('I6', C, '0')$XADS('I6', C, '0');
+EI7(C)$(not XRP('I7', C, '0'))..  QG(C) =e= qgbar(C) * GADJ + XADV('I7', C, '0')$XADS('I7', C, '0');
 EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
                  + sum(C$CM(C), tm(C) * TMADJ * pwm(C) * QM(C)) * EXR
                  + sum(C$CE(C), te(C) * (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) * EXR
@@ -536,35 +543,35 @@ EI8..     YG =e= sum(D, TINS(D) * YI(D)) + sum(C, tq(C) * TQADJ * PQ(C) * QQ(C))
                  + TVADJ * sum(C$tv(C), tv(C) * PQ(C) * (sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
                        + QSHI(C)$qshibar(C) + sum(A$QIX(C, A), (1 - kappa(A)) * QINT(C, A))))
                  + sum((GOVS, F), YIF(GOVS, F)) + trgr * EXR + trgg * CPI + sum(GOVS, RENTTO(GOVS))
-                 + sum((F, A)$FA(F, A), tf(F, A) * W(F) * WFDIST(F, A) * QF(F, A)) + sum(F, tfy(F) * YF(F));
+                 + sum((F, A)$FA(F, A), tf(F, A) * W(F) * WFDIST(F, A) * QF(F, A)) + sum(F, tfy(F) * YF(F)) + XADV('I8', '0', '0')$XADS('I8', '0', '0');
 EI9..     EG =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QG(C)) + (sum(D, trdg(D)) + trgg + trshi) * CPI
-                 + trrg * EXR + rd * ddebt + rf * fdebt * EXR;
-EI10(D)$(not XRP('I10', D, '0')).. TINS(D) =e= tins0(D) * TINSADJ;
-EI11(D)$(not XRP('I11', D, '0')).. MPS(D) =e= mps0(D) * MPSADJ;
-EI12$(fund and not XRP('I12', '0', '0'))..  YSHI =e= sum((SHIS, F), YIF(SHIS, F)) + trshi * CPI + trshir * EXR;
-EI13(C)$(qshibar(C) and not XRP('I13', C, '0'))..  QSHI(C) =e= qshibar(C) * SHIADJ;
-EI14$(fund and not XRP('I14', '0', '0'))..  sum(C$qshibar(C), PQ(C) * (1 + tv(C) * TVADJ) * QSHI(C)) =e= (1 - sshi) * YSHI;
+                 + trrg * EXR + rd * ddebt + rf * fdebt * EXR + XADV('I9', '0', '0')$XADS('I9', '0', '0');
+EI10(D)$(not XRP('I10', D, '0')).. TINS(D) =e= tins0(D) * TINSADJ + XADV('I10', D, '0')$XADS('I10', D, '0');
+EI11(D)$(not XRP('I11', D, '0')).. MPS(D) =e= mps0(D) * MPSADJ + XADV('I11', D, '0')$XADS('I11', D, '0');
+EI12$(fund and not XRP('I12', '0', '0'))..  YSHI =e= sum((SHIS, F), YIF(SHIS, F)) + trshi * CPI + trshir * EXR + XADV('I12', '0', '0')$XADS('I12', '0', '0');
+EI13(C)$(qshibar(C) and not XRP('I13', C, '0'))..  QSHI(C) =e= qshibar(C) * SHIADJ + XADV('I13', C, '0')$XADS('I13', C, '0');
+EI14$(fund and not XRP('I14', '0', '0'))..  sum(C$qshibar(C), PQ(C) * (1 + tv(C) * TVADJ) * QSHI(C)) =e= (1 - sshi) * YSHI + XADV('I14', '0', '0')$XADS('I14', '0', '0');
 
 * 14 Labour-market regimes: wage curve (L1) and smoothed minimum wage (L2);
 * each is inert unless the closure fixes its slack
 EL1(F)$(FL(F) and not XRP('L1', F, '0'))..  W(F) / CPI =e= (wref(F) * ((1 - QFS(F) / qlf(F)) / u0(F))**(-epsw(F)))$(epsw(F) > 0)
-                               + wref(F)$(epsw(F) = 0) + LSW(F);
+                               + wref(F)$(epsw(F) = 0) + LSW(F) + XADV('L1', F, '0')$XADS('L1', F, '0');
 EL2(F)$(FL(F) and not XRP('L2', F, '0'))..  (1 - QFS(F) / qlf(F)) + (W(F) / (CPI * wmin(F)) - 1)
-                - sqrt(sqr(1 - QFS(F) / qlf(F)) + sqr(W(F) / (CPI * wmin(F)) - 1) + 2 * mu) =e= LSM(F);
+                - sqrt(sqr(1 - QFS(F) / qlf(F)) + sqr(W(F) / (CPI * wmin(F)) - 1) + 2 * mu) =e= LSM(F) + XADV('L2', F, '0')$XADS('L2', F, '0');
 
 * 5.5 System constraints (S6 through the closure)
-ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F);
+ES1(F)..  sum(A$FA(F, A), QF(F, A)) =e= QFS(F) + XADV('S1', F, '0')$XADS('S1', F, '0');
 ES2(C)$CQ(C)..  QQ(C) =e= sum(A$QIX(C, A), QINT(C, A)) + sum(H$beta(C, H), QH(C, H)) + QG(C) + QINV(C)
-                    + QT(C)$CT(C) + QER(C)$CR(C) + QSHI(C)$qshibar(C);
+                    + QT(C)$CT(C) + QER(C)$CR(C) + QSHI(C)$qshibar(C) + XADV('S2', C, '0')$XADS('S2', C, '0');
 ES3..     sum(C$CM(C), pwm(C) * QM(C)) + (sum((ROWS, F), YIF(ROWS, F))
               + sum(D, shir(D) * (1 - MPS(D)) * (1 - TINS(D)) * YI(D)) + sum(ROWS, RENTTO(ROWS))) / EXR
           + trrg + rf * fdebt
           =e= sum(C$CE(C), (PWEV(C)$CED(C) + pwe(C)$(not CED(C))) * QE(C)) + sum(C$CR(C), PQ(C) * QER(C)) / EXR
               + sum(D, trdr(D))
-              + sum(F, trfr(F)) + trgr + trshir + FSAV;
-ES4$(not XRP('S4', '0', '0'))..     YG =e= EG + GSAV;
+              + sum(F, trfr(F)) + trgr + trshir + FSAV + XADV('S3', '0', '0')$XADS('S3', '0', '0');
+ES4$(not XRP('S4', '0', '0'))..     YG =e= EG + GSAV + XADV('S4', '0', '0')$XADS('S4', '0', '0');
 ES5..     sum(D, MPS(D) * (1 - TINS(D)) * YI(D)) + GSAV + sshi * YSHI + EXR * FSAV
-          =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QINV(C)) + WALRAS;
+          =e= sum(C, PQ(C) * (1 + tv(C) * TVADJ) * QINV(C)) + WALRAS + XADV('S5', '0', '0')$XADS('S5', '0', '0');
 
 * User variables and equations (from version 0.6.1, model_spec.md, Section
 * 19), written by cge_gams

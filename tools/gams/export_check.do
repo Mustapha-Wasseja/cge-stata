@@ -34,7 +34,8 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions inequalities pairs replace cgenest functions bounds boundscon boxpair
+    nests nestvat outces user usersets conditions inequalities pairs replace cgenest functions bounds boundscon boxpair ///
+    addterm
 local ncase : word count `cases'
 
 tempname post
@@ -343,6 +344,29 @@ foreach case of local cases {
         cge_variable PRU = PQ(com_agr) / CPI, upper(1.0001)
         cge_shock tm, value(0)
         cge_shock qg, elements(com_ser) scale(0.9)
+    }
+    * variables added to built-in equations (version 0.40.0): a tax on the
+    * absorption of manufactures paid to the government (I8, with exact
+    * derivatives of its own), more absorption of services (S2), a wedge in
+    * the import price of manufactures (P1, a definition kept in the system),
+    * purchases by the government over an index (I7), and a term of
+    * government spending that is not zero at the base (I9)
+    else if "`case'" == "addterm" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_parameter ttx = 0
+        cge_variable TX = ttx * PQ(com_man) * QQ(com_man), add(I8)
+        cge_variable WS, value(0) fixed add(S2(com_ser))
+        cge_variable WP, value(0) fixed add(P1(com_man))
+        cge_variable WG(c), value(0) fixed add(I7)
+        cge_variable WT = 0.01 * QA(act_agr), add(I9)
+        cge_shock ttx, value(0.05)
+        cge_shock WS, value(2)
+        cge_shock WP, value(0.03)
+        cge_shock WG, elements(com_agr) value(1)
+        cge_shock tm, value(0)
     }
     * box pairs (version 0.34.0): a tariff-rate quota, rents on imports of
     * manufactures between zero and a cap that binds, and a target on

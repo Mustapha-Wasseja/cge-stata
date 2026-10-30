@@ -266,6 +266,12 @@ struct cge_model {
     // prices of the goods and of the consumption of each good by each
     // group, and that of each group's income or ""
     string rowvector sarole
+    // variables added to built-in equations (from version 0.40.0;
+    // cge_variable, add()): each variable and its block, written as for
+    // replace(); and, for each element, the row of its equation element,
+    // the position of the variable, the block and the element in the block
+    string matrix    uadd
+    real matrix      uaddp
 }
 
 // Columns of the Jacobian for one solve (free variables), grouped so that the
@@ -280,7 +286,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.39.0")
+    return("0.40.0")
 }
 
 // =====================================================================
@@ -2397,7 +2403,7 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     real colvector rns, rf, rc, cdf, cdc
     real colvector oneA, oneC, oneF, oneH, oneD, DY, rs, tq, tm, tv, PH, pwe, PDD, unemp, rwage, ub, rent, ul, ur
     real rowvector SN
-    real scalar k, nH, nD
+    real scalar k, nH, nD, ka
 
     // a standalone model (from version 0.13.0): the constraints and the user
     // equations only
@@ -2703,6 +2709,10 @@ void _cge_eq(struct cge_model scalar M, struct cge_par scalar p, real colvector 
     // system (from version 0.9.3)
     if (record) M.erep = _cge_u_reprows(M, K)
     if (rows(M.erep)) K[M.erep] = J(rows(M.erep), 1, 0)
+    // user variables added to the right side of built-in equation elements
+    // (from version 0.40.0)
+    if (record) M.uaddp = _cge_u_addrows(M, K, M.erep)
+    for (ka = 1; ka <= rows(M.uaddp); ka++) R[M.uaddp[ka, 1]] = R[M.uaddp[ka, 1]] + x[M.uaddp[ka, 2]]
 }
 
 // The domain of a built-in equation block that a user equation may replace
@@ -2724,30 +2734,34 @@ string scalar _cge_blockdom(string scalar b)
 // index replaces the elements of the block with the labels of its own; one
 // without, the block without an index or the element given. Returns the
 // block, with the element when given.
-string scalar _cge_u_repcheck(struct cge_model scalar M, string scalar rep, string scalar idx, string scalar set)
+string scalar _cge_u_repcheck(struct cge_model scalar M, string scalar rep, string scalar idx, string scalar set,
+                               | string scalar opt)
 {
     string scalar b, dom, s1, s2, u1, u2, els
     string rowvector el, iv
     string colvector lb, lu
     real scalar nb, nu, k, c, r, nidx
+    // the option checked: replace or, from version 0.40.0, add
+    if (args() < 5) opt = "replace"
     if (!regexm(strtrim(rep), "^([A-Za-z][A-Za-z0-9]*)[ ]*(\((.*)\))?$")) {
-        _cge_fail("replace(): give an equation block, as replace(I7) or replace(I7(com_ser))", 198)
+        _cge_fail(opt + "(): give an equation block, as " + opt + "(I7) or " + opt + "(I7(com_ser))", 198)
     }
     b = strupper(regexs(1))
     els = (strpos(rep, "(") ? strtrim(regexs(3)) : "")
-    dom = _cge_blockdom(b)
+    dom = (opt == "add" ? _cge_adddom(b) : _cge_blockdom(b))
     if (dom == "-") {
+        if (anyof(M.ename, b) & opt == "add") _cge_fail("add(): a variable cannot be added to the constraints or the user equations", 198)
         if (anyof(M.ename, b)) {
             _cge_fail("replace(): equation block " + b + " cannot be replaced: it has exact derivatives of its own, or is a constraint or a user equation", 198)
         }
-        _cge_fail("replace(): " + b + " is not an equation block of the model (model_spec.md, Section 5)", 198)
+        _cge_fail(opt + "(): " + b + " is not an equation block of the model (model_spec.md, Section 5)", 198)
     }
     _cge_setparts(dom, s1, s2)
     nb = (s1 != "") + (s2 != "")
     if (els != "") {
         el = tokens(els, ",")
         el = strtrim(select(el, el :!= ","))
-        if (cols(el) != nb) _cge_fail("replace(): block " + b + " has " + strofreal(nb) + " index(es); " + strofreal(cols(el)) + " given", 198)
+        if (cols(el) != nb) _cge_fail(opt + "(): block " + b + " has " + strofreal(nb) + " index(es); " + strofreal(cols(el)) + " given", 198)
         // an index of the equation in place of a label (from version 0.11.0),
         // as replace(Q4(lab, a)): its elements, within the block's set
         iv = J(1, 0, "")
@@ -2764,37 +2778,37 @@ string scalar _cge_u_repcheck(struct cge_model scalar M, string scalar rep, stri
             if (c) {
                 lu = _cge_setlab(M, (c == 1 ? u1 : u2))
                 for (r = 1; r <= rows(lu); r++) {
-                    if (!anyof(lb, lu[r])) _cge_fail("replace(): " + lu[r] + " is not an element of block " + b + "; the indexes of the equation must run over its sets", 198)
+                    if (!anyof(lb, lu[r])) _cge_fail(opt + "(): " + lu[r] + " is not an element of block " + b + "; the indexes of the " + (opt == "add" ? "variable" : "equation") + " must run over its sets", 198)
                 }
                 el[k] = "#" + strofreal(c)
                 nidx++
             }
-            else if (!anyof(lb, el[k])) _cge_fail("replace(): " + el[k] + " is not an element of block " + b, 111)
+            else if (!anyof(lb, el[k])) _cge_fail(opt + "(): " + el[k] + " is not an element of block " + b, 111)
         }
         if (cols(iv) & nidx != cols(iv)) {
-            _cge_fail("replace(): an equation with an index replaces elements that follow it: write replace(" + b + "), or the index in place of a label, as replace(Q4(lab, a))", 198)
+            _cge_fail(opt + "(): " + (opt == "add" ? "a variable with an index is added to elements that follow it" : "an equation with an index replaces elements that follow it") + ": write " + opt + "(" + b + "), or the index in place of a label, as " + opt + "(Q4(lab, a))", 198)
         }
         return(b + "(" + invtokens(el, ",") + ")")
     }
     _cge_setparts(set, u1, u2)
     nu = (u1 != "") + (u2 != "")
     if (nu != nb) {
-        if (nu == 0) _cge_fail("replace(): block " + b + " has " + strofreal(nb) + " index(es): give the element, as replace(" + b + "(label)), or an index to the equation", 198)
-        _cge_fail("replace(): block " + b + " has " + strofreal(nb) + " index(es); the equation has " + strofreal(nu), 198)
+        if (nu == 0) _cge_fail(opt + "(): block " + b + " has " + strofreal(nb) + " index(es): give the element, as " + opt + "(" + b + "(label)), or an index to the " + (opt == "add" ? "variable" : "equation"), 198)
+        _cge_fail(opt + "(): block " + b + " has " + strofreal(nb) + " index(es); the " + (opt == "add" ? "variable" : "equation") + " has " + strofreal(nu), 198)
     }
     // the sets of the equation's indexes are within those of the block
     if (nu >= 1) {
         lb = _cge_setlab(M, s1)
         lu = _cge_setlab(M, u1)
         for (k = 1; k <= rows(lu); k++) {
-            if (!anyof(lb, lu[k])) _cge_fail("replace(): " + lu[k] + " is not an element of block " + b + "; the indexes of the equation must run over its sets", 198)
+            if (!anyof(lb, lu[k])) _cge_fail(opt + "(): " + lu[k] + " is not an element of block " + b + "; the indexes of the " + (opt == "add" ? "variable" : "equation") + " must run over its sets", 198)
         }
     }
     if (nu == 2) {
         lb = _cge_setlab(M, s2)
         lu = _cge_setlab(M, u2)
         for (k = 1; k <= rows(lu); k++) {
-            if (!anyof(lb, lu[k])) _cge_fail("replace(): " + lu[k] + " is not an element of block " + b + "; the indexes of the equation must run over its sets", 198)
+            if (!anyof(lb, lu[k])) _cge_fail(opt + "(): " + lu[k] + " is not an element of block " + b + "; the indexes of the " + (opt == "add" ? "variable" : "equation") + " must run over its sets", 198)
         }
     }
     return(b)
@@ -5716,6 +5730,9 @@ void _cge_reduce_setup(struct cge_model scalar M, real colvector rowid, real col
         v = _cge_vidx(M, cand[k, 2])
         if (g == 0 | v == 0) continue
         if (M.elen[g] != M.vrows[v] * M.vcols[v]) continue
+        // a definition with variables added stays in the system (from
+        // version 0.40.0)
+        if (rows(M.uaddp)) if (anyof(M.uaddp[., 3], g)) continue
         pos = _cge_vpos(M, v)
         erow = rowid[boff[g] :+ (1::M.elen[g])]
         ex = M.exists[pos]
@@ -6178,6 +6195,14 @@ void _cge_pattern(struct cge_model scalar M, struct cge_par scalar p)
         }
     }
 
+    // user variables added to built-in equations (from version 0.40.0); the
+    // rows with exact derivatives of their own have them there
+    for (k = 1; k <= rows(M.uaddp); k++) {
+        if (anyof((_cge_denseblocks(), "S2", "P7"), M.ename[M.uaddp[k, 3]])) continue
+        pr = pr \ rowid[M.uaddp[k, 1]]
+        pc = pc \ M.uaddp[k, 2]
+    }
+
     // Keep existing equations and variables
     keep = (pr :> 0) :& M.exists[pc]
     P = uniqrows((select(pr, keep), select(pc, keep)))
@@ -6338,7 +6363,8 @@ real matrix _cge_dense(struct cge_model scalar M, struct cge_par scalar p, real 
     G[r, _cge_vcols(M, "QINV")'] = -PH'
     G[r, _cge_vcols(M, "TVADJ")] = -sum(p.tv :* PQ :* QINV)
     G[r, _cge_vcols(M, "WALRAS")] = -1
-    return(G)
+    // user variables added to these rows (from version 0.40.0)
+    return(_cge_u_adddense(M, G, 1))
 }
 
 // Derivatives of the rents paid to recipient code (Section 16.1), times s,
@@ -6457,6 +6483,8 @@ real matrix _cge_dense2(struct cge_model scalar M, struct cge_par scalar p, real
         if (reduced & M.dact[3]) G[r, cPQ'] = -QINTA[a] :* p.ica[., a]'
         else G[r, cPINTA[a]] = -QINTA[a]
     }
+    // user variables added to these rows (from version 0.40.0)
+    G = _cge_u_adddense(M, G, 2)
     // Commodities without composite supply have no S2 row
     return(G[(select((1::nC), M.cq) \ (nC :+ (1::nA))), .])
 }
@@ -7377,6 +7405,8 @@ void _cge_jtrip(struct cge_model scalar M, struct cge_par scalar p, real colvect
     _cge_jd(M, T, bo, "S4", 1, "EG", 1, -1)
     _cge_jd(M, T, bo, "S4", 1, "GSAV", 1, -1)
     _cge_jtrip_ub(M, p, x, T, bo)
+    // user variables added to built-in equations (from version 0.40.0)
+    _cge_u_addtrip(M, T)
 }
 
 // The entries of the constraints and of the user equations (from version
@@ -15156,6 +15186,177 @@ void _cge_ms_evcv_sa(real matrix wg, real colvector hi, real colvector C0, real 
 }
 
 // =====================================================================
+// Variables added to built-in equations (from version 0.40.0;
+// model_spec.md, Section 50)
+// =====================================================================
+
+// The domain of a built-in equation block to which a variable may be added,
+// as set codes: "" for a block without an index, "-" for the constraints and
+// the user equations, which take none. Unlike replace(), the blocks with
+// exact derivatives of their own take variables: their entries are added to
+// those derivatives.
+string scalar _cge_adddom(string scalar b)
+{
+    string scalar set, desc
+    if (anyof(("B1", "U"), b)) return("-")
+    _cge_eqinfo(b, set, desc)
+    return(set == "?" ? "-" : set)
+}
+
+// The elements of the built-in equations to which user variables are added
+// (cge_variable, add()): for each existing element of each variable of
+// M.uadd, the row of its equation element, the position of the variable,
+// the block and the element within the block. Each row must be in the model
+// (K) and not replaced by a user equation (erep).
+real matrix _cge_u_addrows(struct cge_model scalar M, real colvector K, real colvector erep)
+{
+    real matrix out
+    real colvector bo, pos
+    string colvector e1, e2, l1, l2
+    string rowvector el
+    string scalar dom, s1, s2, lab
+    real scalar k, kv, i, g, ii, jj, n1, n2, r
+    out = J(0, 4, .)
+    if (rows(M.uadd) == 0 | cols(M.uadd) != 2) return(out)
+    bo = runningsum(M.elen) - M.elen
+    for (k = 1; k <= rows(M.uadd); k++) {
+        kv = _cge_vidx(M, M.uadd[k, 1])
+        if (!kv) _cge_fail("cge internal error: variable " + M.uadd[k, 1] + " of add() is not in the model", 3498)
+        pos = _cge_vpos(M, kv)
+        _cge_vlabels(M, kv, e1, e2)
+        for (i = 1; i <= rows(pos); i++) {
+            if (!M.exists[pos[i]]) continue
+            el = _cge_u_repel(M.uadd[k, 2], e1[i], e2[i])
+            lab = el[1] + (el[2] != "" ? "(" + el[2] + (el[3] != "" ? "," + el[3] : "") + ")" : "")
+            g = _cge_find(M.ename, el[1])
+            dom = _cge_adddom(el[1])
+            if (!g | dom == "-") _cge_fail("cge internal error: a variable cannot be added to block " + el[1], 3498)
+            _cge_setparts(dom, s1, s2)
+            ii = jj = n1 = n2 = 1
+            if (s1 != "") {
+                l1 = _cge_setlab(M, s1)
+                n1 = rows(l1)
+                ii = _cge_find(l1, el[2])
+            }
+            if (s2 != "") {
+                l2 = _cge_setlab(M, s2)
+                n2 = rows(l2)
+                jj = _cge_find(l2, el[3])
+            }
+            if (M.elen[g] != n1 * n2) _cge_fail("cge internal error: block " + el[1] + " does not have the domain " + dom, 3498)
+            if (!ii | !jj) _cge_fail("add(): " + lab + " is not an element of the block", 111)
+            r = bo[g] + (ii - 1) * n2 + jj
+            if (rows(erep)) if (anyof(erep, r)) _cge_fail("add(): " + lab + " is replaced by a user equation; add the variable to that equation", 459)
+            if (!K[r]) _cge_fail("add(): " + lab + " is not an equation of the model, so nothing can be added to it", 459)
+            out = out \ (r, pos[i], g, (ii - 1) * n2 + jj)
+        }
+    }
+    return(out)
+}
+
+// The entries of the added variables in the exact Jacobian, -1 in their
+// rows; those of the rows of _cge_dense are there
+void _cge_u_addtrip(struct cge_model scalar M, struct cge_trip scalar T)
+{
+    real colvector sel
+    real scalar i
+    if (!rows(M.uaddp)) return
+    sel = J(rows(M.uaddp), 1, 1)
+    for (i = 1; i <= rows(M.uaddp); i++) {
+        if (anyof(_cge_denseblocks(), M.ename[M.uaddp[i, 3]])) sel[i] = 0
+    }
+    sel = selectindex(sel)
+    if (rows(sel) * cols(sel)) _cge_tadd(T, M.uaddp[sel, 1], M.uaddp[sel, 2], J(rows(sel), 1, -1))
+}
+
+// The entries of the added variables in the rows of exact derivatives:
+// which 1, those of _cge_dense (P8, P9, I1 by factor, I8, I9, S1 by factor,
+// S3, S5); which 2, those of _cge_dense2 before the rows of commodities
+// without composite supply are left out (S2 by commodity, P7 by activity)
+real matrix _cge_u_adddense(struct cge_model scalar M, real matrix G, real scalar which)
+{
+    real matrix H
+    string scalar blk
+    real scalar i, e, r, nF, nC
+    H = G
+    if (!rows(M.uaddp)) return(H)
+    nF = M.nF
+    nC = M.nC
+    for (i = 1; i <= rows(M.uaddp); i++) {
+        blk = M.ename[M.uaddp[i, 3]]
+        e = M.uaddp[i, 4]
+        r = 0
+        if (which == 1) {
+            if (blk == "P8") r = 1
+            else if (blk == "P9") r = 2
+            else if (blk == "I1") r = 2 + e
+            else if (blk == "I8") r = 3 + nF
+            else if (blk == "I9") r = 4 + nF
+            else if (blk == "S1") r = 4 + nF + e
+            else if (blk == "S3") r = 5 + 2 * nF
+            else if (blk == "S5") r = 6 + 2 * nF
+        }
+        else {
+            if (blk == "S2") r = e
+            else if (blk == "P7") r = nC + e
+        }
+        if (r) H[r, M.uaddp[i, 2]] = H[r, M.uaddp[i, 2]] - 1
+    }
+    return(H)
+}
+
+// The GAMS model of the added variables: each element of a built-in
+// equation with variables added is set in XADS, and XADV, which the
+// equations of cge_model.gms add there, is defined as the sum of the
+// variables less its value at the base times UBASE, so that GAMS solves the
+// same base as Stata and the scenario, where UBASE is 0, the whole sum
+void _cge_gams_add(struct cge_model scalar M, real scalar fh)
+{
+    real colvector rws, sel
+    string colvector l1, l2
+    string scalar b, dom, s1, s2, a1, a2, ref, g, ix, args
+    real scalar k, i, j, n2, e, ii, jj, base, n
+    rws = uniqrows(M.uaddp[., 1])
+    n = 0
+    fput(fh, "* Variables added to built-in equation elements (cge_variable, add())")
+    for (k = 1; k <= rows(rws); k++) {
+        sel = selectindex(M.uaddp[., 1] :== rws[k])
+        i = sel[1]
+        b = M.ename[M.uaddp[i, 3]]
+        e = M.uaddp[i, 4]
+        dom = _cge_adddom(b)
+        _cge_setparts(dom, s1, s2)
+        a1 = a2 = "0"
+        n2 = 1
+        if (s2 != "") {
+            l2 = _cge_setlab(M, s2)
+            n2 = rows(l2)
+        }
+        ii = floor((e - 1) / n2) + 1
+        jj = e - (ii - 1) * n2
+        if (s1 != "") {
+            l1 = _cge_setlab(M, s1)
+            a1 = l1[ii]
+        }
+        if (s2 != "") a2 = l2[jj]
+        args = "('" + b + "', '" + a1 + "', '" + a2 + "')"
+        ref = ""
+        base = 0
+        for (j = 1; j <= rows(sel); j++) {
+            _cge_gams_ref(M, M.uaddp[sel[j], 2], g, ix)
+            ref = ref + (j > 1 ? " + " : "") + g + ix
+            base = base + M.x0[M.uaddp[sel[j], 2]]
+        }
+        n++
+        fput(fh, "XADS" + args + " = yes;")
+        fput(fh, "equation XAL" + strofreal(n) + ";")
+        fput(fh, "XAL" + strofreal(n) + "..  XADV" + args + " =e= " + ref +
+             (base != 0 ? " - (" + _cge_gnum(base) + ") * UBASE" : "") + ";")
+        fput(fh, "XADV.l" + args + " = 0;")
+    }
+}
+
+// =====================================================================
 // Link to household surveys (model_spec.md, Section 11; from version 0.2.2)
 // =====================================================================
 
@@ -19061,7 +19262,7 @@ real scalar _cge_gams_scenario(struct cge_model scalar M, struct cge_par scalar 
     fh = _cge_gopen(fpar)
     fput(fh, "* Parameter changes and the closure, written by cge_gams")
     // user equations hold exactly in a scenario (from version 0.7.1)
-    if (rows(M.uelab)) fput(fh, "UBASE = 0;")
+    if (rows(M.uelab) | rows(M.uaddp)) fput(fh, "UBASE = 0;")
     for (k = 1; k <= rows(P); k++) {
         v0 = _cge_par_get(p0, P[k, 1])
         v1 = _cge_par_get(p, P[k, 1])
@@ -23373,7 +23574,7 @@ void _cge_u_split(string scalar s, string scalar head, string scalar expr, strin
 void _cge_u_addvar(string scalar spec)
 {
     struct cge_model scalar M
-    string scalar head, expr, opts, name, idx, set, value, cond, lo, up, status, rel, dexpr, ix
+    string scalar head, expr, opts, name, idx, set, value, cond, lo, up, status, rel, dexpr, ix, add, addspec
     string rowvector ot
     real colvector x0, pos
     real scalar k, len, nom, fx, nb
@@ -23384,7 +23585,13 @@ void _cge_u_addvar(string scalar spec)
     _cge_u_head(M, head, name, idx, set, cond)
     if (substr(name, 1, 1) == "_") _cge_fail(name + ": names that begin with _ are kept for the package", 198)
     // the options; value() may hold an expression (from version 0.13.0)
-    _cge_u_varopts(opts, nom, fx, value, lo, up)
+    _cge_u_varopts(opts, nom, fx, value, lo, up, add)
+    // added to built-in equation elements (from version 0.40.0)
+    addspec = ""
+    if (add != "") {
+        if (_cge_sa(M)) _cge_fail("cge_variable: add() adds a variable to the built-in equations of a model from a SAM; a standalone model has none", 198)
+        addspec = _cge_u_repcheck(M, add, idx, set, "add")
+    }
     // a variable without a definition at a bound is exogenous there, and may
     // move away from it as the paired variable of an inequality (from
     // version 0.9.0)
@@ -23436,6 +23643,10 @@ void _cge_u_addvar(string scalar spec)
     pos = select(pos, M.exists[pos])
     len = rows(pos)
     if (!len) _cge_fail("user variable " + name + ": no element meets the condition", 459)
+    if (addspec != "") {
+        if (cols(M.uadd) != 2) M.uadd = J(0, 2, "")
+        M.uadd = M.uadd \ (name, addspec)
+    }
     _cge_u_refresh(M)
     if (expr != "" & (lo != "" | up != "")) (void) _cge_u_cons_sync(M, 1)
     _cge_store(M)
@@ -23446,6 +23657,7 @@ void _cge_u_addvar(string scalar spec)
                            (lo + up != "" ? ", held within its bounds" : ""))
     else if (status == "fixed") printf("{txt}It is exogenous%s\n", (lo + up != "" ? ": the paired variable of an inequality may move it from its bound" : ""))
     else printf("{txt}Add the equations that determine it with cge_equation\n")
+    if (addspec != "") printf("{txt}It is added to the right side of {res}%s\n", add)
     st_global("r(name)", name)
     st_numscalar("r(N_elements)", len)
 }
@@ -23456,12 +23668,12 @@ void _cge_u_addvar(string scalar spec)
 // base value of each element as a definition does, and lower() and upper()
 // numbers
 void _cge_u_varopts(string scalar opts, real scalar nom, real scalar fx, string scalar value, string scalar lo,
-                    string scalar up)
+                    string scalar up, string scalar add)
 {
     string scalar s, w, inner
     real scalar e, d
     nom = fx = 0
-    value = lo = up = ""
+    value = lo = up = add = ""
     s = strtrim(opts)
     while (s != "") {
         if (!regexm(s, "^([A-Za-z]+)")) _cge_fail("cge_variable: cannot read the options from " + s, 198)
@@ -23475,10 +23687,10 @@ void _cge_u_varopts(string scalar opts, real scalar nom, real scalar fx, string 
             fx = 1
             continue
         }
-        if (!anyof(("value", "lower", "upper"), w)) {
-            _cge_fail("cge_variable: unknown option " + w + "; the options are nominal, value(), fixed, lower(#) and upper(#)", 198)
+        if (!anyof(("value", "lower", "upper", "add"), w)) {
+            _cge_fail("cge_variable: unknown option " + w + "; the options are nominal, value(), fixed, lower(#), upper(#) and add(block)", 198)
         }
-        if (substr(s, 1, 1) != "(") _cge_fail("cge_variable: write " + w + "(" + (w == "value" ? "expression" : "#") + ")", 198)
+        if (substr(s, 1, 1) != "(") _cge_fail("cge_variable: write " + w + "(" + (w == "value" ? "expression" : (w == "add" ? "block" : "#")) + ")", 198)
         d = 0
         for (e = 1; e <= strlen(s); e++) {
             if (substr(s, e, 1) == "(") d++
@@ -23491,8 +23703,9 @@ void _cge_u_varopts(string scalar opts, real scalar nom, real scalar fx, string 
         inner = strtrim(substr(s, 2, e - 2))
         s = strtrim(substr(s, e + 1, .))
         if (inner == "") _cge_fail("cge_variable: " + w + "() is empty", 198)
-        if (w != "value" & strtoreal(inner) >= .) _cge_fail("cge_variable: " + w + "() must be a number", 198)
+        if (w != "value" & w != "add" & strtoreal(inner) >= .) _cge_fail("cge_variable: " + w + "() must be a number", 198)
         if (w == "value") value = inner
+        else if (w == "add") add = inner
         else if (w == "lower") lo = inner
         else up = inner
     }
@@ -23986,6 +24199,8 @@ void _cge_u_clear()
     M.uvdef = J(0, 9, "")
     M.uedef = J(0, 8, "")
     M.urep = J(0, 3, "")
+    M.uadd = J(0, 2, "")
+    M.uaddp = J(0, 4, .)
     M.ubox = J(0, 5, .)
     M.utok = J(0, 3, .)
     M.uelab = J(0, 1, "")
@@ -24500,6 +24715,11 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
             fput(fh, "UE" + strofreal(k) + "..  " + M.uegams[k, 1] + " =e= " + M.uegams[k, 2] +
                  (abs(gap) > 1e-12 * max((1, abs(ul[k]), abs(ur[k]))) ? " + (" + _cge_gnum(gap) + ") * UBASE" : "") + ";")
         }
+    }
+    // user variables added to built-in equations (from version 0.40.0)
+    if (rows(M.uaddp)) {
+        if (!rows(M.uelab)) fput(fh, "scalar UBASE " + char(34) + "1 in the base, where user equations hold with their base gaps" + char(34) + " / 1 /;")
+        _cge_gams_add(M, fh)
     }
     fclose(fh)
     fclose(fh2)
@@ -26838,6 +27058,8 @@ void _cge_model_new()
     M.intdef = J(0, 3, "")
     M.nashdef = J(0, 6, "")
     M.sarole = J(1, 0, "")
+    M.uadd = J(0, 2, "")
+    M.uaddp = J(0, 4, .)
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
@@ -29169,6 +29391,8 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "upar", M.upar)
     _cge_io_put(fh, "ubox", M.ubox)
     _cge_io_put(fh, "sarole", M.sarole)
+    _cge_io_put(fh, "uadd", M.uadd)
+    _cge_io_put(fh, "uaddp", M.uaddp)
 }
 
 real scalar _cge_model_member(struct cge_model scalar M, string scalar name, transmorphic matrix v)
@@ -29335,6 +29559,8 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "upar") M.upar = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "ubox") M.ubox = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else if (name == "sarole") M.sarole = (rows(v) * cols(v) == 0 ? J(1, 0, "") : v)
+    else if (name == "uadd") M.uadd = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "uaddp") M.uaddp = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else return(0)
     return(1)
 }

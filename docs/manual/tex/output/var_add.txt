@@ -1,0 +1,25 @@
+. cge_parameter ttx = 0
+User parameter ttx: 1 value(s), from 0 to 0
+
+. cge_variable TX = ttx * PQ(com_man) * QQ(com_man), add(I8)
+User variable TX: 1 element(s), base value 0
+and its definition, equation TX
+It is added to the right side of I8
+
+. cge_shock ttx, value(0.05)
+User parameter ttx changed for 1 element(s)
+
+. quietly cge_solve, name(mantax)
+
+. quietly cge_report, sims(mantax) tables(government items) items(tax = TX) clear
+
+. list measure base value pct if inlist(measure, "revenue", "spending", "savings", "tax"), noobs
+
+  +-------------------------------------+
+  |  measure   base   value         pct |
+  |-------------------------------------|
+  |  revenue     63    71.9   14.126984 |
+  | spending     60      60           0 |
+  |  savings      3    11.9   296.66667 |
+  |      tax      0     8.9           . |
+  +-------------------------------------+

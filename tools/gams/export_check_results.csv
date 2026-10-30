@@ -81,13 +81,14 @@ user,path,cns,16,123,2.776e-17,1.120e-12
 usersets,path,cns,16,146,0.000e+00,1.165e-12
 conditions,path,cns,16,152,1.346e-16,3.432e-13
 inequalities,path,mcp,1,132,1.850e-16,4.264e-13
-boxpair,path,mcp,1,117,2.776e-17,4.341e-13
 pairs,path,mcp,1,180,1.388e-17,3.611e-12
 replace,path,cns,16,117,2.776e-17,2.292e-14
 cgenest,path,cns,16,191,4.163e-16,5.133e-13
 functions,path,cns,16,139,1.865e-16,4.871e-13
 bounds,path,cns,16,132,1.388e-17,1.366e-12
 boundscon,path,mcp,1,121,2.776e-17,8.807e-14
+boxpair,path,mcp,1,117,2.776e-17,4.335e-13
+addterm,path,cns,16,124,2.776e-17,1.971e-12
 dyninst,path,cns,16,516,1.388e-17,2.938e-14
 dynhealth,path,cns,16,584,0.000e+00,2.036e-13
 dyndebt,path,cns,16,516,1.388e-17,2.558e-13
@@ -107,6 +108,6 @@ namedmodel,path,cns,16,5,0.000e+00,4.223e-16
 labalias,path,cns,16,6,0.000e+00,3.074e-14
 multiindex,path,cns,16,16,0.000e+00,4.101e-16
 lagindex,path,cns,16,10,0.000e+00,4.144e-16
-linked_A,path,cns,16,117,2.776e-17,1.314e-13
-linked_B,path,cns,16,129,1.388e-17,5.690e-14
+linked_A,path,cns,16,117,2.776e-17,2.648e-13
+linked_B,path,cns,16,129,1.388e-17,9.944e-14
 loop,path,cns,16,516,1.388e-17,4.865e-13

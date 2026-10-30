@@ -396,6 +396,9 @@ coded in the package, {cmd:P7}, {cmd:P8}, {cmd:P9}, {cmd:I1}, {cmd:I8},
 {cmd:I9}, {cmd:S1}, {cmd:S2}, {cmd:S3} and {cmd:S5}, cannot be replaced. A
 replacement must keep the accounting of the model consistent; Walras's law,
 whose residual {cmd:WALRAS} every simulation reports, shows when it does not.
+From version 0.40.0, a term can instead be added to any built-in equation,
+these included, with {cmd:cge_variable}, {opt add()}: see
+{helpb cge_variable}.
 
 
 {title:Options}

@@ -34,12 +34,12 @@ cge_variable LAM, value(1)
 A variable and its definition
 \begin{stsyntax}
 \cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]] \cmd{=} \argu{expression}
-[\texttt{,} \opt{}{nominal} \optarg{}{lower}{\#} \optarg{}{upper}{\#}]
+[\texttt{,} \opt{}{nominal} \optarg{}{lower}{\#} \optarg{}{upper}{\#} \optarg{}{add}{block}]
 \end{stsyntax}
 A variable that user equations determine
 \begin{stsyntax}
 \cmdb{cge_variable} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\texttt{,} \optarg{}{value}{expression}
-[\opt{}{fixed} \opt{}{nominal}]
+[\opt{}{fixed} \opt{}{nominal} \optarg{}{add}{block}]
 \end{stsyntax}
 An exogenous variable at a bound, which an inequality may move (from version 0.9.0)
 \begin{stsyntax}
@@ -63,6 +63,7 @@ described in \manref{cge_equation}.
 \opt{}{fixed} & the variable is exogenous, at its value\\
 \optarg{}{lower}{\#}, \optarg{}{upper}{\#} & bounds; without a definition, the exogenous level\\
 \opt{}{nominal} & the variable is measured in local currency\\
+\optarg{}{add}{block} & add the variable to the right side of a built-in equation block\\
 \end{opttable}
 
 \cgesec{Options}
@@ -91,6 +92,13 @@ from an upper bound, down.
 \item[\opt{}{nominal}] marks a variable measured in local currency, so that
 the homogeneity check of \manref{cge_check} expects it to scale with the
 numeraire.
+
+\item[\optarg{}{add}{block}] (from version 0.40.0) adds the variable to the
+right side of the elements of a built-in equation block, named as in
+chapter~\ref{chap:equations}: \cmd{add(I8)}, government revenue;
+\cmd{add(S2(com_man))}, market clearing for manufactures. A variable with an
+index is added to the elements with the labels of its own, as for
+\opt{}{replace()} of \manref{cge_equation}.
 \end{optdesc}
 
 \cgesec{Remarks and examples}
@@ -157,6 +165,26 @@ as \manref{cge_check} shows; \manref{cge_solve} stops with error 459 before it
 solves:
 \stlog{var_value}
 \manref{cge_equation} gives an example that adds the equation.
+
+\cgesubsec{Example 5: a term added to the model's own equations}
+
+From version 0.40.0, \opt{}{add()} adds a variable to the right side of the
+elements of a built-in equation block, while their own formula stays: a term
+in the model's equations, as a GAMS modeller would write one. Unlike
+\opt{}{replace()} of \manref{cge_equation}, it takes the blocks with
+derivatives of their own, such as government revenue \cmd{I8} and market
+clearing \cmd{S2}, whose derivatives then include the variable's; it does not
+take the constraints or the user equations. Several variables may be added to
+one element, and a definition that the reduced system leaves out, such as the
+import price \cmd{P1}, is kept in the system when something is added to it.
+A tax of 5 per cent on the absorption of manufactures, paid to the
+government:
+\stlog{var_add}
+The tax raises government revenue by its yield, the item \cmd{tax}, and
+government savings with it under the default closure. A defined variable brings its own equation and an exogenous one has
+none, so the system stays square. A term that is not zero at the base acts as
+a shock from the base, and \manref{cge_gams} writes the terms into the GAMS
+model, where they give the same solution.
 
 \cgesec{Stored results}
 

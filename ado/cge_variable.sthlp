@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.13.0  24oct2026}{...}
+{* *! version 0.40.0  30oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -10,10 +10,10 @@
 {title:Syntax}
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal} {opt lower(#)} {opt upper(#)}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]] {cmd:=} {it:expression} [{cmd:,} {opt nominal} {opt lower(#)} {opt upper(#)} {opt add(block)}]
 
 {p 8 12 2}
-{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(expression)} [{opt fixed} {opt nominal}]
+{cmd:cge_variable} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd:,} {opt value(expression)} [{opt fixed} {opt nominal} {opt add(block)}]
 
 {p 8 12 2}
 {cmd:cge_variable} {it:name}[...]{cmd:,} {opt lower(#)}|{opt upper(#)} [{opt nominal}]
@@ -52,6 +52,33 @@ within bounds; {opt fixed} makes a variable given a value exogenous, as in the
 closure, and {opt lower(#)} or {opt upper(#)} without a definition makes it
 exogenous at that bound, from which an inequality paired with it may move it.
 See {it:Inequalities} in {helpb cge_equation}.
+
+{pstd}
+From version 0.40.0, {opt add(block)} adds the variable to the right side of
+the elements of a built-in equation block, named as in Section 5 of the
+model's specification: a term in the model's own equations, as a GAMS
+modeller would write one, while their own formula stays. A variable with an
+index is added to the elements of the block with the labels of its own, and
+one without, to the block without an index or the element given, as for
+{opt replace()} of {helpb cge_equation}: {opt add(I8)}, government revenue;
+{opt add(S2(com_man))}, market clearing for manufactures; {opt add(I7)} for
+{cmd:WG(c)}, government purchases of each commodity. Unlike {opt replace()},
+{opt add()} takes the blocks with derivatives of their own, such as
+government revenue {cmd:I8} and market clearing {cmd:S2}, but not the
+constraints or the user equations. Several variables may be added to one
+element. The system stays square: a defined variable brings its own
+equation, and an exogenous one ({opt fixed}) is shocked with
+{helpb cge_shock}. A definition that the reduced system leaves out, such as
+the import price {cmd:P1}, is kept in the system when something is added to
+it. A term that is not zero at the base acts as a shock from the base.
+{helpb cge_gams} writes the terms into the GAMS model. For example, a tax on
+the absorption of manufactures paid to the government:
+
+{phang2}{cmd:. cge_parameter ttx = 0}{p_end}
+
+{phang2}{cmd:. cge_variable TX = ttx * PQ(com_man) * QQ(com_man), add(I8)}{p_end}
+
+{phang2}{cmd:. cge_shock ttx, value(0.05)}{p_end}
 
 {pstd}
 A variable added with {opt value()} needs an equation added with
