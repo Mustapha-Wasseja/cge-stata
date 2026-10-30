@@ -3437,6 +3437,42 @@ results with consumption indexed (groups, goods); the report as a dataset,
 a .dta file and an Excel workbook; roles saved and loaded; items and
 variables in the report of the SYNTHETIC SAM model; errors).
 
+## 48. Sensitivity of standalone models (from version 0.38.0)
+
+`cge_sensitivity` on a standalone model draws its user parameters. `vary()`
+names them (required); `_cge_sens_sa_init` records the positions of their
+values in `p.upval` (`_cge_up_pos`), their central values and the factors of
+every draw, from `_cge_sens_factors` in the order of `vary()` after the seed,
+one per element or, with `common`, one per parameter. Each draw, in the ado:
+`cge_use` of the model saved at the start; `_cge_sens_sa_apply` sets the
+drawn values in p0 and p; the `calibrate()` program, if any, runs with the
+external `cge__recal` set (`_cge_recal`), which lets `cge_parameter` assign
+again a parameter that equations use; `cge_solve, name(_sensbase)` solves
+the benchmark, without the scenario's shocks, and `_cge_sens_sa_rebase`
+makes it the draw's x0 (and xcur); then the scenario program and
+`cge_solve, name(_sens)`. A draw whose benchmark or scenario does not solve
+is not converged. `_cge_sens_collect` records the rows of
+`_cge_report_rows_sa` (variables, all or `variables()`; `items()`; groups and
+welfare with roles), and the base of each draw (`G.sbase`, also kept for
+models from a SAM, where it does not change). The dataset has `table`
+`parameter` rows with each draw's values. `variables()` and `items()` work
+for models from a SAM too, appended to the report rows.
+
+Measuring each draw from its own benchmark keeps changes in the benchmark
+out of the scenario's effect. In the test model, P(c)^(1+eta) =
+sum(h, alpha ybar) / A(c): draws of ybar with A at its central value move
+the base price of g2 to sqrt(0.3 (y1 + y2) / 45), yet the scenario's change
+is sqrt(1.25) - 1 in every draw, as the model implies; with a `calibrate()`
+program that assigns A again, the base stays at 1.
+
+Tests: `tests/test_sens_sa.do` (20 draws of supply elasticities against the
+price 1.25^(1/(1+eta)) and the variation 100 (P^-0.3 - 1) per cent each
+implies, to 1e-8; separate and common factors; the same seed, the same
+draws; draws of incomes measured from moving benchmarks; calibrate(); draws
+kept as simulations; the model restored; errors, including a failing
+calibrate() program and a parameter assigned again outside it; items and
+variables in the sensitivity of the SYNTHETIC SAM model).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

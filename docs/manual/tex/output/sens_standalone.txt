@@ -1,0 +1,76 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set c = g1 g2 g3
+User set c: 3 element(s): g1 g2 g3
+
+. cge_set h = h1 h2
+User set h: 2 element(s): h1 h2
+
+. cge_parameter alpha(c,h), values(g1.h1:0.5 g2.h1:0.3 g3.h1:0.2 g1.h2:0.2 g2.h2:0.3 g3.h2:0.5)
+User parameter alpha(c,h): 6 value(s), from .2 to .5
+
+. cge_parameter ybar(h), values(h1:100 h2:50)
+User parameter ybar(h): 2 value(s), from 50 to 100
+
+. cge_parameter eta(c), values(g1:1 g2:1 g3:0.5)
+User parameter eta(c): 3 value(s), from .5 to 1
+
+. cge_parameter A(c) = sum(h, alpha(c,h) * ybar(h))
+User parameter A(c): 3 value(s), from 45 to 60
+
+. cge_variable P(c), value(1)
+User variable P(c): 3 element(s), base values 1 1 1
+Add the equations that determine it with cge_equation
+
+. cge_variable Y(h) = ybar(h)
+User variable Y(h): 2 element(s), base values 100 50
+and its definition, equation Y
+
+. cge_variable X(c) = A(c) * P(c)^eta(c)
+User variable X(c): 3 element(s), base values 60 45 45
+and its definition, equation X
+
+. cge_variable Q(c,h) = alpha(c,h) * Y(h) / P(c)
+User variable Q(c,h): 6 element(s), base values 50 10 30 15 20 ...
+and its definition, equation Q
+
+. cge_equation MKT(c): sum(h, Q(c,h)) = X(c)
+User equation MKT: 3 element(s)
+
+. cge_model roles, groups(h) goods(c) prices(P) consumption(Q) income(Y)
+Roles of the model's variables
+  groups       h (2)
+  goods        c (3)
+  prices       P
+  consumption  Q
+  income       Y
+
+. program define supply_cut
+  1.     cge_shock A, elements(g2) scale(0.8)
+  2. end
+
+. cge_sensitivity, scenario(supply_cut) draws(20) seed(2026) vary(eta) items(pg2 = P(g2))
+Sensitivity analysis: 20 draws of the parameters eta (uniform within +/-50 per cent)
+  10 draws done
+  20 draws done
+
+Sensitivity of the scenario to the parameters: 20 of 20 draws converged
+Per cent changes from the base (welfare: per cent of base expenditure)
+
+items
+--------------------------------------------------------------------------------
+                             central       mean         sd         p5        p95
+pg2                           11.803     12.780      1.947      9.790     15.796
+--------------------------------------------------------------------------------
+
+welfare
+--------------------------------------------------------------------------------
+                             central       mean         sd         p5        p95
+ev h1                         -3.292     -3.538      0.499     -4.355     -2.887
+cv h1                         -3.404     -3.671      0.537     -4.554     -2.973
+ev h2                         -3.292     -3.538      0.499     -4.355     -2.887
+cv h2                         -3.404     -3.671      0.537     -4.554     -2.973
+--------------------------------------------------------------------------------

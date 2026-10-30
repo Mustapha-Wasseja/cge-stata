@@ -55,9 +55,9 @@ and fixed variables), {helpb cge_closure} (with {opt swap()} only),
 {helpb cge_optimize} (with expressions as objectives and targets),
 {helpb cge_save} and {helpb cge_use}, {helpb cge_gdx} and {helpb cge_gams},
 which writes the model as a GAMS program of its own, and, from version
-0.37.0, {helpb cge_report}. The commands that need a SAM and the built-in
-equations, such as {helpb cge_calibrate} and {helpb cge_dynamic}, stop with
-an error.
+0.37.0, {helpb cge_report} and, from version 0.38.0, {helpb cge_sensitivity}.
+The commands that need a SAM and the built-in equations, such as
+{helpb cge_calibrate} and {helpb cge_dynamic}, stop with an error.
 
 {pstd}
 In a standalone model the letters {cmd:a c f h d i n} are not the indexes of

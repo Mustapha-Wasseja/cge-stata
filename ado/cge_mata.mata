@@ -280,7 +280,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.37.0")
+    return("0.38.0")
 }
 
 // =====================================================================
@@ -14259,6 +14259,15 @@ struct cge_sens {
     real matrix      kx
     real colvector   kd
     pointer(struct cge_par scalar) rowvector kp
+    // the variables and items reported, and the base of each draw (from
+    // version 0.38.0); for a standalone model, the parameters varied, the
+    // positions of their values in p.upval, their central values and the
+    // factors of every draw
+    string scalar    svars, sitems
+    real matrix      sbase
+    string rowvector spar
+    real colvector   spos, scen
+    real matrix      sfac
 }
 
 // A pointer to a copy of a parameter structure
@@ -14301,7 +14310,8 @@ real matrix _cge_sens_factors(real scalar n, real scalar draws, real scalar s, s
 }
 
 void _cge_sens_init(real scalar draws, real scalar seed, real scalar spread, string scalar dist,
-                    string scalar vary, real scalar common, | string scalar keep)
+                    string scalar vary, real scalar common, | string scalar keep, string scalar vars,
+                    string scalar items)
 {
     struct cge_model scalar M
     struct cge_sens scalar G
@@ -14343,6 +14353,9 @@ void _cge_sens_init(real scalar draws, real scalar seed, real scalar spread, str
     G.conv = J(draws + 1, 1, 0)
     G.keys = J(0, 3, "")
     G.keep = (args() < 7 ? "" : keep)
+    // the variables and items reported (from version 0.38.0)
+    G.svars = (args() < 8 ? "" : vars)
+    G.sitems = (args() < 9 ? "" : items)
     G.kx = J(rows(M.x0), 0, .)
     G.kd = J(0, 1, .)
     G.kp = J(1, 0, NULL)
@@ -14431,15 +14444,26 @@ void _cge_sens_collect(real scalar d, real scalar conv)
     G.conv[d + 1] = conv
     if (conv) {
         s = _cge_sim_index(M, "_sens")
-        _cge_report_rows(M, s, keys, base, vals, pct)
+        // a standalone model (from version 0.38.0): its own tables
+        if (_cge_sa(M)) _cge_report_rows_sa(M, s, G.svars, G.sitems, keys, base, vals, pct)
+        else {
+            _cge_report_rows(M, s, keys, base, vals, pct)
+            // the variables and items given (from version 0.38.0)
+            if (G.svars != "") _cge_report_vars(M, s, G.svars, keys, base, vals, pct)
+            if (G.sitems != "") _cge_report_items(M, s, G.sitems, keys, base, vals, pct)
+        }
         if (rows(G.keys) == 0) {
             G.keys = keys
             G.base = base
             G.pct = J(rows(keys), rows(G.conv), .)
             G.val = G.pct
+            G.sbase = G.pct
         }
+        if (rows(keys) != rows(G.keys)) _cge_fail("the report of draw " + strofreal(d) + " has other rows than that of the central draw", 459)
         G.pct[., d + 1] = pct
         G.val[., d + 1] = vals
+        // the base of each draw: that of a standalone model is its benchmark
+        G.sbase[., d + 1] = base
         if (G.keep != "") {
             G.kx = G.kx, M.simx[., s]
             G.kd = G.kd \ d
@@ -14454,32 +14478,55 @@ void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
 {
     struct cge_model scalar M
     struct cge_sens scalar G
-    string rowvector tab
-    string colvector lab, d1, d2, d3
-    real colvector ok, sel, x, q, nd, dv, va, qq, tt, aa
+    string rowvector tab, alltab
+    string colvector lab
+    real colvector ok, sel, x, q, nd, va, qq, tt, aa
     real matrix P
-    real scalar i, n, nk, j, D, w1, k
+    real scalar i, n, nk, j, D, w1, k, sa
 
     M = _cge_load()
     G = _cge_sens_load()
+    sa = _cge_sa(M)
     D = rows(G.conv) - 1
-    if (rows(G.keys) == 0 | !G.conv[1]) _cge_fail("the scenario did not converge with the central elasticities", 430)
+    if (rows(G.keys) == 0 | !G.conv[1]) {
+        _cge_fail("the scenario did not converge with the central " + (sa ? "parameters" : "elasticities"), 430)
+    }
     ok = select((2::(D + 1)), G.conv[|2 \ D + 1|])
     n = rows(ok)
     P = G.pct[., ok]
     if (show) {
-        tab = (tables == "" ? ("macro", "welfare") : (tables == "all" ?
-               ("macro", "government", "debt", "institutions", "factors", "activities", "commodities", "health", "welfare") :
-               tokens(tables)))
-        printf("\n{txt}Sensitivity of the scenario to the elasticities: {res}%f{txt} of {res}%f{txt} draws converged\n", n, D)
-        printf("{txt}Per cent changes from the base (welfare: per cent of base consumption)\n")
+        if (sa) {
+            // a standalone model (from version 0.38.0): by default the items
+            // and the groups' welfare, or else the variables
+            alltab = ("variables", "items", "groups", "welfare")
+            if (tables == "" ) {
+                tab = select(("items", "welfare"), (anyof(G.keys[., 1], "items"), anyof(G.keys[., 1], "welfare")))
+                if (!cols(tab)) tab = "variables"
+            }
+            else tab = (tables == "all" ? alltab : tokens(tables))
+        }
+        else {
+            alltab = ("macro", "government", "debt", "institutions", "factors", "activities", "commodities", "health", "welfare",
+                      "variables", "items")
+            tab = (tables == "" ? ("macro", "welfare") : (tables == "all" ? alltab : tokens(tables)))
+            if (tables == "") {
+                if (G.svars != "") tab = tab, "variables"
+                if (G.sitems != "") tab = tab, "items"
+            }
+        }
+        for (k = 1; k <= cols(tab); k++) {
+            if (!anyof(alltab, tab[k])) _cge_fail("tables(): " + tab[k] + " is not a report table (" + invtokens(alltab) + ")", 198)
+        }
+        printf("\n{txt}Sensitivity of the scenario to the %s: {res}%f{txt} of {res}%f{txt} draws converged\n",
+               (sa ? "parameters" : "elasticities"), n, D)
+        printf("{txt}Per cent changes from the base (welfare: per cent of base %s)\n", (sa ? "expenditure" : "consumption"))
         for (k = 1; k <= cols(tab); k++) {
             sel = select((1::rows(G.keys)), G.keys[., 1] :== tab[k])
             if (rows(sel) == 0) continue
             w1 = max((24, max(strlen(G.keys[sel, 2] :+ " " :+ G.keys[sel, 3])))) + 1
             printf("\n{txt}%s\n{hline %f}\n", tab[k], w1 + 55)
             printf("{txt}%-" + strofreal(w1) + "s %10s %10s %10s %10s %10s\n", "", "central", "mean", "sd", "p5", "p95")
-            for (i = 1; i <= rows(sel); i++) {
+            for (i = 1; i <= min((rows(sel), 60)); i++) {
                 j = sel[i]
                 x = select(P[j, .]', P[j, .]' :< .)
                 q = (rows(x) ? sort(x, 1) : J(0, 1, .))
@@ -14489,20 +14536,16 @@ void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
                        (rows(x) ? q[max((1, ceil(0.05 * rows(x))))] : .), (rows(x) ? q[max((1, ceil(0.95 * rows(x))))] : .))
             }
             printf("{txt}{hline %f}\n", w1 + 55)
+            if (rows(sel) > 60) printf("{txt}The first 60 of %f rows; clear or saving() keeps them all\n", rows(sel))
         }
     }
     st_numscalar("r(N_draws)", D)
     st_numscalar("r(N_converged)", n)
     if (fill) {
-        // Report measures for every draw (draw 0: central elasticities), then the
-        // elasticities of every draw
+        // Report measures for every draw (draw 0: the central values), then the
+        // elasticities or parameters of every draw
         nk = rows(G.keys)
         nd = J(0, 1, .)
-        d1 = J(0, 1, "")
-        d2 = d1
-        d3 = d1
-        dv = J(0, 1, .)
-        lab = M.A \ M.C \ M.C \ M.A
         for (j = 0; j <= D; j++) {
             if (!G.conv[j + 1]) continue
             nd = nd \ J(nk, 1, j)
@@ -14517,29 +14560,62 @@ void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
         st_sstore(., "table", J(rows(nd) / nk, 1, G.keys[., 1]))
         st_sstore(., "measure", J(rows(nd) / nk, 1, G.keys[., 2]))
         st_sstore(., "element", J(rows(nd) / nk, 1, G.keys[., 3]))
-        st_store(., "base", J(rows(nd) / nk, 1, G.base))
         sel = select((1::(D + 1)), G.conv)
+        st_store(., "base", colshape(G.sbase[., sel]', 1))
         st_store(., "value", colshape(G.val[., sel]', 1))
         st_store(., "pct", colshape(G.pct[., sel]', 1))
-        for (j = 0; j <= D; j++) {
-            _cge_sens_values(G, j, va, qq, tt, aa)
-            nd = J(rows(lab), 1, j)
-            k = st_nobs()
-            st_addobs(rows(lab))
-            st_store(((k + 1)::(k + rows(lab))), "draw", nd)
-            st_sstore(((k + 1)::(k + rows(lab))), "table", J(rows(lab), 1, "elasticity"))
-            st_sstore(((k + 1)::(k + rows(lab))), "measure", J(M.n, 1, "sigmava") \ J(M.nC, 1, "sigmaq") \
-                      J(M.nC, 1, "sigmat") \ J(M.n, 1, "sigmaa"))
-            st_sstore(((k + 1)::(k + rows(lab))), "element", lab)
-            st_store(((k + 1)::(k + rows(lab))), "value", va \ qq \ tt \ aa)
+        // the parameters of every draw of a standalone model (from version
+        // 0.38.0)
+        if (sa) _cge_sens_sa_fill(M, G, D)
+        else {
+            lab = M.A \ M.C \ M.C \ M.A
+            for (j = 0; j <= D; j++) {
+                _cge_sens_values(G, j, va, qq, tt, aa)
+                nd = J(rows(lab), 1, j)
+                k = st_nobs()
+                st_addobs(rows(lab))
+                st_store(((k + 1)::(k + rows(lab))), "draw", nd)
+                st_sstore(((k + 1)::(k + rows(lab))), "table", J(rows(lab), 1, "elasticity"))
+                st_sstore(((k + 1)::(k + rows(lab))), "measure", J(M.n, 1, "sigmava") \ J(M.nC, 1, "sigmaq") \
+                          J(M.nC, 1, "sigmat") \ J(M.n, 1, "sigmaa"))
+                st_sstore(((k + 1)::(k + rows(lab))), "element", lab)
+                st_store(((k + 1)::(k + rows(lab))), "value", va \ qq \ tt \ aa)
+            }
         }
-        st_varlabel("draw", "Draw (0: central elasticities)")
-        st_varlabel("table", "Report table, or elasticity")
-        st_varlabel("measure", "Measure, or elasticity")
+        st_varlabel("draw", "Draw (0: central values)")
+        st_varlabel("table", "Report table, elasticity or parameter")
+        st_varlabel("measure", "Measure, elasticity or parameter")
         st_varlabel("element", "Set element")
         st_varlabel("base", "Base value")
         st_varlabel("value", "Value in the draw")
-        st_varlabel("pct", "Per cent change (rates: points; welfare: per cent of base consumption)")
+        st_varlabel("pct", "Per cent change (rates: points; welfare: per cent of base consumption or expenditure)")
+    }
+}
+
+// The parameters of every draw of a standalone model, as rows of table
+// parameter: the name, the element (e1.e2 for two indexes) and the value
+void _cge_sens_sa_fill(struct cge_model scalar M, struct cge_sens scalar G, real scalar D)
+{
+    string colvector nm, el, e1, e2
+    real colvector v
+    real scalar k, kp, j, n, r
+    nm = el = J(0, 1, "")
+    for (k = 1; k <= cols(G.spar); k++) {
+        kp = _cge_up_find(M, G.spar[k])
+        _cge_up_labels(M, kp, e1, e2)
+        nm = nm \ J(rows(e1), 1, G.spar[k])
+        el = el \ e1 :+ ((e2 :!= "") :* ("." :+ e2))
+    }
+    n = rows(nm)
+    for (j = 0; j <= D; j++) {
+        v = _cge_sens_sa_values(G, j)
+        r = st_nobs()
+        st_addobs(n)
+        st_store(((r + 1)::(r + n)), "draw", J(n, 1, j))
+        st_sstore(((r + 1)::(r + n)), "table", J(n, 1, "parameter"))
+        st_sstore(((r + 1)::(r + n)), "measure", nm)
+        st_sstore(((r + 1)::(r + n)), "element", el)
+        st_store(((r + 1)::(r + n)), "value", v)
     }
 }
 
@@ -14867,6 +14943,131 @@ string rowvector _cge_split_semi(string scalar s)
         r = substr(r, k + 1, .)
     }
     return((out, r))
+}
+
+// =====================================================================
+// Sensitivity of standalone models (from version 0.38.0; model_spec.md,
+// Section 48)
+// =====================================================================
+
+// The rows of every table of the report of a standalone model (from version
+// 0.38.0): the variables (those of vars, or all), the items of items and,
+// with roles, the groups and their welfare, as _cge_report_rows
+void _cge_report_rows_sa(struct cge_model scalar M, real colvector s, string scalar vars, string scalar items,
+                         string matrix keys, real colvector base, real matrix vals, real matrix pct)
+{
+    keys = J(0, 3, "")
+    base = J(0, 1, .)
+    vals = pct = J(0, rows(s), .)
+    _cge_report_vars(M, s, vars, keys, base, vals, pct)
+    if (items != "") _cge_report_items(M, s, items, keys, base, vals, pct)
+    if (_cge_roles_on(M)) {
+        _cge_report_groups(M, s, "groups", keys, base, vals, pct)
+        _cge_report_groups(M, s, "welfare", keys, base, vals, pct)
+    }
+}
+
+// Sensitivity of a standalone model (from version 0.38.0): the user
+// parameters of vary, each element (or, with common, each parameter) drawn
+// as factors around one, as for the elasticities of a model from a SAM
+void _cge_sens_sa_init(real scalar draws, real scalar seed, real scalar spread, string scalar dist,
+                       string scalar vary, real scalar common, string scalar keep, string scalar vars,
+                       string scalar items)
+{
+    struct cge_model scalar M
+    struct cge_sens scalar G
+    string rowvector v
+    real colvector pos
+    real scalar k, kp
+
+    M = _cge_load()
+    if (spread < 0 | spread >= 1) _cge_fail("spread() must be at least 0 and less than 1", 198)
+    if (dist != "uniform" & dist != "triangular") _cge_fail("distribution() must be uniform or triangular", 198)
+    if (vary == "") _cge_fail("vary(): name the parameters of the standalone model to vary", 198)
+    v = tokens(vary)
+    G.spar = J(1, 0, "")
+    G.spos = G.scen = J(0, 1, .)
+    G.sfac = J(0, draws, .)
+    rseed(seed)
+    for (k = 1; k <= cols(v); k++) {
+        kp = _cge_up_find(M, v[k])
+        if (!kp) _cge_fail("vary(): " + v[k] + " is not a user parameter (cge_parameter)", 111)
+        if (anyof(G.spar, v[k])) _cge_fail("vary(): " + v[k] + " is given twice", 198)
+        pos = _cge_up_pos(M, kp)
+        G.spar = G.spar, v[k]
+        G.spos = G.spos \ pos
+        G.scen = G.scen \ M.p0.upval[pos]
+        // draws in the order of vary(), so a seed gives the same draws
+        G.sfac = G.sfac \ _cge_sens_factors(rows(pos), draws, spread, dist, common)
+    }
+    G.vary = v
+    G.svars = vars
+    G.sitems = items
+    G.conv = J(draws + 1, 1, 0)
+    G.keys = J(0, 3, "")
+    G.keep = keep
+    G.kx = J(rows(M.x0), 0, .)
+    G.kd = J(0, 1, .)
+    G.kp = J(1, 0, NULL)
+    _cge_sens_store(G)
+}
+
+// The values of the parameters varied in draw d (0: the central ones),
+// stacked in the order of vary()
+real colvector _cge_sens_sa_values(struct cge_sens scalar G, real scalar d)
+{
+    return(d > 0 ? G.scen :* G.sfac[., d] : G.scen)
+}
+
+// The parameters of draw d, in the base and the current parameters of the
+// model just loaded
+void _cge_sens_sa_apply(real scalar d)
+{
+    struct cge_model scalar M
+    struct cge_sens scalar G
+    real colvector v
+    M = _cge_load()
+    G = _cge_sens_load()
+    v = _cge_sens_sa_values(G, d)
+    M.p0.upval[G.spos] = v
+    M.p.upval[G.spos] = v
+    _cge_store(M)
+}
+
+// The benchmark of the draw, solved as simulation _sensbase with the drawn
+// parameters, becomes the base from which its changes are measured
+void _cge_sens_sa_rebase()
+{
+    struct cge_model scalar M
+    real scalar k
+    M = _cge_load()
+    k = _cge_sim_index(M, "_sensbase")
+    M.x0 = M.simx[., k]
+    M.xcur = M.x0
+    _cge_store(M)
+}
+
+// The local sa: 1 if the model in memory is a standalone model
+void _cge_sens_sa_local()
+{
+    struct cge_model scalar M
+    st_local("sa", "0")
+    if (findexternal("cge__model") == NULL) return
+    M = _cge_load()
+    st_local("sa", strofreal(_cge_sa(M)))
+}
+
+// The program of cge_sensitivity, calibrate(), is running (from version
+// 0.38.0): mode 1 sets, 0 clears, -1 reads
+real scalar _cge_recal(real scalar mode)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__recal")) == NULL) {
+        if (mode != 1) return(0)
+        q = crexternal("cge__recal")
+    }
+    if (mode >= 0) *q = mode
+    return(*q)
 }
 
 // =====================================================================
@@ -20869,7 +21070,9 @@ void _cge_up_add(string scalar spec)
         if (M.updef[kk, 2] != s1 | M.updef[kk, 3] != s2) {
             _cge_fail("cge_parameter: " + name + " is defined over other sets; write it with indexes of its own sets", 198)
         }
-        if (_cge_up_used(M, name)) _cge_fail("cge_parameter: " + name + " is used by user variables, equations or macros; change it with cge_shock", 459)
+        // except in the program of cge_sensitivity, calibrate() (from
+        // version 0.38.0), which sets the base values of each draw
+        if (_cge_up_used(M, name) & !_cge_recal(-1)) _cge_fail("cge_parameter: " + name + " is used by user variables, equations or macros; change it with cge_shock", 459)
     }
     else _cge_u_newname(M, name, "parameter")
     // the elements, in the order they are stored

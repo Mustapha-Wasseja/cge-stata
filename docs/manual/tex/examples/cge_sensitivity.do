@@ -28,3 +28,23 @@ list draw measure element value if table == "elasticity" & draw <= 2 & measure =
     noobs sepby(draw)
 summarize pct if measure == "equivalent_variation" & draw > 0
 *<<
+
+*>> sens_standalone
+cge_model new
+cge_set c = g1 g2 g3
+cge_set h = h1 h2
+cge_parameter alpha(c,h), values(g1.h1:0.5 g2.h1:0.3 g3.h1:0.2 g1.h2:0.2 g2.h2:0.3 g3.h2:0.5)
+cge_parameter ybar(h), values(h1:100 h2:50)
+cge_parameter eta(c), values(g1:1 g2:1 g3:0.5)
+cge_parameter A(c) = sum(h, alpha(c,h) * ybar(h))
+cge_variable P(c), value(1)
+cge_variable Y(h) = ybar(h)
+cge_variable X(c) = A(c) * P(c)^eta(c)
+cge_variable Q(c,h) = alpha(c,h) * Y(h) / P(c)
+cge_equation MKT(c): sum(h, Q(c,h)) = X(c)
+cge_model roles, groups(h) goods(c) prices(P) consumption(Q) income(Y)
+program define supply_cut
+    cge_shock A, elements(g2) scale(0.8)
+end
+cge_sensitivity, scenario(supply_cut) draws(20) seed(2026) vary(eta) items(pg2 = P(g2))
+*<<

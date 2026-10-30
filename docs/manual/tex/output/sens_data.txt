@@ -1,7 +1,8 @@
 . tabulate table
 
-Report table, or |
-      elasticity |      Freq.     Percent        Cum.
+   Report table, |
+   elasticity or |
+       parameter |      Freq.     Percent        Cum.
 -----------------+-----------------------------------
       activities |        189       11.39       11.39
      commodities |        378       22.78       34.18
