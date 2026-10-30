@@ -1,14 +1,16 @@
-*! cge_report.ado  v0.6.4  2026-10-22
+*! cge_report.ado  v0.37.0  2026-10-30
 *! cge-stata: standard report tables for one or more simulations
 *! Macroeconomic aggregates, government, institutions, factors, activities,
-*! commodities, health and welfare (model_spec.md, Section 9)
+*! commodities, health and welfare (model_spec.md, Section 9); the variables,
+*! items and, with cge_model roles, groups and welfare of a standalone model
+*! (from version 0.37.0)
 *!
 *! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_report, rclass
     version 13.0
-    syntax [, SIMs(string) RUN(name) TABles(string) CLEAR SAVing(string) NODisplay]
+    syntax [, SIMs(string) RUN(name) TABles(string) CLEAR SAVing(string) NODisplay VARiables(string) ITEMs(string)]
 
     _cge_load
     if "`run'" != "" {
@@ -34,18 +36,18 @@ program define cge_report, rclass
     local show = ("`nodisplay'" == "")
     if "`clear'" != "" {
         drop _all
-        mata: _cge_report_run("`sims'", "`tables'", `show', "long")
+        mata: _cge_report_run("`sims'", "`tables'", `show', "long", st_local("variables"), st_local("items"))
         local show 0
     }
     else if `"`file'"' == "" {
-        mata: _cge_report_run("`sims'", "`tables'", `show', "")
+        mata: _cge_report_run("`sims'", "`tables'", `show', "", st_local("variables"), st_local("items"))
     }
     if `"`file'"' != "" {
         mata: st_local("ext", strlower(pathsuffix(st_local("file"))))
         preserve
         drop _all
         if inlist("`ext'", ".xlsx", ".xls") {
-            mata: _cge_report_run("`sims'", "`tables'", `show', "wide")
+            mata: _cge_report_run("`sims'", "`tables'", `show', "wide", st_local("variables"), st_local("items"))
             if "`replace'" != "" capture erase `"`file'"'
             else {
                 capture confirm new file `"`file'"'
@@ -56,7 +58,7 @@ program define cge_report, rclass
             }
             quietly levelsof table, local(tabs) clean
             * Sheets in the order of the report
-            foreach t in macro government debt institutions factors activities commodities health welfare {
+            foreach t in macro government debt institutions factors activities commodities health welfare variables items groups {
                 if strpos(" `tabs' ", " `t' ") == 0 continue
                 quietly export excel table measure element base v* p* if table == "`t'" ///
                     using `"`file'"', sheet("`t'") sheetreplace firstrow(varlabels)
@@ -64,7 +66,7 @@ program define cge_report, rclass
             display as text `"Report saved to {res}`file'{txt} (one sheet per table)"'
         }
         else {
-            mata: _cge_report_run("`sims'", "`tables'", `show', "long")
+            mata: _cge_report_run("`sims'", "`tables'", `show', "long", st_local("variables"), st_local("items"))
             save `"`file'"', `replace'
         }
         restore

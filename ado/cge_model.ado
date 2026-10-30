@@ -1,7 +1,8 @@
-*! cge_model.ado  v0.17.0  2026-10-25
+*! cge_model.ado  v0.37.0  2026-10-30
 *! cge-stata: start a standalone model, written whole in the user language,
 *! describe the model in memory, and define named models over subsets of
-*! its equations, as GAMS's model statement (Reference Manual, cge_model)
+*! its equations, as GAMS's model statement, and give the roles of its
+*! variables for cge_report (Reference Manual, cge_model)
 *!
 *! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
@@ -10,7 +11,7 @@ program define cge_model, rclass
     version 13.0
     gettoken sub rest : 0, parse(" ,")
     if `"`sub'"' == "" {
-        display as error "cge_model: give new, describe, define, drop or list"
+        display as error "cge_model: give new, describe, define, drop, list or roles"
         exit 198
     }
     _cge_load
@@ -45,6 +46,12 @@ program define cge_model, rclass
         }
         mata: _cge_model_describe(st_local("rest"))
     }
+    * the roles of a standalone model's variables (from version 0.37.0)
+    else if "`sub'" == "roles" {
+        local 0 `"`rest'"'
+        syntax [, GROUPs(name) GOODs(name) PRICEs(name) CONSumption(name) INCome(name) LIST CLEAR]
+        mata: _cge_roles("`groups'", "`goods'", "`prices'", "`consumption'", "`income'", ("`list'" != ""), ("`clear'" != ""))
+    }
     else if "`sub'" == "new" {
         if strtrim(`"`rest'"') != "" {
             display as error "cge_model new: no arguments or options are allowed"
@@ -53,7 +60,7 @@ program define cge_model, rclass
         mata: _cge_model_new()
     }
     else {
-        display as error `"cge_model: unknown subcommand `sub'; give new, describe, define, drop or list"'
+        display as error `"cge_model: unknown subcommand `sub'; give new, describe, define, drop, list or roles"'
         exit 198
     }
     return add

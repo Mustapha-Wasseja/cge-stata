@@ -241,11 +241,14 @@ assert r(max) < 1e-9
 * ---------------------------------------------------------------------
 * 5. Errors: commands that need a SAM, closure options, shocks, export
 * ---------------------------------------------------------------------
-foreach cmd in "cge_calibrate, sigmava(1) sigmaq(1) sigmat(1)" "cge_report" "cge_check" "cge_multiplier" ///
+foreach cmd in "cge_calibrate, sigmava(1) sigmaq(1) sigmat(1)" "cge_check" "cge_multiplier" ///
     "cge_dynamic, name(x) periods(1 2)" "cge_map, activities(a)" "cge_samexport, clear" {
     capture noisily `cmd'
     assert _rc == 459
 }
+* from version 0.37.0, cge_report reports a standalone model: its variables
+quietly cge_report, nodisplay
+assert r(N_sims) == 1 & r(N_measures) > 0
 capture noisily cge_closure, external(fixexr)
 assert _rc == 198
 capture noisily cge_shock tm2, value(1)

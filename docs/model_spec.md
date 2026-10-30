@@ -3394,6 +3394,49 @@ solves without restoration unchanged; on the SYNTHETIC SAM, one bound among
 eight found in 10 solves, a scenario that solves, and a quota inequality
 with a cap on its rent found together among three; errors).
 
+## 47. Reports of standalone models, and the roles of their variables (from version 0.37.0)
+
+`cge_model roles, groups(set) goods(set) prices(V) consumption(V)
+[income(V)]` records in `M.sarole` (groups, goods, prices, consumption,
+income or "") the sets of a standalone model's groups and goods and the
+variables of the prices of the goods (indexed by the goods), of the
+quantities each group buys of each good (indexed by goods and groups, in
+either order) and of each group's income (indexed by the groups). The sets
+must be user sets and the variables user variables with those indexes;
+`_cge_roles_on` checks again at each report, since the model can change
+after. `list` and `clear`; `cge_save`/`cge_use` keep the member.
+
+`cge_report` on a standalone model builds its rows in place of
+`_cge_report_rows`, in the same (table, measure, element) form, so that
+display, `clear`, `saving()` and the Excel sheets are shared. Tables:
+`variables` (every element of every user variable, internal ones starting
+with `_` left out, or those in `variables()`; per cent change from the base
+x0, missing where the base is 0), `items` (each `name = expression` of
+`items()`, compiled once by `_cge_u_compile` and evaluated by
+`_cge_u_value` at the base with p0 and at each simulation with its own
+parameters), and, with roles, `groups` and `welfare`. `items()` and
+`variables()` work for models from a SAM too, appended to the standard
+tables. On screen a table shows at most 60 rows.
+
+With prices P (goods) and consumption Q (goods x groups) at the base and at
+a simulation, each group g has expenditure E = sum_c P_c Q_cg, base budget
+shares s_cg = P0_c Q0_cg / E0_g, a Laspeyres index L = sum_c s_cg P1_c/P0_c,
+a geometric index G = exp(sum_c s_cg ln(P1_c/P0_c)), real expenditure E1/G
+and, with income Y, real income Y1/G. Its equivalent and compensating
+variations are those of Cobb-Douglas preferences in the base shares,
+EV = E1/G - E0 and CV = E1 - E0 G, reported as per cent of E0. They are
+exact for Cobb-Douglas demands, as in the test model, where both groups
+spend 30 per cent on a good whose price rises by sqrt(1.25): EV = 100
+(1.25^-0.15 - 1) per cent for both.
+
+Tests: `tests/test_report_sa.do` (Cobb-Douglas demands for three goods from
+supplies with elasticities 1 and 0.5, two groups; a supply shock and an
+income shock; expenditure, both price indexes, real income, EV and CV
+against values computed in the test to 1e-10; items and variables; the same
+results with consumption indexed (groups, goods); the report as a dataset,
+a .dta file and an Excel workbook; roles saved and loaded; items and
+variables in the report of the SYNTHETIC SAM model; errors).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

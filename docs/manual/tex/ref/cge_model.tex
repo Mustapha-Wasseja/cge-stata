@@ -14,7 +14,9 @@ expressions, and its equations with \manref{cge_equation}.
 statistics of the model in memory, standalone or built from a SAM, as GAMS's
 model statistics do. From version 0.17.0, \cmd{cge_model define} names a
 model over a subset of the equations, as GAMS's \cmd{model} statement does,
-which \manref{cge_solve}, \opt{}{model()}, solves on its own.
+which \manref{cge_solve}, \opt{}{model()}, solves on its own. From version
+0.37.0, \cmd{cge_model roles} says which variables are the prices, the
+consumption and the incomes of the model's groups, for \manref{cge_report}.
 
 \cgesec{Quick start}
 
@@ -44,7 +46,9 @@ cge_model list
 \cmdb{cge_model} \textbf{\opt{d}{escribe}} [\argu{model}]\\
 \cmdb{cge_model define} \argu{model} \texttt{=} \argu{list}\\
 \cmdb{cge_model drop} \argu{model}|\cmd{_all}\\
-\cmdb{cge_model list}
+\cmdb{cge_model list}\\
+\cmdb{cge_model roles}\texttt{,} \optarg{group}{s}{set} \optarg{good}{s}{set} \optarg{price}{s}{varname} \optarg{cons}{umption}{varname} [\optarg{inc}{ome}{varname}]\\
+\cmdb{cge_model roles} [\texttt{,} \opt{}{list}|\opt{}{clear}]
 \end{stsyntax}
 
 \noindent A \argu{list} names user equations, variables defined by an
@@ -104,7 +108,20 @@ and \opt{}{hold()} holds variables at their levels for one solve, as GAMS's
 \cmd{P.fx = P.l}: the total solved from the markets' solution, with the prices
 and quantities held, is that of the whole model.
 
-\cgesubsec{Example 4: the standard model}
+\cgesubsec{Example 4: the roles of the variables}
+
+\manref{cge_report} knows the households, prices and consumption of a model
+built from a SAM. Those of a standalone model are its own variables, and
+\cmd{cge_model roles} names them: the set of groups (households, or any
+others), the set of goods, the variable of the prices the groups pay,
+indexed by the goods, that of the quantities each group buys, indexed by the
+goods and the groups in either order, and, optionally, that of each group's
+income:
+\stlog{model_roles}
+\manref{cge_report} then gives each group's expenditure, price indexes and
+welfare (\manref{cge_report}, Example 5). The roles are saved with the model.
+
+\cgesubsec{Example 5: the standard model}
 
 The example \cmd{examples/standard_model.do} of the package repository
 writes the standard model of Part~\ref{part:model} for the synthetic SAM as a
@@ -140,6 +157,9 @@ stores the following in \cmd{r()}:
 \cmd{cge_model define} stores \cmd{r(name)}, \cmd{r(equations)}, the equations of
 the model after models and \cmd{all} are expanded, and \cmd{r(N_eq_blocks)};
 \cmd{cge_model list} stores \cmd{r(models)} and \cmd{r(N_models)}.
+\cmd{cge_model roles} stores \cmd{r(groups)}, \cmd{r(goods)},
+\cmd{r(prices)}, \cmd{r(consumption)} and \cmd{r(income)}, empty without
+roles.
 
 \cgesec{Methods and formulas}
 

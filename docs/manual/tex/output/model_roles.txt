@@ -1,0 +1,46 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set c = g1 g2 g3
+User set c: 3 element(s): g1 g2 g3
+
+. cge_set h = h1 h2
+User set h: 2 element(s): h1 h2
+
+. cge_parameter alpha(c,h), values(g1.h1:0.5 g2.h1:0.3 g3.h1:0.2 g1.h2:0.2 g2.h2:0.3 g3.h2:0.5)
+User parameter alpha(c,h): 6 value(s), from .2 to .5
+
+. cge_parameter ybar(h), values(h1:100 h2:50)
+User parameter ybar(h): 2 value(s), from 50 to 100
+
+. cge_parameter A(c) = sum(h, alpha(c,h) * ybar(h))
+User parameter A(c): 3 value(s), from 45 to 60
+
+. cge_variable P(c), value(1)
+User variable P(c): 3 element(s), base values 1 1 1
+Add the equations that determine it with cge_equation
+
+. cge_variable Y(h) = ybar(h)
+User variable Y(h): 2 element(s), base values 100 50
+and its definition, equation Y
+
+. cge_variable X(c) = A(c) * P(c)
+User variable X(c): 3 element(s), base values 60 45 45
+and its definition, equation X
+
+. cge_variable Q(c,h) = alpha(c,h) * Y(h) / P(c)
+User variable Q(c,h): 6 element(s), base values 50 10 30 15 20 ...
+and its definition, equation Q
+
+. cge_equation MKT(c): sum(h, Q(c,h)) = X(c)
+User equation MKT: 3 element(s)
+
+. cge_model roles, groups(h) goods(c) prices(P) consumption(Q) income(Y)
+Roles of the model's variables
+  groups       h (2)
+  goods        c (3)
+  prices       P
+  consumption  Q
+  income       Y

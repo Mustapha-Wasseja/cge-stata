@@ -261,6 +261,11 @@ struct cge_model {
     // equations, the position of the variable, its bounds and the scale of
     // the equation at the base
     real matrix      ubox
+    // the roles of a standalone model's variables (from version 0.37.0;
+    // cge_model roles): the sets of groups and goods, the variables of the
+    // prices of the goods and of the consumption of each good by each
+    // group, and that of each group's income or ""
+    string rowvector sarole
 }
 
 // Columns of the Jacobian for one solve (free variables), grouped so that the
@@ -275,7 +280,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.36.0")
+    return("0.37.0")
 }
 
 // =====================================================================
@@ -10586,30 +10591,75 @@ void _cge_report_rows(struct cge_model scalar M, real colvector s, string matrix
 // Display the report, and optionally fill the dataset in memory (mode "long":
 // one observation per simulation and measure; "wide": one per measure, with
 // a value and a percentage change for each simulation)
-void _cge_report_run(string scalar sims, string scalar tables, real scalar show, string scalar mode)
+void _cge_report_run(string scalar sims, string scalar tables, real scalar show, string scalar mode,
+                     | string scalar vars, string scalar items)
 {
     struct cge_model scalar M
     string matrix keys
     string rowvector tab, alltab, title
     real colvector s, base, sel
     real matrix vals, pct
-    real scalar t, i, j, n, ns, w1
+    real scalar t, i, j, n, ns, w1, sa, roles, nshow
 
+    if (args() < 5) vars = ""
+    if (args() < 6) items = ""
     M = _cge_load()
-    _cge_need(M, "sam")
     _cge_need(M, "calibrated")
+    // a standalone model (from version 0.37.0): its variables, the items
+    // given and, with cge_model roles, its groups and their welfare
+    sa = _cge_sa(M)
+    roles = (sa ? _cge_roles_on(M) : 0)
     s = _cge_sim_list(M, sims)
     ns = rows(s)
-    _cge_report_rows(M, s, keys, base, vals, pct)
-    alltab = ("macro", "government", "debt", "institutions", "factors", "activities", "commodities", "health", "welfare")
-    title = ("Macroeconomic aggregates", "Government", "Public debt", "Institutions", "Factors", "Activities",
-             "Commodities", "Health", "Welfare (per cent of base consumption)")
-    tab = (tables == "" ? ("macro", "government", "debt", "institutions", "factors", "health", "welfare") :
-          (tables == "all" ? alltab : tokens(tables)))
+    if (sa) {
+        keys = J(0, 3, "")
+        base = J(0, 1, .)
+        vals = pct = J(0, ns, .)
+        alltab = ("variables", "items", "groups", "welfare")
+        title = ("Variables", "Report items", "Groups", "Welfare (per cent of base expenditure)")
+        if (tables == "" | tables == "all") {
+            tab = ("variables", "items", "groups", "welfare")
+            if (items == "") tab = select(tab, tab :!= "items")
+            if (!roles) tab = select(tab, (tab :!= "groups") :& (tab :!= "welfare"))
+        }
+        else tab = tokens(tables)
+    }
+    else {
+        _cge_report_rows(M, s, keys, base, vals, pct)
+        alltab = ("macro", "government", "debt", "institutions", "factors", "activities", "commodities", "health", "welfare",
+                  "variables", "items")
+        title = ("Macroeconomic aggregates", "Government", "Public debt", "Institutions", "Factors", "Activities",
+                 "Commodities", "Health", "Welfare (per cent of base consumption)", "Variables", "Report items")
+        tab = (tables == "" ? ("macro", "government", "debt", "institutions", "factors", "health", "welfare") :
+              (tables == "all" ? alltab[|1 \ 9|] : tokens(tables)))
+        // the variables and items given (from version 0.37.0)
+        if (tables == "" | tables == "all") {
+            if (vars != "") tab = tab, "variables"
+            if (items != "") tab = tab, "items"
+        }
+    }
     for (t = 1; t <= cols(tab); t++) {
         if (!anyof(alltab, tab[t])) _cge_fail("tables(): " + tab[t] + " is not a report table (" +
                                               invtokens(alltab) + ")", 198)
     }
+    if (sa) {
+        if (!roles & (anyof(tab, "groups") | anyof(tab, "welfare"))) {
+            _cge_fail("tables(): the groups and welfare tables need the roles of the model's variables (cge_model roles)", 459)
+        }
+        if (anyof(tab, "groups")) _cge_report_groups(M, s, "groups", keys, base, vals, pct)
+        if (anyof(tab, "welfare")) _cge_report_groups(M, s, "welfare", keys, base, vals, pct)
+    }
+    if (anyof(tab, "variables")) {
+        if (!sa & vars == "") _cge_fail("tables(variables): name the variables with variables()", 198)
+        _cge_report_vars(M, s, vars, keys, base, vals, pct)
+    }
+    else if (vars != "") _cge_fail("variables(): give the table variables in tables(), or leave tables() out", 198)
+    if (anyof(tab, "items")) {
+        if (items == "") _cge_fail("tables(items): give the items with items()", 198)
+        _cge_report_items(M, s, items, keys, base, vals, pct)
+    }
+    else if (items != "") _cge_fail("items(): give the table items in tables(), or leave tables() out", 198)
+    if (!rows(keys)) _cge_fail("the report has no rows", 459)
     if (show) {
         for (t = 1; t <= cols(tab); t++) {
             sel = select((1::rows(keys)), keys[., 1] :== tab[t])
@@ -10620,7 +10670,9 @@ void _cge_report_run(string scalar sims, string scalar tables, real scalar show,
             printf("{txt}%-" + strofreal(w1) + "s %12s", "", (tab[t] == "welfare" ? "" : "base"))
             for (j = 1; j <= min((ns, 6)); j++) printf(" %10s", abbrev(M.simname[s[j]], 10))
             printf("\n")
-            for (i = 1; i <= rows(sel); i++) {
+            // at most 60 rows of a table on the screen (from version 0.37.0)
+            nshow = min((rows(sel), 60))
+            for (i = 1; i <= nshow; i++) {
                 n = sel[i]
                 printf("{txt}%-" + strofreal(w1) + "s ", keys[n, 2] + (keys[n, 3] == "" ? "" : " " + keys[n, 3]))
                 if (tab[t] == "welfare") printf("%12s", "")
@@ -10629,8 +10681,9 @@ void _cge_report_run(string scalar sims, string scalar tables, real scalar show,
                 printf("\n")
             }
             printf("{txt}%s\n", "{hline " + strofreal(w1 + 13 + 11 * min((ns, 6))) + "}")
+            if (rows(sel) > nshow) printf("{txt}The first %f of %f rows; clear or saving() keeps them all\n", nshow, rows(sel))
         }
-        printf("{txt}Percentage changes from the base (rates: changes in points)")
+        printf("{txt}Percentage changes from the base (%s)", (sa ? "welfare: per cent of base expenditure" : "rates: changes in points"))
         if (ns > 6) printf("; the first 6 of %f simulations are shown", ns)
         printf("\n")
     }
@@ -14493,6 +14546,327 @@ void _cge_sens_finish(string scalar tables, real scalar show, real scalar fill)
 void _cge_sens_end()
 {
     if (findexternal("cge__sens") != NULL) rmexternal("cge__sens")
+}
+
+// =====================================================================
+// Roles of a standalone model's variables, and the report rows they give
+// (from version 0.37.0; model_spec.md, Section 47)
+// =====================================================================
+
+// cge_model roles: the sets of groups and goods of a standalone model, and
+// the variables of the prices of the goods, the consumption of each good by
+// each group and, optionally, each group's income, for cge_report; list
+// shows them, clear removes them
+void _cge_roles(string scalar grp, string scalar gds, string scalar pr, string scalar cons, string scalar inc,
+                real scalar list, real scalar clear)
+{
+    struct cge_model scalar M
+    real scalar kp, kq, ky
+    string scalar cs
+    M = _cge_load()
+    if (!_cge_sa(M)) _cge_fail("cge_model roles: roles are for standalone models (cge_model new); cge_report knows the roles of a model from a SAM", 198)
+    if (clear) {
+        if (grp + gds + pr + cons + inc != "" | list) _cge_fail("cge_model roles: clear takes no other options", 198)
+        M.sarole = J(1, 0, "")
+        _cge_store(M)
+        printf("{txt}Roles removed\n")
+        return
+    }
+    if (list | grp + gds + pr + cons + inc == "") {
+        if (grp + gds + pr + cons + inc != "") _cge_fail("cge_model roles: list takes no other options", 198)
+        _cge_roles_show(M)
+        return
+    }
+    if (grp == "" | gds == "" | pr == "" | cons == "") {
+        _cge_fail("cge_model roles: give groups(), goods(), prices() and consumption(), and optionally income()", 198)
+    }
+    if (grp == gds) _cge_fail("cge_model roles: the groups and the goods must be different sets", 198)
+    if (!_cge_us_find(M, grp)) _cge_fail("groups(): " + grp + " is not a user set (cge_set)", 111)
+    if (!_cge_us_find(M, gds)) _cge_fail("goods(): " + gds + " is not a user set (cge_set)", 111)
+    kp = _cge_roles_var(M, pr, "prices")
+    if (M.vset[kp] != "~" + gds) _cge_fail("prices(): " + pr + " must be indexed by the goods alone, as " + pr + "(" + gds + ")", 198)
+    kq = _cge_roles_var(M, cons, "consumption")
+    cs = M.vset[kq]
+    if (cs != "~" + gds + "|~" + grp & cs != "~" + grp + "|~" + gds) {
+        _cge_fail("consumption(): " + cons + " must be indexed by the goods and the groups, as " + cons + "(" + gds + "," + grp + ")", 198)
+    }
+    if (inc != "") {
+        ky = _cge_roles_var(M, inc, "income")
+        if (M.vset[ky] != "~" + grp) _cge_fail("income(): " + inc + " must be indexed by the groups alone, as " + inc + "(" + grp + ")", 198)
+    }
+    M.sarole = (grp, gds, pr, cons, inc)
+    _cge_store(M)
+    _cge_roles_show(M)
+}
+
+// The index of variable name of a role, which must be a user variable
+real scalar _cge_roles_var(struct cge_model scalar M, string scalar name, string scalar role)
+{
+    real scalar k
+    k = _cge_vidx(M, name)
+    if (!k | substr(name, 1, 1) == "_") _cge_fail(role + "(): " + name + " is not a variable of the model", 111)
+    return(k)
+}
+
+void _cge_roles_show(struct cge_model scalar M)
+{
+    if (cols(M.sarole) < 5) {
+        printf("{txt}No roles: give them with cge_model roles, groups() goods() prices() consumption()\n")
+        st_global("r(groups)", "")
+        return
+    }
+    printf("{txt}Roles of the model's variables\n")
+    printf("{txt}  groups       {res}%s{txt} (%f)\n", M.sarole[1], rows(_cge_us_labels(M, _cge_us_find(M, M.sarole[1]))))
+    printf("{txt}  goods        {res}%s{txt} (%f)\n", M.sarole[2], rows(_cge_us_labels(M, _cge_us_find(M, M.sarole[2]))))
+    printf("{txt}  prices       {res}%s\n", M.sarole[3])
+    printf("{txt}  consumption  {res}%s\n", M.sarole[4])
+    printf("{txt}  income       {res}%s\n", (M.sarole[5] == "" ? "(none)" : M.sarole[5]))
+    st_global("r(groups)", M.sarole[1])
+    st_global("r(goods)", M.sarole[2])
+    st_global("r(prices)", M.sarole[3])
+    st_global("r(consumption)", M.sarole[4])
+    st_global("r(income)", M.sarole[5])
+}
+
+// 1 if the model has roles that still hold: the sets and variables exist,
+// with the indexes given; fails with a message where they no longer do
+real scalar _cge_roles_on(struct cge_model scalar M)
+{
+    real scalar kp, kq, ky
+    string scalar cs
+    if (cols(M.sarole) < 5) return(0)
+    if (!_cge_us_find(M, M.sarole[1]) | !_cge_us_find(M, M.sarole[2])) {
+        _cge_fail("the sets of cge_model roles are no longer defined; give the roles again", 459)
+    }
+    kp = _cge_vidx(M, M.sarole[3])
+    kq = _cge_vidx(M, M.sarole[4])
+    ky = (M.sarole[5] == "" ? -1 : _cge_vidx(M, M.sarole[5]))
+    if (!kp | !kq | !ky) _cge_fail("a variable of cge_model roles is no longer defined; give the roles again", 459)
+    cs = M.vset[kq]
+    if (M.vset[kp] != "~" + M.sarole[2] | (cs != "~" + M.sarole[2] + "|~" + M.sarole[1] & cs != "~" + M.sarole[1] + "|~" + M.sarole[2]) |
+        (ky > 0 ? M.vset[ky] != "~" + M.sarole[1] : 0)) {
+        _cge_fail("a variable of cge_model roles has new indexes; give the roles again", 459)
+    }
+    return(1)
+}
+
+// The prices P of the goods, the consumption Q of each good (rows) by each
+// group (columns), and the incomes Y of the groups (no rows without income)
+// at x
+void _cge_roles_at(struct cge_model scalar M, real colvector x, real colvector P, real matrix Q, real colvector Y)
+{
+    real colvector pp, pq, py
+    real scalar kq, ng, nc
+    ng = rows(_cge_us_labels(M, _cge_us_find(M, M.sarole[1])))
+    nc = rows(_cge_us_labels(M, _cge_us_find(M, M.sarole[2])))
+    pp = _cge_vpos(M, _cge_vidx(M, M.sarole[3]))
+    P = x[pp] :* M.exists[pp]
+    kq = _cge_vidx(M, M.sarole[4])
+    pq = _cge_vpos(M, kq)
+    Q = x[pq] :* M.exists[pq]
+    // elements in order, the first index the slowest
+    if (M.vset[kq] == "~" + M.sarole[2] + "|~" + M.sarole[1]) Q = colshape(Q, ng)
+    else Q = colshape(Q, nc)'
+    Y = J(0, 1, .)
+    if (M.sarole[5] != "") {
+        py = _cge_vpos(M, _cge_vidx(M, M.sarole[5]))
+        Y = x[py] :* M.exists[py]
+    }
+}
+
+// The rows of the groups and welfare tables of a standalone model with roles,
+// appended to keys, base, vals and pct (as _cge_report_rows): for each group,
+// its expenditure on the goods, the Laspeyres and geometric price indexes of
+// its base budget shares, its real expenditure (deflated by the geometric
+// index) and, with income(), its income and real income; and its equivalent
+// and compensating variations, Cobb-Douglas in its base budget shares, as
+// per cent of its base expenditure
+void _cge_report_groups(struct cge_model scalar M, real colvector s, string scalar which, string matrix keys,
+                        real colvector base, real matrix vals, real matrix pct)
+{
+    real colvector P0, Y0, P1, Y1, E0, E1, r, lr, L, G
+    real matrix Q0, Q1, S0, V, Pc
+    string colvector gl
+    string matrix k1
+    real scalar ns, ng, j, g, hasy, nm
+    _cge_roles_at(M, M.x0, P0, Q0, Y0)
+    gl = _cge_us_labels(M, _cge_us_find(M, M.sarole[1]))
+    ng = rows(gl)
+    ns = rows(s)
+    hasy = (M.sarole[5] != "")
+    E0 = colsum(P0 :* Q0)'
+    // base budget shares; a group without base expenditure has none
+    S0 = (P0 :* Q0) :/ (E0' + (E0' :== 0))
+    if (which == "groups") {
+        nm = 4 + 2 * hasy
+        k1 = J(ng * nm, 3, "")
+        V = Pc = J(ng * nm, ns, .)
+        for (g = 1; g <= ng; g++) {
+            k1[(g - 1) * nm + 1, .] = ("groups", "expenditure", gl[g])
+            k1[(g - 1) * nm + 2, .] = ("groups", "price_laspeyres", gl[g])
+            k1[(g - 1) * nm + 3, .] = ("groups", "price_geometric", gl[g])
+            k1[(g - 1) * nm + 4, .] = ("groups", "real_expenditure", gl[g])
+            if (hasy) {
+                k1[(g - 1) * nm + 5, .] = ("groups", "income", gl[g])
+                k1[(g - 1) * nm + 6, .] = ("groups", "real_income", gl[g])
+            }
+        }
+    }
+    else {
+        nm = 2
+        k1 = J(ng * 2, 3, "")
+        V = Pc = J(ng * 2, ns, .)
+        for (g = 1; g <= ng; g++) {
+            k1[2 * g - 1, .] = ("welfare", "ev", gl[g])
+            k1[2 * g, .] = ("welfare", "cv", gl[g])
+        }
+    }
+    for (j = 1; j <= ns; j++) {
+        _cge_roles_at(M, M.simx[., s[j]], P1, Q1, Y1)
+        E1 = colsum(P1 :* Q1)'
+        // price relatives, 1 for goods outside a group's base budget
+        r = P1 :/ (P0 + (P0 :== 0))
+        lr = ln(r)
+        L = G = J(ng, 1, .)
+        for (g = 1; g <= ng; g++) {
+            if (E0[g] <= 0) continue
+            L[g] = sum(S0[., g] :* r)
+            G[g] = (any((S0[., g] :> 0) :& (r :<= 0)) ? . : exp(sum(select(S0[., g] :* lr, S0[., g] :> 0))))
+        }
+        for (g = 1; g <= ng; g++) {
+            if (which == "groups") {
+                V[(g - 1) * nm + 1, j] = E1[g]
+                V[(g - 1) * nm + 2, j] = L[g]
+                V[(g - 1) * nm + 3, j] = G[g]
+                V[(g - 1) * nm + 4, j] = E1[g] / G[g]
+                Pc[(g - 1) * nm + 1, j] = _cge_rep_pct(E1[g], E0[g])
+                Pc[(g - 1) * nm + 2, j] = 100 * (L[g] - 1)
+                Pc[(g - 1) * nm + 3, j] = 100 * (G[g] - 1)
+                Pc[(g - 1) * nm + 4, j] = _cge_rep_pct(E1[g] / G[g], E0[g])
+                if (hasy) {
+                    V[(g - 1) * nm + 5, j] = Y1[g]
+                    V[(g - 1) * nm + 6, j] = Y1[g] / G[g]
+                    Pc[(g - 1) * nm + 5, j] = _cge_rep_pct(Y1[g], Y0[g])
+                    Pc[(g - 1) * nm + 6, j] = _cge_rep_pct(Y1[g] / G[g], Y0[g])
+                }
+            }
+            else {
+                V[2 * g - 1, j] = E1[g] / G[g] - E0[g]
+                V[2 * g, j] = E1[g] - E0[g] * G[g]
+                Pc[2 * g - 1, j] = (E0[g] > 0 ? 100 * V[2 * g - 1, j] / E0[g] : .)
+                Pc[2 * g, j] = (E0[g] > 0 ? 100 * V[2 * g, j] / E0[g] : .)
+            }
+        }
+    }
+    keys = keys \ k1
+    if (which == "groups") {
+        base = base \ colshape((E0, J(ng, 2, 1), E0, (hasy ? (Y0, Y0) : J(ng, 0, .))), 1)
+    }
+    else base = base \ J(ng * 2, 1, .)
+    vals = vals \ V
+    pct = pct \ Pc
+}
+
+// The per cent change from b to v; missing where b is 0
+real scalar _cge_rep_pct(real scalar v, real scalar b)
+{
+    if (b == 0 | b >= . | v >= .) return(.)
+    return(100 * (v / b - 1))
+}
+
+// The rows of the variables table (from version 0.37.0): every element of
+// the variables named in vars, or, for a standalone model without vars,
+// of all its variables
+void _cge_report_vars(struct cge_model scalar M, real colvector s, string scalar vars, string matrix keys,
+                      real colvector base, real matrix vals, real matrix pct)
+{
+    string rowvector names
+    string colvector e1, e2
+    real colvector pos, keep
+    real scalar i, k, j, n, ns
+    ns = rows(s)
+    if (vars != "") names = tokens(vars)
+    else {
+        names = J(1, 0, "")
+        for (k = rows(M.vname) - M.nuv + 1; k <= rows(M.vname); k++) {
+            if (substr(M.vname[k], 1, 1) != "_") names = names, M.vname[k]
+        }
+    }
+    for (i = 1; i <= cols(names); i++) {
+        k = _cge_vidx(M, names[i])
+        if (!k | substr(names[i], 1, 1) == "_") _cge_fail("variables(): " + names[i] + " is not a variable of the model", 111)
+        pos = _cge_vpos(M, k)
+        _cge_vlabels(M, k, e1, e2)
+        keep = M.exists[pos]
+        n = sum(keep)
+        if (!n) continue
+        pos = select(pos, keep)
+        e1 = select(e1, keep)
+        e2 = select(e2, keep)
+        keys = keys \ (J(n, 1, "variables"), J(n, 1, names[i]), e1 :+ ((e2 :!= "") :* ("." :+ e2)))
+        base = base \ M.x0[pos]
+        vals = vals \ M.simx[pos, s']
+        pct = pct \ J(n, ns, .)
+        for (j = 1; j <= ns; j++) {
+            pct[|rows(pct) - n + 1, j \ rows(pct), j|] = _cge_rep_pctv(M.simx[pos, s[j]], M.x0[pos])
+        }
+    }
+}
+
+real colvector _cge_rep_pctv(real colvector v, real colvector b)
+{
+    return(100 :* (v :/ (b + (b :== 0)) :- 1) :/ (b :!= 0))
+}
+
+// The rows of the items table (from version 0.37.0): each item of items,
+// "name = expression" separated by semicolons, an expression of the user
+// language in the model's variables and parameters, at the base and at each
+// simulation, with that simulation's parameters
+void _cge_report_items(struct cge_model scalar M, real colvector s, string scalar items, string matrix keys,
+                       real colvector base, real matrix vals, real matrix pct)
+{
+    string rowvector parts
+    string scalar it, nm, ex, g
+    real matrix tok
+    real scalar i, j, e, b, ns
+    real rowvector v
+    ns = rows(s)
+    parts = _cge_split_semi(items)
+    for (i = 1; i <= cols(parts); i++) {
+        it = strtrim(parts[i])
+        if (it == "") continue
+        e = strpos(it, "=")
+        if (!e) _cge_fail("items(): write each item as name = expression, separated by semicolons: " + it, 198)
+        nm = strtrim(substr(it, 1, e - 1))
+        ex = strtrim(substr(it, e + 1, .))
+        if (!regexm(nm, "^[A-Za-z_][A-Za-z0-9_]*$") | strlen(nm) > 32) _cge_fail("items(): " + nm + " is not a valid name", 198)
+        if (rows(keys)) if (anyof(select(keys[., 2], keys[., 1] :== "items"), nm)) _cge_fail("items(): " + nm + " is given twice", 198)
+        if (ex == "") _cge_fail("items(): " + nm + " has no expression", 198)
+        g = ""
+        tok = _cge_u_compile(M, _cge_u_written(M, M.p0, M.x0, _cge_u_tokens(ex)), M.x0, g)
+        b = _cge_u_value(M, M.p0, M.x0, tok)
+        v = J(1, ns, .)
+        for (j = 1; j <= ns; j++) v[j] = _cge_u_value(M, M.simp[s[j]], M.simx[., s[j]], tok)
+        keys = keys \ ("items", nm, "")
+        base = base \ b
+        vals = vals \ v
+        pct = pct \ _cge_rep_pctv(v', J(ns, 1, b))'
+    }
+}
+
+// The parts of s between semicolons
+string rowvector _cge_split_semi(string scalar s)
+{
+    string rowvector out
+    string scalar r
+    real scalar k
+    out = J(1, 0, "")
+    r = s
+    while ((k = strpos(r, ";")) > 0) {
+        out = out, substr(r, 1, k - 1)
+        r = substr(r, k + 1, .)
+    }
+    return((out, r))
 }
 
 // =====================================================================
@@ -26148,6 +26522,7 @@ void _cge_model_new()
     M.mdef = J(0, 2, "")
     M.intdef = J(0, 3, "")
     M.nashdef = J(0, 6, "")
+    M.sarole = J(1, 0, "")
     M.simx = J(0, 0, .)
     M.simp = cge_par(1, 0)
     M.simconv = M.simiter = M.simres = M.simper = M.simlam = J(0, 1, .)
@@ -28478,6 +28853,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "uelab", M.uelab)
     _cge_io_put(fh, "upar", M.upar)
     _cge_io_put(fh, "ubox", M.ubox)
+    _cge_io_put(fh, "sarole", M.sarole)
 }
 
 real scalar _cge_model_member(struct cge_model scalar M, string scalar name, transmorphic matrix v)
@@ -28643,6 +29019,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "uelab") M.uelab = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "upar") M.upar = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "ubox") M.ubox = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
+    else if (name == "sarole") M.sarole = (rows(v) * cols(v) == 0 ? J(1, 0, "") : v)
     else return(0)
     return(1)
 }
