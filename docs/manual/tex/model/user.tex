@@ -347,6 +347,13 @@ terms, with sets, parameters and conditions. Each inequality becomes a
 constraint of chapter~\ref{chap:constraints} on its slack variable, and is
 solved, reported and exported to GAMS in the same way.
 
+From version 0.34.0, an equation may be paired with a variable between
+bounds, a box pair, as PATH writes one: \cmd{perp(}\argu{variable}\cmd{)} with
+\opt{}{lower()} and \opt{}{upper()}, so that the variable lies between its
+bounds where the equation holds and at a bound where the equation's
+difference has the sign that pushes it there (\manref{cge_equation}, \emph{Box
+pairs}). A tariff-rate quota, with its rent between zero and a cap, is one.
+
 A user variable may be exogenous, \cmd{cge_variable TAU, value(0) fixed}, or
 exogenous at a bound from which a paired inequality may move it,
 \cmd{cge_variable TAU, lower(0)}: the analogue of a positive variable in

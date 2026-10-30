@@ -53,6 +53,12 @@ Add an inequality paired with a variable (from version 0.9.0)
 \argu{expression} \cmd{=l=}|\cmd{=g=} \argu{expression}\texttt{,}
 \optarg{}{perp}{variable\textup{[}\texttt{, up}|\texttt{down}\textup{]}}
 \end{stsyntax}
+Add an equation paired with a variable between bounds, a box pair (from version 0.34.0)
+\begin{stsyntax}
+\cmdb{cge_equation} \argu{name}[\cmd{(}\argu{i}[\cmd{,}\argu{j}]\cmd{)}[\cmd{$(}\argu{condition}\cmd{)}]]\cmd{:}
+\argu{expression} \cmd{=} \argu{expression}\texttt{,}
+\optarg{}{perp}{variable} [\optarg{low}{er}{\#}] [\optarg{up}{per}{\#}]
+\end{stsyntax}
 List the user variables and equations
 \begin{stsyntax}
 \cmdb{cge_equation}\texttt{,} \opt{}{list}
@@ -78,6 +84,10 @@ moves, up (the default) or down, when it binds. \argu{variable} is a variable
 element, such as \cmd{RA(act_man)} or \cmd{GADJ}, or, for an equation with an
 index, the variable at that index, as in \cmd{RA(a)}. See
 \emph{Inequalities} below.
+
+\item[\optarg{low}{er}{\#}, \optarg{up}{per}{\#}] (from version 0.34.0), with
+\opt{}{perp()} on an equation, the bounds of a box pair; one or both. See
+\emph{Box pairs} below.
 
 \item[\optarg{}{replace}{block}] (from version 0.9.3) makes the equation
 take the place of the elements of the built-in equation block \argu{block},
@@ -189,6 +199,32 @@ scenario. A condition that is missing at the base, such as \cmd{1/tm(c) > 0}
 where a tariff is 0, and a domain that no element meets are errors. Stata
 reads \cmd{$}\argu{name} on a command line as a global macro, so the
 condition is always written in parentheses.
+
+\cgesubsec{Box pairs}
+
+From version 0.34.0, an equation with \cmd{perp(}\argu{variable}\cmd{)} and
+\opt{}{lower()}, \opt{}{upper()} or both is a box pair, as PATH and GAMS's
+MCP models write one: $F = \ell - r$ is perpendicular to $L \le X \le U$,
+\begin{equation*}
+L < X < U \Rightarrow F = 0, \qquad X = L \Rightarrow F \ge 0, \qquad X = U \Rightarrow F \le 0.
+\end{equation*}
+A tariff-rate quota is one. The rent on imports lies between zero and the
+margin of the tariff above the quota; it is zero while imports stay below the
+quota, holds them at the quota between its bounds, and stops at its cap, the
+imports then exceeding the quota:
+\begin{stcode}
+cge_equation trq: 0.98 * base(QM(com_man)) = QM(com_man), perp(RM(com_man)) lower(0) upper(0.05)
+\end{stcode}
+An inequality paired with a variable is a box pair with one bound. The paired
+variable must be fixed under the closure, as for an inequality, and start
+within its bounds. Stata solves the pair as the equation
+$X = \mathrm{mid}(L, U, X - cF)$, with $c$ the scale of $X$ over that of $F$
+at the base, by Newton's method with the exact derivatives of \cmd{min()} and
+\cmd{max()}; \manref{cge_gams} writes it into the scenario's mixed
+complementarity problem as \cmd{F =n= 0} paired with a variable between the
+bounds, so that the model is exported with \cmd{type(mcp)} and solved by PATH.
+With the same quota and a cap that does not bind, the solution is that of the
+inequality \cmd{QM(com_man) =l= 0.98 * base(QM(com_man)), perp(RM(com_man))}.
 
 \cgesubsec{Inequalities}
 

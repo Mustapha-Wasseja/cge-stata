@@ -256,6 +256,11 @@ struct cge_model {
     real matrix      utok
     real colvector   ustart, ulen, ulen2
     string colvector uelab, upar
+    // box pairs (from version 0.34.0): for each element of a user equation
+    // paired with a variable between bounds, its row among the user
+    // equations, the position of the variable, its bounds and the scale of
+    // the equation at the base
+    real matrix      ubox
 }
 
 // Columns of the Jacobian for one solve (free variables), grouped so that the
@@ -270,7 +275,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.33.0")
+    return("0.34.0")
 }
 
 // =====================================================================
@@ -4130,7 +4135,8 @@ void _cge_closure_apply(struct cge_model scalar M, string scalar ext, string sca
         fixed[M.swfix[k]] = 1
         fixed[M.swfree[k]] = 0
     }
-    nfree = sum(M.exists :* (1 :- fixed)) + rows(M.bY)
+    // the variables of box pairs are solved for too (from version 0.34.0)
+    nfree = sum(M.exists :* (1 :- fixed)) + rows(M.bY) + rows(M.ubox)
     if (nfree != M.neq) {
         errprintf("closure is not square: %f free variables, %f equations\n", nfree, M.neq)
         exit(459)
@@ -5604,9 +5610,11 @@ struct cge_sys scalar _cge_sys_make(struct cge_model scalar M, real scalar reduc
     struct cge_sys scalar S
     real colvector isx
     S.reduced = reduced
-    // The adjusting variables of constraints are solved for (Section 16.2)
+    // The adjusting variables of constraints are solved for (Section 16.2),
+    // and from version 0.34.0 the variables of box pairs
     isx = J(rows(M.x0), 1, 0)
     if (rows(M.bX)) isx[M.bX] = J(rows(M.bX), 1, 1)
+    if (rows(M.ubox)) isx[M.ubox[., 2]] = J(rows(M.ubox), 1, 1)
     if (reduced) {
         S.free = select((1::rows(M.x0)), M.exists :* ((1 :- M.fixed) :| isx) :* (1 :- M.derived))
         S.mask = M.rmask
@@ -17704,6 +17712,26 @@ real scalar _cge_gams_cons(struct cge_model scalar M, struct cge_par scalar p, s
         fput(fw, "put '%2', '_BROOM', '" + r + "', '', ((BND" + r + ".l - BND" + r + ".lo) * " + _cge_gnum(M.xscale[M.bY[k]]) + ") /;")
         fput(fw, "put '%2', '_BMARG', '" + r + "', '', (BND" + r + ".m * " + _cge_gnum(M.xscale[M.bX[k]]) + ") /;")
     }
+    // box pairs (from version 0.34.0): (lhs - rhs) / scale =n= 0 with a
+    // variable between the bounds, linked to the paired variable, which is
+    // freed
+    for (k = 1; k <= rows(M.ubox); k++) {
+        r = strofreal(k)
+        _cge_gams_ref(M, M.ubox[k, 2], gx, ix)
+        fput(fh, "* box pair " + M.uelab[M.ubox[k, 1]] + ": " + _cge_poslabel(M, M.ubox[k, 2]) +
+             (M.ubox[k, 3] < . ? " >= " + _cge_gnum(M.ubox[k, 3]) : "") + (M.ubox[k, 4] < . ? " <= " + _cge_gnum(M.ubox[k, 4]) : ""))
+        fput(fh, "variable BXV" + r + ";")
+        fput(fh, "equations UB" + r + ", LB" + r + ";")
+        fput(fh, "BXV" + r + ".lo = " + (M.ubox[k, 3] < . ? _cge_gnum(M.ubox[k, 3]) : "-inf") + ";  BXV" + r + ".up = " +
+             (M.ubox[k, 4] < . ? _cge_gnum(M.ubox[k, 4]) : "inf") + ";")
+        fput(fh, "BXV" + r + ".l = " + gx + ".l" + ix + ";")
+        fput(fh, "UB" + r + "..  ((" + M.uegams[M.ubox[k, 1], 1] + ") - (" + M.uegams[M.ubox[k, 1], 2] + ")) / " +
+             _cge_gnum(M.ubox[k, 5]) + " =n= 0;")
+        fput(fh, "LB" + r + "..  " + gx + ix + " =e= BXV" + r + ";")
+        fput(fh, gx + ".lo" + ix + " = -inf;")
+        fput(fh, gx + ".up" + ix + " = inf;")
+        pairs = pairs + ", LB" + r + ", UB" + r + ".BXV" + r
+    }
     fput(fh, "model cgecon / cge" + pairs + " /;")
     fput(fh, "cgecon.optfile = cge.optfile;")
     fclose(fh)
@@ -17802,6 +17830,8 @@ void _cge_gams_export(string scalar dir, string scalar sim, string scalar solver
     if (rows(p.bmode) != rows(M.bY)) _cge_fail("the constraints have changed since simulation " + sim + " was solved; solve it again", 459)
     nc = (rows(M.bY) ? sum(p.bmode :> 0) : 0)
     if (nc & type != "mcp") _cge_fail("the scenario has constraints: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
+    // and box pairs (from version 0.34.0)
+    if (rows(M.ubox) & type != "mcp") _cge_fail("the model has box pairs: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
     _cge_gams_data(M, dir + "/cge_data.inc")
     n = _cge_gams_scenario(M, p, x, fixed, cl, dir + "/cge_shock_par.inc", dir + "/cge_shock_var.inc", M.p0, M.x0)
     (void) _cge_gams_cons(M, p, dir + "/cge_constraints.inc")
@@ -17861,6 +17891,8 @@ void _cge_gams_export_sa(struct cge_model scalar M, string scalar dir, string sc
     if (rows(p.bmode) != rows(M.bY)) _cge_fail("the constraints have changed since simulation " + sim + " was solved; solve it again", 459)
     nc = (rows(M.bY) ? sum(p.bmode :> 0) : 0)
     if (nc & type != "mcp") _cge_fail("the scenario has constraints: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
+    // and box pairs (from version 0.34.0)
+    if (rows(M.ubox) & type != "mcp") _cge_fail("the model has box pairs: they are solved as a mixed complementarity problem, type(mcp), with PATH", 198)
     // a nonlinear programme (from version 0.15.0): its objective in GAMS
     if (sim != "") if (M.simmethod[k] == "nlp" | M.simmethod[k] == "minlp") {
         if (M.simmethod[k] == "nlp" & type != "nlp") _cge_fail("simulation " + sim + " is a nonlinear programme: export it with type(nlp) and an NLP solver", 198)
@@ -18255,7 +18287,10 @@ real scalar _cge_gams_hascons(string scalar sim)
     struct cge_model scalar M
     struct cge_par scalar p
     M = _cge_load()
-    if (M.calibrated != 1 | !rows(M.bY)) return(0)
+    if (M.calibrated != 1) return(0)
+    // box pairs (from version 0.34.0) are pairs of a mixed complementarity problem
+    if (rows(M.ubox)) return(1)
+    if (!rows(M.bY)) return(0)
     if (sim == "") p = M.p
     else {
         if (!_cge_find(M.simname, sim)) return(0)
@@ -21619,6 +21654,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     ln1 = J(0, 1, .)
     ln2 = J(0, 1, .)
     M.urep = J(0, 3, "")
+    M.ubox = J(0, 5, .)
     for (k = 1; k <= rows(M.uedef); k++) {
         // an inequality is the bound of its slack variable (from version 0.9.0)
         if (M.uedef[k, 7] == "<=" | M.uedef[k, 7] == ">=") continue
@@ -21636,6 +21672,11 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
             }
             L = _cge_u_compile(M, _cge_u_written(M, pb, x0, tl), x0, gtl)
             R = _cge_u_compile(M, _cge_u_written(M, pb, x0, tr), x0, gtr)
+            // a box pair (from version 0.34.0): F = lhs - rhs perpendicular
+            // to l <= X <= u is X = mid(l, u, X - c F), with c the scale of X
+            // over that of F at the base; GAMS gets F itself
+            if (M.uedef[k, 7] == "box") _cge_u_boxrow(M, pb, x0, M.uedef[k, 8], idx, set, e1[j], e2[j], o1[j], o2[j],
+                                                      tl, tr, rows(lab) + 1, L, R)
             st = st \ (rows(tok) + 1)
             ln1 = ln1 \ rows(L)
             ln2 = ln2 \ rows(R)
@@ -21654,6 +21695,56 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     M.ustart = st
     M.ulen = ln1
     M.ulen2 = ln2
+}
+
+// The rows of an element of a box pair (from version 0.34.0): L the paired
+// variable, R mid(l, u, X - c (lhs - rhs)), with c = scale of X / scale of
+// lhs - rhs at the base; the element's pair appended to M.ubox (its row
+// among the user equations, the variable's position, the bounds and the
+// scale of the equation)
+void _cge_u_boxrow(struct cge_model scalar M, struct cge_par scalar pb, real colvector x0, string scalar spec,
+                   string scalar idx, string scalar set, string scalar e1, string scalar e2, real scalar o1,
+                   real scalar o2, string rowvector tl, string rowvector tr, real scalar row, real matrix L,
+                   real matrix R)
+{
+    string rowvector pr, tx, t
+    string scalar vname, vel, g
+    real matrix X
+    real scalar lo, up, xp, sf, c
+    pr = tokens(spec, "|")
+    pr = select(pr, pr :!= "|")
+    vname = pr[1]
+    vel = pr[2]
+    t = _cge_u_boxbounds(spec)
+    lo = strtoreal(t[1])
+    up = strtoreal(t[2])
+    tx = _cge_u_pre(M, _cge_u_tokens(vname + (vel != "-" ? "(" + vel + ")" : "")))
+    if (idx != "") tx = _cge_u_substd(M, ("(", tx, ")"), idx, set, e1, e2, o1, o2)
+    X = _cge_u_compile(M, _cge_u_written(M, pb, x0, tx), x0, g)
+    if (rows(X) != 1 | X[1, 1] != 2) _cge_fail("perp(): the paired variable of a box is one element of a variable", 198)
+    xp = X[1, 2]
+    sf = max((abs(_cge_u_value(M, pb, x0, L)), abs(_cge_u_value(M, pb, x0, R))))
+    if (!(sf > 1e-9) | sf >= .) sf = 1
+    c = M.xscale[xp] / sf
+    t = tx, "-", _cge_u_numtok(c), "*", "(", "(", tl, ")", "-", "(", tr, ")", ")"
+    if (up < .) t = "min", "(", _cge_u_numtok(up), ",", t, ")"
+    if (lo < .) t = "max", "(", _cge_u_numtok(lo), ",", t, ")"
+    M.ubox = M.ubox \ (row, xp, lo, up, sf)
+    R = _cge_u_compile(M, _cge_u_written(M, pb, x0, t), x0, g)
+    L = X
+}
+
+// The bounds of a box pair's specification "VAR|e|box|lo|up", as strings
+// (empty for none)
+string rowvector _cge_u_boxbounds(string scalar spec)
+{
+    real scalar k
+    k = strpos(spec, "|box|")
+    if (!k) return(("", ""))
+    spec = substr(spec, k + 5, .)
+    k = strpos(spec, "|")
+    if (!k) return((spec, ""))
+    return((substr(spec, 1, k - 1), substr(spec, k + 1, .)))
 }
 
 // Position of the first colon outside parentheses, 0 if none
@@ -22018,6 +22109,11 @@ real scalar _cge_u_cons_sync(struct cge_model scalar M, real scalar strict)
         }
     }
     _cge_cons_rebuild(M)
+    // box pairs (from version 0.34.0)
+    if (rows(M.ubox)) {
+        _cge_u_boxcheck(M)
+        any = 1
+    }
     return(any)
 }
 
@@ -22073,12 +22169,18 @@ void _cge_u_cons_drop(struct cge_model scalar M)
 // The paired variable of an inequality as written: ", perp(VAR(e), down)"
 string scalar _cge_u_perptext(string scalar spec)
 {
-    string rowvector pr
+    string rowvector pr, bb
     if (spec == "") return("")
     // an equation that replaces built-in elements (from version 0.9.3)
     if (substr(spec, 1, 8) == "replace:") return(", replace(" + substr(spec, 9, .) + ")")
     pr = tokens(spec, "|")
     pr = select(pr, pr :!= "|")
+    // a box pair (from version 0.34.0)
+    if (cols(pr) >= 3) if (pr[3] == "box") {
+        bb = _cge_u_boxbounds(spec)
+        return(", perp(" + pr[1] + (pr[2] != "-" ? "(" + pr[2] + ")" : "") + ")" +
+               (bb[1] != "" ? " lower(" + bb[1] + ")" : "") + (bb[2] != "" ? " upper(" + bb[2] + ")" : ""))
+    }
     return(", perp(" + pr[1] + (cols(pr) >= 2 & pr[2] != "-" ? "(" + pr[2] + ")" : "") +
            (cols(pr) >= 3 & pr[3] == "down" ? ", down" : "") + ")")
 }
@@ -22139,6 +22241,59 @@ void _cge_u_addineq(struct cge_model scalar M, string scalar name, string scalar
     st_numscalar("r(N_constraints)", rows(M.bY))
 }
 
+// The pair of a box (from version 0.34.0): the variable of perp(VAR[(e)])
+// and the bounds lower() and upper(), at least one, as "VAR|e|box|lo|up"
+// (empty for no bound)
+string scalar _cge_u_boxspec(struct cge_model scalar M, string scalar pspec, string scalar lo, string scalar up,
+                             string scalar idx)
+{
+    string scalar vname, vel
+    real scalar dir, l, u
+    _cge_u_perp(M, "perp(" + pspec + ")", idx, vname, vel, dir)
+    if (strpos(pspec, ",")) {
+        if (regexm(pspec, ",[ ]*(up|down)[ ]*$")) _cge_fail("perp(): a variable between bounds has no direction", 198)
+    }
+    if (lo == "" & up == "") _cge_fail("cge_equation: an equation with perp() is a box pair; give lower(), upper() or both (an inequality, =l= or =g=, takes perp() alone)", 198)
+    l = (lo == "" ? . : strtoreal(lo))
+    u = (up == "" ? . : strtoreal(up))
+    if (lo != "" & l >= .) _cge_fail("lower(): give a number", 198)
+    if (up != "" & u >= .) _cge_fail("upper(): give a number", 198)
+    if (l < . & u < .) if (l >= u) _cge_fail("lower() must be below upper()", 198)
+    return(vname + "|" + (vel == "" ? "-" : vel) + "|box|" + lo + "|" + up)
+}
+
+// The tokens of number v, a negative one in parentheses
+string rowvector _cge_u_numtok(real scalar v)
+{
+    if (v >= 0) return(strofreal(v, "%21.15g"))
+    return(("(", "-", strofreal(-v, "%21.15g"), ")"))
+}
+
+// Stops unless the variable of each box pair is fixed under the closure, as
+// the variable paired with an inequality is (from version 0.34.0); and
+// unless its starting level lies within its bounds
+void _cge_u_boxcheck(struct cge_model scalar M)
+{
+    real scalar k, xp
+    if (!rows(M.ubox)) return
+    for (k = 1; k <= rows(M.ubox); k++) {
+        xp = M.ubox[k, 2]
+        if (!M.fixed[xp]) {
+            _cge_fail("box pair " + M.uelab[M.ubox[k, 1]] + ": " + _cge_poslabel(M, xp) +
+                      " is not fixed under the closure, so it cannot be paired with it", 459)
+        }
+        if (rows(M.bX)) if (anyof(M.bX, xp)) {
+            _cge_fail("box pair " + M.uelab[M.ubox[k, 1]] + ": " + _cge_poslabel(M, xp) +
+                      " is already paired with a constraint or an inequality", 459)
+        }
+        if (sum(M.ubox[., 2] :== xp) > 1) _cge_fail("box pair " + M.uelab[M.ubox[k, 1]] + ": " + _cge_poslabel(M, xp) + " is paired twice", 459)
+        if ((M.ubox[k, 3] < . & M.xcur[xp] < M.ubox[k, 3] - 1e-12 * max((1, abs(M.ubox[k, 3])))) |
+            (M.ubox[k, 4] < . & M.xcur[xp] > M.ubox[k, 4] + 1e-12 * max((1, abs(M.ubox[k, 4]))))) {
+            _cge_fail("box pair " + M.uelab[M.ubox[k, 1]] + ": " + _cge_poslabel(M, xp) + " starts outside its bounds", 459)
+        }
+    }
+}
+
 // cge_equation NAME[(i)]: expression = expression
 void _cge_u_addeq(string scalar spec)
 {
@@ -22170,16 +22325,25 @@ void _cge_u_addeq(string scalar spec)
     }
     // an equation that replaces built-in equation elements (from version 0.9.3)
     rep = ""
+    rel = "="
     if (opts != "") {
-        ro = _cge_u_opts(opts, ("replace", "perp"), (3, 4), "cge_equation")
-        if (ro[2] != "") _cge_fail("cge_equation: perp() pairs an inequality, =l= or =g=, with a variable", 198)
-        rep = "replace:" + _cge_u_repcheck(M, ro[1], idx, set)
+        ro = _cge_u_opts(opts, ("replace", "perp", "lower", "upper"), (3, 4, 3, 3), "cge_equation")
+        // a box pair (from version 0.34.0): lhs - rhs perpendicular to
+        // lower <= VAR <= upper, as a mixed complementarity problem
+        if (ro[2] != "") {
+            if (ro[1] != "") _cge_fail("cge_equation: give replace() or perp(), not both", 198)
+            rep = _cge_u_boxspec(M, ro[2], ro[3], ro[4], idx)
+            rel = "box"
+        }
+        else if (ro[3] != "" | ro[4] != "") _cge_fail("cge_equation: lower() and upper() go with perp(), the variable they bound", 198)
+        else rep = "replace:" + _cge_u_repcheck(M, ro[1], idx, set)
     }
     n0 = rows(M.uelab)
     _cge_u_widen(M)
-    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, "=", rep)
+    M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, rel, rep)
     _cge_u_build(M, M.p0, M.x0)
     if (rows(M.uelab) == n0) _cge_fail("user equation " + name + ": no element meets the condition", 459)
+    if (rel == "box") _cge_u_boxcheck(M)
     _cge_u_refresh(M)
     // the base need not satisfy a new equation: it then acts as a shock
     _cge_u_eval(M, M.p0, M.x0, L, R)
@@ -22187,7 +22351,7 @@ void _cge_u_addeq(string scalar spec)
     for (k = n0 + 1; k <= rows(L); k++) worst = max((worst, abs(L[k] - R[k]) / max((1, abs(L[k]), abs(R[k])))))
     _cge_store(M)
     printf("{txt}User equation {res}%s{txt}: %f element(s)%s\n", name, rows(L) - n0,
-           (rep != "" ? ", replacing " + _cge_u_reptext(M, rows(L) - n0) : ""))
+           (rel == "box" ? _cge_u_perptext(rep) : (rep != "" ? ", replacing " + _cge_u_reptext(M, rows(L) - n0) : "")))
     if (worst > 1e-9 & _cge_sa(M)) printf("{txt}Note: the starting levels do not satisfy it (largest relative gap {res}%9.2e{txt})\n", worst)
     else if (worst > 1e-9) printf("{txt}Note: the base does not satisfy it (largest relative gap {res}%9.2e{txt}); it acts as a shock\n", worst)
     st_global("r(name)", name)
@@ -22263,6 +22427,7 @@ void _cge_u_clear()
     M.uvdef = J(0, 9, "")
     M.uedef = J(0, 8, "")
     M.urep = J(0, 3, "")
+    M.ubox = J(0, 5, .)
     M.utok = J(0, 3, .)
     M.uelab = J(0, 1, "")
     M.uegams = J(0, 2, "")
@@ -22676,7 +22841,7 @@ void _cge_un_widen(struct cge_model scalar M)
 void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar fw)
 {
     string colvector e1, e2, decl
-    real colvector pos, ul, ur, ity, tys
+    real colvector pos, ul, ur, ity, tys, isb
     real scalar vty
     real matrix LG
     real scalar fh, fh2, k, kv, i, gap
@@ -22764,8 +22929,13 @@ void _cge_gams_user(struct cge_model scalar M, string scalar fn, string scalar f
         // same base as Stata
         _cge_u_eval(M, M.p0, M.x0, ul, ur)
         fput(fh, "scalar UBASE " + char(34) + "1 in the base, where user equations hold with their base gaps" + char(34) + " / 1 /;")
-        fput(fh, "equations " + invtokens(("UE" :+ strofreal((1::rows(M.uelab))))', ", ") + ";")
+        // the rows of box pairs (from version 0.34.0) are written with the
+        // constraints, as pairs of the scenario's mixed complementarity problem
+        isb = J(rows(M.uelab), 1, 0)
+        if (rows(M.ubox)) isb[M.ubox[., 1]] = J(rows(M.ubox), 1, 1)
+        if (!all(isb)) fput(fh, "equations " + invtokens(("UE" :+ strofreal(select((1::rows(M.uelab)), !isb)))', ", ") + ";")
         for (k = 1; k <= rows(M.uelab); k++) {
+            if (isb[k]) continue
             fput(fh, "* " + M.uelab[k])
             gap = ul[k] - ur[k]
             fput(fh, "UE" + strofreal(k) + "..  " + M.uegams[k, 1] + " =e= " + M.uegams[k, 2] +
@@ -25087,6 +25257,7 @@ void _cge_model_new()
     M.unest = J(0, 2, "")
     M.bddef = J(0, 7, "")
     M.loopdef = J(0, 3, "")
+    M.ubox = J(0, 5, .)
     M.upar = M.uelab = J(0, 1, "")
     M.uegams = J(0, 2, "")
     M.utok = J(0, 3, .)
@@ -27405,6 +27576,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "ulen2", M.ulen2)
     _cge_io_put(fh, "uelab", M.uelab)
     _cge_io_put(fh, "upar", M.upar)
+    _cge_io_put(fh, "ubox", M.ubox)
 }
 
 real scalar _cge_model_member(struct cge_model scalar M, string scalar name, transmorphic matrix v)
@@ -27569,6 +27741,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "ulen2") M.ulen2 = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "uelab") M.uelab = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
     else if (name == "upar") M.upar = (rows(v) * cols(v) == 0 ? J(0, 1, "") : v)
+    else if (name == "ubox") M.ubox = (rows(v) * cols(v) == 0 ? J(0, 0, .) : v)
     else return(0)
     return(1)
 }

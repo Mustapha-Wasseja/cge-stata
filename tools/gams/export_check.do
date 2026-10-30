@@ -34,7 +34,7 @@ local sigmas sigmava(0.8) sigmaq(2) sigmat(2)
 * Each case: data, mapping, calibration, closure and shocks; one simulation
 local cases std closures unemployed mixed inst_les margins territorial sut health vat debt ///
     trade home wagecurve minwage outcomes fquant quota capacity peglimit nodeficit wagefloor swaps ftax ///
-    nests nestvat outces user usersets conditions inequalities pairs replace cgenest functions bounds boundscon
+    nests nestvat outces user usersets conditions inequalities pairs replace cgenest functions bounds boundscon boxpair
 local ncase : word count `cases'
 
 tempname post
@@ -343,6 +343,18 @@ foreach case of local cases {
         cge_variable PRU = PQ(com_agr) / CPI, upper(1.0001)
         cge_shock tm, value(0)
         cge_shock qg, elements(com_ser) scale(0.9)
+    }
+    * box pairs (version 0.34.0): a tariff-rate quota, rents on imports of
+    * manufactures between zero and a cap that binds, and a target on
+    * government purchases met by GADJ within bounds, above the upper one
+    else if "`case'" == "boxpair" {
+        quietly cge_synthetic, clear
+        quietly cge_sam, labels(account)
+        quietly cge_map, `stdmap'
+        quietly cge_calibrate, `sigmas'
+        cge_equation trq: 0.98 * base(QM(com_man)) = QM(com_man), perp(RM(com_man)) lower(0) upper(0.05)
+        cge_equation gt: QG(com_ser) = 1.08 * base(QG(com_ser)), perp(GADJ) lower(0.97) upper(1.05)
+        cge_shock tm, value(0)
     }
     * two indexes and sets of pairs (version 0.9.1): variables and equations
     * over (c,h), a sum over two indexes with a condition, sums and a domain

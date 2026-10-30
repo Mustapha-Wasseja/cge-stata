@@ -32,7 +32,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 # Cases of export_check.do with constraints
 MCP_CASES = ("quota", "capacity", "peglimit", "nodeficit", "wagefloor", "inequalities", "pairs", "boundscon",
-             "mcpjosephy", "mcptech", "manycons")
+             "mcpjosephy", "mcptech", "manycons", "boxpair")
 # Nonlinear programmes (version 0.15.0): solved by an NLP solver, IPOPT
 # unless --solver names another
 NLP_CASES = ("nlphs071", "nlpentropy", "nlpfrontier")
@@ -90,7 +90,9 @@ def main() -> None:
     nlp_solver = args.solver if args.solver in NLP_SOLVERS else "ipopt"
     skipped = []
     for d in folders:
-        constrained = "positive variable" in (d / "cge_constraints.inc").read_text(encoding="utf-8")
+        # constraints, and box pairs (version 0.34.0)
+        cons = (d / "cge_constraints.inc").read_text(encoding="utf-8")
+        constrained = "positive variable" in cons or "variable BXV" in cons
         if constrained and args.solver not in mcp_solvers:
             skipped.append(d.name)
             continue

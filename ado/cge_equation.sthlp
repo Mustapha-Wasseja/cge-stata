@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.7  26oct2026}{...}
+{* *! version 0.34.0  29oct2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -15,6 +15,10 @@
 {p 8 12 2}
 {cmd:cge_equation} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=l=}|{cmd:=g=} {it:expression}{cmd:,}
 {opt perp(variable[, up|down])}
+
+{p 8 12 2}
+{cmd:cge_equation} {it:name}[{cmd:(}{it:i}[{cmd:,}{it:j}]{cmd:)}[{cmd:$(}{it:condition}{cmd:)}]]{cmd::} {it:expression} {cmd:=} {it:expression}{cmd:,}
+{opt perp(variable)} [{opt lower(#)}] [{opt upper(#)}]
 
 {p 8 12 2}
 {cmd:cge_equation}{cmd:,} {opt list}
@@ -216,6 +220,32 @@ its value, which {helpb cge_shock} can change; {cmd:cge_variable}
 bound, from which an inequality paired with it may move it.
 
 
+{title:Box pairs}
+
+{pstd}
+From version 0.34.0, an equation {it:lhs} {cmd:=} {it:rhs} with
+{opt perp(variable)} and {opt lower(#)}, {opt upper(#)} or both is a box
+pair, as PATH and GAMS's MCP models write one: F = {it:lhs} - {it:rhs} is
+perpendicular to {it:lower} <= {it:variable} <= {it:upper}. The variable lies
+between its bounds where F = 0, at {it:lower} where F >= 0, and at
+{it:upper} where F <= 0. A tariff-rate quota is one: the rent on imports
+between zero and the margin of the tariff above the quota,
+{cmd:cge_equation trq: 0.98 * base(QM(com_man)) = QM(com_man), perp(RM(com_man)) lower(0) upper(0.05)},
+where the rent is zero while imports stay below the quota, holds them at
+the quota while it lies between the bounds, and stops at its cap, imports
+then exceeding the quota. An inequality is a box pair with one bound.
+
+{pstd}
+The paired variable must be fixed under the closure, as for an inequality,
+and start within its bounds. Stata solves the pair as the equation
+{it:variable} = mid({it:lower}, {it:upper}, {it:variable} - c F), with c the
+scale of the variable over that of F at the base, by Newton's method with
+the exact derivatives of min() and max(). {helpb cge_gams} writes it into
+the scenario's mixed complementarity problem as F =n= 0 paired with a
+variable between the bounds, so that a model with box pairs is exported
+with {cmd:type(mcp)}, the default for it, and solved by PATH.
+
+
 {title:Lags}
 
 {pstd}
@@ -386,7 +416,9 @@ numeraire.
 
 {phang}
 {opt perp(variable[, up|down])} pairs an inequality with a variable fixed under
-the closure, which moves up (the default) or down when it binds.
+the closure, which moves up (the default) or down when it binds. From
+version 0.34.0, with {opt lower(#)}, {opt upper(#)} or both, it pairs an
+equation with a variable between bounds, a box pair (see {it:Box pairs}).
 
 {phang}
 {opt replace(block)} replaces the elements of a built-in equation block, or
@@ -436,6 +468,12 @@ all.
 {phang2}{cmd:. cge_solve}{p_end}
 
 {phang2}{cmd:. cge_constraint, list}{p_end}
+
+{pstd}A tariff-rate quota on agriculture: the rent between zero and 0.05 (from version 0.34.0){p_end}
+
+{phang2}{cmd:. cge_equation trq: 0.98 * base(QM(com_agr)) = QM(com_agr), perp(RM(com_agr)) lower(0) upper(0.05)}{p_end}
+
+{phang2}{cmd:. cge_solve}{p_end}
 
 {pstd}Spending on the imports that carry a tariff, and the tariff revenue by commodity, defined only for them{p_end}
 

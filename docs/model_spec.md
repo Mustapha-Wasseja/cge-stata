@@ -3206,6 +3206,55 @@ the dense and the sparse LU, for a tariff removal, that model, an import
 quota by the semismooth method (one or two iterations fewer), a run with
 foresight and linked regions; the setting saved, reset and checked).
 
+## 44. Box pairs (from version 0.34.0)
+
+A box pair is an equation paired with a variable between bounds, as PATH
+and GAMS's MCP models write a mixed complementarity problem:
+
+```
+cge_equation NAME[(i)][$(c)]: lhs = rhs, perp(VAR[(e)]) [lower(#)] [upper(#)]
+```
+
+$F = lhs - rhs$ is perpendicular to $L \le X \le U$: $X$ between its bounds
+where $F = 0$, $X = L$ where $F \ge 0$, $X = U$ where $F \le 0$. An
+inequality paired with a variable (Section 19) is the case of one bound; the
+quota of Section 16 with a cap on its rent is a tariff-rate quota.
+
+**Stata.** Each element is a user equation in the natural residual form
+
+$$X = \mathrm{mid}(L, U, X - cF), \qquad c = s_X / \max(|lhs^0|, |rhs^0|),$$
+
+compiled as `max(L, min(U, X - c*((lhs) - (rhs))))` (`_cge_u_boxrow`), with
+$s_X$ the scale of $X$ and $c$ fixed at the base; its solutions are those of
+the pair for any $c > 0$. The paired variable must be fixed under the
+closure and start within its bounds (`_cge_u_boxcheck`, error 459); the pair
+frees it (`_cge_sys_make`, as the adjusting variables of constraints), so
+the system stays square, and the closure's count includes it. Newton's method
+solves the equation with the exact derivatives of `min()` and `max()` (the
+argument taken, Section 40), so semismooth in effect. The pairs are kept in
+`M.ubox` (row of each element among the user equations, the position of
+$X$, $L$, $U$ and the scale of $F$), made again with the user equations.
+
+**GAMS.** The base model leaves the pairs out ($X$ is fixed there). In the
+scenario (`cge_constraints.inc`), each element is
+
+```
+variable BXVk;  BXVk.lo = L;  BXVk.up = U;
+UBk..  ((lhs) - (rhs)) / sF =n= 0;
+LBk..  X =e= BXVk;
+```
+
+with $X$ freed, and model `cgecon` adds `LBk, UBk.BXVk`; a model with box
+pairs is exported with `type(mcp)` (the default for it) and solved by PATH.
+
+Tests: `tests/test_boxpair.do` (one-variable boxes in each regime; a target
+on government purchases met by GADJ within bounds, interior, above and below,
+against GADJ fixed where it should be, to $10^{-13}$; a tariff-rate quota
+against the quota as an inequality when the cap does not bind, and with the
+cap binding, the rent at the cap and imports over the quota; listing, saving
+and loading; the GAMS files; errors) and the export check's case `boxpair`
+(PATH, model status 1, 117 values to $4.3\times10^{-13}$).
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
