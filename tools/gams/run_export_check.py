@@ -32,7 +32,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 # Cases of export_check.do with constraints
 MCP_CASES = ("quota", "capacity", "peglimit", "nodeficit", "wagefloor", "inequalities", "pairs", "boundscon",
-             "mcpjosephy", "mcptech", "manycons", "boxpair")
+             "mcpjosephy", "mcptech", "manycons", "boxpair", "mpsge", "mpsnest")
 # Nonlinear programmes (version 0.15.0): solved by an NLP solver, IPOPT
 # unless --solver names another
 NLP_CASES = ("nlphs071", "nlpentropy", "nlpfrontier")

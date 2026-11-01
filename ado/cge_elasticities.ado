@@ -1,4 +1,4 @@
-*! cge_elasticities.ado  v0.3.5  2026-10-20
+*! cge_elasticities.ado  v0.44.0  2026-11-01
 *! cge-stata: published elasticities, with their sources (docs/elasticities.md)
 *! Lists or loads entries of the elasticity library, or turns them into
 *! option values for cge_calibrate
@@ -19,12 +19,16 @@ program define cge_elasticities, rclass
         display as error "map() and others() need values"
         exit 198
     }
-    quietly findfile cge_elasticities.csv
-    local lib "`r(fn)'"
-    quietly findfile cge_elasticity_sources.csv
-    local src "`r(fn)'"
     if "`using'" != "" confirm file `"`using'"'
     _cge_load
+    * the library and its sources from the package's bundle (from version
+    * 0.44.0: Stata's package files take at most 100 files), each into a
+    * file of its own name that lasts the session
+    foreach f in lib src {
+        local name = cond("`f'" == "lib", "cge_elasticities.csv", "cge_elasticity_sources.csv")
+        mata: st_local("`f'", _cge_bundle_tmp("`name'"))
+        mata: _cge_bundle_get("cge_elasticity_library.txt", "`name'", st_local("`f'"))
+    }
     if "`clear'" != "" clear
     mata: _cge_elas("`parameter'", "`country'", "`category'", "`source'", "`id'", `"`lib'"', `"`src'"', ///
         `"`using'"', "`clear'" != "", "`values'" != "", "`map'", "`others'")

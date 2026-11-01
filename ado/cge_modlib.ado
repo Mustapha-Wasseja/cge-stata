@@ -1,4 +1,4 @@
-*! cge_modlib.ado  v0.27.1  2026-10-25
+*! cge_modlib.ado  v0.44.0  2026-11-01
 *! cge-stata: a library of ready-to-run models written in the user language,
 *! as GAMS's model library (Reference Manual, cge_modlib)
 *!
@@ -8,7 +8,7 @@
 program define cge_modlib, rclass
     version 13.0
     gettoken sub rest : 0, parse(" ,")
-    local models exchange crusoe ramsey markets hs071 transport ras knapsack cournot
+    local models exchange crusoe ramsey markets hs071 transport ras knapsack cournot mpsge
     if "`sub'" == "" | "`sub'" == "list" {
         display as text _n "The model library of cge-stata"
         display as text "{hline 78}"
@@ -16,7 +16,9 @@ program define cge_modlib, rclass
         display as text "{hline 78}"
         foreach m of local models {
             _cge_modlib_read `m'
-            display as text %-11s "{bf:`m'}" %-8s "`r(kind)'" as result "`r(title)'"
+            * columns by position: the tag of bold type does not count
+            * toward a width (from version 0.44.0)
+            display as text "{bf:`m'}" _col(12) "`r(kind)'" _col(20) as result "`r(title)'"
         }
         display as text "{hline 78}"
         display as text "cge_modlib describe {it:model} shows a model; cge_modlib run {it:model} runs it;"

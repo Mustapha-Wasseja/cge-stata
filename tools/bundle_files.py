@@ -2,7 +2,8 @@
 
 Stata's package files take at most 100 files: beyond that, net install stops
 with "package file too long" (error 640). The package therefore installs the
-SYNTHETIC SAMs, the model library and the GAMS model as three text files,
+SYNTHETIC SAMs, the model library, the GAMS model and (from version 0.44.0)
+the elasticity library as four text files,
 each a series of sections that begin with a line "@@@ name", which
 cge_synthetic, cge_modlib and cge_gams read through _cge_bundle_get. The
 sources stay as files in the repository. Run this script after changing any
@@ -28,6 +29,7 @@ def sources(root: Path) -> dict[str, list[Path]]:
         "data/cge_synthetic_sams.txt": sorted((root / "data").glob("cge_synthetic_sam*.csv")),
         "ado/cge_ml_library.txt": sorted((root / "ado").glob("cge_ml_*.do")),
         "ado/cge_gams_model.txt": [root / "ado" / f for f in GAMS],
+        "data/cge_elasticity_library.txt": [root / "data" / "cge_elasticities.csv", root / "data" / "cge_elasticity_sources.csv"],
     }
 
 

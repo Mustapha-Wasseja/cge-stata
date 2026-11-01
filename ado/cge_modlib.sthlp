@@ -42,6 +42,7 @@ model's do-file, {cmd:cge_ml_}{it:model}{cmd:.do}, in the current folder.
 {p2col:{cmd:ras}}a matrix balanced by cross entropy, the RAS solution{p_end}
 {p2col:{cmd:knapsack}}eight binary choices, a mixed-integer programme{p_end}
 {p2col:{cmd:cournot}}Cournot duopoly and a Stackelberg leader ({helpb cge_nash}){p_end}
+{p2col:{cmd:mpsge}}two goods and a tax on labour, in the form of MPSGE ({helpb cge_mpsge}; from version 0.44.0){p_end}
 {p2colreset}{...}
 
 

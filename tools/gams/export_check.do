@@ -645,7 +645,7 @@ local exfile = subinstr(subinstr(`"`r(fn)'"', "\", "/", .), "ado/cge_model.ado",
 * method and by PATH as MCP: MCPLIB josephy, an economy in the form of MPSGE
 * with a technology that is not used, and many constraints of the standard
 * model at once
-foreach case in standalone exchange mcpjosephy mcptech manycons sacond {
+foreach case in standalone exchange mcpjosephy mcptech manycons sacond mpsge mpsnest {
     display as text _n "{hline 60}" _n "Case " as result "`case'"
     if "`case'" == "mcpjosephy" {
         quietly cge_model new
@@ -700,6 +700,61 @@ foreach case in standalone exchange mcpjosephy mcptech manycons sacond {
         quietly cge_variable G = sum(i$(sub(i) > 0), S(i))
         quietly cge_shock sub, elements(a) value(0.2)
         quietly cge_shock sub, elements(b) value(0)
+    }
+    * models in the form of MPSGE (version 0.44.0), as box pairs: three
+    * sectors over sets with a tax on labour raised; joint products, two
+    * levels of nests and nested demand, with a free good and a technology
+    * that does not pay
+    else if "`case'" == "mpsge" {
+        quietly cge_model new
+        quietly cge_set s = agr man ser
+        quietly cge_set g = s
+        quietly cge_set f = lab cap
+        quietly cge_set h = rich poor
+        quietly cge_parameter id0(g,s), values(agr.agr:10 agr.man:20 agr.ser:5 man.agr:15 man.man:30 man.ser:20 ser.agr:5 ser.man:15 ser.ser:25)
+        quietly cge_parameter fd0(f,s), values(lab.agr:30 lab.man:25 lab.ser:40 cap.agr:20 cap.man:30 cap.ser:35)
+        quietly cge_parameter tf0(f,s), values(lab.man:0.2)
+        quietly cge_parameter tf(f,s), values(lab.man:0.2)
+        quietly cge_parameter y0(s), values(agr:80 man:156.25 ser:125)
+        quietly cge_parameter ty0(s), values(man:0.2)
+        quietly cge_parameter ty(s), values(man:0.2)
+        quietly cge_parameter esub(s), values(agr:0.5 man:1 ser:1.5)
+        quietly cge_parameter sh(h), values(rich:1.5 poor:0.8)
+        quietly cge_parameter g0(g), values(agr:5 man:11.25 ser:20)
+        quietly cge_parameter c0(g,h), values(agr.rich:15 agr.poor:25 man.rich:50 man.poor:30 ser.rich:40 ser.poor:20)
+        quietly cge_parameter e0(f,h), values(lab.rich:45 lab.poor:50 cap.rich:60 cap.poor:25)
+        quietly cge_mpsge sectors: Y(s)
+        quietly cge_mpsge commodities: P(s) PF(f)
+        quietly cge_mpsge consumers: HH(h) GOV
+        quietly cge_mpsge prod:Y(s) s:0 va:esub(s)
+        quietly cge_mpsge    o:P(s)  q:y0(s) p:(1-ty0(s)) a:GOV t:ty(s)
+        quietly cge_mpsge    i:P(g)$(id0(g,s)) q:id0(g,s)
+        quietly cge_mpsge    i:PF(f) q:fd0(f,s) p:(1+tf0(f,s)) va: a:GOV t:tf(f,s)
+        quietly cge_mpsge demand:HH(h) s:sh(h)  d:P(g) q:c0(g,h)  e:PF(f) q:e0(f,h)
+        quietly cge_mpsge demand:GOV s:0  d:P(g) q:g0(g)
+        quietly cge_mpsge end, numeraire(PF(lab))
+        quietly cge_shock tf, elements(lab.man) value(0.5)
+    }
+    else if "`case'" == "mpsnest" {
+        quietly cge_model new
+        quietly cge_parameter te0 = 0.1
+        quietly cge_parameter te = 0.1
+        quietly cge_parameter tl0 = 0.2
+        quietly cge_parameter tl = 0.2
+        quietly cge_parameter zq = 6
+        quietly cge_parameter nend = 20
+        quietly cge_mpsge sectors: X Y Z
+        quietly cge_mpsge commodities: PD PE PY PL PK PN
+        quietly cge_mpsge consumers: HH GOV
+        quietly cge_mpsge prod:X s:0 t:2 va:1.2 kn(va):0.6  o:PD q:64  o:PE q:40 p:(1-te0) a:GOV t:te
+        quietly cge_mpsge    i:PN q:20  i:PL q:25 p:(1+tl0) va: a:GOV t:tl  i:PK q:30 kn:  i:PY q:20 kn:
+        quietly cge_mpsge prod:Y s:0.8  o:PY q:50  i:PL q:30  i:PK q:20
+        quietly cge_mpsge prod:Z s:1  o:PY q:10  i:PL q:zq  i:PK q:zq
+        quietly cge_mpsge demand:HH s:0.7 tr:1.5  d:PD q:64 tr:  d:PE q:36 tr:  d:PY q:25  e:PL q:55  e:PK q:50  e:PN q:nend
+        quietly cge_mpsge demand:GOV  d:PE q:4  d:PY q:5
+        quietly cge_mpsge end, numeraire(PL)
+        quietly cge_bound Z, level(0)
+        quietly cge_shock te, value(0.3)
     }
     else if "`case'" == "standalone" {
         preserve

@@ -18,6 +18,17 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.44.0 adds `cge_mpsge`, which writes a model as MPSGE writes one:
+sectors, commodities and consumers, with production blocks (`prod:`) and
+demand blocks (`demand:`) whose records give reference quantities, prices
+and taxes of nested CES and CET functions. `cge_mpsge end` writes it as the
+mixed complementarity problem MPSGE generates, zero profits, market
+clearing and income balance, in user variables and equations of a
+standalone model; `cge_mpsge using` reads the model of a GAMS program
+between `$ontext` and `$offtext`. Three test models, with taxes, nests,
+joint products, a free good and a sector that shuts down, agree with
+GAMS/MPSGE to about 1e-13.
+
 Version 0.43.0 evaluates the `$` conditions of user variables and equations
 at each solve, as GAMS does: with `cge_options, conditions(solve)`, a shock
 to a parameter that a condition uses brings elements into their domains, or
@@ -114,7 +125,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.43.0 implements the standard single-country model described in
+Version 0.44.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -188,6 +199,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.44.0 adds models in the form of MPSGE.
 Version 0.43.0 adds conditions evaluated at each solve.
 Version 0.42.0 adds global solutions of programmes by SCIP through PySCIPOpt.
 Version 0.41.0 adds nonlinear programmes by IPOPT through cyipopt.

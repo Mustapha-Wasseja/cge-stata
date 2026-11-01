@@ -1,0 +1,28 @@
+. cge_model new
+New standalone model: write its sets, parameters, variables and equations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_parameter tx = 0.25
+User parameter tx: 1 value(s), from .25 to .25
+
+. cge_mpsge model:taxlab
+
+. cge_mpsge sectors: X Y W
+
+. cge_mpsge commodities: PX PY PL PK PW
+
+. cge_mpsge consumers: CONS
+
+. cge_mpsge prod:X s:0.5  o:PX q:100  i:PL q:40 p:1.25 a:CONS t:tx  i:PK q:50
+
+. cge_mpsge prod:Y s:1.5  o:PY q:100  i:PL q:60  i:PK q:40
+
+. cge_mpsge prod:W s:1    o:PW q:200  i:PX q:100  i:PY q:100
+
+. cge_mpsge demand:CONS   d:PW q:200  e:PL q:100  e:PK q:90
+
+. cge_mpsge end, numeraire(PL)
+MPSGE model taxlab: 3 sector(s), 5 commodities and 1 consumer(s), in 4 block(s)
+written as 28 user variable(s) and 8 equation(s), 27 elements in all
+Numeraire: PL, fixed at 1
+Reference point: largest relative gap of the equations  0.00e+00

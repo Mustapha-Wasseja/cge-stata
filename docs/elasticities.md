@@ -26,7 +26,9 @@ Muhammad et al. (2011) cover 47 African countries (the 2005 ICP round, without
 Comoros, which the authors exclude).
 
 Files: `data/cge_elasticities.csv` (one row per entry) and
-`data/cge_elasticity_sources.csv` (one row per source). They are plain ASCII,
+`data/cge_elasticity_sources.csv` (one row per source), installed from
+version 0.44.0 as one bundle, `data/cge_elasticity_library.txt`
+(`tools/bundle_files.py`). They are plain ASCII,
 which Stata 13 displays, so accents are dropped (for example, "Cote
 d'Ivoire").
 

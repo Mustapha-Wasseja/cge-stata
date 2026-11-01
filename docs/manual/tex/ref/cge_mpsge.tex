@@ -1,0 +1,272 @@
+\cgeentry{cge_mpsge}{Models in the form of MPSGE}
+
+\cgesec{Description}
+
+\cmd{cge_mpsge} (from version 0.44.0) writes a standalone model
+(\manref{cge_model}) as MPSGE writes one \citep{rutherford1999}: sectors
+whose activity levels make outputs from inputs, commodities whose prices
+clear their markets, and consumers whose incomes come from endowments and
+taxes. Each sector has a production block and each consumer a demand
+block, whose records give quantities and prices at a reference point; the
+functions are nested CES functions of the inputs and demands and CET
+functions of the outputs, calibrated to those quantities and prices.
+\cmd{cge_mpsge end} writes the model as user variables and equations
+(\manref{cge_variable}, \manref{cge_equation}): the mixed complementarity
+problem that MPSGE generates \citep{mathiesen1985, rutherford1995}, with zero
+profit paired with each activity level, market clearing with each price and
+income balance with each income. The model is then solved, reported and
+exported like any standalone model.
+
+\cgesec{Quick start}
+
+A sector X making good PX from labour and capital, with a tax on labour,
+and a consumer who owns the factors
+\begin{stcode}
+cge_model new
+cge_parameter tx = 0.25
+cge_mpsge sectors: X
+cge_mpsge commodities: PX PL PK
+cge_mpsge consumers: CONS
+cge_mpsge prod:X s:0.5  o:PX q:100  i:PL q:40 p:1.25 a:CONS t:tx  i:PK q:50
+cge_mpsge demand:CONS   d:PX q:100  e:PL q:40  e:PK q:50
+cge_mpsge end, numeraire(PL)
+cge_shock tx, value(0)
+cge_solve, name(notax)
+\end{stcode}
+A model read from a GAMS program, between \cmd{$ontext} and \cmd{$offtext}
+\begin{stcode}
+cge_mpsge using "model.gms", numeraire(PF(lab))
+\end{stcode}
+List the definitions written; drop a model being read
+\begin{stcode}
+cge_mpsge, list generated
+cge_mpsge, drop
+\end{stcode}
+
+\cgesec{Syntax}
+
+A statement of the model, the model written, a model read from a file
+\begin{stsyntax}
+\cmdb{cge_mpsge} \argu{statement}\\
+\cmdb{cge_mpsge end} [\texttt{,} \optarg{num}{eraire}{name[(labels)]}]\\
+\cmdb{cge_mpsge using} \argu{filename} [\texttt{,} \optarg{num}{eraire}{name[(labels)]}]
+\end{stsyntax}
+List the models, or drop the model being read
+\begin{stsyntax}
+\cmdb{cge_mpsge} \texttt{,} \{\opt{}{list} [\opt{gen}{erated}]|\opt{}{drop}\}
+\end{stsyntax}
+A \argu{statement} is a section's header with what follows it, or the
+fields of the block being read:
+\begin{center}
+\begin{tabular}{ll}
+\hline
+Statement & Content\\
+\hline
+\cmd{model:}\argu{name} & the model's name\\
+\cmd{sectors:} \argu{names} & activity levels, as \cmd{X Y(s)}\\
+\cmd{commodities:} \argu{names} & prices, as \cmd{PL P(g)}\\
+\cmd{consumers:} \argu{names} & incomes, as \cmd{RA HH(h)}\\
+\cmd{prod:}\argu{sector}[\cmd{$(}\argu{cond}\cmd{)}] [\argu{fields}] & a production block\\
+\cmd{demand:}\argu{consumer}[\cmd{$(}\argu{cond}\cmd{)}] [\argu{fields}] & a demand block\\
+\argu{fields} & records and fields of the block being read\\
+\hline
+\end{tabular}
+\end{center}
+The fields are written \argu{key}\cmd{:}\argu{value}, as MPSGE writes them:
+\begin{center}
+\begin{tabular}{lp{0.62\textwidth}}
+\hline
+Field & Meaning\\
+\hline
+\cmd{s:}\argu{e} & elasticity of substitution at the top of the inputs or demands; default 0\\
+\cmd{t:}\argu{e} & elasticity of transformation at the top of the outputs; default 0\\
+\argu{nest}\cmd{:}\argu{e} & a nest within \cmd{s}; \argu{nest}\cmd{(}\argu{parent}\cmd{):}\argu{e} within another nest or \cmd{t}\\
+\cmd{o:}, \cmd{i:} \argu{commodity} & an output or input of a production block\\
+\cmd{d:}, \cmd{e:} \argu{commodity} & a final demand or endowment of a demand block\\
+\cmd{q:}\argu{expression} & reference quantity of a record; default 1\\
+\cmd{p:}\argu{expression} & reference price of a record; default 1\\
+\cmd{a:}\argu{consumer} \cmd{t:}\argu{expression} & a tax at rate \cmd{t:}, paid to the agent \cmd{a:}\\
+\argu{nest}\cmd{:} & the nest of a record; default \cmd{s} for inputs and demands, \cmd{t} for outputs\\
+\hline
+\end{tabular}
+\end{center}
+
+\cgesec{Options}
+
+\begin{optdesc}
+\item[\optarg{num}{eraire}{name[(labels)]}] fixes the price of a commodity
+or the income of a consumer at its value at the reference point, with
+labels for an element of one with indexes, as \cmd{numeraire(PF(lab))}; its
+equation is left out, as Walras's law makes it hold. The default is the
+income of the consumer with the largest income at the reference point, as
+in MPSGE.
+
+\item[\opt{}{list}] lists the model being read and the models written;
+\opt{gen}{erated} lists the definitions written in place of the statements.
+\opt{}{drop} drops the model being read. \manref{cge_equation}\cmd{, clear}
+removes the models written with the other user variables and equations.
+\end{optdesc}
+
+\cgesec{Remarks and examples}
+
+\cgesubsec{Statements}
+
+Each \cmd{cge_mpsge} command holds a statement. A block may be written on
+one line, with as many records as needed, or over several lines that each
+continue the block before them. On a command line Stata reads
+\cmd{$}\argu{name} as a global macro, so the sections are written without
+MPSGE's dollar sign (\cmd{prod:} for \cmd{$prod:}) and conditions in
+parentheses, \cmd{i:P(g)$(id0(g,s))}. \cmd{cge_mpsge using} reads a file as
+MPSGE writes a model, dollar signs and conditions such as
+\cmd{$id0(g,s)} included: from the line \cmd{$model:} to \cmd{$offtext},
+or the whole file, so that it reads the model of a GAMS program between
+\cmd{$ontext} and \cmd{$offtext}; lines that begin with an asterisk are
+comments. The sets and parameters are those of the model in Stata, under
+the same names (\manref{cge_set}, \manref{cge_parameter}); names are case
+sensitive.
+
+The fields are expressions in the parameters of the model. They are
+evaluated at the parameters of each solve, as MPSGE generates the model
+again before each solve, so that \manref{cge_shock} changes a tax, an
+endowment or a technology. A block or record over indexes runs over their
+sets: \cmd{prod:Y(s)} is a block for each element of \cmd{s}, and
+\cmd{i:P(g) q:id0(g,s)} within it an input of each commodity \cmd{P(g)},
+those with a reference quantity of zero left out, as in MPSGE. The
+conditions, like those of \manref{cge_equation}, are evaluated at the base
+unless \cmd{cge_options, conditions(solve)} evaluates them at each solve
+(\manref{cge_options}).
+
+\cgesubsec{Example 1: a tax on labour}
+
+Two sectors make goods from labour and capital, with elasticities of 0.5
+and 1.5; a third combines the goods into welfare, which the consumer buys
+with the income of the factors and of a tax of 25 per cent on the labour of
+X. The reference price of the taxed labour, 1.25, includes the tax, as MPSGE
+takes the reference price of an input:
+\stlog{mps_tax}
+The data are a benchmark equilibrium, so that the equations hold at the
+reference point. The definitions written are price indexes of the nests,
+quantities of the records and the revenue of the tax, and three kinds of
+equations:
+\stlog{mps_list}
+Without the tax, X expands and the price of its good falls; the
+revenue, \cmd{X_tx2}, is 0:
+\stlog{mps_solve}
+The same model in GAMS/MPSGE gives the same equilibrium; the test suite
+compares the two to $10^{-13}$.
+
+\cgesubsec{Example 2: sectors over sets}
+
+Three sectors use each other's goods as intermediate inputs, in fixed
+proportions, and labour and capital in a nest whose elasticity varies by
+sector; the government receives an output tax and a tax on labour in
+manufacturing, and two households with elasticities of their own buy the
+goods from the income of their endowments:
+\stlog{mps_sets}
+A tax of 50 per cent on labour in manufacturing shifts output toward the
+other sectors and raises the government's income; \cmd{HH_u} is the
+utility of each household relative to the reference point:
+\stlog{mps_labtax}
+
+\cgesubsec{What is written}
+
+For sector $B$, consumer $H$, commodity $P$ and the $k$th record of a block:
+\begin{center}
+\begin{tabular}{lp{0.62\textwidth}}
+\hline
+Name & Content\\
+\hline
+$B$, $P$, $H$ & activity levels and prices, 1 at the reference point, and incomes at their reference values\\
+$B$\cmd{_s}, $B$\cmd{_t}, $B$\cmd{_}\argu{nest} & price indexes of the nests, 1 at the reference point\\
+$B$\cmd{_i}$k$, $B$\cmd{_o}$k$ & quantities of the inputs and outputs\\
+$B$\cmd{_tx}$k$ & revenue of the tax on the record\\
+$H$\cmd{_s}, $H$\cmd{_u}, $H$\cmd{_d}$k$ & price index and utility of the consumer, and its demands\\
+$B$\cmd{_zp} & zero profit, paired with $B$\\
+$P$\cmd{_mkt} & market clearing, supply less demand, paired with $P$\\
+$H$\cmd{_inc} & income balance, paired with $H$\\
+\hline
+\end{tabular}
+\end{center}
+The equations are box pairs with the lower bound 0 (\manref{cge_equation}):
+a sector whose cost exceeds its revenue stays at 0, and a commodity in
+excess supply has the price 0. A sector that does not pay at the reference
+prices starts at 0 with \cmd{cge_bound} $B$\cmd{, level(0)}, as GAMS's
+$B$\cmd{.l = 0} (\manref{cge_bound}). \cmd{cge_mpsge end} reports the
+largest relative gap of the equations at the reference point, which is 0
+for a benchmark equilibrium.
+
+\cgesubsec{The numeraire}
+
+Without \opt{num}{eraire()}, the income of the consumer with the largest
+income at the reference point is fixed at that income. MPSGE fixes it at
+its value at the start of each solve, so that prices and incomes may then
+differ from those of GAMS by a common factor; quantities do not.
+
+\cgesubsec{What is not available}
+
+Auxiliary variables and constraints (\cmd{$auxiliary}, \cmd{$constraint}),
+endogenous taxes (\cmd{n:} and \cmd{m:}), rationed endowments (\cmd{r:}),
+report blocks and indexed nests stop \cmd{cge_mpsge} with an error.
+Constraints may be written with \manref{cge_variable} and
+\manref{cge_equation} over the variables written.
+
+\cgesec{Stored results}
+
+\cmd{cge_mpsge end} and \cmd{cge_mpsge using} store the following in
+\cmd{r()}:
+\begin{storedres}
+\resgroup{Scalars}
+\res{r(N_sectors)} & activity levels (elements)\\
+\res{r(N_commodities)} & prices (elements)\\
+\res{r(N_consumers)} & incomes (elements)\\
+\res{r(N_blocks)} & blocks\\
+\res{r(N_variables)} & user variables written\\
+\res{r(N_equations)} & equations written, besides the definitions\\
+\res{r(N_elements)} & equation elements written, with the definitions\\
+\res{r(numeraire_value)} & value of the numeraire\\
+\res{r(gap)} & largest relative gap of the equations at the reference point\\
+\resgroup{Macros}
+\res{r(name)} & the model's name (\cmd{mpsge} without \cmd{model:})\\
+\res{r(numeraire)} & the numeraire\\
+\end{storedres}
+\cmd{cge_mpsge, list} stores \cmd{r(N_models)} and \cmd{r(models)}.
+
+\cgesec{Methods and formulas}
+
+In a nest with elasticity $e$, record $k$ with reference quantity $q_k$,
+reference price $\bar p_k$, commodity price $P_k$ and tax rates summing to
+$t_k$ has the value $v_k = \bar p_k q_k$ at reference prices and the
+relative price $r_k = P_k (1 + t_k)/\bar p_k$ (an input or demand) or
+$r_k = P_k (1 - t_k)/\bar p_k$ (an output). The price index of an input nest
+is
+\begin{equation*}
+C = \Bigl[\frac{1}{V}\sum_k v_k\,r_k^{1-e}\Bigr]^{1/(1-e)}, \qquad V = \sum_k v_k,
+\end{equation*}
+over its records and inner nests, an inner nest with its own index in place
+of $r_k$; the geometric mean at $e = 1$ and the weighted sum at $e = 0$. An
+output nest has the exponent $1 + e$. A record's quantity per unit of
+activity is $q_k (C/r_k)^{e}$, or $q_k (r_k/C)^{e}$ for an output, times the
+factor of each nest above it. Zero profit of sector $B$ is
+$V_s C_s - V_t R_t \ge 0 \perp B \ge 0$, with $C_s$ and $R_t$ the indexes of
+the tops of its inputs and outputs. A consumer with income $M$ has utility
+$U = M/(V_s C_s)$ and demands $q_k U$ times the factors of its nests. Market
+clearing is supply, outputs and endowments, less demand, inputs and final
+demands, $\ge 0 \perp P \ge 0$, and income balance $M = \sum P e + \sum
+t P x \perp M \ge 0$, the value of the endowments and the revenue of the
+taxes the consumer receives \citep{mathiesen1985, rutherford1999}. An
+elasticity given by an expression is written with both forms, under the
+conditions \cmd{$(}$e \ne 1$\cmd{)} and \cmd{$(}$e = 1$\cmd{)}.
+
+\cgesec{References}
+
+\citet{mathiesen1985}; \citet{rutherford1995}; \citet{rutherford1999}.
+
+\cgesec{Also see}
+
+\begin{alsosee}
+\seeentry{cge_model}{A standalone model, written whole in the user language}
+\seeentry{cge_variable}{Add a user variable}
+\seeentry{cge_equation}{Add a user equation}
+\seeentry{cge_nest}{Declare a nested CES or CET block}
+\seeentry{cge_solve}{Solve the model}
+\end{alsosee}

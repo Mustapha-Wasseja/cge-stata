@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.43.0  30oct2026}{...}
+{* *! version 0.44.0  01nov2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -36,7 +36,8 @@ and binding limits such as quotas, capacity and borrowing ceilings.
 {pstd}
 Users can extend the built-in model or write a standalone model without a SAM,
 using sets, parameters, variables, equations and nested CES or CET blocks
-({helpb cge_model}, {helpb cge_equation}, {helpb cge_nest}). The package solves
+({helpb cge_model}, {helpb cge_equation}, {helpb cge_nest}), or in the form of
+MPSGE ({helpb cge_mpsge}). The package solves
 equilibrium and complementarity systems and nonlinear optimisation problems,
 including models with integer or binary variables. It also supports policy
 optimisation ({helpb cge_optimize}), Nash and Stackelberg games
@@ -90,6 +91,7 @@ examples. Its repository path is {cmd:docs/manual/cge-stata-manual.pdf}.
 {p2col:{helpb cge_parameter}}user parameters: values, assignments and data{p_end}
 {p2col:{helpb cge_macro}}macros of the language of user variables and equations{p_end}
 {p2col:{helpb cge_nest}}declare a nested CES or CET block, as MPSGE's production blocks{p_end}
+{p2col:{helpb cge_mpsge}}a model in the form of MPSGE: sectors, commodities, consumers and their blocks{p_end}
 {p2col:{helpb cge_model}}a standalone model, written whole in the user language; model statistics{p_end}
 {p2col:{helpb cge_modlib}}a library of ready-to-run models in the user language{p_end}
 {p2col:{helpb cge_solve}}solve and store a simulation{p_end}

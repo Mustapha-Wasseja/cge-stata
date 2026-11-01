@@ -148,6 +148,9 @@ struct cge_model {
     // blocks declared with cge_nest (from version 0.11.0): name and the
     // declarations, one per line
     string matrix    unest
+    // models written with cge_mpsge (from version 0.44.0): name, the
+    // statements and the definitions written, one per line
+    string matrix    umps
     real colvector   erep
     real scalar      neq
     // closure
@@ -292,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.43.0")
+    return("0.44.0")
 }
 
 // =====================================================================
@@ -308,6 +311,9 @@ struct cge_model scalar _cge_load()
     // and no command finds the parameters of the conditions of a solve that
     // stopped with an error (from version 0.43.0; _cge_cond_set)
     if (findexternal("cge__condp") != NULL) rmexternal("cge__condp")
+    // nor the values of conditions of a build that stopped (from version
+    // 0.44.0; _cge_u_build)
+    if (findexternal("cge__cmemo") != NULL) rmexternal("cge__cmemo")
     q = findexternal("cge__model")
     if (q == NULL) {
         errprintf("no SAM in memory; load one with cge_sam\n")
@@ -4232,6 +4238,11 @@ void _cge_closure_rank(struct cge_model scalar M, real colvector fixed)
     if (rows(M.jr) == 0) return
     isfree = M.exists :* (1 :- fixed)
     if (rows(M.bX)) isfree[M.bX] = J(rows(M.bX), 1, 1)
+    // the variables of box pairs are solved for (from version 0.44.0;
+    // before, a box pair whose row held no other free variable, as the
+    // income of a consumer whose endowments are priced by box pairs, made
+    // the closure singular when it was applied again)
+    if (rows(M.ubox)) isfree[M.ubox[., 2]] = J(rows(M.ubox), 1, 1)
     cnt = J(M.neq, 1, 0)
     has = cnt
     for (k = 1; k <= rows(M.jr); k++) {
@@ -9689,6 +9700,9 @@ real colvector _cge_bd_movable(struct cge_model scalar M, real colvector pos)
     out = J(rows(pos), 1, 0)
     isx = J(rows(M.x0), 1, 0)
     if (rows(M.bX)) isx[M.bX] = J(rows(M.bX), 1, 1)
+    // and the variables of box pairs (from version 0.44.0), which are solved
+    // for as GAMS solves the variables of a mixed complementarity problem
+    if (rows(M.ubox)) isx[M.ubox[., 2]] = J(rows(M.ubox), 1, 1)
     for (i = 1; i <= rows(pos); i++) {
         if (isx[pos[i]]) {
             out[i] = 1
@@ -9724,9 +9738,11 @@ real colvector _cge_bd_start(struct cge_model scalar M, real colvector xfix)
     }
     if (rows(M.bdsp)) {
         fr = (M.fixed[M.bdsp] :== 0)
-        if (rows(M.bX)) {
+        if (rows(M.bX) | rows(M.ubox)) {
             isx = J(rows(M.x0), 1, 0)
-            isx[M.bX] = J(rows(M.bX), 1, 1)
+            if (rows(M.bX)) isx[M.bX] = J(rows(M.bX), 1, 1)
+            // the variables of box pairs (from version 0.44.0)
+            if (rows(M.ubox)) isx[M.ubox[., 2]] = J(rows(M.ubox), 1, 1)
             fr = fr :| isx[M.bdsp]
         }
         k = _cge_which(fr)
@@ -22646,13 +22662,21 @@ string rowvector _cge_u_rdollar(struct cge_model scalar M, struct cge_par scalar
 real scalar _cge_u_condval(struct cge_model scalar M, struct cge_par scalar p, real colvector x0, string rowvector t)
 {
     pointer(struct cge_par scalar) scalar q
+    pointer() scalar mq
     real matrix tok
     real scalar v, sv
-    string scalar g
+    string scalar g, key
     // at a solve with conditions(solve) (from version 0.43.0), the
     // parameters of the solve (_cge_cond_build)
     sv = ((q = findexternal("cge__condp")) != NULL)
     if (!sv) q = &p
+    // within a build, a condition of parameters alone is evaluated once
+    // (from version 0.44.0)
+    key = ""
+    if ((mq = findexternal("cge__cmemo")) != NULL) {
+        key = invtokens(t, " ")
+        if (asarray_contains(*mq, key)) return(asarray(*mq, key))
+    }
     tok = _cge_u_compile(M, _cge_u_written(M, *q, x0, t), x0, g, 1)
     // the period changes from period to period (from version 0.10.2)
     if (any(tok[., 1] :== 12)) {
@@ -22661,6 +22685,9 @@ real scalar _cge_u_condval(struct cge_model scalar M, struct cge_par scalar p, r
     v = _cge_u_value(M, *q, x0, tok)
     if (v >= .) _cge_fail("a condition is missing at the " + (sv ? "parameters of the solve" : "base") + ": " +
                           invtokens(_cge_u_um(t), " "), 459)
+    if (key != "") {
+        if (!any(tok[., 1] :== 2 :| tok[., 1] :== 9 :| tok[., 1] :== 11) & !anyof(t, "base")) asarray(*mq, key, v != 0)
+    }
     return(v != 0)
 }
 
@@ -23995,7 +24022,7 @@ void _cge_u_head(struct cge_model scalar M, string scalar head, string scalar na
 // user variables from their definitions, in order
 void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colvector x0)
 {
-    string rowvector tl, tr, els
+    string rowvector tl, tr, els, tl0, tr0
     string colvector lab, gl, e1, e2
     real colvector o1, o2
     string scalar name, idx, set, gtl, gtr
@@ -24003,7 +24030,12 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     real colvector pos, st, ln1, ln2, dom
     real scalar k, j, kv, v, r
     struct cge_par scalar pb
+    pointer() scalar q
     _cge_u_widen(M)
+    // the values of conditions without variables, kept for the build (from
+    // version 0.44.0; _cge_u_condval)
+    if ((q = findexternal("cge__cmemo")) == NULL) q = crexternal("cge__cmemo")
+    *q = asarray_create()
     M.upar = J(0, 1, "")
     // at the base, a lagged value is the base value (from version 0.9.2), and
     // so is a value of a later period (from version 0.10.2)
@@ -24019,6 +24051,8 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
         // the elements in its domain exist (from version 0.7.2)
         dom = (idx == "" ? 1 : _cge_u_domain(M, pb, x0, idx, M.uvdef[k, 2], M.uvdef[k, 7]))
         M.exists[pos] = dom
+        // tokenized once for every element (from version 0.44.0)
+        if (any(dom)) tl0 = _cge_u_pre(M, _cge_u_tokens(M.uvdef[k, 3]))
         for (j = 1; j <= rows(pos); j++) {
             if (!dom[j]) {
                 x0[pos[j]] = 0
@@ -24026,7 +24060,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
                 pb.xlead[pos[j], .] = J(1, _cge_maxlag(), 0)
                 continue
             }
-            tl = _cge_u_pre(M, _cge_u_tokens(M.uvdef[k, 3]))
+            tl = tl0
             if (idx != "") tl = _cge_u_substd(M, ("(", tl, ")"), idx, M.uvdef[k, 2], e1[j], e2[j], o1[j], o2[j])
             tl = _cge_u_written(M, pb, x0, tl)
             tok = _cge_u_compile(M, tl, x0, gtl)
@@ -24060,10 +24094,14 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
         set = M.uedef[k, 3]
         _cge_u_els(M, set, e1, e2, o1, o2)
         dom = (idx == "" ? 1 : _cge_u_domain(M, pb, x0, idx, set, M.uedef[k, 6]))
+        if (any(dom)) {
+            tl0 = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 4]))
+            tr0 = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 5]))
+        }
         for (j = 1; j <= rows(e1); j++) {
             if (!dom[j]) continue
-            tl = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 4]))
-            tr = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 5]))
+            tl = tl0
+            tr = tr0
             if (idx != "") {
                 tl = _cge_u_substd(M, ("(", tl, ")"), idx, set, e1[j], e2[j], o1[j], o2[j])
                 tr = _cge_u_substd(M, ("(", tr, ")"), idx, set, e1[j], e2[j], o1[j], o2[j])
@@ -24093,6 +24131,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     M.ustart = st
     M.ulen = ln1
     M.ulen2 = ln2
+    rmexternal("cge__cmemo")
 }
 
 // The rows of an element of a box pair (from version 0.34.0): L the paired
@@ -24371,6 +24410,9 @@ real colvector _cge_u_newrow(struct cge_model scalar M, string rowvector r, real
     M.fixed = M.fixed \ J(len, 1, (r[6] == "fixed"))
     M.nominal = M.nominal \ J(len, 1, nom)
     M.simx = M.simx \ J(len, cols(M.simx), 0)
+    // the definitions of cge_mpsge end, built together (from version 0.44.0;
+    // _cge_ub_finish)
+    if (findexternal("cge__ubatch") != NULL) return(_cge_vpos(M, rows(M.vname)))
     x0 = M.x0
     _cge_u_build(M, M.p0, x0)
     pos = _cge_vpos(M, rows(M.vname))
@@ -24755,6 +24797,12 @@ void _cge_u_addeq(string scalar spec)
     n0 = rows(M.uelab)
     _cge_u_widen(M)
     M.uedef = M.uedef \ (name, idx, set, lhs, rhs, cond, rel, rep)
+    // the equations of cge_mpsge end, built together (from version 0.44.0;
+    // _cge_ub_finish)
+    if (findexternal("cge__ubatch") != NULL) {
+        _cge_store(M)
+        return
+    }
     _cge_u_build(M, M.p0, M.x0)
     if (rows(M.uelab) == n0 & M.optcond != 1) _cge_fail("user equation " + name + ": no element meets the condition", 459)
     if (rel == "box") _cge_u_boxcheck(M)
@@ -24777,6 +24825,9 @@ void _cge_u_addeq(string scalar spec)
 void _cge_u_refresh(struct cge_model scalar M)
 {
     real colvector L, R, K, mag
+    // while cge_mpsge end adds its definitions, once at the end (from
+    // version 0.44.0; the external is removed at each command by _cge_load)
+    if (findexternal("cge__ubatch") != NULL) return
     _cge_eq(M, M.p0, M.x0, L, R, K, 1)
     M.emask = K
     mag = rowmax((abs(L), abs(R)))
@@ -24870,6 +24921,7 @@ void _cge_u_clear()
     // the attributes of the user variables go with them (from version 0.9.8)
     _cge_bd_sync(M)
     M.unest = J(0, 2, "")
+    M.umps = J(0, 3, "")
     _cge_store(M)
     printf("{txt}User variables and equations removed\n")
 }
@@ -25250,6 +25302,1367 @@ void _cge_un_widen(struct cge_model scalar M)
     if (rows(M.unest) == 0 | cols(M.unest) != 2) {
         if (rows(M.unest) == 0) M.unest = J(0, 2, "")
     }
+}
+
+// =====================================================================
+// Models in the form of MPSGE (from version 0.44.0; model_spec.md,
+// Section 54)
+// =====================================================================
+// cge_mpsge reads a model as MPSGE writes one (Rutherford 1999): its
+// sectors (activity levels), commodities (prices) and consumers (incomes),
+// and blocks of production (prod:) and final demand (demand:) whose records
+// give the reference quantities, prices and taxes of nested CES and CET
+// functions. cge_mpsge end writes the model as user variables and equations
+// of a standalone model: the price index of each nest, the quantity of each
+// record and the revenue of each tax, then zero profit paired with each
+// activity level, market clearing with each price and income balance with
+// each income, as box pairs on the bound 0. The fields are expressions,
+// evaluated at the parameters of each solve, as MPSGE generates the model
+// again before each solve.
+
+struct cge_mp {
+    // the model's name, the section being read (0 none, 1 sectors, 2
+    // commodities, 3 consumers, 5 a block) and the statements as written
+    string scalar    name
+    real scalar      sec
+    string colvector text
+    // declared variables: kind (1 to 3, as the sections), name, indexes
+    string matrix    dv
+    // blocks: kind (prod or demand), name, indexes, condition, and the
+    // elasticities s and t as written
+    string matrix    bk
+    // nests: block, name, parent, elasticity
+    string matrix    ns
+    // records: block, field (o, i, d or e), commodity, its indexes as
+    // written, condition, q, p, nest, and the taxes: pairs of agent and
+    // rate, joined by char(10), agent and rate by char(9)
+    string matrix    rc
+}
+
+// A record as cge_mpsge end writes it: block and field; the commodity, its
+// references and the reference written out; the record's indexes, those
+// beyond the block's, and its conditions, alone and with the block's; its
+// quantity, relative price and value at reference prices; its nest and
+// variable; and its taxes (agent, rate, variable)
+struct cge_mpr {
+    real scalar      b
+    string scalar    f, sym, pref, lcr, lc, q, rel, val, nest, var
+    string rowvector refs, D, L
+    string matrix    tax
+}
+
+struct cge_mp scalar _cge_mp_load()
+{
+    struct cge_mp scalar MP
+    pointer() scalar q
+    if ((q = findexternal("cge__mp")) != NULL) return(*q)
+    MP.name = ""
+    MP.sec = 0
+    MP.text = J(0, 1, "")
+    MP.dv = J(0, 3, "")
+    MP.bk = J(0, 6, "")
+    MP.ns = J(0, 4, "")
+    MP.rc = J(0, 9, "")
+    return(MP)
+}
+
+void _cge_mp_store(struct cge_mp scalar MP)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__mp")) == NULL) q = crexternal("cge__mp")
+    *q = MP
+}
+
+// The model being read dropped
+void _cge_mp_drop()
+{
+    if (findexternal("cge__mp") != NULL) rmexternal("cge__mp")
+}
+
+// cge_mpsge statement: one statement of the model
+void _cge_mp_line(string scalar s)
+{
+    struct cge_model scalar M
+    struct cge_mp scalar MP
+    M = _cge_load()
+    if (!_cge_sa(M)) _cge_fail("cge_mpsge builds a standalone model: start one with cge_model new", 198)
+    MP = _cge_mp_load()
+    _cge_mp_stmt(M, MP, s)
+    MP.text = MP.text \ stritrim(strtrim(s))
+    _cge_mp_store(MP)
+}
+
+// cge_mpsge using file: the statements of a file written as MPSGE writes a
+// model, from the line model: (with its dollar sign) to the end of the
+// text, or the whole file; comment lines begin with an asterisk
+void _cge_mp_file(string scalar fn)
+{
+    struct cge_model scalar M
+    struct cge_mp scalar MP
+    string colvector L
+    string scalar s, ls
+    real scalar k, k0
+    M = _cge_load()
+    if (!_cge_sa(M)) _cge_fail("cge_mpsge builds a standalone model: start one with cge_model new", 198)
+    if (findexternal("cge__mp") != NULL) _cge_fail("cge_mpsge: a model is being read; end it with cge_mpsge end, or drop it with cge_mpsge, drop", 198)
+    if (!fileexists(fn)) _cge_fail("cge_mpsge: file " + fn + " not found", 601)
+    L = cat(fn)
+    k0 = 1
+    for (k = 1; k <= rows(L); k++) {
+        if (regexm(strlower(strtrim(L[k])), "^[" + char(36) + "]model[ ]*:")) {
+            k0 = k
+            break
+        }
+    }
+    MP = _cge_mp_load()
+    for (k = k0; k <= rows(L); k++) {
+        s = strtrim(subinstr(L[k], char(9), " "))
+        ls = strlower(s)
+        if (s == "" | substr(s, 1, 1) == "*") continue
+        if (regexm(ls, "^[" + char(36) + "]offtext")) break
+        if (regexm(ls, "^[" + char(36) + "]ontext")) continue
+        _cge_mp_stmt(M, MP, s)
+        MP.text = MP.text \ stritrim(s)
+    }
+    if (!rows(MP.text)) _cge_fail("cge_mpsge: file " + fn + " holds no statements", 198)
+    _cge_mp_store(MP)
+}
+
+// The words of a statement: split at blanks outside parentheses, a field
+// written with a blank after its colon (q: 100) joined to its value
+string rowvector _cge_mp_words(string scalar s)
+{
+    string rowvector w, out
+    string scalar ch, t, key, val, k2, v2
+    real scalar k, d
+    w = J(1, 0, "")
+    t = ""
+    d = 0
+    for (k = 1; k <= strlen(s); k++) {
+        ch = substr(s, k, 1)
+        if (ch == "(") d++
+        else if (ch == ")") {
+            d--
+            if (d < 0) _cge_fail("cge_mpsge: a parenthesis is closed that was not opened in " + s, 198)
+        }
+        if ((ch == " " | ch == char(9)) & d == 0) {
+            if (t != "") w = w, t
+            t = ""
+        }
+        else t = t + ch
+    }
+    if (d) _cge_fail("cge_mpsge: a parenthesis is not closed in " + s, 198)
+    if (t != "") w = w, t
+    out = J(1, 0, "")
+    for (k = 1; k <= cols(w); k++) {
+        if (k < cols(w) & _cge_mp_field(w[k], key, val)) {
+            if (val == "" & anyof(("o", "i", "d", "e", "q", "p", "a", "t", "s", "prod", "demand", "model"),
+                                  strlower(subinstr(key, char(36), ""))) & !_cge_mp_field(w[k + 1], k2, v2)) {
+                out = out, w[k] + w[k + 1]
+                k++
+                continue
+            }
+        }
+        out = out, w[k]
+    }
+    return(out)
+}
+
+// A field, key:value, split at its first colon outside parentheses; 0 if
+// the word has none
+real scalar _cge_mp_field(string scalar w, string scalar key, string scalar val)
+{
+    real scalar k, d
+    string scalar ch
+    d = 0
+    for (k = 1; k <= strlen(w); k++) {
+        ch = substr(w, k, 1)
+        if (ch == "(") d++
+        else if (ch == ")") d--
+        else if (ch == ":" & d == 0) {
+            key = substr(w, 1, k - 1)
+            val = substr(w, k + 1, .)
+            return(1)
+        }
+    }
+    key = w
+    val = ""
+    return(0)
+}
+
+// One statement: the header of a section with what follows it, names of the
+// section being read, or fields of the block being read
+void _cge_mp_stmt(struct cge_model scalar M, struct cge_mp scalar MP, string scalar s)
+{
+    string rowvector w
+    string scalar key, val, lk
+    real scalar k, kind
+    w = _cge_mp_words(strtrim(s))
+    if (!cols(w)) return
+    if (_cge_mp_field(w[1], key, val)) {
+        lk = strlower(key)
+        if (substr(lk, 1, 1) == char(36)) lk = substr(lk, 2, .)
+        kind = _cge_find(("sectors" \ "commodities" \ "consumers"), lk)
+        if (kind) {
+            MP.sec = kind
+            if (val != "") _cge_mp_decl(M, MP, kind, val)
+            for (k = 2; k <= cols(w); k++) _cge_mp_decl(M, MP, kind, w[k])
+            return
+        }
+        if (lk == "model") {
+            if (!regexm(val, "^[A-Za-z_][A-Za-z_0-9]*$") | cols(w) > 1) _cge_fail("cge_mpsge: write model:name", 198)
+            if (MP.name != "") _cge_fail("cge_mpsge: the model is already named " + MP.name, 198)
+            MP.name = val
+            return
+        }
+        if (lk == "prod" | lk == "demand") {
+            _cge_mp_block(M, MP, lk, val)
+            MP.sec = 5
+            for (k = 2; k <= cols(w); k++) _cge_mp_word(M, MP, w[k])
+            return
+        }
+        if (anyof(("auxiliary", "constraint", "report"), lk)) {
+            _cge_fail("cge_mpsge: " + lk + ": is not available; write constraints with cge_variable and cge_equation", 198)
+        }
+    }
+    if (MP.sec == 0) _cge_fail("cge_mpsge: begin with a section: sectors:, commodities:, consumers:, prod: or demand:", 198)
+    for (k = 1; k <= cols(w); k++) {
+        if (MP.sec < 5) _cge_mp_decl(M, MP, MP.sec, w[k])
+        else _cge_mp_word(M, MP, w[k])
+    }
+}
+
+// A declared variable: a name with the indexes of its sets, as Y(s) or PL
+void _cge_mp_decl(struct cge_model scalar M, struct cge_mp scalar MP, real scalar kind, string scalar w)
+{
+    string scalar name, idx, cond
+    string rowvector ix
+    real scalar k
+    _cge_mp_ref(w, name, idx, cond)
+    if (cond != "") _cge_fail("cge_mpsge: a declaration takes no condition: " + w, 198)
+    if (rows(MP.dv)) {
+        if (anyof(MP.dv[., 2], name)) _cge_fail("cge_mpsge: " + name + " is already declared", 110)
+    }
+    if (strlen(name) > 12) _cge_fail("cge_mpsge: " + name + ": the names of sectors, commodities and consumers have at most 12 characters, so that the names made from them fit", 198)
+    if (substr(name, 1, 1) == "_") _cge_fail(name + ": names that begin with _ are kept for the package", 198)
+    ix = _cge_mp_ix(idx)
+    for (k = 1; k <= cols(ix); k++) {
+        if (!_cge_mp_isix(M, ix[k])) _cge_fail("cge_mpsge: " + ix[k] + " in the declaration of " + name + " is not the index of a set", 198)
+    }
+    MP.dv = MP.dv \ (strofreal(kind), name, idx)
+}
+
+// A reference: NAME or NAME(e1,e2), with a condition written with a dollar
+// sign and parentheses or, in a file, as MPSGE writes one, a dollar sign
+// before a parameter. The name, the indexes (labels without quotes, joined
+// by commas) and the condition
+void _cge_mp_ref(string scalar w, string scalar name, string scalar idx, string scalar cond)
+{
+    string scalar rest, c
+    real scalar k, d
+    if (!regexm(w, "^([A-Za-z_][A-Za-z_0-9]*)(.*)$")) _cge_fail("cge_mpsge: cannot read the name in " + w, 198)
+    name = regexs(1)
+    rest = regexs(2)
+    idx = cond = ""
+    if (substr(rest, 1, 1) == "(") {
+        d = 0
+        for (k = 1; k <= strlen(rest); k++) {
+            if (substr(rest, k, 1) == "(") d++
+            else if (substr(rest, k, 1) == ")") {
+                d--
+                if (!d) break
+            }
+        }
+        idx = subinstr(subinstr(subinstr(substr(rest, 2, k - 2), char(34), ""), char(39), ""), " ", "")
+        rest = substr(rest, k + 1, .)
+        if (idx == "" | strpos(idx, "(")) _cge_fail("cge_mpsge: cannot read the indexes in " + w, 198)
+    }
+    if (rest == "") return
+    if (substr(rest, 1, 1) != char(36) | strlen(rest) < 2) _cge_fail("cge_mpsge: cannot read " + w + "; a condition is written " + name + "(...)" + char(36) + "(condition)", 198)
+    c = substr(rest, 2, .)
+    if (substr(c, 1, 1) == "(") {
+        // in parentheses, unless they close before the end
+        d = 0
+        for (k = 1; k <= strlen(c); k++) {
+            if (substr(c, k, 1) == "(") d++
+            else if (substr(c, k, 1) == ")") {
+                d--
+                if (!d) break
+            }
+        }
+        if (k == strlen(c)) c = substr(c, 2, strlen(c) - 2)
+    }
+    cond = c
+}
+
+// The indexes of a reference, as written
+string rowvector _cge_mp_ix(string scalar idx)
+{
+    if (idx == "") return(J(1, 0, ""))
+    return(_cge_u_nodelim(tokens(idx, ","), ","))
+}
+
+// 1 if a token of a reference is an index, not a label
+real scalar _cge_mp_isix(struct cge_model scalar M, string scalar t)
+{
+    return(_cge_u_isindex(M, t) & !_cge_u_islabel(M, t))
+}
+
+// A block begun: prod:SECTOR or demand:CONSUMER, with indexes and a condition
+void _cge_mp_block(struct cge_model scalar M, struct cge_mp scalar MP, string scalar kind, string scalar head)
+{
+    string scalar name, idx, cond
+    if (head == "") _cge_fail("cge_mpsge: write " + kind + ":NAME", 198)
+    _cge_mp_ref(head, name, idx, cond)
+    if (rows(MP.bk)) {
+        if (anyof(MP.bk[., 2], name)) _cge_fail("cge_mpsge: " + name + " already has a block", 110)
+    }
+    MP.bk = MP.bk \ (kind, name, idx, cond, "", "")
+}
+
+// A field of the block being read: a record (o: and i: in a production
+// block, d: and e: in a demand block), a field of the last record or,
+// before the first record, an elasticity or a nest
+void _cge_mp_word(struct cge_model scalar M, struct cge_mp scalar MP, string scalar w)
+{
+    string scalar key, val, lk, kind, name, idx, cond, nest, par
+    real scalar b, r, col
+    b = rows(MP.bk)
+    kind = MP.bk[b, 1]
+    if (!_cge_mp_field(w, key, val)) _cge_fail("cge_mpsge: " + w + " is not a field, key:value, of block " + MP.bk[b, 2], 198)
+    lk = strlower(key)
+    r = rows(MP.rc)
+    if (r) {
+        if (MP.rc[r, 1] != strofreal(b)) r = 0
+    }
+    if ((kind == "prod" & (lk == "o" | lk == "i")) | (kind == "demand" & (lk == "d" | lk == "e"))) {
+        if (val == "") _cge_fail("cge_mpsge: " + key + ": needs a commodity", 198)
+        _cge_mp_ref(val, name, idx, cond)
+        MP.rc = MP.rc \ (strofreal(b), lk, name, idx, cond, "", "", "", "")
+        return
+    }
+    if (anyof(("o", "i", "d", "e"), lk)) {
+        _cge_fail("cge_mpsge: the records of a " + kind + " block are " + (kind == "prod" ? "o: and i:" : "d: and e:") + ", not " + key + ":", 198)
+    }
+    if (!r) {
+        // the block's own fields: its elasticities and nests
+        if (lk == "s" | (lk == "t" & kind == "prod")) {
+            col = (lk == "s" ? 5 : 6)
+            if (val == "") _cge_fail("cge_mpsge: " + key + ": needs an elasticity", 198)
+            if (MP.bk[b, col] != "") _cge_fail("cge_mpsge: " + key + ": is given twice in block " + MP.bk[b, 2], 198)
+            MP.bk[b, col] = val
+            return
+        }
+        if (!regexm(key, "^([A-Za-z][A-Za-z0-9]*)(\(([A-Za-z][A-Za-z0-9]*)\))?$")) {
+            _cge_fail("cge_mpsge: cannot read the field " + w + " of block " + MP.bk[b, 2], 198)
+        }
+        // the parent in parentheses, if any (regexs() of a group that does
+        // not take part in the match prints an error)
+        if (regexm(key, "^([A-Za-z][A-Za-z0-9]*)\(([A-Za-z][A-Za-z0-9]*)\)$")) {
+            nest = strlower(regexs(1))
+            par = strlower(regexs(2))
+        }
+        else {
+            nest = strlower(key)
+            par = "s"
+        }
+        if (val == "") _cge_fail("cge_mpsge: nest " + nest + " of block " + MP.bk[b, 2] + " needs an elasticity, as " + nest + ":0.5", 198)
+        if (anyof(("s", "t", "u", "zp", "mkt", "inc", "a", "p", "q", "n", "m", "r"), nest) | regexm(nest, "^(o|i|d|e|tx)[0-9]+$")) {
+            _cge_fail("cge_mpsge: " + nest + " is kept for the fields and variables of a block; name the nest otherwise", 198)
+        }
+        if (strlen(nest) > 10) _cge_fail("cge_mpsge: the name of nest " + nest + " has more than 10 characters", 198)
+        if (rows(MP.ns)) {
+            if (rows(select(MP.ns, (MP.ns[., 1] :== strofreal(b)) :& (MP.ns[., 2] :== nest)))) {
+                _cge_fail("cge_mpsge: nest " + nest + " is declared twice in block " + MP.bk[b, 2], 110)
+            }
+        }
+        MP.ns = MP.ns \ (strofreal(b), nest, par, val)
+        return
+    }
+    // a field of the last record
+    if (lk == "q" | lk == "p") {
+        if (val == "") _cge_fail("cge_mpsge: " + key + ": needs a value", 198)
+        col = (lk == "q" ? 6 : 7)
+        if (MP.rc[r, col] != "") _cge_fail("cge_mpsge: " + key + ": is given twice in a record of block " + MP.bk[b, 2], 198)
+        if (lk == "p" & MP.rc[r, 2] == "e") _cge_fail("cge_mpsge: an endowment takes q:, not p:", 198)
+        MP.rc[r, col] = val
+        return
+    }
+    if (lk == "a") {
+        if (kind == "demand") _cge_fail("cge_mpsge: taxes are fields of the records of production blocks", 198)
+        if (val == "") _cge_fail("cge_mpsge: a: needs a consumer, the agent who receives the tax", 198)
+        if (MP.rc[r, 9] != "" & substr(MP.rc[r, 9], strlen(MP.rc[r, 9]), 1) == char(9)) {
+            _cge_fail("cge_mpsge: a: is not followed by t:, the rate of its tax", 198)
+        }
+        MP.rc[r, 9] = MP.rc[r, 9] + (MP.rc[r, 9] != "" ? char(10) : "") + val + char(9)
+        return
+    }
+    if (lk == "t") {
+        if (MP.rc[r, 9] == "" | substr(MP.rc[r, 9], strlen(MP.rc[r, 9]), 1) != char(9)) {
+            _cge_fail("cge_mpsge: t: in a record is the rate of a tax and follows a:, the agent who receives it", 198)
+        }
+        if (val == "") _cge_fail("cge_mpsge: t: needs a rate", 198)
+        MP.rc[r, 9] = MP.rc[r, 9] + val
+        return
+    }
+    if (anyof(("n", "m", "r"), lk)) _cge_fail("cge_mpsge: " + key + ": (endogenous taxes and endowments) is not available", 198)
+    // the nest of the record, written name:
+    if (val != "") _cge_fail("cge_mpsge: unknown field " + w + " in block " + MP.bk[b, 2], 198)
+    if (MP.rc[r, 2] == "e") _cge_fail("cge_mpsge: an endowment belongs to no nest", 198)
+    if (MP.rc[r, 8] != "") _cge_fail("cge_mpsge: a record of block " + MP.bk[b, 2] + " is put in two nests", 198)
+    MP.rc[r, 8] = strlower(key)
+}
+
+// cge_mpsge end: the model written as user variables and equations; the
+// standalone model is restored if any of them fails
+void _cge_mp_end(string scalar num)
+{
+    struct cge_model scalar M
+    struct cge_mp scalar MP
+    struct cge_mpr rowvector R
+    string colvector vdef, edef, ndef, inc, hdef
+    string matrix dv, bk
+    string rowvector G, ix
+    string scalar nm, d, ncond, nkind, nname, nlab, s, mname
+    real colvector pos
+    real scalar k, j, b, n0, n1, worst, ne, nv, k0
+    real colvector cnt
+    real colvector L, Rr
+    pointer() scalar q
+    if (findexternal("cge__mp") == NULL) _cge_fail("cge_mpsge: no model is being read; begin one with sectors:, commodities:, consumers: and blocks", 198)
+    MP = _cge_mp_load()
+    M = _cge_load()
+    if (!_cge_sa(M)) _cge_fail("cge_mpsge builds a standalone model: start one with cge_model new", 198)
+    R = _cge_mp_check(M, MP)
+    dv = MP.dv
+    bk = MP.bk
+    if ((q = findexternal("cge__mp_model")) == NULL) q = crexternal("cge__mp_model")
+    *q = M
+    n0 = rows(M.uelab)
+    k0 = rows(M.uvdef)
+    // the definitions built together, in two batches, and one refresh of the
+    // equations after the last of them
+    if (findexternal("cge__ubatch") == NULL) (void) crexternal("cge__ubatch")
+    // the activity levels and prices, at 1, and the variables of the
+    // production blocks
+    vdef = J(0, 1, "")
+    for (k = 1; k <= rows(dv); k++) {
+        if (dv[k, 1] != "1") continue
+        b = _cge_find(bk[., 2], dv[k, 2])
+        vdef = vdef \ (dv[k, 2] + _cge_mp_paren(dv[k, 3]) + (bk[b, 4] != "" ? char(36) + "(" + bk[b, 4] + ")" : "") + ", value(1) fixed")
+    }
+    for (k = 1; k <= rows(dv); k++) {
+        if (dv[k, 1] != "2") continue
+        d = _cge_mp_market(M, MP, R, k, "", "", 1)
+        if (dv[k, 3] == "") d = ""
+        vdef = vdef \ (dv[k, 2] + _cge_mp_paren(dv[k, 3]) + (d != "" ? char(36) + "(" + d + ")" : "") + ", value(1) fixed")
+    }
+    for (b = 1; b <= rows(bk); b++) {
+        if (bk[b, 1] == "prod") vdef = vdef \ _cge_mp_prodvars(M, MP, R, b)
+    }
+    // the incomes, at their values at the reference point, fixed as each
+    // pairs with its income balance
+    inc = J(rows(dv), 1, "")
+    hdef = J(0, 1, "")
+    for (k = 1; k <= rows(dv); k++) {
+        if (dv[k, 1] != "3") continue
+        b = _cge_find(bk[., 2], dv[k, 2])
+        inc[k] = _cge_mp_income(M, MP, R, k)
+        hdef = hdef \ (dv[k, 2] + _cge_mp_paren(dv[k, 3]) + (bk[b, 4] != "" ? char(36) + "(" + bk[b, 4] + ")" : "") +
+                       ", value(" + inc[k] + ") fixed")
+    }
+    vdef = vdef \ hdef
+    for (k = 1; k <= rows(vdef); k++) _cge_u_addvar(vdef[k])
+    _cge_ub_finish(k0)
+    // the numeraire: as given, or, as MPSGE takes it, the income of the
+    // consumer with the largest income at the reference point
+    M = _cge_load()
+    _cge_mp_numeraire(M, MP, num, nkind, nname, nlab, ncond)
+    // the variables of the demand blocks, then the equations
+    ndef = J(0, 1, "")
+    for (b = 1; b <= rows(bk); b++) {
+        if (bk[b, 1] == "demand") ndef = ndef \ _cge_mp_demvars(M, MP, R, b)
+    }
+    for (k = 1; k <= rows(ndef); k++) _cge_u_addvar(ndef[k])
+    edef = J(0, 1, "")
+    for (b = 1; b <= rows(bk); b++) {
+        if (bk[b, 1] == "prod") edef = edef \ _cge_mp_zp(M, MP, R, b)
+    }
+    for (k = 1; k <= rows(dv); k++) {
+        if (dv[k, 1] != "2") continue
+        if (nkind == "2" & nname == dv[k, 2] & dv[k, 3] == "") continue
+        edef = edef \ _cge_mp_market(M, MP, R, k, (nkind == "2" & nname == dv[k, 2] ? ncond : ""), dv[k, 2] + "_mkt", 0)
+    }
+    for (k = 1; k <= rows(dv); k++) {
+        if (dv[k, 1] != "3") continue
+        if (nkind == "3" & nname == dv[k, 2] & dv[k, 3] == "") continue
+        b = _cge_find(bk[., 2], dv[k, 2])
+        G = _cge_mp_ix(dv[k, 3])
+        s = _cge_mp_and(bk[b, 4], (nkind == "3" & nname == dv[k, 2] ? ncond : ""))
+        edef = edef \ (dv[k, 2] + "_inc" + _cge_mp_paren(dv[k, 3]) + (s != "" ? char(36) + "(" + s + ")" : "") + ": " +
+                       dv[k, 2] + _cge_mp_paren(dv[k, 3]) + " = " + inc[k] + ", perp(" + dv[k, 2] + _cge_mp_paren(dv[k, 3]) + ") lower(0)")
+    }
+    for (k = 1; k <= rows(edef); k++) _cge_u_addeq(edef[k])
+    _cge_ub_finish(k0)
+    _cge_ub_clear()
+    M = _cge_load()
+    _cge_u_refresh(M)
+    // the reference point against the model, as MPSGE's check of the
+    // benchmark
+    n1 = rows(M.uelab)
+    _cge_u_eval(M, M.p0, M.x0, L, Rr)
+    worst = 0
+    for (k = n0 + 1; k <= rows(L); k++) worst = max((worst, abs(L[k] - Rr[k]) / max((1, abs(L[k]), abs(Rr[k])))))
+    mname = (MP.name != "" ? MP.name : "mpsge")
+    if (cols(M.umps) != 3) M.umps = J(0, 3, "")
+    M.umps = M.umps \ (mname, invtokens(MP.text', char(10)), invtokens((vdef \ ndef \ edef)', char(10)))
+    _cge_store(M)
+    rmexternal("cge__mp_model")
+    _cge_mp_drop()
+    nv = rows(vdef) + rows(ndef)
+    ne = rows(edef)
+    st_global("r(name)", mname)
+    st_global("r(numeraire)", nname + nlab)
+    st_numscalar("r(numeraire_value)", _cge_mp_numval(M, nname, nlab))
+    st_numscalar("r(N_variables)", nv)
+    st_numscalar("r(N_equations)", ne)
+    // the elements of the sectors, commodities and consumers that exist
+    cnt = J(3, 1, 0)
+    for (k = 1; k <= rows(dv); k++) {
+        pos = _cge_vpos(M, _cge_vidx(M, dv[k, 2]))
+        cnt[strtoreal(dv[k, 1])] = cnt[strtoreal(dv[k, 1])] + sum(M.exists[pos])
+    }
+    st_numscalar("r(N_sectors)", cnt[1])
+    st_numscalar("r(N_commodities)", cnt[2])
+    st_numscalar("r(N_consumers)", cnt[3])
+    st_numscalar("r(N_blocks)", rows(bk))
+    st_numscalar("r(N_elements)", n1 - n0)
+    st_numscalar("r(gap)", worst)
+}
+
+// The model written, as cge_mpsge end reports it from r()
+void _cge_mp_report()
+{
+    real scalar nc
+    nc = st_numscalar("r(N_commodities)")
+    printf("{txt}MPSGE model {res}%s{txt}: %f sector(s), %f commodit%s and %f consumer(s), in %f block(s)\n", st_global("r(name)"),
+           st_numscalar("r(N_sectors)"), nc, (nc == 1 ? "y" : "ies"), st_numscalar("r(N_consumers)"), st_numscalar("r(N_blocks)"))
+    printf("{txt}written as %f user variable(s) and %f equation(s), %f elements in all\n",
+           st_numscalar("r(N_variables)"), st_numscalar("r(N_equations)"), st_numscalar("r(N_elements)"))
+    printf("{txt}Numeraire: {res}%s{txt}, fixed at {res}%s\n", st_global("r(numeraire)"),
+           strtrim(strofreal(st_numscalar("r(numeraire_value)"), "%12.6g")))
+    printf("{txt}Reference point: largest relative gap of the equations {res}%9.2e\n", st_numscalar("r(gap)"))
+}
+
+// The definitions added one after another without the refresh of the
+// equations' masks, scales and pattern, which follows them
+void _cge_ub_clear()
+{
+    if (findexternal("cge__ubatch") != NULL) rmexternal("cge__ubatch")
+}
+
+// The definitions added after user variable k0 built together, as
+// _cge_u_newrow and _cge_u_addeq build each one otherwise: the base values
+// in order, then the box pairs with the scales of the new variables
+void _cge_ub_finish(real scalar k0)
+{
+    struct cge_model scalar M
+    real colvector x0, pos
+    real scalar k
+    M = _cge_load()
+    x0 = M.x0
+    _cge_u_build(M, M.p0, x0)
+    for (k = k0 + 1; k <= rows(M.uvdef); k++) {
+        pos = _cge_vpos(M, rows(M.vname) - M.nuv + k)
+        if (!rows(pos)) continue
+        M.x0[pos] = x0[pos]
+        M.xcur[pos] = x0[pos]
+        M.xscale[pos] = abs(x0[pos]) :* (abs(x0[pos]) :> 1e-12) + (abs(x0[pos]) :<= 1e-12)
+        if (cols(M.simx)) M.simx[pos, .] = J(1, cols(M.simx), x0[pos])
+        M.fixed[pos] = J(rows(pos), 1, (M.uvdef[k, 6] == "fixed"))
+    }
+    _cge_u_build(M, M.p0, M.x0)
+    if (rows(M.ubox)) _cge_u_boxcheck(M)
+    _cge_store(M)
+}
+
+// When cge_mpsge end fails: the model as it was, the statements kept
+void _cge_mp_abort()
+{
+    pointer() scalar q
+    _cge_ub_clear()
+    if ((q = findexternal("cge__mp_model")) != NULL) {
+        _cge_store(*q)
+        rmexternal("cge__mp_model")
+    }
+}
+
+// The model checked, and its records prepared
+struct cge_mpr rowvector _cge_mp_check(struct cge_model scalar M, struct cge_mp scalar MP)
+{
+    struct cge_mpr rowvector R
+    string matrix dv, bk, ns, rc, tx
+    string rowvector bix, refs, tp, ar, ai
+    string scalar nest, aname, aidx, acond, t, s
+    real scalar k, j, b, m, kk, nr, n
+    dv = MP.dv
+    bk = MP.bk
+    ns = MP.ns
+    rc = MP.rc
+    if (!rows(dv)) _cge_fail("cge_mpsge: the model declares no sectors, commodities or consumers", 198)
+    if (!rows(bk)) _cge_fail("cge_mpsge: the model has no blocks", 198)
+    for (k = 1; k <= 3; k++) {
+        if (!any(dv[., 1] :== strofreal(k))) _cge_fail("cge_mpsge: the model declares no " + ("sectors" \ "commodities" \ "consumers")[k], 198)
+    }
+    // every sector has one production block, every consumer one demand block,
+    // over the indexes of its declaration
+    for (k = 1; k <= rows(dv); k++) {
+        if (dv[k, 1] == "2") continue
+        b = _cge_find(bk[., 2], dv[k, 2])
+        if (!b) _cge_fail("cge_mpsge: " + (dv[k, 1] == "1" ? "sector " + dv[k, 2] + " has no production block, prod:" : "consumer " + dv[k, 2] + " has no demand block, demand:") + dv[k, 2], 198)
+        if (bk[b, 1] != (dv[k, 1] == "1" ? "prod" : "demand")) {
+            _cge_fail("cge_mpsge: " + dv[k, 2] + " is a " + (dv[k, 1] == "1" ? "sector; its block is prod:" : "consumer; its block is demand:") + dv[k, 2], 198)
+        }
+        if (bk[b, 3] != dv[k, 3]) _cge_fail("cge_mpsge: write the block of " + dv[k, 2] + " over the indexes of its declaration, " + dv[k, 2] + _cge_mp_paren(dv[k, 3]), 198)
+    }
+    for (b = 1; b <= rows(bk); b++) {
+        k = _cge_find(dv[., 2], bk[b, 2])
+        if (!k) _cge_fail("cge_mpsge: " + bk[b, 2] + " has a block but is not declared", 111)
+        if (dv[k, 1] == "2") _cge_fail("cge_mpsge: " + bk[b, 2] + " is a commodity; blocks belong to sectors and consumers", 198)
+        if (bk[b, 6] != "" & bk[b, 1] == "demand") _cge_fail("cge_mpsge: a demand block has no t:", 198)
+        if (bk[b, 3] == "" & bk[b, 4] != "") _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no index, so it takes no condition", 198)
+        // the defaults, as GAMS's MPSGE takes them: s:0 and t:0, so that a
+        // demand block without s: is Leontief
+        if (bk[b, 5] == "") bk[b, 5] = "0"
+        if (bk[b, 6] == "" & bk[b, 1] == "prod") bk[b, 6] = "0"
+        for (j = 5; j <= 6; j++) {
+            if (bk[b, j] != "") {
+                if (strtoreal(bk[b, j]) < 0) _cge_fail("cge_mpsge: an elasticity of block " + bk[b, 2] + " is negative", 198)
+            }
+        }
+    }
+    MP.bk = bk
+    // nests: each within the top of its side or another nest
+    for (k = 1; k <= rows(ns); k++) {
+        b = strtoreal(ns[k, 1])
+        if (strtoreal(ns[k, 4]) < 0) _cge_fail("cge_mpsge: nest " + ns[k, 2] + " of block " + bk[b, 2] + " has a negative elasticity", 198)
+        if (bk[b, 1] == "demand" & _cge_mp_side(MP, b, ns[k, 2]) == 2) _cge_fail("cge_mpsge: the nests of a demand block are within s", 198)
+        (void) _cge_mp_side(MP, b, ns[k, 2])
+    }
+    nr = rows(rc)
+    if (!nr) _cge_fail("cge_mpsge: the blocks have no records", 198)
+    R = cge_mpr(nr)
+    for (k = 1; k <= nr; k++) {
+        b = strtoreal(rc[k, 1])
+        R[k].b = b
+        R[k].f = rc[k, 2]
+        R[k].sym = rc[k, 3]
+        j = _cge_find(dv[., 2], rc[k, 3])
+        if (!j) _cge_fail("cge_mpsge: " + rc[k, 3] + " in block " + bk[b, 2] + " is not declared", 111)
+        if (dv[j, 1] != "2") _cge_fail("cge_mpsge: " + rc[k, 3] + " in block " + bk[b, 2] + " is not a commodity", 198)
+        refs = _cge_mp_ix(rc[k, 4])
+        if (cols(refs) != cols(_cge_mp_ix(dv[j, 3]))) {
+            _cge_fail("cge_mpsge: " + rc[k, 3] + _cge_mp_paren(rc[k, 4]) + " in block " + bk[b, 2] + " needs " + strofreal(cols(_cge_mp_ix(dv[j, 3]))) + " index(es)", 198)
+        }
+        R[k].refs = refs
+        R[k].pref = rc[k, 3] + _cge_mp_paren(rc[k, 4])
+        // the record's indexes: the block's, then those of its commodity
+        // beyond them
+        bix = _cge_mp_ix(bk[b, 3])
+        R[k].L = J(1, 0, "")
+        for (m = 1; m <= cols(refs); m++) {
+            if (!_cge_mp_isix(M, refs[m])) {
+                if (!_cge_u_islabel(M, refs[m])) _cge_fail("cge_mpsge: " + refs[m] + " in " + R[k].pref + " is neither an index nor a label", 198)
+                continue
+            }
+            if (anyof(bix, refs[m])) continue
+            if (anyof(R[k].L, refs[m])) _cge_fail("cge_mpsge: index " + refs[m] + " is given twice in " + R[k].pref, 198)
+            R[k].L = R[k].L, refs[m]
+        }
+        R[k].D = bix, R[k].L
+        // the quantity and the condition: a record whose quantity is zero
+        // does not exist
+        R[k].q = (rc[k, 6] != "" ? rc[k, 6] : "1")
+        R[k].lcr = rc[k, 5]
+        if (strtoreal(R[k].q) >= .) R[k].lcr = _cge_mp_and(R[k].lcr, _cge_mp_paren2(R[k].q) + " != 0")
+        else if (strtoreal(R[k].q) == 0) R[k].lcr = "0"
+        R[k].lc = _cge_mp_and(bk[b, 4], R[k].lcr)
+        // the nest
+        nest = rc[k, 8]
+        if (R[k].f != "e") {
+            if (nest == "") nest = (R[k].f == "o" ? "t" : "s")
+            if (nest != "s" & nest != "t") {
+                if (!rows(ns)) _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no nest " + nest, 111)
+                if (!rows(select(ns, (ns[., 1] :== strofreal(b)) :& (ns[., 2] :== nest)))) _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no nest " + nest, 111)
+            }
+            if (_cge_mp_side(MP, b, nest) != (R[k].f == "o" ? 2 : 1)) {
+                _cge_fail("cge_mpsge: " + (R[k].f == "o" ? "an output of block " + bk[b, 2] + " belongs in t or a nest within it" : "an input or demand of block " + bk[b, 2] + " belongs in s or a nest within it"), 198)
+            }
+        }
+        R[k].nest = nest
+        // the taxes: agent, rate, and the variable of their revenue
+        R[k].tax = J(0, 3, "")
+        if (rc[k, 9] != "") {
+            tp = tokens(rc[k, 9], char(10))
+            n = 0
+            for (m = 1; m <= cols(tp); m++) {
+                if (tp[m] == char(10)) continue
+                ar = tokens(tp[m], char(9))
+                if (cols(ar) != 3) _cge_fail("cge_mpsge: a: in a record of block " + bk[b, 2] + " is not followed by t:, the rate of its tax", 198)
+                _cge_mp_ref(ar[1], aname, aidx, acond)
+                j = _cge_find(dv[., 2], aname)
+                if (!j) _cge_fail("cge_mpsge: agent " + aname + " is not declared", 111)
+                if (dv[j, 1] != "3") _cge_fail("cge_mpsge: agent " + aname + " is not a consumer", 198)
+                if (cols(_cge_mp_ix(aidx)) != cols(_cge_mp_ix(dv[j, 3]))) _cge_fail("cge_mpsge: agent " + ar[1] + " needs " + strofreal(cols(_cge_mp_ix(dv[j, 3]))) + " index(es)", 198)
+                if (acond != "") _cge_fail("cge_mpsge: an agent takes no condition", 198)
+                ai = _cge_mp_ix(aidx)
+                for (j = 1; j <= cols(ai); j++) {
+                    if (_cge_mp_isix(M, ai[j]) & !anyof(R[k].D, ai[j])) _cge_fail("cge_mpsge: index " + ai[j] + " of agent " + aname + " is not an index of its record", 198)
+                    if (!_cge_mp_isix(M, ai[j]) & !_cge_u_islabel(M, ai[j])) _cge_fail("cge_mpsge: " + ai[j] + " of agent " + aname + " is neither an index nor a label", 198)
+                }
+                n++
+                R[k].tax = R[k].tax \ (ar[1], ar[3], "")
+            }
+        }
+        // the relative price (tax-inclusive for inputs, net of tax for
+        // outputs, against the reference price) and the value at reference
+        // prices
+        t = ""
+        for (m = 1; m <= rows(R[k].tax); m++) t = t + (t != "" ? " + " : "") + _cge_mp_paren2(R[k].tax[m, 2])
+        s = (rc[k, 7] != "" ? rc[k, 7] : "1")
+        R[k].rel = R[k].pref
+        if (t != "") R[k].rel = R[k].rel + " * (1 " + (R[k].f == "o" ? "- " : "+ ") + (rows(R[k].tax) > 1 ? "(" + t + ")" : t) + ")"
+        if (s != "1") R[k].rel = R[k].rel + " / " + _cge_mp_paren2(s)
+        if (R[k].rel != R[k].pref) R[k].rel = "(" + R[k].rel + ")"
+        R[k].val = (s == "1" ? _cge_mp_paren2(R[k].q) : _cge_mp_paren2(s) + " * " + _cge_mp_paren2(R[k].q))
+        if (R[k].f == "e" & s != "1") _cge_fail("cge_mpsge: an endowment takes no reference price", 198)
+    }
+    // the variables of the records: B_ok, B_ik, B_dk; the taxes B_txk
+    for (b = 1; b <= rows(bk); b++) {
+        kk = 0
+        for (k = 1; k <= nr; k++) {
+            if (R[k].b != b) continue
+            kk++
+            if (R[k].f != "e") R[k].var = bk[b, 2] + "_" + R[k].f + strofreal(kk)
+            for (m = 1; m <= rows(R[k].tax); m++) R[k].tax[m, 3] = bk[b, 2] + "_tx" + strofreal(kk) + (m > 1 ? "_" + strofreal(m) : "")
+        }
+        if (bk[b, 1] == "prod") {
+            if (!_cge_mp_has(R, b, "o")) _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no output, o:", 198)
+            if (!_cge_mp_has(R, b, "i")) _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no input, i:", 198)
+        }
+        else if (!_cge_mp_has(R, b, "d")) _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no demand, d:", 198)
+    }
+    // every nest holds a record
+    for (k = 1; k <= rows(ns); k++) {
+        b = strtoreal(ns[k, 1])
+        n = 0
+        for (j = 1; j <= nr; j++) {
+            if (R[j].b == b & R[j].nest != "") n = n + _cge_mp_within(MP, b, R[j].nest, ns[k, 2])
+        }
+        if (!n) _cge_fail("cge_mpsge: nest " + ns[k, 2] + " of block " + bk[b, 2] + " holds no record", 198)
+    }
+    return(R)
+}
+
+// 1 if block b has a record of field f
+real scalar _cge_mp_has(struct cge_mpr rowvector R, real scalar b, string scalar f)
+{
+    real scalar k
+    for (k = 1; k <= cols(R); k++) if (R[k].b == b & R[k].f == f) return(1)
+    return(0)
+}
+
+// The parent of nest n of block b ("" for s and t)
+string scalar _cge_mp_parent(struct cge_mp scalar MP, real scalar b, string scalar n)
+{
+    real scalar k
+    if (n == "s" | n == "t") return("")
+    for (k = 1; k <= rows(MP.ns); k++) {
+        if (MP.ns[k, 1] == strofreal(b) & MP.ns[k, 2] == n) return(MP.ns[k, 3])
+    }
+    _cge_fail("cge_mpsge: block " + MP.bk[b, 2] + " has no nest " + n, 111)
+    return("")
+}
+
+// The elasticity of nest n of block b
+string scalar _cge_mp_elast(struct cge_mp scalar MP, real scalar b, string scalar n)
+{
+    real scalar k
+    if (n == "s") return(MP.bk[b, 5])
+    if (n == "t") return(MP.bk[b, 6])
+    for (k = 1; k <= rows(MP.ns); k++) {
+        if (MP.ns[k, 1] == strofreal(b) & MP.ns[k, 2] == n) return(MP.ns[k, 4])
+    }
+    return("")
+}
+
+// The side of nest n: 1 within s (inputs and demands), 2 within t (outputs)
+real scalar _cge_mp_side(struct cge_mp scalar MP, real scalar b, string scalar n0)
+{
+    string scalar n
+    real scalar d
+    // a copy: Mata passes arguments by address
+    n = n0
+    d = 0
+    while (n != "s" & n != "t") {
+        n = _cge_mp_parent(MP, b, n)
+        if (++d > rows(MP.ns) + 1) _cge_fail("cge_mpsge: the nests of block " + MP.bk[b, 2] + " form a loop", 198)
+    }
+    return(n == "s" ? 1 : 2)
+}
+
+// 1 if nest a is nest c or within it
+real scalar _cge_mp_within(struct cge_mp scalar MP, real scalar b, string scalar a0, string scalar c)
+{
+    string scalar a
+    a = a0
+    while (a != "") {
+        if (a == c) return(1)
+        a = _cge_mp_parent(MP, b, a)
+    }
+    return(0)
+}
+
+// The nests of side sd of block b, each after the nests within it
+string colvector _cge_mp_post(struct cge_mp scalar MP, real scalar b, real scalar sd)
+{
+    string colvector nn
+    real colvector depth
+    real scalar k, d
+    string scalar a
+    nn = (sd == 1 ? "s" : "t")
+    for (k = 1; k <= rows(MP.ns); k++) {
+        // the nests of other blocks are not looked at (Mata evaluates both
+        // sides of &)
+        if (MP.ns[k, 1] != strofreal(b)) continue
+        if (_cge_mp_side(MP, b, MP.ns[k, 2]) == sd) nn = nn \ MP.ns[k, 2]
+    }
+    depth = J(rows(nn), 1, 0)
+    for (k = 1; k <= rows(nn); k++) {
+        a = nn[k]
+        d = 0
+        while ((a = _cge_mp_parent(MP, b, a)) != "") d++
+        depth[k] = d
+    }
+    return(nn[order((-depth, (1::rows(nn))), (1, 2))])
+}
+
+// The variable of the price index of nest n of block b, with its indexes
+string scalar _cge_mp_nvar(struct cge_mp scalar MP, real scalar b, string scalar n)
+{
+    return(MP.bk[b, 2] + "_" + n + _cge_mp_paren(MP.bk[b, 3]))
+}
+
+// A record's expression summed over its indexes beyond the block's, under
+// its condition
+string scalar _cge_mp_lsum(string rowvector L, string scalar c, string scalar body)
+{
+    if (!cols(L)) return(c != "" ? "(" + body + ")" + char(36) + "(" + c + ")" : body)
+    return("sum(" + (cols(L) == 1 ? L : "(" + invtokens(L, ",") + ")") + (c != "" ? char(36) + "(" + c + ")" : "") + ", " + body + ")")
+}
+
+// The value at reference prices of nest n of block b: the records within it
+string scalar _cge_mp_nval(struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b, string scalar n)
+{
+    string scalar s
+    real scalar k
+    s = ""
+    for (k = 1; k <= cols(R); k++) {
+        if (R[k].b != b | R[k].f == "e") continue
+        if (!_cge_mp_within(MP, b, R[k].nest, n)) continue
+        s = s + (s != "" ? " + " : "") + _cge_mp_lsum(R[k].L, R[k].lcr, R[k].val)
+    }
+    return("(" + s + ")")
+}
+
+// 1 if a value is surely positive: sums and products of positive numbers
+real scalar _cge_mp_pos(string scalar v)
+{
+    return(regexm(v, "^[0-9.() +*]+$") & regexm(v, "[1-9]"))
+}
+
+// x raised to the exponent of the index of a nest of side sd: 1 - e (CES) or
+// 1 + e (CET); ln(x) where lnf is set
+string scalar _cge_mp_pw(string scalar x, string scalar e, real scalar sd, real scalar lnf)
+{
+    real scalar v
+    if (lnf) return("ln(" + x + ")")
+    v = strtoreal(e)
+    if (v < .) {
+        if (v == 0) return(x)
+        return(x + "^" + _cge_mp_num(sd == 1 ? 1 - v : 1 + v))
+    }
+    return(x + "^(1 " + (sd == 1 ? "- " : "+ ") + _cge_mp_paren2(e) + ")")
+}
+
+// A number written for an exponent: in parentheses when negative
+string scalar _cge_mp_num(real scalar v)
+{
+    return(v < 0 ? "(" + _cge_gnum(v) + ")" : _cge_gnum(v))
+}
+
+// The terms of the index of nest n (side sd) of block b, each weighted by
+// its value at reference prices
+string scalar _cge_mp_terms(struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b, string scalar n,
+                            real scalar sd, real scalar lnf)
+{
+    string scalar s, e, v
+    real scalar k
+    e = _cge_mp_elast(MP, b, n)
+    s = ""
+    for (k = 1; k <= cols(R); k++) {
+        if (R[k].b != b | R[k].nest != n) continue
+        s = s + (s != "" ? " + " : "") + _cge_mp_lsum(R[k].L, R[k].lcr, R[k].val + " * " + _cge_mp_pw(R[k].rel, e, sd, lnf))
+    }
+    for (k = 1; k <= rows(MP.ns); k++) {
+        if (MP.ns[k, 1] != strofreal(b) | MP.ns[k, 3] != n) continue
+        v = _cge_mp_nval(MP, R, b, MP.ns[k, 2])
+        s = s + (s != "" ? " + " : "") + "(" + v + " * " + _cge_mp_pw(_cge_mp_nvar(MP, b, MP.ns[k, 2]), e, sd, lnf) + ")" +
+            (_cge_mp_pos(v) ? "" : char(36) + "(" + v + " != 0)")
+    }
+    return(s)
+}
+
+// The price index of nest n (side sd) of block b: the CES (or CET) index of
+// the relative prices of its records and nests, 1 at the reference point
+string scalar _cge_mp_index(struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b, string scalar n, real scalar sd)
+{
+    string scalar e, V, E
+    real scalar v
+    e = _cge_mp_elast(MP, b, n)
+    V = _cge_mp_nval(MP, R, b, n)
+    v = strtoreal(e)
+    if (v < .) {
+        if (sd == 1 & v == 1) return("exp((" + _cge_mp_terms(MP, R, b, n, sd, 1) + ") / " + V + ")")
+        if (v == 0) return("(" + _cge_mp_terms(MP, R, b, n, sd, 0) + ") / " + V)
+        return("((" + _cge_mp_terms(MP, R, b, n, sd, 0) + ") / " + V + ")^" + _cge_mp_num(1 / (sd == 1 ? 1 - v : 1 + v)))
+    }
+    E = _cge_mp_paren2(e)
+    if (sd == 2) return("((" + _cge_mp_terms(MP, R, b, n, sd, 0) + ") / " + V + ")^(1 / (1 + " + E + "))")
+    // an elasticity given by an expression: Cobb-Douglas where it is 1
+    return("(((" + _cge_mp_terms(MP, R, b, n, sd, 0) + ") / " + V + ")^(1 / (1 - " + E + ")))" + char(36) + "(" + E + " != 1) + (exp((" +
+           _cge_mp_terms(MP, R, b, n, sd, 1) + ") / " + V + "))" + char(36) + "(" + E + " == 1)")
+}
+
+// A factor of a compensated demand or supply: (a / c) raised to elasticity e
+string scalar _cge_mp_fac(string scalar a, string scalar c, string scalar e)
+{
+    real scalar v
+    v = strtoreal(e)
+    if (v == 0) return("")
+    if (v == 1) return(" * " + a + " / " + c)
+    return(" * (" + a + " / " + c + ")^" + (v < . ? _cge_mp_num(v) : "(" + e + ")"))
+}
+
+// The chain of factors from a record's relative price up its nests
+string scalar _cge_mp_chain(struct cge_mp scalar MP, struct cge_mpr scalar r)
+{
+    string scalar s, n, m
+    real scalar b, sd
+    b = r.b
+    n = r.nest
+    sd = (r.f == "o" ? 2 : 1)
+    s = (sd == 1 ? _cge_mp_fac(_cge_mp_nvar(MP, b, n), r.rel, _cge_mp_elast(MP, b, n)) :
+                   _cge_mp_fac(r.rel, _cge_mp_nvar(MP, b, n), _cge_mp_elast(MP, b, n)))
+    while ((m = _cge_mp_parent(MP, b, n)) != "") {
+        s = s + (sd == 1 ? _cge_mp_fac(_cge_mp_nvar(MP, b, m), _cge_mp_nvar(MP, b, n), _cge_mp_elast(MP, b, m)) :
+                           _cge_mp_fac(_cge_mp_nvar(MP, b, n), _cge_mp_nvar(MP, b, m), _cge_mp_elast(MP, b, m)))
+        n = m
+    }
+    return(s)
+}
+
+// The domain of the index of nest n of block b
+string scalar _cge_mp_ndom(struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b, string scalar n)
+{
+    string scalar V
+    V = _cge_mp_nval(MP, R, b, n)
+    return(_cge_mp_and(MP.bk[b, 4], (n == "s" | n == "t" | _cge_mp_pos(V) ? "" : V + " != 0")))
+}
+
+// The variables of production block b: the price indexes of its nests, from
+// the innermost out, the quantity of each record, and the revenue of each tax
+string colvector _cge_mp_prodvars(struct cge_model scalar M, struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b)
+{
+    string colvector v, nn
+    string scalar B, ix
+    real scalar sd, k, m
+    B = MP.bk[b, 2]
+    ix = _cge_mp_paren(MP.bk[b, 3])
+    v = J(0, 1, "")
+    for (sd = 1; sd <= 2; sd++) {
+        nn = _cge_mp_post(MP, b, sd)
+        for (k = 1; k <= rows(nn); k++) {
+            v = v \ _cge_mp_def(B + "_" + nn[k], MP.bk[b, 3], _cge_mp_ndom(MP, R, b, nn[k]), _cge_mp_index(MP, R, b, nn[k], sd))
+        }
+    }
+    for (k = 1; k <= cols(R); k++) {
+        if (R[k].b != b) continue
+        v = v \ _cge_mp_def(R[k].var, invtokens(R[k].D, ","), R[k].lc, B + ix + " * " + _cge_mp_paren2(R[k].q) + _cge_mp_chain(MP, R[k]))
+        for (m = 1; m <= rows(R[k].tax); m++) {
+            v = v \ _cge_mp_def(R[k].tax[m, 3], invtokens(R[k].D, ","), R[k].lc,
+                               _cge_mp_paren2(R[k].tax[m, 2]) + " * " + R[k].pref + " * " + R[k].var + _cge_mp_paren(invtokens(R[k].D, ",")))
+        }
+    }
+    return(v)
+}
+
+// The variables of demand block b: the price indexes of its nests; the
+// consumer's utility, 1 at the reference point, its income against the
+// cost of the reference demands at the price index of the block (written
+// apart, so that the value of the reference demands, a sum over their
+// indexes, is not written where those indexes are bound); and the quantity
+// of each demand
+string colvector _cge_mp_demvars(struct cge_model scalar M, struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b)
+{
+    string colvector v, nn
+    string scalar H, ix
+    real scalar k
+    H = MP.bk[b, 2]
+    ix = _cge_mp_paren(MP.bk[b, 3])
+    v = J(0, 1, "")
+    nn = _cge_mp_post(MP, b, 1)
+    for (k = 1; k <= rows(nn); k++) {
+        v = v \ _cge_mp_def(H + "_" + nn[k], MP.bk[b, 3], _cge_mp_ndom(MP, R, b, nn[k]), _cge_mp_index(MP, R, b, nn[k], 1))
+    }
+    v = v \ _cge_mp_def(H + "_u", MP.bk[b, 3], MP.bk[b, 4], H + ix + " / (" + _cge_mp_nval(MP, R, b, "s") + " * " + H + "_s" + ix + ")")
+    for (k = 1; k <= cols(R); k++) {
+        if (R[k].b != b | R[k].f != "d") continue
+        v = v \ _cge_mp_def(R[k].var, invtokens(R[k].D, ","), R[k].lc, _cge_mp_paren2(R[k].q) + " * " + H + "_u" + ix + _cge_mp_chain(MP, R[k]))
+    }
+    return(v)
+}
+
+// The definition of a variable over indexes ix under condition c: the
+// condition on its domain or, without indexes, on its expression
+string scalar _cge_mp_def(string scalar name, string scalar ix, string scalar c, string scalar e)
+{
+    if (ix == "") return(name + " = " + (c != "" ? "(" + e + ")" + char(36) + "(" + c + ")" : e))
+    return(name + "(" + ix + ")" + (c != "" ? char(36) + "(" + c + ")" : "") + " = " + e)
+}
+
+// The zero profit of production block b, paired with its activity level:
+// the cost of a unit of activity against its revenue
+string scalar _cge_mp_zp(struct cge_model scalar M, struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b)
+{
+    string scalar B, ix
+    B = MP.bk[b, 2]
+    ix = _cge_mp_paren(MP.bk[b, 3])
+    return(B + "_zp" + ix + (MP.bk[b, 4] != "" ? char(36) + "(" + MP.bk[b, 4] + ")" : "") + ": " +
+           _cge_mp_nval(MP, R, b, "s") + " * " + B + "_s" + ix + " - " + _cge_mp_nval(MP, R, b, "t") + " * " + B + "_t" + ix +
+           " = 0, perp(" + B + ix + ") lower(0)")
+}
+
+// The market of commodity k (declaration row): supply (outputs and
+// endowments) less demand (inputs and final demands), paired with its price.
+// With exist set, the condition under which an element has a market.
+string scalar _cge_mp_market(struct cge_model scalar M, struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar k,
+                             string scalar nc, string scalar ename, real scalar exist)
+{
+    string rowvector G
+    string scalar P, ix, sup, dem, t, ex, cond, body
+    real scalar j, all
+    P = MP.dv[k, 2]
+    ix = _cge_mp_paren(MP.dv[k, 3])
+    G = _cge_mp_ix(MP.dv[k, 3])
+    sup = dem = cond = ""
+    all = 0
+    for (j = 1; j <= cols(R); j++) {
+        if (R[j].sym != P) continue
+        body = (R[j].f == "e" ? _cge_mp_paren2(R[j].q) : R[j].var + _cge_mp_paren(invtokens(R[j].D, ",")))
+        t = _cge_mp_term(M, body, R[j].D, R[j].lc, R[j].refs, G, ex)
+        if (R[j].f == "o" | R[j].f == "e") sup = sup + (sup != "" ? " + " : "") + t
+        else dem = dem + " - " + t
+        if (ex == "") all = 1
+        else cond = cond + (cond != "" ? " | " : "") + "(" + ex + ")"
+    }
+    if (exist) {
+        if (sup == "" & dem == "") _cge_fail("cge_mpsge: commodity " + P + " is in no record", 198)
+        return(all ? "" : cond)
+    }
+    if (all | !cols(G)) cond = ""
+    cond = _cge_mp_and(cond, nc)
+    return(ename + ix + (cond != "" ? char(36) + "(" + cond + ")" : "") + ": " + (sup != "" ? sup : "0") + dem +
+           " = 0, perp(" + P + ix + ") lower(0)")
+}
+
+// The income of consumer k (declaration row): the value of its endowments
+// and the revenue of the taxes it receives
+string scalar _cge_mp_income(struct cge_model scalar M, struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar k)
+{
+    string rowvector G, ar
+    string scalar H, s, ex, aname, aidx, acond
+    real scalar j, m, b
+    H = MP.dv[k, 2]
+    G = _cge_mp_ix(MP.dv[k, 3])
+    b = _cge_find(MP.bk[., 2], H)
+    s = ""
+    for (j = 1; j <= cols(R); j++) {
+        if (R[j].b == b & R[j].f == "e") {
+            s = s + (s != "" ? " + " : "") + _cge_mp_term(M, R[j].pref + " * " + _cge_mp_paren2(R[j].q), R[j].D, R[j].lcr, G, G, ex)
+        }
+        for (m = 1; m <= rows(R[j].tax); m++) {
+            _cge_mp_ref(R[j].tax[m, 1], aname, aidx, acond)
+            if (aname != H) continue
+            s = s + (s != "" ? " + " : "") + _cge_mp_term(M, R[j].tax[m, 3] + _cge_mp_paren(invtokens(R[j].D, ",")), R[j].D, R[j].lc,
+                                                         _cge_mp_ix(aidx), G, ex)
+        }
+    }
+    return(s != "" ? s : "0")
+}
+
+// A record's expression (body, over its indexes D, under condition lc)
+// summed into an equation over the indexes G of a symbol that the record
+// names with refs: the indexes of D that refs names take the names of G,
+// labels restrict the term with sameas(), and the other indexes of D, under
+// names the equation does not use, are summed. ex gets the condition under
+// which an element of the equation has the term ("" if every one has it).
+string scalar _cge_mp_term(struct cge_model scalar M, string scalar body, string rowvector D, string scalar lc,
+                           string rowvector refs, string rowvector G, string scalar ex)
+{
+    string rowvector to, U, id
+    string scalar c, cand, base, si, b2, l2
+    real rowvector mp
+    real scalar m, j, d
+    to = D
+    mp = J(1, cols(D), 0)
+    c = ""
+    for (m = 1; m <= cols(G); m++) {
+        j = (cols(D) ? _cge_find(D', refs[m]) : 0)
+        if (j) {
+            if (mp[j]) _cge_fail("cge_mpsge: index " + refs[m] + " is given twice in a reference", 198)
+            to[j] = G[m]
+            mp[j] = 1
+            // an index over another set: the elements of the set of G in it
+            if (!_cge_mp_sameset(M, D[j], G[m])) c = _cge_mp_and(c, _cge_mp_setname(M, D[j]) + "(" + G[m] + ")")
+        }
+        else c = _cge_mp_and(c, "sameas(" + G[m] + ", " + refs[m] + ")")
+    }
+    // the indexes summed take names that the equation does not use
+    for (j = 1; j <= cols(D); j++) {
+        if (mp[j] | !anyof(G, D[j])) continue
+        base = _cge_mp_setname(M, D[j])
+        for (d = 1; d <= 99; d++) {
+            cand = base + strofreal(d)
+            if (anyof(G, cand) | anyof(D, cand) | anyof(to, cand) | _cge_u_islabel(M, cand) | _cge_us_find(M, cand)) continue
+            break
+        }
+        to[j] = cand
+    }
+    // a name taken that the expressions use for something else, such as
+    // the index of a sum within them
+    id = _cge_mp_idents(body + " " + lc)
+    for (j = 1; j <= cols(D); j++) {
+        if (to[j] != D[j] & !anyof(D, to[j]) & anyof(id, to[j])) {
+            _cge_fail("cge_mpsge: index " + to[j] + " is used within a record of " + body + " and is needed for an equation; give that index another name", 198)
+        }
+    }
+    b2 = _cge_mp_ren(body, D, to)
+    l2 = _cge_mp_ren(lc, D, to)
+    c = _cge_mp_and(l2, c)
+    U = J(1, 0, "")
+    for (j = 1; j <= cols(D); j++) if (!mp[j]) U = U, to[j]
+    if (!cols(U)) {
+        ex = c
+        return(c != "" ? "(" + b2 + ")" + char(36) + "(" + c + ")" : b2)
+    }
+    si = (cols(U) == 1 ? U : "(" + invtokens(U, ",") + ")")
+    ex = "sum(" + si + (c != "" ? char(36) + "(" + c + ")" : "") + ", 1) > 0"
+    return("sum(" + si + (c != "" ? char(36) + "(" + c + ")" : "") + ", " + b2 + ")")
+}
+
+// The name of the set of an index
+string scalar _cge_mp_setname(struct cge_model scalar M, string scalar ix)
+{
+    return(substr(_cge_u_set(M, ix), 2, .))
+}
+
+// 1 if two indexes run over the same elements
+real scalar _cge_mp_sameset(struct cge_model scalar M, string scalar a, string scalar b)
+{
+    string colvector la, lb
+    if (_cge_u_set(M, a) == _cge_u_set(M, b)) return(1)
+    la = _cge_setlab(M, _cge_u_set(M, a))
+    lb = _cge_setlab(M, _cge_u_set(M, b))
+    if (rows(la) == rows(lb)) {
+        if (la == lb) return(1)
+    }
+    // otherwise the elements of a must be among those of b
+    if (any(!_cge_us_in(la, lb))) {
+        _cge_fail("cge_mpsge: index " + a + " runs over elements that index " + b + " of the declaration does not have", 198)
+    }
+    return(0)
+}
+
+// The names in an expression
+string rowvector _cge_mp_idents(string scalar e)
+{
+    string rowvector out
+    real scalar k, j, n
+    out = J(1, 0, "")
+    n = strlen(e)
+    k = 1
+    while (k <= n) {
+        if (regexm(substr(e, k, 1), "[A-Za-z_]") & (k == 1 | !regexm(substr(e, k - 1, 1), "[0-9.]"))) {
+            j = k
+            while (j <= n & regexm(substr(e, j, 1), "[A-Za-z_0-9]")) j++
+            out = out, substr(e, k, j - k)
+            k = j
+        }
+        else k++
+    }
+    return(out)
+}
+
+// An expression with the indexes from renamed to, all at once
+string scalar _cge_mp_ren(string scalar e, string rowvector from, string rowvector to)
+{
+    string scalar out, w
+    real scalar k, j, n, m
+    if (!cols(from)) return(e)
+    out = ""
+    n = strlen(e)
+    k = 1
+    while (k <= n) {
+        if (regexm(substr(e, k, 1), "[A-Za-z_]")) {
+            j = k
+            while (j <= n & regexm(substr(e, j, 1), "[A-Za-z_0-9]")) j++
+            w = substr(e, k, j - k)
+            m = _cge_find(from', w)
+            out = out + (m ? to[m] : w)
+            k = j
+        }
+        else if (regexm(substr(e, k, 1), "[0-9.]")) {
+            // a number, with its exponent
+            j = k
+            while (j <= n & regexm(substr(e, j, 1), "[0-9.]")) j++
+            if (j < n & regexm(substr(e, j, 2), "^[eE][0-9]")) j++
+            else if (j < n - 1 & regexm(substr(e, j, 3), "^[eE][+-][0-9]")) j = j + 2
+            while (j <= n & regexm(substr(e, j, 1), "[0-9]")) j++
+            out = out + substr(e, k, j - k)
+            k = j
+        }
+        else {
+            out = out + substr(e, k, 1)
+            k++
+        }
+    }
+    return(out)
+}
+
+// Two conditions joined by and
+string scalar _cge_mp_and(string scalar a, string scalar b)
+{
+    if (a == "") return(b)
+    if (b == "") return(a)
+    return("(" + a + ") & (" + b + ")")
+}
+
+// Indexes in parentheses, or nothing
+string scalar _cge_mp_paren(string scalar ix)
+{
+    return(ix != "" ? "(" + ix + ")" : "")
+}
+
+// An expression in parentheses unless it is a number or a reference
+string scalar _cge_mp_paren2(string scalar x)
+{
+    if (regexm(x, "^[A-Za-z_][A-Za-z_0-9]*(\([^()]*\))?$") | strtoreal(x) < .) return(strtoreal(x) < 0 ? "(" + x + ")" : x)
+    return("(" + x + ")")
+}
+
+// The numeraire: a commodity's price or a consumer's income, as given or,
+// as MPSGE takes it, the consumer with the largest income at the reference
+// point. Its kind (2 commodity, 3 consumer), name, labels and the condition
+// that leaves its equation out
+void _cge_mp_numeraire(struct cge_model scalar M, struct cge_mp scalar MP, string scalar num, string scalar nkind,
+                       string scalar nname, string scalar nlab, string scalar ncond)
+{
+    string scalar idx, cond, best
+    string rowvector G, lab
+    string colvector e1, e2
+    real colvector pos, x
+    real scalar k, j, vb, i
+    ncond = nlab = ""
+    if (num != "") {
+        _cge_mp_ref(num, nname, idx, cond)
+        k = _cge_find(MP.dv[., 2], nname)
+        if (!k | cond != "") _cge_fail("cge_mpsge: numeraire(" + num + ") is not a commodity or consumer of the model", 198)
+        if (MP.dv[k, 1] == "1") _cge_fail("cge_mpsge: numeraire() takes a commodity or a consumer, not sector " + nname, 198)
+        nkind = MP.dv[k, 1]
+        G = _cge_mp_ix(MP.dv[k, 3])
+        lab = _cge_mp_ix(idx)
+        if (cols(lab) != cols(G)) _cge_fail("cge_mpsge: numeraire(" + num + ") needs " + strofreal(cols(G)) + " label(s)", 198)
+        for (j = 1; j <= cols(lab); j++) {
+            if (!_cge_u_islabel(M, lab[j])) _cge_fail("cge_mpsge: numeraire(" + num + "): " + lab[j] + " is not a label", 198)
+        }
+    }
+    else {
+        // the consumer with the largest income (missing is above every
+        // number in Mata, so the search starts below them)
+        vb = -1e300
+        nname = best = ""
+        for (k = 1; k <= rows(MP.dv); k++) {
+            if (MP.dv[k, 1] != "3") continue
+            j = _cge_vidx(M, MP.dv[k, 2])
+            pos = _cge_vpos(M, j)
+            x = M.x0[pos]
+            _cge_vlabels(M, j, e1, e2)
+            for (i = 1; i <= rows(pos); i++) {
+                if (!M.exists[pos[i]]) continue
+                if (x[i] > vb) {
+                    vb = x[i]
+                    nname = MP.dv[k, 2]
+                    best = (MP.dv[k, 3] != "" ? e1[i] + (e2[i] != "" ? "," + subinstr(e2[i], ".", ",") : "") : "")
+                }
+            }
+        }
+        if (nname == "") _cge_fail("cge_mpsge: no consumer has an income at the reference point; give numeraire()", 198)
+        nkind = "3"
+        k = _cge_find(MP.dv[., 2], nname)
+        G = _cge_mp_ix(MP.dv[k, 3])
+        lab = _cge_mp_ix(best)
+    }
+    if (cols(lab)) {
+        nlab = "(" + invtokens(lab, ",") + ")"
+        for (j = 1; j <= cols(lab); j++) ncond = ncond + (ncond != "" ? " & " : "") + "sameas(" + G[j] + ", " + lab[j] + ")"
+        ncond = "!(" + ncond + ")"
+    }
+}
+
+// The value of the numeraire at the reference point
+real scalar _cge_mp_numval(struct cge_model scalar M, string scalar nname, string scalar nlab)
+{
+    real scalar p
+    p = _cge_u_varpos(M, nname, (nlab != "" ? _cge_mp_ix(substr(nlab, 2, strlen(nlab) - 2)) : J(1, 0, "")))
+    return(p ? M.x0[p] : .)
+}
+
+// cge_mpsge, list: the model being read and the models written
+void _cge_mp_list(real scalar gen)
+{
+    struct cge_model scalar M
+    struct cge_mp scalar MP
+    string rowvector L
+    real scalar k, j, n
+    M = _cge_load()
+    n = 0
+    if (findexternal("cge__mp") != NULL) {
+        MP = _cge_mp_load()
+        printf("{txt}Being read:\n")
+        for (j = 1; j <= rows(MP.text); j++) printf("{p 4 8 2}{res}%s{p_end}\n", MP.text[j])
+    }
+    if (cols(M.umps) == 3) n = rows(M.umps)
+    if (!n & findexternal("cge__mp") == NULL) printf("{txt}No MPSGE model is declared\n")
+    for (k = 1; k <= n; k++) {
+        printf("{txt}MPSGE model {res}%s{txt}:\n", M.umps[k, 1])
+        L = tokens(M.umps[k, (gen ? 3 : 2)], char(10))
+        for (j = 1; j <= cols(L); j++) {
+            if (L[j] != char(10)) printf("{p 4 8 2}{res}%s{p_end}\n", L[j])
+        }
+    }
+    st_numscalar("r(N_models)", n)
+    st_global("r(models)", (n ? invtokens(M.umps[., 1]') : ""))
 }
 
 // The user variables and equations for GAMS (cge_user.inc), and the lines
@@ -27212,8 +28625,9 @@ void _cge_loop_par(struct cge_model scalar M, string scalar name, string rowvect
 
 // Section name of bundle file bundle, written to file out (from version
 // 0.27.1). Stata's package files take at most 100 files, so the package
-// installs the SYNTHETIC SAMs, the model library and the GAMS model as three
-// bundles, whose sections begin with a line "@@@ name"
+// installs the SYNTHETIC SAMs, the model library, the GAMS model and, from
+// version 0.44.0, the elasticity library as four bundles, whose sections
+// begin with a line "@@@ name"
 // (tools/bundle_files.py writes them from the files of the repository)
 void _cge_bundle_get(string scalar bundle, string scalar name, string scalar out)
 {
@@ -27699,6 +29113,10 @@ void _cge_model_new()
     M.umac = J(0, 3, "")
     M.urep = J(0, 3, "")
     M.unest = J(0, 2, "")
+    M.umps = J(0, 3, "")
+    // a model in the form of MPSGE being read belongs to the model before
+    // (from version 0.44.0)
+    _cge_mp_drop()
     M.bddef = J(0, 7, "")
     M.loopdef = J(0, 3, "")
     M.ubox = J(0, 5, .)
@@ -30006,6 +31424,7 @@ void _cge_model_write(real scalar fh, struct cge_model scalar M)
     _cge_io_put(fh, "emask", M.emask)
     _cge_io_put(fh, "urep", M.urep)
     _cge_io_put(fh, "unest", M.unest)
+    _cge_io_put(fh, "umps", M.umps)
     _cge_io_put(fh, "erep", M.erep)
     _cge_io_put(fh, "neq", M.neq)
     _cge_io_put(fh, "c_ext", M.c_ext)
@@ -30178,6 +31597,7 @@ real scalar _cge_model_member(struct cge_model scalar M, string scalar name, tra
     else if (name == "emask") M.emask = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "urep") M.urep = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "unest") M.unest = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
+    else if (name == "umps") M.umps = (rows(v) * cols(v) == 0 ? J(0, 0, "") : v)
     else if (name == "erep") M.erep = (rows(v) * cols(v) == 0 ? J(0, 1, .) : v)
     else if (name == "neq") M.neq = (rows(v) * cols(v) == 0 ? . : v)
     else if (name == "c_ext") M.c_ext = (rows(v) * cols(v) == 0 ? "" : v)

@@ -18,6 +18,7 @@ relative tolerance of 1e-6.
 | `cnm_*.csv` | the five shocks on the non-imported layout (`data/cge_synthetic_sam_cnm.csv`: a non-imported commodity with sales tax) |
 | `margins_*.csv` | the five shocks on the margins layout (`data/cge_synthetic_sam_margins.csv`: margins netted out of `act_ser`) |
 | `inst_*.csv` | the five shocks above on the institutions layout (`data/cge_synthetic_sam_inst.csv`: an enterprise and a non-profit institution) |
+| `mpsge_gams.csv` | models in the form of MPSGE (version 0.44.0): the levels that GAMS/MPSGE gives for the scenarios of the programs in `tests/data/mpsge` (`tools/gams/run_mpsge_check.py`), which `tests/test_mpsge.do` compares with `cge_mpsge`'s solutions to 1e-9 |
 | `link_<case>_<region>.csv`, `link_<case>_routes.csv` | linked regions (version 0.12.0; `reference/cge_ref/regions.py`): the synthetic SAM (region A) and the institutions layout (region B, a SAM unit worth two world units) with the routes of `LINK_TRADE`; cases `base`, `fta` (no tariffs between the regions), `world` (the rest of the world's price of `com_man` up 10 per cent) and `prod` (efficiency of `act_man` in A up 5 per cent); each region's solution and the routes' quantities and prices |
 
 Settings: the synthetic SAM (`data/cge_synthetic_sam.csv`); elasticities

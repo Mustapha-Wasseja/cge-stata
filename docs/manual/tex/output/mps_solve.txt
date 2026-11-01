@@ -1,0 +1,24 @@
+. cge_shock tx, value(0)
+User parameter tx changed for 1 element(s)
+
+. cge_solve, name(notax)
+Simulation notax solved in 7 iteration(s) (newton)
+Largest scaled residual  1.31e-14
+
+. quietly cge_results, sim(notax) clear nodisplay
+
+. format base value %10.6f
+
+. list variable base value if inlist(variable, "X", "Y", "W", "PX", "PY", "PK") | inlist(variable, "
+> CONS", "X_i2", "X_tx2"), noobs clean
+
+    variable         base        value
+           X     1.000000     1.061206
+           Y     1.000000     0.947511
+           W     1.000000     1.002749
+          PX     1.000000     0.878778
+          PY     1.000000     0.984226
+          PK     1.000000     0.961255
+        X_i2    40.000000    44.489179
+       X_tx2    10.000000     0.000000
+        CONS   200.000000   186.512966

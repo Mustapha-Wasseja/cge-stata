@@ -17,7 +17,7 @@ real scalar _tl_val(string scalar v, string scalar el, string scalar sim)
 end
 
 cge_modlib list
-assert r(N_models) == 9
+assert r(N_models) == 10
 cge_modlib describe transport
 assert "`r(kind)'" == "nlp" & strpos("`r(expect)'", "153.675")
 
@@ -102,6 +102,12 @@ foreach k in 2 3 4 6 8 {
     local d = max(`d', abs(`x' - 1))
 }
 assert `d' < 1e-9
+
+* a tax on labour in the form of MPSGE (from version 0.44.0), against
+* GAMS/MPSGE
+quietly cge_modlib run mpsge
+mata: st_numscalar("tl_d", abs(_tl_val("X", "", "notax") - 1.061206149099731) + abs(_tl_val("PX", "", "notax") - 0.878778198362246))
+assert scalar(tl_d) < 1e-9
 
 * Cournot and Stackelberg
 quietly cge_modlib run cournot

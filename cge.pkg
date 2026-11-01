@@ -70,6 +70,8 @@ f ado/cge_nash.ado
 f ado/cge_nash.sthlp
 f ado/cge_nest.ado
 f ado/cge_nest.sthlp
+f ado/cge_mpsge.ado
+f ado/cge_mpsge.sthlp
 f ado/cge_region.ado
 f ado/cge_region.sthlp
 f ado/cge_model.ado
@@ -113,5 +115,4 @@ F ado/cge_gams_model.txt
 f ado/cge_synthetic.ado
 f ado/cge_synthetic.sthlp
 F data/cge_synthetic_sams.txt
-F data/cge_elasticities.csv
-F data/cge_elasticity_sources.csv
+F data/cge_elasticity_library.txt

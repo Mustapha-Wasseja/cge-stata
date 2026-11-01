@@ -1,0 +1,36 @@
+. cge_shock tf, elements(lab.man) value(0.5)
+User parameter tf changed for 1 element(s)
+
+. cge_solve, name(labtax)
+Simulation labtax solved in 8 iteration(s) (newton)
+Largest scaled residual  1.60e-14
+
+. quietly cge_results, sim(labtax) clear nodisplay
+
+. format base value %10.6f
+
+. list variable element1 base value if inlist(variable, "Y", "P", "PF", "HH", "GOV", "HH_u"), noobs
+> sepby(variable)
+
+  +-----------------------------------------------+
+  | variable   element1         base        value |
+  |-----------------------------------------------|
+  |        Y        agr     1.000000     0.993753 |
+  |        Y        man     1.000000     0.964904 |
+  |        Y        ser     1.000000     1.021461 |
+  |-----------------------------------------------|
+  |        P        agr     1.000000     1.044901 |
+  |        P        man     1.000000     1.112705 |
+  |        P        ser     1.000000     1.045868 |
+  |-----------------------------------------------|
+  |       PF        lab     1.000000     1.000000 |
+  |       PF        cap     1.000000     1.061711 |
+  |-----------------------------------------------|
+  |       HH       rich   105.000000   108.702650 |
+  |       HH       poor    75.000000    76.542771 |
+  |-----------------------------------------------|
+  |      GOV               36.250000    44.667501 |
+  |-----------------------------------------------|
+  |     HH_u       rich     1.000000     0.961447 |
+  |     HH_u       poor     1.000000     0.952134 |
+  +-----------------------------------------------+

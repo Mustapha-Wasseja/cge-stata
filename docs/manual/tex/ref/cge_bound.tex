@@ -100,7 +100,11 @@ starts, in place of the base value, for an element the closure leaves free
 or, from version 0.14.0, one that may move from a bound: a variable that
 adjusts for a constraint, or an exogenous user variable at a bound, which a
 paired inequality may move, as GAMS's \cmd{.l} of a positive variable. Its
-fixed level stays the bound it moves from. It must lie within the bounds, and
+fixed level stays the bound it moves from. From version 0.44.0 it also gives
+the start of the variable of a box pair (\manref{cge_equation}), as
+\cmd{.l} of a variable of a mixed complementarity problem: a sector of a
+model written by \manref{cge_mpsge} that does not pay at the reference
+prices starts at 0 with \cmd{cge_bound Z, level(0)}. It must lie within the bounds, and
 be positive for a price or quantity.
 
 \item[\optarg{}{fix}{\#}] sets the value of an element the closure fixes, as

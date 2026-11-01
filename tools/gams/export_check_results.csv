@@ -101,6 +101,8 @@ mcpjosephy,path,mcp,1,16,0.000e+00,8.816e-13
 mcptech,path,mcp,1,16,0.000e+00,0.000e+00
 manycons,path,mcp,1,127,2.776e-17,9.504e-14
 sacond,path,cns,16,6,0.000e+00,1.599e-16
+mpsge,path,mcp,1,62,0.000e+00,1.276e-14
+mpsnest,path,mcp,1,43,0.000e+00,2.428e-15
 nlphs071,ipopt,nlp,2,5,0.000e+00,6.764e-13
 nlpentropy,ipopt,nlp,2,12,0.000e+00,3.055e-13
 nlpfrontier,ipopt,nlp,2,3,0.000e+00,3.948e-12

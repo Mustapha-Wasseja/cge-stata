@@ -105,7 +105,10 @@ the marginals of the constraints, as GAMS's solution listing does.
 {opt scale(#)} gives the scale, a positive number.
 
 {phang}
-{opt level(#)} gives the starting level of a free variable.
+{opt level(#)} gives the starting level of a free variable, and from version
+0.44.0 of the variable of a box pair ({helpb cge_equation}), as GAMS's
+{cmd:.l} of the variable of a mixed complementarity problem: a sector of a
+model written by {helpb cge_mpsge} that starts at 0, {cmd:cge_bound Z, level(0)}.
 
 {phang}
 {opt fix(#)} gives the value of a variable fixed under the closure; it is given alone.

@@ -1,0 +1,38 @@
+. cge_mpsge, list generated
+MPSGE model taxlab:
+    X, value(1) fixed
+    Y, value(1) fixed
+    W, value(1) fixed
+    PX, value(1) fixed
+    PY, value(1) fixed
+    PL, value(1) fixed
+    PK, value(1) fixed
+    PW, value(1) fixed
+    X_s = ((1.25 * 40 * (PL * (1 + tx) / 1.25)^0.5 + 50 * PK^0.5) / (1.25 * 40 + 50))^2
+    X_t = (100 * PX) / (100)
+    X_o1 = X * 100
+    X_i2 = X * 40 * (X_s / (PL * (1 + tx) / 1.25))^0.5
+    X_tx2 = tx * PL * X_i2
+    X_i3 = X * 50 * (X_s / PK)^0.5
+    Y_s = ((60 * PL^(-0.5) + 40 * PK^(-0.5)) / (60 + 40))^(-2)
+    Y_t = (100 * PY) / (100)
+    Y_o1 = Y * 100
+    Y_i2 = Y * 60 * (Y_s / PL)^1.5
+    Y_i3 = Y * 40 * (Y_s / PK)^1.5
+    W_s = exp((100 * ln(PX) + 100 * ln(PY)) / (100 + 100))
+    W_t = (200 * PW) / (200)
+    W_o1 = W * 200
+    W_i2 = W * 100 * W_s / PX
+    W_i3 = W * 100 * W_s / PY
+    CONS, value(X_tx2 + PL * 100 + PK * 90) fixed
+    CONS_s = (200 * PW) / (200)
+    CONS_u = CONS / ((200) * CONS_s)
+    CONS_d1 = 200 * CONS_u
+    X_zp: (1.25 * 40 + 50) * X_s - (100) * X_t = 0, perp(X) lower(0)
+    Y_zp: (60 + 40) * Y_s - (100) * Y_t = 0, perp(Y) lower(0)
+    W_zp: (100 + 100) * W_s - (200) * W_t = 0, perp(W) lower(0)
+    PX_mkt: X_o1 - W_i2 = 0, perp(PX) lower(0)
+    PY_mkt: Y_o1 - W_i3 = 0, perp(PY) lower(0)
+    PK_mkt: 90 - X_i3 - Y_i3 = 0, perp(PK) lower(0)
+    PW_mkt: W_o1 - CONS_d1 = 0, perp(PW) lower(0)
+    CONS_inc: CONS = X_tx2 + PL * 100 + PK * 90, perp(CONS) lower(0)

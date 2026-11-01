@@ -33,6 +33,7 @@ parameters and fixed variables (for example, "world import prices times 1.1").
 | `gams_check_results.csv` | results of the last run with PATH, one row per scenario |
 | `export_check.do`, `run_export_check.py` | the check of `cge_gams`: models exported from Stata and solved in GAMS |
 | `export_check_results.csv` | its results, one row per case and solver |
+| `run_mpsge_check.py` | solves the models of `tests/data/mpsge` with GAMS/MPSGE (from version 0.44.0) and writes their levels to `tests/expected/mpsge_gams.csv`, against which `tests/test_mpsge.do` checks `cge_mpsge` |
 | `gdx_check.do`, `run_gdx_check.py` | the check of `cge_gdx` (from version 0.10.0): GDX files written by GAMS from Stata and read back, and the GDX file of a scenario solved by GAMS |
 | `gdx_check_results.csv` | its results, one row per check |
 

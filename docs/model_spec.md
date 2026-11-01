@@ -3776,6 +3776,80 @@ where on(c), the scenario taking one commodity out and bringing another
 in) and `sacond` (a standalone model with a conditional variable,
 equation, term and sum, one element in and one out).
 
+## 54. Models in the form of MPSGE (from version 0.44.0)
+
+`cge_mpsge` reads a model's statements into the external `cge__mp`
+(`struct cge_mp`: name, section being read, statements; declarations of
+sectors, commodities and consumers with their indexes; blocks with their
+indexes, condition and top elasticities `s:` and `t:`; nests with block,
+parent and elasticity; records with block, field `o i d e`, commodity and
+its indexes, condition, `q:`, `p:`, nest and taxes). A statement is split
+into words at blanks outside parentheses (`q: 100` joined), each word
+`key:value` at its first colon outside parentheses; a leading dollar sign
+of a key is dropped. `cge_mpsge using` reads a file from the line `$model:`
+to `$offtext` (or the whole file), comment lines beginning with `*`; a
+condition written `$name(...)` or `$(...)`.
+
+`cge_mpsge end` (`_cge_mp_check`) checks that every sector has one
+production block and every consumer one demand block over the indexes of
+its declaration, that records name declared commodities with as many
+indexes, agents name consumers, nests reach `s` (inputs, demands) or `t`
+(outputs), and every nest holds a record; defaults `s:0`, `t:0` in both
+kinds of block (GAMS's MPSGE). For record $k$ of block $B$ over indexes
+$b$: its indexes $D_k = (b, L_k)$, $L_k$ the indexes of its commodity
+reference beyond $b$; its condition $c_k$ = the record's condition and
+$q_k \ne 0$ (for a $q_k$ that is not a number); $\bar p_k$ (default 1);
+$v_k = \bar p_k q_k$; $r_k = P_k (1 \pm \sum t)/\bar p_k$ (+ for inputs
+and demands, - for outputs).
+
+Definitions written (`_cge_mp_prodvars`, `_cge_mp_demvars`), in order:
+sectors $B(b)\$(c_B)$, `value(1) fixed`; commodities $P(g)\$(\text{exist})$,
+`value(1) fixed`, the existence condition the disjunction over the records
+naming $P$ of the projection of $c_k$ (`_cge_mp_term`: `sum(U$(c), 1) > 0`
+over the indexes $U$ of $D_k$ not mapped to $g$); for each block and side,
+from the innermost nest out, the index $B\_n(b)$ = CES (CET) index of its
+records' and inner nests' relative prices with weights $v/V_n$,
+$V_n = \sum_{k \in n} \sum_{L_k\$(c_k)} v_k$, an inner nest's term and
+domain guarded by $V_m \ne 0$ unless $V_m$ is a sum of positive numbers;
+the exponent $1 - e$ (CES) or $1 + e$ (CET), `exp` of the weighted mean of
+logarithms at a numeric $e = 1$, both forms under `$(e != 1)` and
+`$(e == 1)` for an expression $e$; record quantities
+$B\_ok(D_k)\$(c_B \wedge c_k) = B(b)\,q_k \prod$ factors
+$(C_n/r_k)^{e_n}$, $(C_m/C_n)^{e_m}$ up the nests (outputs
+$(r_k/C_n)^{e_n}$, $(C_n/C_m)^{e_m}$); tax revenues $B\_txk = t\,P_k\,x$;
+incomes $H(h)$, `value(`income`) fixed`; demand indexes $H\_n$; utility
+$H\_u(h) = H(h)/(V_s H\_s(h))$; demands $H\_dk = q_k\,H\_u \prod$ factors.
+A definition without indexes takes its condition on the expression.
+Equations (box pairs with `lower(0)`): `B_zp(b)$(c_B)`:
+$V_s B\_s - V_t B\_t = 0 \perp B$; `P_mkt(g)$(exist)`: outputs +
+endowments - inputs - demands $= 0 \perp P$; `H_inc(h)$(c_H)`:
+$H = \sum_{e} \sum P_k q_k + \sum_{\text{taxes to } H} B\_txk \perp H$.
+A term of a record in an equation over the indexes $G$ of the symbol it
+names (`_cge_mp_term`) maps the indexes of $D_k$ that the reference names
+to $G$ (with `setname(g)` where the sets differ, `sameas(g, label)` for a
+label), renames the others that the equation uses to an alias with digits
+(`_cge_mp_ren`, whole names), and sums them under the renamed condition.
+The numeraire's equation is left out (`!(sameas(g, lab))` for an element);
+by default the consumer with the largest income at the reference point,
+`_cge_mp_numeraire`. The reference gap is the largest relative gap of the
+equations written at the base.
+
+The definitions are added in two batches (external `cge__ubatch`, which
+`_cge_load.ado` removes at each command): `_cge_u_newrow` and
+`_cge_u_addeq` skip their builds and `_cge_u_refresh` its refresh, and
+`_cge_ub_finish` builds each batch once, sets the base values, levels and
+scales of its variables, builds again for the box pairs and checks them.
+From version 0.44.0 `_cge_u_build` tokenizes each definition once for all
+its elements and keeps, for the build, the values of conditions without
+variables, lags, leads or `base()` (external `cge__cmemo`, read by
+`_cge_u_condval`); `_cge_closure_rank` counts the variables of box pairs
+as free; `cge_bound, level()` sets the start of a box pair's variable
+(`_cge_bd_movable`, `_cge_bd_start`). `M.umps` keeps each model's name,
+statements and definitions; `cge_equation, clear` empties it.
+tests/test_mpsge.do compares the models of tests/data/mpsge with the
+levels of GAMS/MPSGE (tests/expected/mpsge_gams.csv) to 1e-9 (agreement
+about 1e-13); export cases `mpsge` and `mpsnest` with PATH.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
