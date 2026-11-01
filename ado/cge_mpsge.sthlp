@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.45.0  01nov2026}{...}
+{* *! version 0.46.0  01nov2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -45,6 +45,7 @@ writes them:
 {p2col:{cmd:s:}{it:e}}elasticity of substitution at the top of the inputs or demands; default 0{p_end}
 {p2col:{cmd:t:}{it:e}}elasticity of transformation at the top of the outputs; default 0{p_end}
 {p2col:{it:nest}{cmd::}{it:e}}a nest within {cmd:s}; {it:nest}{cmd:(}{it:parent}{cmd:):}{it:e} within another nest or within {cmd:t}{p_end}
+{p2col:{it:g}{cmd:.tl:}{it:e}}a nest for each element of the set of index {it:g}, with elasticity {it:e} (from version 0.46.0); {it:g}{cmd:.tl(}{it:parent}{cmd:):}{it:e} within a nest{p_end}
 {p2col:{cmd:o:}{it:commodity}}an output (production){p_end}
 {p2col:{cmd:i:}{it:commodity}}an input (production){p_end}
 {p2col:{cmd:d:}{it:commodity}}a final demand (demand){p_end}
@@ -54,7 +55,7 @@ writes them:
 {p2col:{cmd:a:}{it:consumer} {cmd:t:}{it:expression}}a tax on the record at rate {cmd:t:}, paid to the agent {cmd:a:}{p_end}
 {p2col:{cmd:n:}{it:aux} [{cmd:m:}{it:expression}]}an endogenous rate of the tax, the auxiliary variable {cmd:n:} times {cmd:m:} (default 1), added to {cmd:t:}{p_end}
 {p2col:{cmd:r:}{it:aux}}the multiplier of an endowment, an auxiliary variable{p_end}
-{p2col:{it:nest}{cmd::}}the nest of a record; default {cmd:s} for inputs and demands, {cmd:t} for outputs{p_end}
+{p2col:{it:nest}{cmd::}}the nest of a record, or {it:g}{cmd:.tl:}; default {cmd:s} for inputs and demands, {cmd:t} for outputs{p_end}
 {p2colreset}{...}
 
 {pstd}
@@ -230,7 +231,16 @@ solve, and at which the incomes are evaluated at the reference point:
 {cmd:start(TAU:0.1 Z:0)}, or {cmd:start(Y(agr):0)} for one element.
 
 {pstd}
-{bf:Not available.} Indexed nests stop {cmd:cge_mpsge} with an error.
+{bf:Indexed nests.} From version 0.46.0, {it:g}{cmd:.tl:}{it:e} declares a
+nest for each element of the set of index {it:g}, as GTAP's models nest
+imports and domestic goods for each commodity:
+{cmd:prod:C s:0.5 m:1.5 g.tl(m):sig(g)} with {cmd:i:PD(g) q:dd0(g) g.tl:} and
+{cmd:i:PM(g) q:mm0(g) g.tl:}. A record in it runs over {it:g} and belongs to
+the nest of its element; the elasticity may differ by element, and the nests
+may be within a nest of their own, not within each other. Their price
+indexes are {it:B}{cmd:_}{it:g}{cmd:tl(}{it:g}{cmd:)}. The letters of fields
+other than {cmd:s} and {cmd:t} may name nests, as {cmd:m:} above: a field
+without a value puts a record in the nest of that name.
 
 
 {title:Options}

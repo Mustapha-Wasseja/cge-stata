@@ -89,3 +89,36 @@ quietly cge_results, sim(lesscap) clear nodisplay
 format base value %10.6f
 list variable base value if inlist(variable, "X", "Y", "PK", "GOVT", "TAU", "U") | inlist(variable, "XL", "WC"), noobs clean
 *<<
+
+*>> mps_inest
+cge_model new
+cge_set g = a b
+cge_parameter dd0(g), values(a:50 b:40)
+cge_parameter mm0(g), values(a:30 b:20)
+cge_parameter ld0(g), values(a:30 b:25)
+cge_parameter kd0(g), values(a:20 b:15)
+cge_parameter sig(g), values(a:4 b:1.5)
+cge_parameter tm0(g), values(a:0.1 b:0)
+cge_parameter tm(g), values(a:0.1 b:0)
+cge_mpsge sectors: C Y(g) M(g)
+cge_mpsge commodities: PC PD(g) PM(g) PL PK PFX
+cge_mpsge consumers: RA GOV
+cge_mpsge prod:C s:0.5 m:1.5 g.tl(m):sig(g) va:1
+cge_mpsge    o:PC q:(200 + sum(g, tm0(g) * mm0(g)))
+cge_mpsge    i:PD(g) q:dd0(g) g.tl:
+cge_mpsge    i:PM(g) q:mm0(g) p:(1+tm0(g)) g.tl: a:GOV t:tm(g)
+cge_mpsge    i:PL q:40 va:  i:PK q:20 va:
+cge_mpsge prod:Y(g) s:1  o:PD(g) q:dd0(g)  i:PL q:ld0(g)  i:PK q:kd0(g)
+cge_mpsge prod:M(g)  o:PM(g) q:mm0(g)  i:PFX q:mm0(g)
+cge_mpsge demand:RA  d:PC q:200  e:PL q:95  e:PK q:55  e:PFX q:50
+cge_mpsge demand:GOV  d:PC q:(sum(g, tm0(g) * mm0(g)))
+cge_mpsge end, numeraire(PL)
+*<<
+
+*>> mps_inestsolve
+cge_shock tm, value(0)
+cge_solve, name(freetrade)
+quietly cge_results, sim(freetrade) clear nodisplay
+format base value %10.6f
+list variable element1 base value if inlist(variable, "M", "Y", "PM", "C_gtl", "RA", "GOV"), noobs sepby(variable)
+*<<

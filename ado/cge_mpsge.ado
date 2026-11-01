@@ -1,4 +1,4 @@
-*! cge_mpsge.ado  v0.45.0  2026-11-01
+*! cge_mpsge.ado  v0.46.0  2026-11-01
 *! cge-stata: a model written as MPSGE writes one, with sectors,
 *! commodities, consumers and blocks of production and demand, as user
 *! variables and equations of a standalone model (model_spec.md, Section 54)

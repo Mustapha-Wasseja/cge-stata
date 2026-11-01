@@ -1,0 +1,58 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_set g = a b
+User set g: 2 element(s): a b
+
+. cge_parameter dd0(g), values(a:50 b:40)
+User parameter dd0(g): 2 value(s), from 40 to 50
+
+. cge_parameter mm0(g), values(a:30 b:20)
+User parameter mm0(g): 2 value(s), from 20 to 30
+
+. cge_parameter ld0(g), values(a:30 b:25)
+User parameter ld0(g): 2 value(s), from 25 to 30
+
+. cge_parameter kd0(g), values(a:20 b:15)
+User parameter kd0(g): 2 value(s), from 15 to 20
+
+. cge_parameter sig(g), values(a:4 b:1.5)
+User parameter sig(g): 2 value(s), from 1.5 to 4
+
+. cge_parameter tm0(g), values(a:0.1 b:0)
+User parameter tm0(g): 2 value(s), from 0 to .1
+
+. cge_parameter tm(g), values(a:0.1 b:0)
+User parameter tm(g): 2 value(s), from 0 to .1
+
+. cge_mpsge sectors: C Y(g) M(g)
+
+. cge_mpsge commodities: PC PD(g) PM(g) PL PK PFX
+
+. cge_mpsge consumers: RA GOV
+
+. cge_mpsge prod:C s:0.5 m:1.5 g.tl(m):sig(g) va:1
+
+. cge_mpsge    o:PC q:(200 + sum(g, tm0(g) * mm0(g)))
+
+. cge_mpsge    i:PD(g) q:dd0(g) g.tl:
+
+. cge_mpsge    i:PM(g) q:mm0(g) p:(1+tm0(g)) g.tl: a:GOV t:tm(g)
+
+. cge_mpsge    i:PL q:40 va:  i:PK q:20 va:
+
+. cge_mpsge prod:Y(g) s:1  o:PD(g) q:dd0(g)  i:PL q:ld0(g)  i:PK q:kd0(g)
+
+. cge_mpsge prod:M(g)  o:PM(g) q:mm0(g)  i:PFX q:mm0(g)
+
+. cge_mpsge demand:RA  d:PC q:200  e:PL q:95  e:PK q:55  e:PFX q:50
+
+. cge_mpsge demand:GOV  d:PC q:(sum(g, tm0(g) * mm0(g)))
+
+. cge_mpsge end, numeraire(PL)
+MPSGE model mpsge: 5 sector(s), 8 commodities and 2 consumer(s), in 5 block(s)
+written as 37 user variable(s) and 10 equation(s), 53 elements in all
+Numeraire: PL, fixed at 1
+Reference point: largest relative gap of the equations  0.00e+00

@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.45.0")
+    return("0.46.0")
 }
 
 // =====================================================================
@@ -25758,22 +25758,31 @@ void _cge_mp_word(struct cge_model scalar M, struct cge_mp scalar MP, string sca
             MP.bk[b, col] = val
             return
         }
-        if (!regexm(key, "^([A-Za-z][A-Za-z0-9]*)(\(([A-Za-z][A-Za-z0-9]*)\))?$")) {
-            _cge_fail("cge_mpsge: cannot read the field " + w + " of block " + MP.bk[b, 2], 198)
-        }
         // the parent in parentheses, if any (regexs() of a group that does
-        // not take part in the match prints an error)
-        if (regexm(key, "^([A-Za-z][A-Za-z0-9]*)\(([A-Za-z][A-Za-z0-9]*)\)$")) {
-            nest = strlower(regexs(1))
+        // not take part in the match prints an error); from version 0.46.0
+        // a nest indexed by g, g.tl, with its parent in parentheses
+        if (regexm(key, "^([A-Za-z_][A-Za-z_0-9]*)[.][tT][lL]$")) {
+            nest = regexs(1) + ".tl"
+            par = "s"
+        }
+        else if (regexm(key, "^([A-Za-z_][A-Za-z_0-9]*)[.][tT][lL]\(([A-Za-z][A-Za-z0-9]*)\)$")) {
+            nest = regexs(1) + ".tl"
             par = strlower(regexs(2))
         }
-        else {
+        else if (regexm(key, "^([A-Za-z][A-Za-z0-9]*)\(([A-Za-z_][A-Za-z_0-9.]*)\)$")) {
+            nest = strlower(regexs(1))
+            par = _cge_mp_nestkey(regexs(2))
+        }
+        else if (regexm(key, "^[A-Za-z][A-Za-z0-9]*$")) {
             nest = strlower(key)
             par = "s"
         }
+        else _cge_fail("cge_mpsge: cannot read the field " + w + " of block " + MP.bk[b, 2], 198)
         if (val == "") _cge_fail("cge_mpsge: nest " + nest + " of block " + MP.bk[b, 2] + " needs an elasticity, as " + nest + ":0.5", 198)
-        if (anyof(("s", "t", "u", "zp", "mkt", "inc", "a", "p", "q", "n", "m", "r"), nest) | regexm(nest, "^(o|i|d|e|tx)[0-9]+$")) {
-            _cge_fail("cge_mpsge: " + nest + " is kept for the fields and variables of a block; name the nest otherwise", 198)
+        // names that the variables of a block take (from version 0.46.0, the
+        // letters of fields are names of nests, as m: in GTAP's models)
+        if (anyof(("s", "t", "u", "zp", "mkt", "inc", "con"), nest) | regexm(nest, "^(o|i|d|e|tx)[0-9]+$")) {
+            _cge_fail("cge_mpsge: " + nest + " is kept for the variables of a block; name the nest otherwise", 198)
         }
         if (strlen(nest) > 10) _cge_fail("cge_mpsge: the name of nest " + nest + " has more than 10 characters", 198)
         if (rows(MP.ns)) {
@@ -25784,7 +25793,20 @@ void _cge_mp_word(struct cge_model scalar M, struct cge_mp scalar MP, string sca
         MP.ns = MP.ns \ (strofreal(b), nest, par, val)
         return
     }
-    // a field of the last record
+    // a field of the last record; the nest of the record, name: or g.tl:, a
+    // field without a value (from version 0.46.0, before the other fields,
+    // so that a nest may be named m)
+    if (val == "") {
+        nest = _cge_mp_nestkey(key)
+        if (anyof(("q", "p", "a", "t", "n", "m", "r"), nest)) {
+            if (!rows(MP.ns)) _cge_fail("cge_mpsge: " + key + ": needs a value", 198)
+            if (!rows(select(MP.ns, (MP.ns[., 1] :== strofreal(b)) :& (MP.ns[., 2] :== nest)))) _cge_fail("cge_mpsge: " + key + ": needs a value", 198)
+        }
+        if (MP.rc[r, 2] == "e") _cge_fail("cge_mpsge: an endowment belongs to no nest", 198)
+        if (MP.rc[r, 8] != "") _cge_fail("cge_mpsge: a record of block " + MP.bk[b, 2] + " is put in two nests", 198)
+        MP.rc[r, 8] = nest
+        return
+    }
     if (lk == "q" | lk == "p") {
         if (val == "") _cge_fail("cge_mpsge: " + key + ": needs a value", 198)
         col = (lk == "q" ? 6 : 7)
@@ -25820,11 +25842,7 @@ void _cge_mp_word(struct cge_model scalar M, struct cge_mp scalar MP, string sca
         MP.rc[r, 9] = val
         return
     }
-    // the nest of the record, written name:
-    if (val != "") _cge_fail("cge_mpsge: unknown field " + w + " in block " + MP.bk[b, 2], 198)
-    if (MP.rc[r, 2] == "e") _cge_fail("cge_mpsge: an endowment belongs to no nest", 198)
-    if (MP.rc[r, 8] != "") _cge_fail("cge_mpsge: a record of block " + MP.bk[b, 2] + " is put in two nests", 198)
-    MP.rc[r, 8] = strlower(key)
+    _cge_fail("cge_mpsge: unknown field " + w + " in block " + MP.bk[b, 2], 198)
 }
 
 // cge_mpsge end: the model written as user variables and equations; the
@@ -26096,6 +26114,12 @@ struct cge_mpr rowvector _cge_mp_check(struct cge_model scalar M, struct cge_mp 
         if (strtoreal(ns[k, 4]) < 0) _cge_fail("cge_mpsge: nest " + ns[k, 2] + " of block " + bk[b, 2] + " has a negative elasticity", 198)
         if (bk[b, 1] == "demand" & _cge_mp_side(MP, b, ns[k, 2]) == 2) _cge_fail("cge_mpsge: the nests of a demand block are within s", 198)
         (void) _cge_mp_side(MP, b, ns[k, 2])
+        // an indexed nest (from version 0.46.0) runs over the set of its
+        // index, within a nest of its own; no nest is within one
+        if (_cge_mp_nix(ns[k, 2]) != "") {
+            if (!_cge_mp_isix(M, _cge_mp_nix(ns[k, 2]))) _cge_fail("cge_mpsge: nest " + ns[k, 2] + " of block " + bk[b, 2] + ": " + _cge_mp_nix(ns[k, 2]) + " is not the index of a set", 198)
+        }
+        if (_cge_mp_nix(ns[k, 3]) != "") _cge_fail("cge_mpsge: nest " + ns[k, 2] + " of block " + bk[b, 2] + " is within an indexed nest, " + ns[k, 3] + "; put it within a nest of its own", 198)
     }
     nr = rows(rc)
     if (!nr) _cge_fail("cge_mpsge: the blocks have no records", 198)
@@ -26142,6 +26166,9 @@ struct cge_mpr rowvector _cge_mp_check(struct cge_model scalar M, struct cge_mp 
             if (nest != "s" & nest != "t") {
                 if (!rows(ns)) _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no nest " + nest, 111)
                 if (!rows(select(ns, (ns[., 1] :== strofreal(b)) :& (ns[., 2] :== nest)))) _cge_fail("cge_mpsge: block " + bk[b, 2] + " has no nest " + nest, 111)
+            }
+            if (_cge_mp_nix(nest) != "") {
+                if (!anyof(R[k].D, _cge_mp_nix(nest))) _cge_fail("cge_mpsge: a record of block " + bk[b, 2] + " in nest " + nest + " runs over index " + _cge_mp_nix(nest), 198)
             }
             if (_cge_mp_side(MP, b, nest) != (R[k].f == "o" ? 2 : 1)) {
                 _cge_fail("cge_mpsge: " + (R[k].f == "o" ? "an output of block " + bk[b, 2] + " belongs in t or a nest within it" : "an input or demand of block " + bk[b, 2] + " belongs in s or a nest within it"), 198)
@@ -26488,7 +26515,60 @@ string colvector _cge_mp_post(struct cge_mp scalar MP, real scalar b, real scala
 // The variable of the price index of nest n of block b, with its indexes
 string scalar _cge_mp_nvar(struct cge_mp scalar MP, real scalar b, string scalar n)
 {
-    return(MP.bk[b, 2] + "_" + n + _cge_mp_paren(MP.bk[b, 3]))
+    return(_cge_mp_nname(MP, b, n) + _cge_mp_paren(_cge_mp_nidx(MP, b, n)))
+}
+
+// An indexed nest (from version 0.46.0), written g.tl: a nest for each
+// element of the set of index g, which takes the records of that element.
+// The index of a nest ("" for a nest of its own)
+string scalar _cge_mp_nix(string scalar n)
+{
+    if (strlen(n) > 3) {
+        if (substr(n, strlen(n) - 2, 3) == ".tl") return(substr(n, 1, strlen(n) - 3))
+    }
+    return("")
+}
+
+// The name of the variable of the price index of nest n of block b: B_n, or
+// B_gtl for the nests indexed by g
+string scalar _cge_mp_nname(struct cge_mp scalar MP, real scalar b, string scalar n)
+{
+    string scalar g
+    g = _cge_mp_nix(n)
+    return(MP.bk[b, 2] + "_" + (g != "" ? g + "tl" : n))
+}
+
+// The indexes of the variable of nest n of block b: the block's, and the
+// index of an indexed nest
+string scalar _cge_mp_nidx(struct cge_mp scalar MP, real scalar b, string scalar n)
+{
+    string rowvector bix
+    string scalar g
+    g = _cge_mp_nix(n)
+    bix = _cge_mp_ix(MP.bk[b, 3])
+    if (g == "" | anyof(bix, g)) return(MP.bk[b, 3])
+    return(invtokens((bix, g), ","))
+}
+
+// A nest's name as a field gives it: g.tl for an indexed nest, a name of its
+// own in lower case
+string scalar _cge_mp_nestkey(string scalar key)
+{
+    if (regexm(key, "^([A-Za-z_][A-Za-z_0-9]*)[.][tT][lL]$")) return(regexs(1) + ".tl")
+    return(strlower(key))
+}
+
+// A record's indexes beyond the block's, without the index of an indexed
+// nest, which the context binds
+string rowvector _cge_mp_free(string rowvector L, string scalar g)
+{
+    string rowvector out
+    real scalar k
+    if (g == "" | !cols(L)) return(L)
+    // select() of nothing is 0 by 0, not a row of none
+    out = J(1, 0, "")
+    for (k = 1; k <= cols(L); k++) if (L[k] != g) out = out, L[k]
+    return(out)
 }
 
 // A record's expression summed over its indexes beyond the block's, under
@@ -26499,16 +26579,18 @@ string scalar _cge_mp_lsum(string rowvector L, string scalar c, string scalar bo
     return("sum(" + (cols(L) == 1 ? L : "(" + invtokens(L, ",") + ")") + (c != "" ? char(36) + "(" + c + ")" : "") + ", " + body + ")")
 }
 
-// The value at reference prices of nest n of block b: the records within it
+// The value at reference prices of nest n of block b: the records within it;
+// for an indexed nest, at the element of its index that the context binds
 string scalar _cge_mp_nval(struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b, string scalar n)
 {
-    string scalar s
+    string scalar s, g
     real scalar k
     s = ""
+    g = _cge_mp_nix(n)
     for (k = 1; k <= cols(R); k++) {
         if (R[k].b != b | R[k].f == "e") continue
         if (!_cge_mp_within(MP, b, R[k].nest, n)) continue
-        s = s + (s != "" ? " + " : "") + _cge_mp_lsum(R[k].L, R[k].lcr, R[k].val)
+        s = s + (s != "" ? " + " : "") + _cge_mp_lsum(_cge_mp_free(R[k].L, g), R[k].lcr, R[k].val)
     }
     return("(" + s + ")")
 }
@@ -26544,17 +26626,26 @@ string scalar _cge_mp_num(real scalar v)
 string scalar _cge_mp_terms(struct cge_mp scalar MP, struct cge_mpr rowvector R, real scalar b, string scalar n,
                             real scalar sd, real scalar lnf)
 {
-    string scalar s, e, v
+    string scalar s, e, v, g, gm
     real scalar k
     e = _cge_mp_elast(MP, b, n)
+    g = _cge_mp_nix(n)
     s = ""
     for (k = 1; k <= cols(R); k++) {
         if (R[k].b != b | R[k].nest != n) continue
-        s = s + (s != "" ? " + " : "") + _cge_mp_lsum(R[k].L, R[k].lcr, R[k].val + " * " + _cge_mp_pw(R[k].rel, e, sd, lnf))
+        s = s + (s != "" ? " + " : "") + _cge_mp_lsum(_cge_mp_free(R[k].L, g), R[k].lcr, R[k].val + " * " + _cge_mp_pw(R[k].rel, e, sd, lnf))
     }
     for (k = 1; k <= rows(MP.ns); k++) {
         if (MP.ns[k, 1] != strofreal(b) | MP.ns[k, 3] != n) continue
         v = _cge_mp_nval(MP, R, b, MP.ns[k, 2])
+        gm = _cge_mp_nix(MP.ns[k, 2])
+        // the nests indexed by gm: one term for each element (from version
+        // 0.46.0)
+        if (gm != "" & !anyof(_cge_mp_ix(MP.bk[b, 3]), gm)) {
+            s = s + (s != "" ? " + " : "") + "sum(" + gm + char(36) + "(" + v + " != 0), " + v + " * " +
+                _cge_mp_pw(_cge_mp_nvar(MP, b, MP.ns[k, 2]), e, sd, lnf) + ")"
+            continue
+        }
         s = s + (s != "" ? " + " : "") + "(" + v + " * " + _cge_mp_pw(_cge_mp_nvar(MP, b, MP.ns[k, 2]), e, sd, lnf) + ")" +
             (_cge_mp_pos(v) ? "" : char(36) + "(" + v + " != 0)")
     }
@@ -26631,7 +26722,7 @@ string colvector _cge_mp_prodvars(struct cge_model scalar M, struct cge_mp scala
     for (sd = 1; sd <= 2; sd++) {
         nn = _cge_mp_post(MP, b, sd)
         for (k = 1; k <= rows(nn); k++) {
-            v = v \ _cge_mp_def(B + "_" + nn[k], MP.bk[b, 3], _cge_mp_ndom(MP, R, b, nn[k]), _cge_mp_index(MP, R, b, nn[k], sd))
+            v = v \ _cge_mp_def(_cge_mp_nname(MP, b, nn[k]), _cge_mp_nidx(MP, b, nn[k]), _cge_mp_ndom(MP, R, b, nn[k]), _cge_mp_index(MP, R, b, nn[k], sd))
         }
     }
     for (k = 1; k <= cols(R); k++) {
@@ -26661,7 +26752,7 @@ string colvector _cge_mp_demvars(struct cge_model scalar M, struct cge_mp scalar
     v = J(0, 1, "")
     nn = _cge_mp_post(MP, b, 1)
     for (k = 1; k <= rows(nn); k++) {
-        v = v \ _cge_mp_def(H + "_" + nn[k], MP.bk[b, 3], _cge_mp_ndom(MP, R, b, nn[k]), _cge_mp_index(MP, R, b, nn[k], 1))
+        v = v \ _cge_mp_def(_cge_mp_nname(MP, b, nn[k]), _cge_mp_nidx(MP, b, nn[k]), _cge_mp_ndom(MP, R, b, nn[k]), _cge_mp_index(MP, R, b, nn[k], 1))
     }
     v = v \ _cge_mp_def(H + "_u", MP.bk[b, 3], MP.bk[b, 4], H + ix + " / (" + _cge_mp_nval(MP, R, b, "s") + " * " + H + "_s" + ix + ")")
     for (k = 1; k <= cols(R); k++) {

@@ -645,7 +645,7 @@ local exfile = subinstr(subinstr(`"`r(fn)'"', "\", "/", .), "ado/cge_model.ado",
 * method and by PATH as MCP: MCPLIB josephy, an economy in the form of MPSGE
 * with a technology that is not used, and many constraints of the standard
 * model at once
-foreach case in standalone exchange mcpjosephy mcptech manycons sacond mpsge mpsnest mpsaux {
+foreach case in standalone exchange mcpjosephy mcptech manycons sacond mpsge mpsnest mpsaux mpsinest {
     display as text _n "{hline 60}" _n "Case " as result "`case'"
     if "`case'" == "mcpjosephy" {
         quietly cge_model new
@@ -776,6 +776,33 @@ foreach case in standalone exchange mcpjosephy mcptech manycons sacond mpsge mps
         quietly cge_mpsge report: v:XL i:PL prod:X  v:WC w:CONS
         quietly cge_mpsge end, numeraire(PL) start(TAU:0.1)
         quietly cge_shock kend, value(70)
+    }
+    * nests indexed by a set (version 0.46.0): Armington nests of each
+    * good within a nest m, a tariff removed
+    else if "`case'" == "mpsinest" {
+        quietly cge_model new
+        quietly cge_set g = a b
+        quietly cge_parameter dd0(g), values(a:50 b:40)
+        quietly cge_parameter mm0(g), values(a:30 b:20)
+        quietly cge_parameter ld0(g), values(a:30 b:25)
+        quietly cge_parameter kd0(g), values(a:20 b:15)
+        quietly cge_parameter sig(g), values(a:4 b:1.5)
+        quietly cge_parameter tm0(g), values(a:0.1 b:0)
+        quietly cge_parameter tm(g), values(a:0.1 b:0)
+        quietly cge_mpsge sectors: C Y(g) M(g)
+        quietly cge_mpsge commodities: PC PD(g) PM(g) PL PK PFX
+        quietly cge_mpsge consumers: RA GOV
+        quietly cge_mpsge prod:C s:0.5 m:1.5 g.tl(m):sig(g) va:1
+        quietly cge_mpsge    o:PC q:(200 + sum(g, tm0(g) * mm0(g)))
+        quietly cge_mpsge    i:PD(g) q:dd0(g) g.tl:
+        quietly cge_mpsge    i:PM(g) q:mm0(g) p:(1+tm0(g)) g.tl: a:GOV t:tm(g)
+        quietly cge_mpsge    i:PL q:40 va:  i:PK q:20 va:
+        quietly cge_mpsge prod:Y(g) s:1  o:PD(g) q:dd0(g)  i:PL q:ld0(g)  i:PK q:kd0(g)
+        quietly cge_mpsge prod:M(g)  o:PM(g) q:mm0(g)  i:PFX q:mm0(g)
+        quietly cge_mpsge demand:RA  d:PC q:200  e:PL q:95  e:PK q:55  e:PFX q:50
+        quietly cge_mpsge demand:GOV  d:PC q:(sum(g, tm0(g) * mm0(g)))
+        quietly cge_mpsge end, numeraire(PL)
+        quietly cge_shock tm, value(0)
     }
     else if "`case'" == "standalone" {
         preserve

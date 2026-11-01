@@ -8,8 +8,8 @@
 * and one that starts; an elasticity given by a parameter, switched to
 * Cobb-Douglas under conditions(solve); save and use; from version 0.45.0,
 * auxiliary variables and constraints, endogenous taxes, rationed
-* endowments and report variables against GAMS/MPSGE; errors. The data are
-* SYNTHETIC.
+* endowments and report variables against GAMS/MPSGE; from version 0.46.0,
+* nests indexed by a set; errors. The data are SYNTHETIC.
 
 version 13.0
 
@@ -420,7 +420,84 @@ mata: st_numscalar("tmp_d", abs(_tmp_val("labtax", "WEL", "poor") - _tmp_val("la
 assert scalar(tmp_d) < 1e-14
 
 * ---------------------------------------------------------------------
-* 6. Errors: the model is not added, and the statements are kept until
+* 6. Nests indexed by a set (version 0.46.0): an Armington nest for each
+*    good, with an elasticity of its own, within a nest named m, beside a
+*    nest of value added; a tariff; less foreign exchange and free trade
+* ---------------------------------------------------------------------
+program define _tmp_inest
+    cge_model new
+    cge_set g = a b
+    cge_parameter dd0(g), values(a:50 b:40)
+    cge_parameter mm0(g), values(a:30 b:20)
+    cge_parameter ld0(g), values(a:30 b:25)
+    cge_parameter kd0(g), values(a:20 b:15)
+    cge_parameter sig(g), values(a:4 b:1.5)
+    cge_parameter tm0(g), values(a:0.1 b:0)
+    cge_parameter tm(g), values(a:0.1 b:0)
+    cge_parameter fxend = 50
+    cge_parameter mend(g), values(a:30 b:20)
+end
+program define _tmp_inestrun
+    cge_solve, name(bench)
+    assert r(converged) == 1 & r(iterations) == 0
+    cge_shock fxend, value(40)
+    cge_solve, name(lessfx)
+    cge_shock fxend, value(50)
+    cge_shock tm, value(0)
+    cge_solve, name(freetrade)
+    foreach sc in lessfx freetrade {
+        mata: st_numscalar("tmp_d", _tmp_gams("mp_inest", "`sc'", "`sc'", 1))
+        display as text "mp_inest `sc': largest relative difference from GAMS/MPSGE " as result %9.2e scalar(tmp_d)
+        assert scalar(tmp_d) < 1e-9
+    }
+end
+_tmp_inest
+cge_mpsge using "data/mpsge/mp_inest.gms", numeraire(PL)
+assert r(gap) < 1e-12
+_tmp_inestrun
+* at free trade imports cost what foreign exchange costs
+mata: st_numscalar("tmp_d", abs(_tmp_val("freetrade", "PM", "a") - _tmp_val("freetrade", "PFX", "")) + abs(_tmp_val("freetrade", "PM", "b") - _tmp_val("freetrade", "PFX", "")))
+assert scalar(tmp_d) < 1e-12
+
+* the same in commands
+_tmp_inest
+cge_mpsge sectors: C Y(g) M(g)
+cge_mpsge commodities: PC PD(g) PM(g) PL PK PFX
+cge_mpsge consumers: RA GOV
+cge_mpsge prod:C s:0.5 m:1.5 g.tl(m):sig(g) va:1
+cge_mpsge    o:PC q:(200 + sum(g, tm0(g) * mm0(g)))
+cge_mpsge    i:PD(g) q:dd0(g) g.tl:
+cge_mpsge    i:PM(g) q:mm0(g) p:(1+tm0(g)) g.tl: a:GOV t:tm(g)
+cge_mpsge    i:PL q:40 va:  i:PK q:20 va:
+cge_mpsge prod:Y(g) s:1  o:PD(g) q:dd0(g)  i:PL q:ld0(g)  i:PK q:kd0(g)
+cge_mpsge prod:M(g)  o:PM(g) q:mm0(g)  i:PFX q:mm0(g)
+cge_mpsge demand:RA  d:PC q:200  e:PL q:95  e:PK q:55  e:PFX q:fxend
+cge_mpsge demand:GOV  d:PC q:(sum(g, tm0(g) * mm0(g)))
+cge_mpsge end, numeraire(PL)
+_tmp_inestrun
+
+* an indexed nest at the top, and a demand block with one
+_tmp_inest
+cge_mpsge sectors: Y(g)
+cge_mpsge commodities: PD(g) PM(g) PL PK
+cge_mpsge consumers: RA
+cge_mpsge prod:Y(g) s:1  o:PD(g) q:dd0(g)  i:PL q:ld0(g)  i:PK q:kd0(g)
+cge_mpsge demand:RA s:0.8 g.tl:sig(g)  d:PD(g) q:(dd0(g)) g.tl:  d:PM(g) q:mm0(g) g.tl:
+cge_mpsge    e:PL q:55  e:PK q:35  e:PM(g) q:mend(g)
+cge_mpsge end, numeraire(PL)
+assert r(gap) < 1e-12
+cge_shock mend, elements(a) value(40)
+cge_solve, name(moreimp)
+assert r(converged) == 1
+* within a good's nest the demands follow its elasticity, 4 for a: the
+* ratio of the quantities against the ratio of the prices
+mata: st_numscalar("tmp_d", abs(ln((_tmp_val("moreimp", "RA_d1", "a") / 50) / (_tmp_val("moreimp", "RA_d2", "a") / 30)) + 4 * ln(_tmp_val("moreimp", "PD", "a") / _tmp_val("moreimp", "PM", "a"))))
+assert scalar(tmp_d) < 1e-10
+mata: st_numscalar("tmp_d", abs(_tmp_val("moreimp", "PM", "a") - 1))
+assert scalar(tmp_d) > 1e-3
+
+* ---------------------------------------------------------------------
+* 7. Errors: the model is not added, and the statements are kept until
 *    they are dropped
 * ---------------------------------------------------------------------
 program define _tmp_err
@@ -516,6 +593,26 @@ cge_mpsge prod:X o:PX q:10
 capture noisily cge_mpsge i:PL q:10 r:A
 assert _rc == 198
 cge_mpsge, drop
+* indexed nests (from version 0.46.0): a record without the nest's index; a
+* nest within an indexed nest; a field without a value that names no nest
+cge_set g = a b
+cge_mpsge sectors: X
+cge_mpsge commodities: PX PL
+cge_mpsge consumers: CONS
+cge_mpsge prod:X g.tl:2 o:PX q:10 i:PL q:10 g.tl:
+cge_mpsge demand:CONS d:PX q:10 e:PL q:10
+_tmp_err 198
+cge_mpsge sectors: X
+cge_mpsge commodities: PX PL
+cge_mpsge consumers: CONS
+cge_mpsge prod:X g.tl:2 w(g.tl):1 o:PX q:10 i:PL q:10
+cge_mpsge demand:CONS d:PX q:10 e:PL q:10
+_tmp_err 198
+cge_mpsge sectors: X
+cge_mpsge prod:X o:PX q:10
+capture noisily cge_mpsge i:PL q:
+assert _rc == 198
+cge_mpsge, drop
 * a model from a SAM takes no model in the form of MPSGE
 quietly do setup_synthetic.do
 capture noisily cge_mpsge sectors: X
@@ -525,5 +622,5 @@ capture erase "tmp_mpsge.cgem"
 capture mata: mata drop _tmp_gams()
 capture mata: mata drop _tmp_val()
 capture mata: mata drop _tmp_diff()
-capture program drop _tmp_tax _tmp_sam3 _tmp_sam3run _tmp_err _tmp_aux _tmp_auxrun
+capture program drop _tmp_tax _tmp_sam3 _tmp_sam3run _tmp_err _tmp_aux _tmp_auxrun _tmp_inest _tmp_inestrun
 capture scalar drop tmp_d tmp_r tmp_a tmp_b tmp_c tmp_tbase tmp_ttn tmp_tm2 tmp_xbase tmp_xtn tmp_xm2

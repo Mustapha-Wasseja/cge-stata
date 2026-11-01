@@ -104,6 +104,7 @@ sacond,path,cns,16,6,0.000e+00,1.599e-16
 mpsge,path,mcp,1,62,0.000e+00,1.276e-14
 mpsnest,path,mcp,1,43,0.000e+00,2.428e-15
 mpsaux,path,mcp,1,36,0.000e+00,9.270e-15
+mpsinest,path,mcp,1,54,0.000e+00,8.877e-16
 nlphs071,ipopt,nlp,2,5,0.000e+00,6.764e-13
 nlpentropy,ipopt,nlp,2,12,0.000e+00,3.055e-13
 nlpfrontier,ipopt,nlp,2,3,0.000e+00,3.948e-12

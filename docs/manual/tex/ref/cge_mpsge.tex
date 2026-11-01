@@ -84,6 +84,7 @@ Field & Meaning\\
 \cmd{s:}\argu{e} & elasticity of substitution at the top of the inputs or demands; default 0\\
 \cmd{t:}\argu{e} & elasticity of transformation at the top of the outputs; default 0\\
 \argu{nest}\cmd{:}\argu{e} & a nest within \cmd{s}; \argu{nest}\cmd{(}\argu{parent}\cmd{):}\argu{e} within another nest or \cmd{t}\\
+\argu{g}\cmd{.tl:}\argu{e} & a nest for each element of the set of index \argu{g}; \argu{g}\cmd{.tl(}\argu{parent}\cmd{):}\argu{e} within a nest\\
 \cmd{o:}, \cmd{i:} \argu{commodity} & an output or input of a production block\\
 \cmd{d:}, \cmd{e:} \argu{commodity} & a final demand or endowment of a demand block\\
 \cmd{q:}\argu{expression} & reference quantity of a record; default 1\\
@@ -92,7 +93,7 @@ Field & Meaning\\
 \cmd{n:}\argu{aux} [\cmd{m:}\argu{expression}] & an endogenous rate of the tax, \cmd{n:} times \cmd{m:} (default 1), added to \cmd{t:}\\
 \cmd{r:}\argu{aux} & the multiplier of an endowment\\
 \cmd{v:}\argu{name} & a report variable, with \cmd{o:} or \cmd{i:} and \cmd{prod:}, \cmd{d:} and \cmd{demand:}, or \cmd{w:}\argu{consumer}\\
-\argu{nest}\cmd{:} & the nest of a record; default \cmd{s} for inputs and demands, \cmd{t} for outputs\\
+\argu{nest}\cmd{:}, \argu{g}\cmd{.tl:} & the nest of a record; default \cmd{s} for inputs and demands, \cmd{t} for outputs\\
 \hline
 \end{tabular}
 \end{center}
@@ -189,7 +190,7 @@ For sector $B$, consumer $H$, commodity $P$ and the $k$th record of a block:
 Name & Content\\
 \hline
 $B$, $P$, $H$ & activity levels and prices, 1 at the reference point, and incomes at their reference values\\
-$B$\cmd{_s}, $B$\cmd{_t}, $B$\cmd{_}\argu{nest} & price indexes of the nests, 1 at the reference point\\
+$B$\cmd{_s}, $B$\cmd{_t}, $B$\cmd{_}\argu{nest}, $B$\cmd{_}\argu{g}\cmd{tl} & price indexes of the nests, 1 at the reference point\\
 $B$\cmd{_i}$k$, $B$\cmd{_o}$k$ & quantities of the inputs and outputs\\
 $B$\cmd{_tx}$k$ & revenue of the tax on the record\\
 $H$\cmd{_s}, $H$\cmd{_u}, $H$\cmd{_d}$k$ & price index and utility of the consumer, and its demands\\
@@ -247,9 +248,23 @@ takes the indexes of its block and commodity that it names and sums over
 the others: \cmd{v:LAB(s) i:PF(lab) prod:Y(s)} is the labour of each
 sector, and \cmd{v:FAC(f) i:PF(f) prod:Y(man)} the factors of one.
 
-\cgesubsec{What is not available}
+\cgesubsec{Example 4: nests indexed by a set}
 
-Indexed nests stop \cmd{cge_mpsge} with an error.
+From version 0.46.0, \argu{g}\cmd{.tl:}\argu{e} declares a nest for each
+element of the set of index \argu{g}, as GTAP's models nest imports and
+domestic goods for each commodity. A record in it, \argu{g}\cmd{.tl:},
+runs over \argu{g} and belongs to the nest of its element; the elasticity
+may differ by element, and the nests may be within a nest of their own,
+\argu{g}\cmd{.tl(}\argu{parent}\cmd{):}, not within each other. The
+letters of fields other than \cmd{s} and \cmd{t} may name nests, as
+\cmd{m:} here, which holds the nests of the goods beside a nest of value
+added; a field without a value puts a record in the nest of that name.
+Imports pay a tariff to the government:
+\stlog{mps_inest}
+The price index of each good's nest is \cmd{C_gtl(}\argu{g}\cmd{)}. With
+the tariff removed, imports of the good it fell on rise:
+\stlog{mps_inestsolve}
+The test suite compares this model with GAMS/MPSGE to $10^{-13}$.
 
 \cgesec{Stored results}
 

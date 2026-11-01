@@ -1,0 +1,33 @@
+. cge_shock tm, value(0)
+User parameter tm changed for 2 element(s)
+
+. cge_solve, name(freetrade)
+Simulation freetrade solved in 9 iteration(s) (newton)
+Largest scaled residual  5.77e-14
+
+. quietly cge_results, sim(freetrade) clear nodisplay
+
+. format base value %10.6f
+
+. list variable element1 base value if inlist(variable, "M", "Y", "PM", "C_gtl", "RA", "GOV"), noobs
+>  sepby(variable)
+
+  +-----------------------------------------------+
+  | variable   element1         base        value |
+  |-----------------------------------------------|
+  |        Y          a     1.000000     0.989812 |
+  |        Y          b     1.000000     1.008771 |
+  |-----------------------------------------------|
+  |        M          a     1.000000     1.067068 |
+  |        M          b     1.000000     0.899399 |
+  |-----------------------------------------------|
+  |       PM          a     1.000000     1.079285 |
+  |       PM          b     1.000000     1.079285 |
+  |-----------------------------------------------|
+  |    C_gtl          a     1.000000     0.992210 |
+  |    C_gtl          b     1.000000     1.025284 |
+  |-----------------------------------------------|
+  |       RA              200.000000   203.933593 |
+  |-----------------------------------------------|
+  |      GOV                3.000000     0.000000 |
+  +-----------------------------------------------+

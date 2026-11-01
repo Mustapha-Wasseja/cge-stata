@@ -3877,6 +3877,25 @@ mp_aux.gms (an equal-yield tax and a floor on the real wage, with reports)
 with GAMS/MPSGE to 1e-9 (agreement about 1e-14), checks $t + n$ and $m n$
 against $n$, and reports over sets.
 
+## 56. Nests indexed by a set in models in the form of MPSGE (from version 0.46.0)
+
+A nest `g.tl:e` (`g.tl(parent):e`) of a block is a nest for each element of
+the set of index `g` (`_cge_mp_nix`). A record with `g.tl:` runs over `g` and
+belongs to the nest of its element. The price index of the nests is
+`B_gtl(b, g)` (`_cge_mp_nname`, `_cge_mp_nidx`; over the block's indexes if
+`g` is one of them), defined where the nest's value is not zero, with the
+elasticity `e` evaluated at each element; its value and terms sum the
+records over their indexes other than `g` (`_cge_mp_free`). In the parent's
+index the nests enter as `sum(g$(V_g != 0), V_g * B_gtl^(1-e))`; a record's
+chain of factors goes from `B_gtl(b, g)` to the parent's index. Indexed nests
+are not within each other, and no nest is within one. From version 0.46.0 a
+field without a value is the nest of a record before the other fields, so
+that the letters of fields other than `s` and `t` name nests (as `m:` in
+GTAP's models). tests/test_mpsge.do compares tests/data/mpsge/mp_inest.gms
+(Armington nests of each good within a nest `m`, beside value added, with a
+tariff) with GAMS/MPSGE to 1e-9, in commands too, and checks a demand block
+with an indexed nest at the top against the ratio of its demands.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
