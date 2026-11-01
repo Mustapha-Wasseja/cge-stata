@@ -5,17 +5,20 @@
 \textbf{Three implementations.} The equations of Part~\ref{part:model} are
 implemented in Stata and Mata, in a Python reference model and in GAMS. The
 Python model runs in continuous integration and writes the expected results of
-every test case. The Stata test suite, 25 test files, compares every variable
+every test case. The Stata test suite, 63 test files, compares every variable
 of every case with them and requires agreement to $10^{-6}$; in practice they
 agree to about $10^{-11}$ or better. The GAMS model was written from the
 specification, calibrates the model from the SAM and the user's settings alone,
 and is solved with PATH; it reproduces the 186 scenarios of the Python
 reference, including scenarios with constraints solved as complementarity
 problems, to $2.9 \times 10^{-11}$ or better. \manref{cge_gams} writes any model
-for that GAMS program: 41 exported cases, solved with PATH (17 of them also
-with CONOPT, KNITRO and IPOPT), reproduce the solutions of Stata to
-$4 \times 10^{-9}$ or better
-(\secref{sec:gams-import}). The test suite also runs every example do-file.
+for GAMS, the built-in model with that program and a standalone model as a
+program of its own: 67 exported cases, solved with PATH (17 of them also with
+CONOPT, KNITRO and IPOPT, three nonlinear programmes with IPOPT and two
+mixed-integer programmes with SCIP), reproduce the solutions of Stata to
+$3.6 \times 10^{-9}$ or better, and to $2.1 \times 10^{-11}$ or better with
+every solver but CONOPT (\secref{sec:gams-import}). The suite passes in
+Stata~13.1 and in StataNow~19.5, and also runs every example do-file.
 
 \textbf{The survey link and the user language.} The measures of
 \manref{cge_microsim} are checked against Stata's own commands and against
@@ -67,6 +70,59 @@ and read back gives the SAM, the calibrated parameters and the levels of the
 variables unchanged, to the last bit; the solution of a scenario solved by GAMS,
 read from its own GDX file, agrees with Stata's to $10^{-13}$; and a SAM read
 from that file calibrates the same model (\texttt{tools/gams/run\_gdx\_check.py}).
+Sets defined by set algebra have the elements found by enumeration, and
+conditions evaluated at each solve give, after a shock, the model whose base
+meets them, to $10^{-14}$; GAMS solves the same elements (cases
+\cmd{condsolve} and \cmd{sacond}). A variable added to an element of the model's own equations
+gives the solution of the element replaced by its own equation with the
+variable on its right side, to $10^{-10}$ (case \cmd{addterm}).
+
+\textbf{Standalone models and solvers.} The standard model written whole in
+the user language reproduces the built-in model to about $10^{-12}$, and GAMS
+solves it to the same solution (case \cmd{standalone}). The semismooth
+Newton method solves problems of MCPLIB with known solutions, Kojima and
+Shindo's degenerate one among them, and agrees with PATH (cases
+\cmd{mcpjosephy} and \cmd{mcptech}); box pairs reach each of their regimes,
+and a tariff-rate quota whose cap does not bind is the quota as an
+inequality (case \cmd{boxpair}). The interior point reproduces the published
+optimum of problem 71 of \citet{hock1981}, with the marginals of its
+equations against differences of their right sides, balances a matrix by
+cross entropy to the RAS solution, and solves the counterexample of
+\citet{wachter2000} with feasibility restoration, which reports a locally
+infeasible programme as such. Its exact Hessians agree with central
+differences of the exact gradients, with the same solutions and iterations.
+Branch and bound reproduces enumeration of every integer point. The
+experimental links (Stata 16 and later) are checked against the package's
+own methods and published results: SuperLU against the sparse LU, HiGHS
+against the interior point, IPOPT on problem 71 against the published
+optimum to $3 \times 10^{-7}$ and the interior point's marginals to
+$10^{-5}$, and SCIP against branch and bound and on a nonconvex polynomial,
+where it finds the global minimum and the interior point a local one.
+Reverse and forward differentiation give the same derivatives, against
+central differences over every operation and function of the language, and
+the exact Jacobians of linked regions and of runs with foresight agree with
+central differences. Ruiz's equilibration leaves the solutions and
+iterations unchanged; on a badly scaled test system it lowers the condition
+number of the Jacobian from $5.4 \times 10^8$ to 3.9. \manref{cge_structure}
+finds the blocks and the over- and under-determined parts of systems of
+known structure, and a model solved block by block gives the solution of the
+whole system to $1.3 \times 10^{-15}$; \manref{cge_iis} finds the one bound
+among eight that makes a scenario infeasible. The reports and survey links
+of standalone models give the price indexes, equivalent and compensating
+variations and poverty computed directly from the solutions, to
+$10^{-10}$, with decompositions that add up; their sensitivity analyses give
+the prices and variations that each draw of the parameters implies, to
+$10^{-8}$.
+
+\textbf{Models in the form of MPSGE.} Five models written for GAMS's own
+MPSGE (\texttt{tests/data/mpsge}), with taxes, nests at several depths and
+indexed by a set, joint products, a free good, sectors that shut down or
+start, auxiliary variables with an equal-yield tax and a floor on the real
+wage, and report variables, are read from their GAMS programs by
+\cmd{cge_mpsge using}, and four of them are also written in commands. Every
+level of every scenario agrees with GAMS/MPSGE to about $10^{-13}$, and GAMS
+solves the exported models to Stata's solutions with PATH (cases
+\cmd{mpsge}, \cmd{mpsnest}, \cmd{mpsaux} and \cmd{mpsinest}).
 
 \textbf{Checks in every run.} Calibration checks benchmark replication;
 \manref{cge_check} adds SAM balance, a square closure, homogeneity, a perturbed
@@ -164,6 +220,11 @@ benchmark replication fails & an error in the SAM or the mapping that the checks
 ``closure is not square'' & a closure fixes too many or too few variables, for example a factor closure that the model's data cannot support\\
 \cmd{cge_solve} exits with error 430 & the shock has no solution, or one too far from the base: read the diagnostics (the equations with the largest residuals, and the smallest pivot), try more steps with \cmd{steps()}, check the closure, and look at \cmd{trace}\\
 ``the closure is singular'' & a swap leaves an equation with no free variable: free a variable of that equation, or undo the swap\\
+a standalone model's Jacobian is singular & \manref{cge_structure} names the equations and variables of the over- and under-determined parts: fix a variable, free one, or add or remove an equation\\
+a scenario with bounds or constraints does not solve & \manref{cge_iis} finds a set of them that cannot hold together, every one of which is needed for the failure\\
+a nonlinear programme ends with model status 5 & the equations and bounds cannot hold together near the point where the interior point stopped: check the bounds, or start elsewhere with \cmd{starts()}\\
+\cmd{solver(ipopt)}, \cmd{solver(scip)} or \cmd{solver(highs)} stops with error 198 & the links need Stata 16 or later with Python and SciPy, and cyipopt or PySCIPOpt: install them, or use the package's own solvers\\
+\cmd{cge_mpsge end} stops with an error & the model is not added, and the statements are kept: correct the one named, or start again with \cmd{cge_mpsge, drop}\\
 a shock ``is not fixed under the current closure'' & the variable is endogenous under the closure: change the closure, or shock a parameter\\
 a negative or missing change in a report & percentage changes of negative bases (a deficit) are relative to the absolute value; a zero base gives a missing change\\
 Stata 13 cannot install from GitHub & its TLS version is too old: install from a downloaded copy (chapter~\ref{chap:intro})\\

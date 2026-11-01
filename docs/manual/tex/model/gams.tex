@@ -137,6 +137,55 @@ cannot start other programs in batch mode. A GAMS licence is needed; GAMS runs
 solvers outside the licence only for small models. Listing files name the
 licence holder.
 
+\section{Standalone models and user additions}\label{sec:gams-user}
+
+\textbf{Standalone models.} A standalone model (\secref{sec:standalone}) has
+no SAM for GAMS to calibrate from, and is written as a GAMS program of its
+own: its sets with their elements, its parameters with their values in
+Stata, its variables with their attributes and levels, and its equations,
+written out element by element as Stata compiles them. A square system is
+solved as a CNS model; a system with inequalities or box pairs as an MCP
+model with PATH; a programme with an objective as an NLP model, with IPOPT
+unless another solver is named, and with integer or binary variables as a
+MINLP (or, with \cmd{type(mip)}, a MIP) model, with SCIP
+(\secref{sec:nlp}, \secref{sec:integer}). A named model is exported with its
+own equations and the other variables fixed (\secref{sec:namedmodels}).
+
+\textbf{Box pairs.} From version 0.34.0, an equation paired with a variable
+between bounds is written as PATH takes one: in the scenario, the variable
+$X$ is freed and linked to a variable $\V{BXV}_k$ with the bounds of the
+pair, and the equation, divided by its scale, is paired with $\V{BXV}_k$ in
+the model \cmd{cgecon},
+\begin{filecode}
+UBk..  ((lhs) - (rhs)) / sF =n= 0;
+LBk..  X =e= BXVk;
+\end{filecode}
+so that a model with box pairs is exported as an MCP model and solved by
+PATH. The base model leaves the pairs out, $X$ being fixed there.
+
+\textbf{Terms added to the model's own equations.} From version 0.40.0, every
+equation of \cmd{cge_model.gms} has on its right side a term
+\cmd{XADV('B', e1, e2)}, present where \cmd{XADS} marks an element of block
+\cmd{B} with variables added (\secref{sec:useradd}). \cmd{cge_user.inc}
+defines \cmd{XADV} by an equation, the sum of the variables less their base
+value times \cmd{UBASE}, so that GAMS solves Stata's base when a term is not
+zero at the base, and adds the whole term in the scenario, where
+\cmd{UBASE} is 0.
+
+\textbf{Conditions at each solve.} From version 0.43.0, a simulation solved
+under the option \cmd{conditions(solve)} of \manref{cge_options} is exported with its own
+structure: the equation elements and the elements of the user variables that
+its parameters bring into their domains, the others fixed at 0. GAMS's base
+solve then reproduces Stata's base on the elements of that structure, and the
+scenario solve the simulation (\secref{sec:userconditions}).
+
+\textbf{Models in the form of MPSGE.} A model written by \manref{cge_mpsge} is
+a standalone model of user variables and equations, and is exported as one:
+GAMS receives the mixed complementarity problem that \cmd{cge_mpsge}
+generated (\secref{sec:mpsge}), not MPSGE's statements, and solves it with
+PATH. The model of a GAMS program can be read the other way, by
+\cmd{cge_mpsge using}.
+
 \section{Comparison and import}\label{sec:gams-import}
 
 \textbf{Comparison.} \cmd{compare} reads the GAMS results and computes, for
@@ -155,24 +204,31 @@ solver (\secref{sec:performance}) the route is to build, calibrate and shock
 the model in Stata, export it, solve it with PATH, and import the solution for
 reports, microsimulation or comparison.
 
-\textbf{Agreement.} On 31 exported cases, which together cover every layout,
-extension and closure of the package, the solutions of GAMS agree with those of
-Stata to these relative differences:
+\textbf{Agreement.} On 67 exported cases, which together cover every layout,
+extension and closure of the built-in model, dynamic runs, linked regions,
+user additions, scenario loops and standalone models (systems,
+complementarity problems, models in the form of MPSGE, and nonlinear and
+mixed-integer programmes), the solutions of GAMS agree with those of Stata
+to these relative differences:
 
 \begin{cgetable}{lllll}
 \toprule
 Solver & Type & Cases solved & Base & Scenario\\
 \midrule\endhead
 \bottomrule\endlastfoot
-PATH & CNS & 26 of 26 & $4.3 \times 10^{-16}$ & $1.6 \times 10^{-11}$\\
-PATH & MCP, with constraints & 5 of 5 & $2.8 \times 10^{-17}$ & $4.0 \times 10^{-12}$\\
+PATH & CNS & 46 of 46 & $4.3 \times 10^{-16}$ & $2.6 \times 10^{-12}$\\
+PATH & MCP, with constraints or pairs & 16 of 16 & $1.8 \times 10^{-16}$ & $3.6 \times 10^{-12}$\\
 CONOPT & CNS & 17 of 17 & $4.3 \times 10^{-16}$ & $3.6 \times 10^{-9}$\\
 KNITRO & CNS & 17 of 17 & $4.3 \times 10^{-16}$ & $1.6 \times 10^{-11}$\\
-IPOPT & NLP & 17 of 17 & $5.6 \times 10^{-15}$ & $1.6 \times 10^{-11}$\\
+IPOPT & NLP & 20 of 20 & $5.6 \times 10^{-15}$ & $1.6 \times 10^{-11}$\\
+SCIP & MINLP & 2 of 2 & --- & $2.1 \times 10^{-11}$\\
 \end{cgetable}
 
 Stata solved every case with a tolerance of $10^{-12}$ on the scaled
 residuals, so differences of about $10^{-11}$ are at the precision of the two
 solutions; CONOPT stops at a looser feasibility tolerance. CONOPT, KNITRO and
 IPOPT do not solve complementarity problems, so they were not run on the cases
-with constraints.
+with constraints. Seventeen cases of the built-in model were solved with
+every CNS and NLP solver; three nonlinear programmes with IPOPT, and two
+mixed-integer programmes, whose starting levels are written but not solved,
+with SCIP.

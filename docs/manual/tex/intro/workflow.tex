@@ -26,6 +26,26 @@ Solve in GAMS & \manref{cge_gams}\\
 Save and reload & \manref{cge_save}, \manref{cge_use}\\
 \end{cgetable}
 
+A standalone model, written whole in the user language, takes a shorter path
+(\secref{sec:standalone}):
+
+\begin{cgetable}{p{0.40\linewidth}p{0.56\linewidth}}
+\toprule
+Step & Commands\\
+\midrule\endhead
+\bottomrule\endlastfoot
+Start the model & \cmd{cge_model new} (\manref{cge_model}), or a model of the library (\manref{cge_modlib})\\
+Sets, parameters and macros & \manref{cge_set}, \manref{cge_parameter}, \manref{cge_macro}\\
+Variables and equations, or MPSGE's blocks & \manref{cge_variable}, \manref{cge_equation}, \manref{cge_bound}; \manref{cge_mpsge}\\
+Check the structure & \cmd{cge_model describe}, \manref{cge_structure}, \manref{cge_listing}\\
+Shock and solve, as a system or a programme & \manref{cge_shock}, \manref{cge_solve}, \manref{cge_options}, \manref{cge_loop}\\
+Find what makes a scenario infeasible & \manref{cge_iis}\\
+Roles of the variables, and reports & \cmd{cge_model roles}, \manref{cge_results}, \manref{cge_report}\\
+Sensitivity and household surveys & \manref{cge_sensitivity}, \manref{cge_microsim}\\
+Games & \manref{cge_nash}\\
+Solve in GAMS, save and reload & \manref{cge_gams}, \manref{cge_gdx}, \manref{cge_save}, \manref{cge_use}\\
+\end{cgetable}
+
 \section{Where the model lives}
 
 The model lives in Mata, not in the data in memory. \manref{cge_sam} starts a

@@ -62,6 +62,32 @@ base utility:
 Both are positive for a gain and are reported in per cent of $\V{EH}^0_h$.
 Neither values public goods, the environment or leisure.
 
+\section{Standalone models}\label{sec:sa-report}
+
+From version 0.37.0, \manref{cge_report} reports a standalone model
+(\secref{sec:standalone}). Its tables are the variables, every element of
+every user variable with its change from the base, and the items of
+\opt{}{items()}, measures written in the user language and evaluated at the
+base and at each simulation with its own parameters; \opt{}{variables()} and
+\opt{}{items()} also add to the tables of a model from a SAM. With the roles
+of \cmd{cge_model roles}, prices $P_c$ of the goods and the quantities
+$Q_{cg}$ that each group $g$ buys, it adds each group's expenditure $E_g =
+\sum_c P_c Q_{cg}$, its base budget shares $s_{cg} = P^0_c Q^0_{cg} /
+E^0_g$, the Laspeyres and geometric price indexes
+\begin{equation*}
+L_g = \sum_c s_{cg}\,\frac{P_c}{P^0_c}, \qquad
+G_g = \exp\Bigl(\sum_c s_{cg} \ln \frac{P_c}{P^0_c}\Bigr),
+\end{equation*}
+real expenditure $E_g/G_g$ and, with incomes $Y_g$, real income $Y_g/G_g$.
+Welfare is measured by the variations of Cobb--Douglas preferences in the
+base shares,
+\begin{equation*}
+\V{EV}_g = E_g/G_g - E^0_g, \qquad \V{CV}_g = E_g - E^0_g\,G_g,
+\end{equation*}
+in per cent of $E^0_g$; they are exact for Cobb--Douglas demands and an
+approximation otherwise. The report has the same form as that of a model
+from a SAM, on screen, as a dataset and in Excel.
+
 \section{Changes}
 
 Reports express a measure $x$ as a change from its base value $x^0$: rates in

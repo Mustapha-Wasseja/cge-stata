@@ -127,7 +127,14 @@ carries its derivatives with respect to the variables of the equation, which
 the operators combine by the rules of the derivative, for example $(ab)' =
 a'b + ab'$, $(a/b)' = a'/b - a b'/b^2$, $(a^b)' = a^b (b\, a'/a + \ln a\,
 b')$ (or $b\, a^{b-1} a'$ for an exponent without variables) and $(\ln a)' =
-a'/a$. The rows of constraints \eqref{eq:B1} have exact derivatives too.
+a'/a$. From version 0.30.0 an element with 200 variables or more, such as a
+long sum, is differentiated in reverse instead, in one pass back through
+its compiled form, so that the work grows with the length of the expression
+rather than with its length times its number of variables (chapter~\ref{chap:user},
+\emph{Compilation}). The rows of constraints \eqref{eq:B1} have exact
+derivatives too, and so, from version 0.31.0, do the equations that link
+regions (chapter~\ref{chap:regions}) and, from version 0.32.0, every state
+of a run with perfect foresight (\secref{sec:foresight}).
 
 The test suite checks the exact Jacobian against central differences taken
 column by column, for the reduced and the full system, at the base, at
@@ -204,6 +211,33 @@ differences use the sparse LU too, with the differences of each group of
 columns as entries. Powell's hybrid method, which holds the Jacobian dense,
 is left out with the sparse LU above 10,000 equations.
 
+\textit{SuperLU.} From version 0.27.0, on Stata 16 and later with Python and
+SciPy, the option \cmd{linsolver(python)} of \manref{cge_options} factorises each Jacobian with
+SciPy's SuperLU instead, through Stata's Python integration; it is an
+experimental option, and Stata 13 to 15 keep the package's own LU.
+
+\section{Scaling}\label{sec:scaling}
+
+The variables are scaled by their base values and the equations by the base
+magnitudes of their sides (section~\ref{sec:newton}). Where these scales are
+poor, as for a variable with a zero base that grows large, the rows and
+columns of the Jacobian may still differ by many orders of magnitude. From
+version 0.33.0, \cmd{cge_options, scaling(ruiz)} equilibrates each Jacobian
+$A$ of Newton's method and of the semismooth method before it is factorised,
+by the method of \citet{ruiz2001}: starting from $D_r = D_c = I$, each pass
+on the matrix scaled so far sets
+\begin{equation*}
+D_r \leftarrow D_r\,\operatorname{diag}\bigl(\lVert a_{i\cdot}\rVert_2\bigr)^{-1/2},
+\qquad
+D_c \leftarrow D_c\,\operatorname{diag}\bigl(\lVert a_{\cdot j}\rVert_2\bigr)^{-1/2},
+\end{equation*}
+for at most ten passes, or until every norm is within 5 per cent of 1. The
+factors are those of $D_r A D_c$, and a solve gives $\Delta z = D_c (D_r A
+D_c)^{-1} D_r b$, the same step in exact arithmetic. The scales are kept with
+the factors, so the dense and the sparse LU, Broyden's updates, runs with
+foresight and linked regions all use them. The setting is saved with the
+model.
+
 \section{Fallbacks and continuation}\label{sec:continuation}
 
 If Newton's method fails with the exact Jacobian and with central
@@ -240,6 +274,54 @@ equation, which make the Jacobian singular;
 the largest, and the variable it belongs to: partial pivoting permutes rows
 only, so column $j$ of $U$ belongs to variable $j$.
 \end{itemize}
+
+\textbf{Infeasible bounds and constraints.} From version 0.36.0,
+\manref{cge_iis} finds an irreducible infeasible set of a scenario's bounds
+and constraints by the deletion filter of \citet{chinneck1991}: with $F(S)$
+true when the scenario with the candidates $S$ does not solve, it requires
+$F(C)$ for the set $C$ of all candidates and not $F(\emptyset)$, and drops
+each candidate $c$ in turn for good where $F(S \setminus \{c\})$ holds. The
+set left fails to solve, and solves without any one of its members
+\citep{chinneck2008}.
+
+\section{The structure of the system}\label{sec:structure}
+
+From version 0.35.0, \manref{cge_structure} analyses the pattern of the
+system that \manref{cge_solve} solves under the closure: the entries that
+are not zero in the exact Jacobian at a point, rows of the equations and
+columns of the free variables.
+
+\textit{Matching.} A maximum matching pairs rows with columns: each row, in
+increasing order of its number of entries, takes its first unmatched column,
+and from each row left unmatched a search for an augmenting path (rows and
+columns in turn, ending at an unmatched column) improves the matching. The
+structural rank is the number of rows matched; the system is structurally
+singular when it is below the number of rows or of columns, whatever the
+values of the entries.
+
+\textit{Parts.} The decomposition of \citet{dulmage1958} follows the
+alternating paths from the unmatched rows to the over-determined part, whose
+equations outnumber its variables (an equation is redundant, or a variable
+must be freed), and from the unmatched columns to the under-determined part,
+whose variables outnumber its equations (a variable must be fixed, or an
+equation added). The rest is the square part. The report names the
+equations of each part by block and element, as \manref{cge_listing} does,
+and its variables.
+
+\textit{Blocks.} In the square part, row $i$ points to row $k$ when it
+contains the column matched to $k$. The strongly connected components of
+that graph, found by the algorithm of \citet{tarjan1972}, are the blocks of
+the block-triangular form, in an order in which each depends only on itself
+and on those before it. The reduced system of the synthetic SAM has 15
+blocks, 14 of one equation and one of 55, the simultaneous core of prices
+and quantities.
+
+\textit{Solving block by block.} \cmd{cge_solve, blocks} solves a standalone
+model without constraints block by block in that order, by Newton's method
+on each block's equations and their matched variables, the others held at
+the solutions of the blocks before, each block to a tenth of the tolerance;
+Newton's method on the whole system polishes the point if it is not within
+the tolerance. A structurally singular system stops with an error.
 
 \section{Constraints}\label{sec:solution-constraints}
 

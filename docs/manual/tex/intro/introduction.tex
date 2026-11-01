@@ -40,19 +40,39 @@ errors from the survey design and ranges across draws of the elasticities.
 The sensitivity of results to the elasticities can be measured; policy
 instruments can be chosen to maximise an outcome or reach targets; and users
 can add their own variables, equations, sets and parameters, with conditions
-and inequalities paired with variables as in GAMS. Tools read, aggregate, balance and
+and inequalities paired with variables as in GAMS, replace elements of the
+model's own equations or add terms to them. Tools read, aggregate, balance and
 analyse the SAM, and a library gives published elasticities with their
 sources. The model can also be written as a GAMS program, solved there and
 brought back.
 
-Standalone models support equilibrium and complementarity systems and
-nonlinear optimisation, including integer or binary variables
-(\manref{cge_model}, \manref{cge_solve}). \manref{cge_nash} adds Nash and
+Standalone models, written whole in the user language as GAMS programs are,
+support equilibrium and complementarity systems and nonlinear optimisation,
+including integer or binary variables (\manref{cge_model},
+\manref{cge_solve}). Their language has GAMS's sets and subsets, with set
+algebra, parameters calculated element by element, symbols with any number
+of indexes, conditions evaluated at the base or at each solve, lags and
+leads, functions and macros. Equations may be paired with variables, at one
+bound or between two, as in PATH's mixed complementarity problems. A model
+can also be written as MPSGE writes one, in sectors, commodities, consumers
+and nested production and demand blocks, from commands or from the model of
+a GAMS program (\manref{cge_mpsge}). With the roles of their variables,
+standalone models are reported, analysed for sensitivity and passed to
+household surveys as models from a SAM are. \manref{cge_nash} adds Nash and
 Stackelberg games, and \manref{cge_modlib} supplies ready-to-run examples,
 including a Ramsey growth model. Perfect foresight solves periods together;
 any forward-looking behaviour or intertemporal objective must be specified
 in the user's equations or optimisation model. Elasticities remain inputs
 supplied by the user or selected from the sourced library.
+
+The solver uses exact first derivatives, by forward or reverse
+differentiation, and, in nonlinear programmes, exact second derivatives. It
+can equilibrate badly scaled systems, solve a standalone model block by
+block, and restore feasibility within its interior-point method.
+\manref{cge_structure} names the equations and variables at fault in a
+structurally singular system, \manref{cge_iis} the bounds and constraints
+that make a scenario infeasible, and \manref{cge_listing} the residual of
+every equation element.
 
 The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
 experimental links to SciPy's SuperLU and HiGHS require Stata 16 or later
@@ -117,30 +137,30 @@ Version & Additions & Where\\
 0.22.0 & Optimisation from instruments on their bounds; a Ramsey growth model in the library & \manref{cge_optimize}, \manref{cge_modlib}\\
 0.22.1 & Equations over two indexes whose labels are the names of indexes & \secref{sec:userpairs}\\
 0.23.0 & Sums over an alias whose labels are the names of indexes; the optimiser's scales & \secref{sec:userpairs}, \manref{cge_optimize}\\
+0.24.0 & Nash equilibria by Newton's method and damped best responses; multi-start; parallel runs from batch mode on Stata 16 and later & \manref{cge_nash}, \manref{cge_solve}, \manref{cge_loop}\\
 0.25.0 & Sets, parameters, variables and equations with three or more indexes; sets of tuples & \secref{sec:userpairs}\\
 0.26.0 & Lags and leads on ordered sets, \cmd{K(t-1)}, \cmd{K(t+1)}, \cmd{t++1} & \secref{sec:userindexlags}\\
-0.27.0 & Prototype links to SciPy (Stata 16 and later): SuperLU for Newton's steps, HiGHS for linear and mixed-integer programmes & \manref{cge_options}, \manref{cge_solve}\\
+0.27.0 & Prototype links to SciPy (Stata 16 and later): SuperLU for Newton's steps, HiGHS for linear and mixed-integer programmes & \manref{cge_options}, \manref{cge_solve}, \secref{sec:extsolvers}\\
 0.27.1 & Installation within Stata's limit of 100 package files; parallel workers' status records & \manref{cge_synthetic}, \manref{cge_modlib}, \manref{cge_loop}\\
-0.28.0 & Exact second derivatives of nonlinear programmes & \manref{cge_solve}, \manref{cge_options}\\
-0.29.0 & Set algebra: subsets with a domain, unions, intersections, differences, complements and conditions, and sets of pairs from conditions & \manref{cge_set}\\
+0.28.0 & Exact second derivatives of nonlinear programmes & \manref{cge_solve}, \manref{cge_options}, \secref{sec:nlp}\\
+0.29.0 & Set algebra: subsets with a domain, unions, intersections, differences, complements and conditions, and sets of pairs from conditions & \manref{cge_set}, \secref{sec:setalgebra}\\
 0.30.0 & Reverse differentiation of user equations and objectives with many variables & \secref{sec:jacobian}\\
-0.31.0 & Exact Jacobians of linked regions: the regions' equations in their world prices and tariffs, and the link equations & \manref{cge_region}\\
-0.32.0 & Exact derivatives of runs with foresight in debt, growth targets, population and labour forces & \manref{cge_dynamic}\\
-0.33.0 & Ruiz's equilibration of Newton's linear systems, as an option & \manref{cge_options}\\
-0.34.0 & Box pairs: an equation paired with a variable between bounds, as in PATH; tariff-rate quotas & \manref{cge_equation}\\
-0.35.0 & The structure of the system: structural singularity named, the blocks of the square part, and standalone models solved block by block & \manref{cge_structure}, \manref{cge_solve}\\
-0.36.0 & Feasibility restoration of the interior point; an irreducible infeasible set of bounds and constraints & \manref{cge_solve}, \manref{cge_iis}\\
-0.37.0 & Reports of standalone models: the roles of their variables, groups and welfare; report items in the user language & \manref{cge_model}, \manref{cge_report}\\
-0.38.0 & Sensitivity of standalone models: draws of their parameters, each measured from its own benchmark & \manref{cge_sensitivity}\\
-0.39.0 & The link to household surveys for standalone models & \manref{cge_microsim}\\
-0.40.0 & Variables added to the model's own equations, those with exact derivatives included & \manref{cge_variable}\\
-0.41.0 & Nonlinear programmes by IPOPT through cyipopt (Stata 16 and later, experimental) & \manref{cge_solve}\\
-0.42.0 & Global solutions of nonlinear and mixed-integer programmes by SCIP through PySCIPOpt (Stata 16 and later, experimental) & \manref{cge_solve}\\
-0.43.0 & Conditions of user definitions evaluated at each solve, as in GAMS & \manref{cge_options}, \manref{cge_equation}\\
-0.44.0 & Models in the form of MPSGE: sectors, commodities, consumers and nested production and demand blocks & \manref{cge_mpsge}\\
+0.31.0 & Exact Jacobians of linked regions: the regions' equations in their world prices and tariffs, and the link equations & \manref{cge_region}, \chapref{chap:regions}\\
+0.32.0 & Exact derivatives of runs with foresight in debt, growth targets, population and labour forces & \manref{cge_dynamic}, \secref{sec:foresight}\\
+0.33.0 & Ruiz's equilibration of Newton's linear systems, as an option & \manref{cge_options}, \secref{sec:scaling}\\
+0.34.0 & Box pairs: an equation paired with a variable between bounds, as in PATH; tariff-rate quotas & \manref{cge_equation}, \secref{sec:userineq}\\
+0.35.0 & The structure of the system: structural singularity named, the blocks of the square part, and standalone models solved block by block & \manref{cge_structure}, \manref{cge_solve}, \secref{sec:structure}\\
+0.36.0 & Feasibility restoration of the interior point; an irreducible infeasible set of bounds and constraints & \manref{cge_solve}, \manref{cge_iis}, \secref{sec:nlp}\\
+0.37.0 & Reports of standalone models: the roles of their variables, groups and welfare; report items in the user language & \manref{cge_model}, \manref{cge_report}, \secref{sec:sa-report}\\
+0.38.0 & Sensitivity of standalone models: draws of their parameters, each measured from its own benchmark & \manref{cge_sensitivity}, \secref{sec:sa-sens}\\
+0.39.0 & The link to household surveys for standalone models & \manref{cge_microsim}, \secref{sec:sa-microsim}\\
+0.40.0 & Variables added to the model's own equations, those with exact derivatives included & \manref{cge_variable}, \secref{sec:useradd}\\
+0.41.0 & Nonlinear programmes by IPOPT through cyipopt (Stata 16 and later, experimental) & \manref{cge_solve}, \secref{sec:extsolvers}\\
+0.42.0 & Global solutions of nonlinear and mixed-integer programmes by SCIP through PySCIPOpt (Stata 16 and later, experimental) & \manref{cge_solve}, \secref{sec:extsolvers}\\
+0.43.0 & Conditions of user definitions evaluated at each solve, as in GAMS & \manref{cge_options}, \secref{sec:userconditions}\\
+0.44.0 & Models in the form of MPSGE: sectors, commodities, consumers and nested production and demand blocks & \manref{cge_mpsge}, \secref{sec:mpsge}\\
 0.45.0 & Auxiliary variables, constraints, endogenous taxes and report variables of models in the form of MPSGE & \manref{cge_mpsge}\\
 0.46.0 & Nests indexed by a set in models in the form of MPSGE, as GTAP's Armington nests & \manref{cge_mpsge}\\
-0.24.0 & Nash equilibria by Newton's method and damped best responses; multi-start; parallel runs from batch mode on Stata 16 and later & \manref{cge_nash}, \manref{cge_solve}, \manref{cge_loop}\\
 \end{cgetable}
 
 \section{This manual}

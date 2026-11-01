@@ -50,6 +50,20 @@ simulation can then use them. \manref{cge_microsim} with
 poverty, inequality and welfare across the draws, by the definition of
 \cmd{_pctile} (chapter~\ref{chap:microsim}).
 
+\section{Standalone models}\label{sec:sa-sens}
+
+From version 0.38.0, \manref{cge_sensitivity} draws the user parameters of a
+standalone model that \opt{}{vary()} names, by the same factors. For each
+draw it sets the drawn values, runs the program of \opt{}{calibrate()}, if
+any, which may assign parameters again so that the benchmark is kept, and
+solves the benchmark without the scenario's shocks; the draw's changes are
+then measured from that benchmark, so that a change in the benchmark caused
+by the draw is kept out of the scenario's effect. The measures are the
+variables, the items of \opt{}{items()} and, with the roles of the model's
+variables, the groups' price indexes and welfare (\secref{sec:sa-report}).
+A draw whose benchmark or scenario does not solve is counted as not
+converged.
+
 \section{Interpretation}
 
 The draws do not estimate uncertainty about the elasticities. They show how

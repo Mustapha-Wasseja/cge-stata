@@ -5,10 +5,14 @@ Computable general equilibrium (CGE) modelling in Stata.
 `cge-stata` builds, calibrates and solves CGE models in Stata. Its built-in
 SAM-based model supports static simulations, recursive dynamics and
 perfect-foresight runs with user-specified forward-looking equations.
-Calibrated single-country models can be linked through bilateral trade, and
-users can write standalone models with their own sets, parameters, variables
-and equations. The package also provides policy optimisation, Nash and
-Stackelberg games, sensitivity analysis and household microsimulation.
+Calibrated single-country models can be linked through bilateral trade.
+Users can also write standalone models in a language close to GAMS, with
+their own sets, parameters, variables and equations, or in the form of
+MPSGE, as sectors, commodities, consumers and nested production and demand
+blocks. The package also provides policy optimisation, Nash and Stackelberg
+games, sensitivity analysis and household microsimulation, for questions of
+trade, taxation, factor markets, public finance, health or any other field
+a model can represent.
 
 The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
 experimental solver links require Stata 16 or later with Python and SciPy,
@@ -16,599 +20,148 @@ and the links to IPOPT and SCIP the Python packages cyipopt and PySCIPOpt
 as well. GAMS export and GDX data exchange are also available; solving an
 exported model in GAMS requires GAMS and the selected solver.
 
+## Features
+
+### The standard model from a SAM
+
+The built-in model, specified in [docs/model_spec.md](docs/model_spec.md),
+follows the IFPRI and PEP traditions:
+
+- production with CES or Cobb-Douglas value added and Leontief intermediate
+  inputs, an optional nest between them, nests within value added (labour of
+  several skills, capital with energy), activities that produce several
+  commodities, and the output of a commodity from several activities
+  combined by a CES function;
+- trade through a CET function between exports and domestic sales and an
+  Armington function between imports and domestic goods, with finite export
+  demand, commodities that are only exported, re-exports and margins that
+  differ by market;
+- households with Cobb-Douglas or linear expenditure system demand and home
+  consumption, enterprises, the government, savings-investment and the rest
+  of the world, with transfers among them;
+- public finance: direct, sales, import, export, activity and factor taxes,
+  VAT with input credits, revenue-neutral closures and public debt;
+- factor markets: mobile, activity-specific or unemployed factors, a wage
+  curve, a minimum wage, and factors in efficiency units;
+- health: a social health insurance fund, labour efficiency and working
+  time linked to health services, mortality and population;
+- limits that bind in some scenarios and not in others, such as quotas and
+  capacity limits with their rents, a peg that holds until borrowing reaches
+  a limit, or a deficit ceiling, solved as complementarity conditions;
+- closures for the external account, the government, savings-investment,
+  the numeraire and each factor, with swaps of any variable;
+- SAMs in national-accounts or supply-use layout, of any size.
+
+### Simulation and analysis
+
+- Recursive dynamics, and perfect foresight with leads and terminal
+  conditions (`cge_dynamic`, `cge_dynresults`).
+- Linked regions with bilateral trade and tariffs by route (`cge_region`).
+- Scenario loops over lists and grids of values, optionally in several
+  Stata processes at once (`cge_loop`).
+- Policy optimisation with exact derivatives, constraints and shadow prices
+  (`cge_optimize`); Nash equilibria and Stackelberg leaders (`cge_nash`).
+- Sensitivity of results to the elasticities or to any parameter
+  (`cge_sensitivity`).
+- Report tables for several simulations, on screen, as data or in Excel,
+  with measures written in the user language (`cge_results`, `cge_report`).
+- The link to household surveys (`cge_microsim`): poverty, inequality,
+  incidence, the growth incidence curve, each household's equivalent and
+  compensating variations, the Shapley decomposition by channel, fiscal
+  incidence by the Commitment to Equity method, reweighting, standard errors
+  from the survey design, bands across draws and journal-style graphs.
+- SAM multipliers and structural path analysis (`cge_multiplier`, `cge_spa`).
+
+### The user language and standalone models
+
+`cge_set`, `cge_parameter`, `cge_variable`, `cge_equation` and `cge_macro`
+extend the standard model, or write a model of one's own:
+
+- sets defined by set algebra (subsets with a domain, `+`, `*`, `-`, `not`,
+  `yes`, `no` and conditions), and sets of pairs and tuples;
+- parameters assigned element by element from expressions or from data, and
+  symbols with any number of indexes;
+- GAMS's `$` conditions on sums, terms and domains, evaluated at the base or,
+  as GAMS does, at each solve;
+- lags and leads, over the periods of a dynamic run and on ordered sets
+  (`K(t-1)`, `K(t+1)`, `t++1`);
+- GAMS's functions, products and extremes over sets, `ord()`, `card()` and
+  macros;
+- inequalities paired with variables, and box pairs, as PATH writes a mixed
+  complementarity problem;
+- equations that replace elements of the standard model's own equations, and
+  variables added to them;
+- nested CES and CET blocks (`cge_nest`).
+
+A standalone model (`cge_model new`) is written whole in the language, as a
+GAMS program is: a system of equations, a complementarity problem, or a
+nonlinear or mixed-integer programme, with named models over subsets of its
+equations. With the roles of its variables (`cge_model roles`) it is
+reported, analysed for sensitivity and passed to household surveys as a
+model from a SAM is. `cge_modlib` supplies ready-to-run models, from an
+exchange economy to Dantzig's transportation problem, a knapsack, a
+Stackelberg game and a Ramsey growth model.
+
+### Models in the form of MPSGE
+
+`cge_mpsge` writes a model as MPSGE writes one: sectors, commodities and
+consumers, with production and demand blocks whose records give reference
+quantities, prices and taxes of nested CES and CET functions, at any depth
+and indexed by sets. Auxiliary variables and constraints, endogenous taxes,
+rationed endowments and report variables are supported. The statements are
+given as commands, or read from the model of a GAMS program. `cge_mpsge end`
+writes the mixed complementarity problem that MPSGE generates, zero profits,
+market clearing and income balance, as user variables and equations, so
+that the rest of the package solves, reports, loops over and exports it. On
+five test models the solutions agree with GAMS/MPSGE to about 1e-13.
+
+### Solvers and diagnostics
+
+- Newton's method with an exact Jacobian, by forward or reverse
+  differentiation, Broyden's updates, a dense or sparse LU, Ruiz's
+  equilibration, continuation and fallbacks.
+- A semismooth Newton method for complementarity problems.
+- A primal-dual interior-point method for nonlinear programmes, with exact
+  Hessians, feasibility restoration, several starts and the marginals of the
+  equations; branch and bound for integer and binary variables.
+- Standalone models solved block by block.
+- Solver options as GAMS's option statement, with GAMS's model and solver
+  statuses (`cge_options`), and the attributes of variables: bounds, scales,
+  starting levels, fixed values and integrality (`cge_bound`).
+- Experimental links, on Stata 16 and later with Python: SuperLU and HiGHS
+  through SciPy, IPOPT through cyipopt, and SCIP, for global solutions of
+  nonconvex and mixed-integer programmes, through PySCIPOpt.
+- Diagnostics: the model checks (`cge_check`); the equation listing,
+  infeasibility report and solution listing (`cge_listing`); the structure of
+  the system, which names the equations and variables at fault in a
+  structurally singular one and finds its blocks (`cge_structure`); and an
+  irreducible infeasible set of bounds and constraints (`cge_iis`).
+
+### SAM tools, elasticities and GAMS
+
+- Reading SAMs from CSV files, data in memory or GDX files, a mapping
+  template, aggregation, balancing by RAS or cross entropy, and export
+  (`cge_sam`, `cge_template`, `cge_aggregate`, `cge_balance`,
+  `cge_samexport`); SYNTHETIC SAMs for testing (`cge_synthetic`).
+- A library of published elasticities with their sources
+  (`cge_elasticities`).
+- `cge_gams` writes any model as a GAMS program: the standard model with an
+  independent GAMS implementation that calibrates itself from the SAM, and a
+  standalone model as a program of its own. It runs GAMS, compares the
+  solution with Stata's and brings it back. `cge_gdx` writes and reads GDX
+  files.
+
 ## Status
 
-Version 0.46.0 adds MPSGE's nests indexed by a set (`g.tl:`), as GTAP's
-models nest imports and domestic goods for each commodity, with an
-elasticity of each: a model with such nests and a tariff agrees with
-GAMS/MPSGE to about 1e-14.
-
-Version 0.45.0 completes `cge_mpsge` with MPSGE's auxiliary variables and
-constraints, endogenous tax rates (`n:`, `m:`), rationed endowments (`r:`),
-report variables and starting levels: an equal-yield tax and a floor on the
-real wage with unemployment agree with GAMS/MPSGE to about 1e-14.
-
-Version 0.44.0 adds `cge_mpsge`, which writes a model as MPSGE writes one:
-sectors, commodities and consumers, with production blocks (`prod:`) and
-demand blocks (`demand:`) whose records give reference quantities, prices
-and taxes of nested CES and CET functions. `cge_mpsge end` writes it as the
-mixed complementarity problem MPSGE generates, zero profits, market
-clearing and income balance, in user variables and equations of a
-standalone model; `cge_mpsge using` reads the model of a GAMS program
-between `$ontext` and `$offtext`. Three test models, with taxes, nests,
-joint products, a free good and a sector that shuts down, agree with
-GAMS/MPSGE to about 1e-13.
-
-Version 0.43.0 evaluates the `$` conditions of user variables and equations
-at each solve, as GAMS does: with `cge_options, conditions(solve)`, a shock
-to a parameter that a condition uses brings elements into their domains, or
-takes them out, at the next `cge_solve` and in each scenario of `cge_loop`.
-
-Version 0.42.0 adds an experimental link to SCIP: `cge_solve,
-minimize(expression) solver(scip)` solves nonlinear and mixed-integer
-programmes, nonconvex ones included, to a global optimum within SCIP's
-tolerances, through the Python package PySCIPOpt, on Stata 16 and later.
-
-Version 0.41.0 adds an experimental link to IPOPT: `cge_solve,
-minimize(expression) solver(ipopt)` solves a nonlinear programme with IPOPT
-through the Python package cyipopt, with the package's exact Jacobian and
-Hessian, on Stata 16 and later.
-
-Version 0.40.0 adds terms to the model's own equations: `cge_variable NAME =
-expression, add(BLOCK)` adds a variable to the right side of a built-in
-equation block, such as government revenue or market clearing, while the
-block's own formula and derivatives stay; `cge_gams` writes the terms into
-the GAMS model.
-
-Version 0.39.0 passes the results of standalone models to household surveys:
-with the roles of its variables, `cge_microsim` takes a standalone model's
-groups, goods, prices and incomes as it takes those of a model from a SAM.
-
-Version 0.38.0 extends `cge_sensitivity` to standalone models: it draws the
-parameters named in `vary()`, runs an optional `calibrate()` program, and
-measures each draw from its own benchmark.
-
-Version 0.37.0 reports standalone models. `cge_model roles` names the
-variables of a model's groups, goods, prices, consumption and incomes, and
-`cge_report` then gives each group's expenditure, price indexes and welfare;
-`items()` adds measures written in the user language to the report of any
-model.
-
-Version 0.36.0 adds a feasibility restoration phase to the interior point:
-where its steps cannot reduce the infeasibility, it minimises the residuals
-within the bounds and goes on, or stops at a local minimum of the
-infeasibility (model status 5). `cge_iis` finds an irreducible infeasible set
-of a scenario's bounds and constraints, by the deletion filter.
-
-Version 0.35.0 adds `cge_structure`: from the Jacobian's pattern, a maximum
-matching of equations and variables, the over- and under-determined parts of
-a structurally singular system (the equations and variables at fault, named),
-and the blocks of its square part in the order they can be solved;
-`cge_solve, blocks` solves a standalone model block by block.
-
-Version 0.34.0 adds box pairs, `cge_equation NAME: lhs = rhs, perp(VAR)
-lower(#) upper(#)`: an equation paired with a variable between bounds, as
-PATH writes a mixed complementarity problem, for tariff-rate quotas and
-capped instruments; GAMS gets the same pairs.
-
-Version 0.33.0 adds `cge_options, scaling(ruiz)`: Ruiz's equilibration of
-each Jacobian of Newton's method before it is factorised, for badly scaled
-models (on a test model the condition number fell from 5.4e8 to 3.9); the
-Newton steps and solutions are unchanged.
-
-Version 0.32.0 makes the Jacobian of runs with perfect foresight exact in
-every state: debt, the efficiency of growth targets, population and labour
-forces, in place of central differences, as capital stocks already were.
-
-Version 0.31.0 makes the Jacobian of linked regions (`cge_region`) exact:
-each region's equations in its world prices and tariffs, and the link
-equations through the price indexes and quantities of the trade routes,
-in place of central differences.
-
-Version 0.30.0 differentiates long expressions of the user language in
-reverse: a sum over a thousand elements, in an equation or the objective of
-a nonlinear programme, takes one pass back instead of a row of a thousand
-derivatives at every step (four times faster at 1,024 variables, and
-memory that grows with the expression, not its square). Forward
-differentiation also no longer returns missing derivatives where a constant
-part of an expression has none, as `sqrt(par)` with `par` = 0, and
-`cge_equation, clear` works in a standalone model.
-
-Version 0.29.0 adds set algebra to `cge_set`, as GAMS's subsets and dynamic
-sets: `cge_set imp(c) = yes$(tm(c) > 0)` for the commodities with tariffs,
-`cge_set others(c) = not imp`, unions, intersections and differences with
-`+`, `*` and `-`, subsets checked against their domain, and sets of pairs
-from conditions, `cge_set large(f,a) = yes$(QF(f,a) > 20)`.
-
-Version 0.28.0 gives nonlinear programmes exact second derivatives: the
-interior point's Hessian of the Lagrangian comes from differentiating the
-compiled objective and equations twice, in place of differences of exact
-gradients, with the same iterations (27 to 35 times faster on the test
-problems). Branch and bound also solves programmes without equations, whose
-nodes at a bound it used to lose.
-
-Version 0.27.1 fixes installation error `r(640)`, "package file too long".
-The package now installs 95 files, within Stata's limit of 100, by bundling
-the synthetic SAMs, model library and GAMS support files. Their original
-source files remain in the repository. Parallel scenario runs also wait for
-the worker's complete status record, preventing an intermittent empty-status
-error. Model equations and numerical solvers are unchanged.
-
-
-Version 0.46.0 implements the standard single-country model described in
-[docs/model_spec.md](docs/model_spec.md):
-
-- CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
-  CES or Cobb-Douglas nest between value added and intermediate inputs (version
-  0.1.12); activities may produce several commodities in fixed proportions
-  (version 0.1.4);
-- CET transformation between exports and domestic sales, Armington aggregation
-  of imports and domestic goods;
-- households with Cobb-Douglas or, from version 0.1.11, linear expenditure
-  system (LES) demand (non-profit institutions can be mapped as households),
-  enterprises, and transfers among institutions and with the rest of the world
-  (version 0.1.2);
-- government with direct, sales, import, export and activity taxes,
-  savings-investment and the rest of the world;
-- a social health insurance fund (version 0.1.13), financed by contributions on
-  factor income and by transfers from the government and the rest of the world,
-  which buys health services with its revenue less a fixed share saved;
-- factors in efficiency units (version 0.1.14): an exogenous efficiency for each
-  factor, and optionally an efficiency that rises with the volume of health
-  services consumed, with an elasticity for each factor;
-- selectable closures for the external account, government, savings-investment,
-  the numeraire and each factor (mobile, activity-specific, unemployed, or,
-  from version 0.3.3, a wage curve or a minimum wage);
-- SAMs in national-accounts layout: exports recorded as sales by activities,
-  taxes paid directly to the government account (version 0.1.1), trade and
-  transport margins netted out of the margin activities (version 0.1.3), the
-  territorial correction and inventory run-downs (version 0.1.4);
-- SAMs in supply-use layout (version 0.1.7): margin accounts paid by
-  commodities, commodities that are imported only, separate stock-change
-  accounts, and account labels that are not valid Stata names (such as `s-i`);
-- exports at least as large as domestic output, such as re-exports and exports
-  from inventories, drawn from composite supply (version 0.1.8);
-- fiscal instruments (version 0.3.1, [Section 12](docs/model_spec.md)): VAT
-  with input credits by activity, so that exempt activities bear VAT on their
-  inputs; revenue-neutral closures in which direct, sales, import or VAT rates
-  adjust to hold government savings; and public debt, with interest separated
-  from the SAM's transfers, paid on domestic and foreign debt, and deficits
-  added to the debt in dynamic runs;
-- trade and household extensions (version 0.3.2, [Section 13](docs/model_spec.md)):
-  home consumption of own produce at producer prices; export demand that falls
-  as world export prices rise; commodities whose output is all exported; and
-  margins that differ between domestic sales, imports and exports;
-- labour-market regimes (version 0.3.3, [Section 14](docs/model_spec.md)): a
-  labour force from the base unemployment rate; a wage curve, on which real
-  wages fall as unemployment rises; and a minimum real wage, below which wages
-  cannot fall, with the regime (unemployment at the floor, or full employment
-  above it) found by the solver;
-- health outcomes and demography (version 0.3.4, [Section 15](docs/model_spec.md)):
-  working time lost to illness and a death rate that respond to health
-  services per head; days worked scale labour input, and in dynamic runs
-  deaths change the growth of the population and of labour;
-- limits that bind in some scenarios and not in others (version 0.4.4,
-  [Section 16](docs/model_spec.md)): import and export quotas and capacity
-  limits, whose rents go to a chosen recipient, and closure switches such as
-  a peg that holds until borrowing reaches a limit or a deficit ceiling,
-  solved as complementarity conditions.
-
-Version 0.1.9 speeds up the solver for large SAMs: the Jacobian combines exact
-derivatives for the aggregate equations with grouped central differences for
-the sparse rest (on a 4,439-equation model, about 3 seconds instead of about
-250). It also repairs the fallback solver, which failed in Stata 13.
-Version 0.1.10 adds shocks to government and investment demand by product and to
-transfers, such as public spending on health services or donor funding.
-Version 0.1.13 adds shocks to the fund's contribution rates, purchases and
-transfers received; version 0.1.14 adds shocks to factor efficiency.
-Version 0.2.0 adds recursive dynamics (`cge_dynamic`). Capital accumulates from
-investment, which is allocated among activities by relative rental rates. Other
-factors, population, government and foreign flows grow at given rates.
-Efficiency grows at a given rate or is calibrated to a GDP growth target, and
-scenarios reuse the baseline's efficiency path. Shocks can vary over time.
-Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
-compares a run with its baseline. Five runs agree with the Python reference to
-about 1e-13 in every period.
-Version 0.46.0 adds nests indexed by a set to models in the form of MPSGE.
-Version 0.45.0 adds auxiliary variables, constraints and reports to models in the form of MPSGE.
-Version 0.44.0 adds models in the form of MPSGE.
-Version 0.43.0 adds conditions evaluated at each solve.
-Version 0.42.0 adds global solutions of programmes by SCIP through PySCIPOpt.
-Version 0.41.0 adds nonlinear programmes by IPOPT through cyipopt.
-Version 0.40.0 adds variables added to built-in equations.
-Version 0.39.0 adds the link to household surveys for standalone models.
-Version 0.38.0 adds sensitivity analysis of standalone models.
-Version 0.37.0 adds reports of standalone models and report items.
-Version 0.36.0 adds feasibility restoration and cge_iis.
-Version 0.35.0 adds cge_structure, structural singularity and blocks.
-Version 0.34.0 adds box pairs, an equation paired with a variable between bounds.
-Version 0.33.0 adds Ruiz's equilibration of Newton's linear systems.
-Version 0.32.0 makes the Jacobian of runs with foresight exact in every state.
-Version 0.31.0 makes the Jacobian of linked regions exact.
-Version 0.30.0 differentiates expressions of many variables in reverse.
-Version 0.29.0 adds set algebra: subsets with a domain, `+`, `*`, `-`,
-`not`, `yes`, `no` and conditions in `cge_set`, and sets of pairs from
-conditions.
-Version 0.28.0 gives nonlinear programmes exact second derivatives: the
-interior point's Hessian of the Lagrangian comes from differentiating the
-compiled objective and equations twice, in place of differences of exact
-gradients (35 times faster on a 400-variable cross-entropy problem).
-Version 0.27.1 fixes `net install`, which stopped with "package file too
-long" from version 0.21.0: Stata's package files take at most 100 files, and
-the package now installs its SYNTHETIC SAMs, model library and GAMS model as
-three bundles (95 files in all).
-Version 0.27.0 is an experimental prototype of links to solvers through
-Stata's Python, on Stata 16 and later with SciPy only: `cge_options,
-linsolver(python)` factorises Newton's Jacobians with SuperLU (2 to 2.5 times
-faster solves of the largest benchmark models), and `cge_solve,
-solver(highs)` solves linear and mixed-integer programmes with HiGHS. Stata
-13 to 15 keep the package's own solvers.
-Version 0.26.0 adds lags and leads on ordered sets, as in GAMS: `K(t-1)`,
-`K(t+1)` and the circular `t++1` and `t--1`, 0 beyond the set.
-Version 0.25.0 lets user sets, parameters, variables and equations have
-three or more indexes, as `X(i,j,k)`, with sums over tuples of indexes and
-sets of tuples, `cge_set m(i,j,k) = p1.q1.r1 ...`.
-Version 0.24.0 finds Nash equilibria by Newton's method on the players'
-first-order conditions (`cge_nash solve, method(newton)`) and damps best
-responses (`damping()`); starts nonlinear programmes and the relaxations of
-branch and bound from several points (`cge_solve, starts()`); and, on
-Stata 16 and later, runs `cge_loop, parallel()` from batch mode by starting
-the processes through Stata's Python integration. Parallel runs from batch
-mode work only on Stata 16 and later with Python; Stata 13 to 15 solve the
-scenarios one after another, with a note.
-Version 0.23.0 fixes sums over an alias whose labels are the names of
-indexes (labels g1 to g3 with the aliases g2 and g3), scales `cge_optimize`'s
-instruments by no less than 1 per cent of their range, and tries a GAMS run
-of the export check again after a licence error.
-Version 0.22.1 fixes equations over two indexes whose element labels are
-the names of indexes (labels t1, t2 with the alias t2).
-Version 0.22.0 lets `cge_optimize` start from instruments on their bounds and
-adds a Ramsey growth model to the library.
-Version 0.21.0 adds a library of ready-to-run models in the user language
-(`cge_modlib`), from an exchange economy to Dantzig's transportation problem,
-a knapsack and a Stackelberg game, and error messages that point to the place
-in an equation.
-Version 0.20.0 finds Nash equilibria of players who each choose instruments
-to maximise an outcome (`cge_nash`), and the choice of a Stackelberg leader;
-Cournot and Stackelberg closed forms are reproduced.
-Version 0.19.0 solves the scenarios of `cge_loop` in several Stata processes
-at once (`parallel()`), merging their simulations as one run.
-Version 0.18.0 adds integer and binary variables (`cge_bound, integer` or
-`binary`): a nonlinear programme with them is solved by branch and bound, as
-GAMS's MINLP and MIP models are, and exported to GAMS as one.
-Version 0.17.0 adds named models over subsets of the equations of a
-standalone model, as GAMS's model statement (`cge_model define`), solved on
-their own with `cge_solve, model()`, from the levels of a stored simulation
-(`from()`) and with variables held at their levels (`hold()`), so that a
-model can be solved block by block.
-Version 0.16.0 adds solver options as GAMS's option statement (`cge_options`:
-tolerance, iteration and time limits, the Jacobian of Newton's method,
-saved with the model) and reports GAMS's model and solver statuses for every
-solve, stored with each simulation.
-Version 0.15.0 gives `cge_optimize` exact derivatives with respect to the
-instruments, from the model's exact Jacobian at each solution by the implicit
-function theorem, so that the optimiser needs far fewer solves of the model,
-and solves standalone models as nonlinear programmes, `cge_solve,
-minimize()` or `maximize()`, by a primal-dual interior-point method after
-Waechter and Biegler, with the marginals of the equations. It reproduces
-problem 71 of Hock and Schittkowski, balances a matrix by cross entropy to
-the RAS solution, and agrees with IPOPT in GAMS.
-Version 0.14.0 solves constraints and the inequalities of user equations by
-a semismooth Newton method, as complementarity problems: every constraint in
-Fischer-Burmeister form, all at once, with a non-monotone line search; the
-active-set method of earlier versions is the fallback and an option
-(`cge_options, mcp()`). It solves problems of MCPLIB with known solutions,
-including Kojima and Shindo's, and agrees with PATH.
-Version 0.13.0 adds standalone models, `cge_model new`: a model written whole
-in the language of `cge_variable` and `cge_equation`, as a GAMS program is,
-without a SAM or the built-in equations. Sets take labels of their own or
-come from the data in memory, parameters are calibrated by assignments
-evaluated element by element (`cge_parameter share(c,a) = io(c,a) /
-sum(c2, io(c2,a))`, with conditions), a SAM in memory becomes a parameter
-with two indexes, and variables start at levels given by expressions.
-`cge_model describe` gives GAMS-style model statistics. The standard model
-written this way (`examples/standard_model.do`) reproduces the built-in
-model's solutions to about 1e-12, and GAMS solves it to the same solution.
-Version 0.12.0 adds linked regions, `cge_region`: calibrated single-country
-models, each from its own SAM with its own closure and shocks, solved together
-with bilateral trade, as multi-region models such as GTAP are. Each region's
-imports of a commodity it trades with the others are a CES aggregate of the
-routes into it, from the other regions and the rest of the world, at prices
-that include each route's tariff; its world prices and average tariffs are
-link variables. `cge_region tariff` changes tariffs by route, so a free-trade
-area is one command. The solutions agree with a Python reference of the
-linked model to 1e-8.
-Version 0.11.0 adds `cge_nest`, which declares a nested CES or CET block as
-MPSGE's production blocks do: `cge_nest begin` with the output, its price and
-the top elasticity, `cge_nest nest` and `cge_nest input` or `output` for the
-tree, and `cge_nest end`, which writes it as user equations in calibrated
-share form in place of the built-in equations named in `replace()`. A block
-of value added at the built-in elasticity gives the built-in solution, and a
-block of two nests the built-in nests of value added, to 1e-10.
-Version 0.10.2 adds perfect foresight: `cge_dynamic, foresight` solves the
-periods of a run together, with `lead()` in user equations for the values of
-later periods, a terminal condition beyond the last
-(`terminal(constant|growth|base)`) and `tperiod`, `tfirst` and `tlast` for
-equations of their own in a period. Capital stocks, public debt, efficiency
-under growth targets and, with a death rate, population become states of the
-stacked system, solved by Newton's method with the sparse LU; without leads it
-gives the recursive run.
-Version 0.10.1 adds a sparse LU for Newton's steps, `cge_options,
-linsolver(sparse|auto)` or `cge_solve, sparse`: a pivot order chosen once by
-Markowitz's rule with threshold pivoting, the rows with many entries in a small
-dense block, and each Jacobian factorised in that order. It holds systems far
-larger than the dense LU can, the full system of large models among them.
-Version 0.10.0 exchanges data with GAMS through GDX files: `cge_gdx write`
-writes the SAM, the calibrated parameters and the levels of the variables;
-`cge_gdx read` reads any symbol of a GDX file, to the last bit; and `cge_sam
-using model.gdx, symbol(SAM)` reads a SAM from one.
-Version 0.9.9 adds scenario loops, as GAMS's loops and GUSS: `cge_loop,
-name(tariff) values(tm(com_man) = 0(0.05)0.3) measures(YG)` solves each
-scenario from the one before, stores it, collects measures and returns the
-results as a dataset; `cge_gams, loop()` writes the loop for GAMS.
-Version 0.9.8 adds GAMS's attributes of variables, `cge_bound` (`.lo`,
-`.up`, `.scale`, `.l`, `.fx`); the solution listing with bounds and marginals,
-`cge_listing, solution`; and shadow prices of targets and constraints, and
-reduced costs of instruments, from `cge_optimize`.
-Version 0.9.7 adds the functions of GAMS to the language of user variables
-and equations, `max()`, `min()`, `abs()`, `sqr()`, `log10()` and `ifthen()`,
-products and extremes over sets, `prod()`, `smax()` and `smin()`, `card()`,
-and macros, as GAMS's `$macro`:
-`cge_macro ces(x, y, d, r) = (d * x^(-r) + (1 - d) * y^(-r))^(-1 / r)`.
-Version 0.9.6 lets `cge_microsim` draw its results, `graph(gic incidence
-poverty shapley ...)`, in the style of figures in economics journals, and save
-them as PDF, EPS or PNG files with `gexport()`.
-Version 0.9.5 adds `cge_listing`, the equation listing and infeasibility
-report of a GAMS run: every element of the model's equations at a simulation,
-the base or the current point, with its left and right sides and scaled
-residual, and the elements that are infeasible, largest first.
-Version 0.9.4 lets `cge_optimize` take any expression of the user language
-as its objective or targets, with inequality constraints, as in an NLP model:
-`cge_optimize, instruments(tm(com_man)) maximize(YG) constraints(QM(com_man) >= 0.98 * base(QM(com_man)))`.
-Version 0.9.3 lets a user equation take the place of elements of the
-model's own equations, as a GAMS modeller would edit them:
-`cge_equation qe: QE(com_agr) = base(QE(com_agr)), replace(T2(com_agr))` holds
-agricultural exports at the base in place of their export supply.
-Version 0.9.2 adds lags to user equations: in a dynamic run,
-`lag(GL)` is the value of `GL` in the period before and `lag(QA(act_man), 2)`
-the value two periods before, so stocks and partial adjustment, such as
-`GL = 0.5 * lag(GL) + 0.5 * YG / base(YG)`, can be written in the model's own
-terms; GAMS receives the lagged values period by period.
-Version 0.9.1 gives user variables and equations two indexes, as in
-`cge_variable X(c,h) = PQ(c) * QH(c, h)`, with sums over two indexes,
-`sum((c,h), X(c,h))`, and sets of pairs, `cge_set map(a,c) = act_agr.com_agr
-act_man.com_man`, which serve, as GAMS mapping sets do, in sums,
-`sum(map(a,c), PA(a) * QA(a))`, and in conditions, `Y(a,c)$(map(a,c))`.
-Version 0.9.0 brings GAMS's complementarity to user equations: an inequality,
-`QM(com_man) =l= 1.02 * base(QM(com_man)), perp(RM(com_man))`, is paired with
-a variable that the closure fixes and that moves only when the inequality
-binds, as in a mixed complementarity problem. Quotas, capacity limits, floors
-on spending and minimum prices can so be written in the model's own terms.
-User variables can also be exogenous or bounded.
-Version 0.8.3 completes the survey link with three tools. Survey weights can
-be adjusted, by minimum relative entropy, so that totals such as employment
-by sector follow the model, as in reweighting approaches to macro-micro
-simulation; standard errors from the survey design (`svyset`) accompany the
-mean and the poverty measures; and `cge_sensitivity, keep()` stores each draw
-of the elasticities, so that `cge_microsim, bands()` gives the range of
-poverty and inequality across them.
-Version 0.8.2 adds fiscal incidence to `cge_microsim`, as the Commitment to
-Equity (CEQ) method measures it, before and after a simulation: market, net
-market, disposable, consumable and final income; for each tax and benefit,
-its concentration coefficient, Kakwani index, coverage and marginal
-contribution to inequality and poverty; the Reynolds-Smolensky index and
-fiscal impoverishment. Taxes and benefits change with the model, and in-kind
-health benefits with its health spending, so the incidence of health spending
-can be traced from the budget to the household.
-Version 0.8.1 adds welfare and decomposition to `cge_microsim`: each
-household's equivalent and compensating variations, consistent with the
-groups' welfare in `cge_report`, and, with `decompose`, the contribution of
-each channel (each source of income, direct taxes and savings, prices) to
-every change in poverty and inequality, by the Shapley method, with the
-growth and redistribution components of the change in poverty.
-Version 0.8.0 extends the link to household surveys (`cge_microsim`): several
-simulations in one call, with every result as a dataset; several poverty
-lines, including lines that differ by household, and the number of poor; the
-Theil index, mean log deviation, GE(2), Atkinson indexes and the Palma and
-S80/S20 ratios beside the Gini coefficient; and incidence by decile (or any
-number of quantiles) of base consumption per person, with the growth
-incidence curve. Quantile groups and percentiles are those of Stata's `xtile`
-and `_pctile`.
-Version 0.7.2 adds conditions, as GAMS's dollar operator: a sum over the
-elements that meet a condition, `sum(c$(tm(c) > 0), PM(c) * QM(c))`, a term
-that is 0 where a condition fails, and user variables and equations defined
-only for some elements, `TMV(c)$(tm(c) > 0)`. Conditions use comparisons,
-`&`, `|`, `!`, set membership, `sameas()` and `ord()`, and are evaluated at
-the base, so the model has the same equations in every scenario, in Stata and
-in GAMS.
-Version 0.7.1 adds user sets and parameters (`cge_set`, `cge_parameter`): a
-set of elements, such as the goods or the health commodities, serves as the
-index of user variables, equations and sums, and a parameter with values of
-the user's own, by element, from options or from the data in memory, enters
-user equations, is changed by `cge_shock`, may be an instrument of
-`cge_optimize`, and is written into the GAMS program. A user equation that
-does not hold at the base no longer stops the model from being calibrated
-again.
-Version 0.7.0 solves faster: the Jacobian is exact, from the derivatives of
-every equation of the model and forward differentiation of user equations,
-and Newton's method continues after each step with Broyden's updates of the
-inverse Jacobian. On a synthetic SAM with 40,190 equations (4,254 in the
-reduced system), a tariff removal takes 27 to 32 seconds in Stata 13.1/IC
-instead of 96, and 27 to 29 in StataNow/MP 19.5 instead of 72. `cge_solve` also notes
-solutions whose quantities, prices or incomes collapse to zero or turn
-negative, which satisfy the equations but rarely make economic sense.
-Version 0.6.4 corrects the help files against the commands and fixes the
-faults that the review found: `cge_solve` stops with error 459 when a user
-variable has no equation; user variables are shocked over their own sets;
-the Excel report has a sheet for public debt; `cge_dynresults` keeps the data
-in memory when a run cannot be loaded; a poverty line must be positive; the
-template's roles sheet lists every role; and commands no longer leave the
-results of the commands they call in `r()`. A dynamic run that fails now
-stores nothing: before, the periods solved until the failure were kept and,
-when an earlier run had the same name, mixed with its later periods. Every
-example in the help files runs on the SYNTHETIC data shipped with the
-package, except those that name the user's own files.
-Version 0.6.3 builds the Jacobian with one-sided differences, one evaluation
-of the equations for each group of variables instead of two. On a synthetic
-SAM with 40,190 equations, a tariff removal took 96 seconds in Stata
-13.1/IC and 72 in StataNow/MP 19.5 on four cores; the solutions were unchanged.
-Version 0.6.2 brings GAMS solutions back into Stata (`cge_gams ..., import()`):
-the solution is checked against the model's equations and stored as a
-simulation, for reports and microsimulation. On a synthetic SAM with
-40,190 equations (4,254 in the reduced system), a tariff removal took
-143 seconds in Stata 13.1/IC, 127 in StataNow/MP 19.5 on four cores
-and 4.1 in GAMS with PATH, so larger models are best solved in GAMS.
-Version 0.6.1 adds user variables and equations (`cge_variable`, `cge_equation`;
-Section 19), written in a small language that Stata compiles for its solver
-and `cge_gams` writes into the GAMS program. With closure swaps they give new
-closure rules, such as nominal government consumption fixed with volumes
-adjusting.
-Version 0.6.0 adds policy optimisation (`cge_optimize`; Section 18): a few
-instruments, such as a tax rate or a public service, chosen to maximise or
-minimise a report measure, such as household welfare, or to reach targets,
-with the model solved at every trial. It agrees with scipy's SLSQP to about
-1e-6 in the instruments, the precision to which a flat optimum can be
-located, and a target for government savings reached by the direct tax rate
-reproduces the closure `fixgsav` to 1e-10.
-Version 0.5.3 exports dynamic runs to GAMS (`cge_gams using dir, dynamic(run)`):
-GAMS solves the periods in order, each from the solution of the one before.
-Version 0.5.2 combines the output of a commodity from several activities by a
-CES function, as in the IFPRI standard model (`cge_calibrate, sigmaac(com_man:2)`;
-Section 17.3): each activity is paid its own price, instead of the outputs
-being perfect substitutes.
-Version 0.5.1 adds nests of value added (Section 17.2): labour as a
-combination of skill types, or capital with energy, each nest with its own
-elasticity (`cge_calibrate, nests(labour: lab_hi lab_lo, ke: cap com_ene)
-sigmanest(labour:1.5 ke:0.4)`). A commodity in a nest leaves intermediate
-input, so that activities substitute energy for capital. A nest of factors
-with the elasticity of value added reproduces the flat model to 1e-10.
-Version 0.5.0 adds taxes on factor use, such as payroll taxes paid by
-activities, and on factor income, as in the IFPRI standard and PEP models
-(`cge_map, factortax(tax_pay:lab) factorincometax(tax_fy)`; Section 17.1),
-with shocks `tf` and `tfy`. With a fixed labour supply, halving a payroll tax
-on the synthetic SAM raises the net wage by 5 per cent and leaves the cost of
-labour almost unchanged: workers bear the tax.
-Version 0.4.5 brings three habits of GAMS modelling into the package.
-Closure swaps fix any free variable and free any fixed one
-(`cge_closure, swap(GSAV GADJ)`), and a closure that leaves an equation
-without a free variable is rejected, naming the equation. A solve that fails
-is retried by continuation, the shock applied in steps. A failure is followed
-by diagnostics: the equations with the largest residuals, by element, and the
-smallest pivot of the Jacobian.
-Version 0.4.4 adds limits that may bind (`cge_constraint`; Section 16). Each
-is a bound on one element of a variable, such as imports of a commodity or the
-output of health services, paired with a variable that the closure fixes and
-that may move in one direction. The solver finds whether each limit binds.
-Quotas and capacity limits work through rents, paid to the government, a
-household, an enterprise, a factor or the rest of the world. Other limits
-switch the closure: a peg that holds until foreign borrowing reaches a limit,
-or government spending cut once the deficit reaches a ceiling. Stata
-(smoothed, then exact conditions), the Python reference (an active-set method)
-and GAMS (a mixed complementarity problem solved with PATH) agree on 13 test
-cases to 4e-12 or better, and `cge_gams` exports such scenarios.
-Version 0.4.3 writes the model and a scenario as a GAMS program (`cge_gams`;
-[docs/gams.md](docs/gams.md)). GAMS calibrates the model itself from the SAM
-and the calibration settings, with the package's independent GAMS
-implementation of the equations. It can then be solved with PATH, CONOPT or
-KNITRO as a system of equations, or with IPOPT and other NLP solvers, and
-compared with Stata's solution from within Stata. On 17 cases covering every
-model feature and closure, the four solvers reproduce Stata's solutions to
-4e-9 or better.
-Version 0.4.2 adds structural path analysis (`cge_spa`; Defourny and Thorbecke
-1984): the paths along which an injection reaches an account, each with its
-direct influence, path multiplier and total influence, which add up to the
-multiplier.
-Version 0.4.1 adds SAM multiplier analysis (`cge_multiplier`; Pyatt and Round
-1979): the accounting multipliers of the mapped SAM, their decomposition into
-transfer, open-loop and closed-loop effects, and the fixed-price effects of
-injections such as more government spending on health services, without
-calibrating a model.
-Version 0.4.0 adds a user manual (now the
-[Reference Manual](docs/manual/cge-stata-manual.pdf)), and a worked
-example that takes an unbalanced SAM through every step: a template,
-aggregation, balancing, mapping, elasticities from the library, calibration
-and checks, three policy simulations, report tables, sensitivity analysis, a
-dynamic baseline and scenario, and poverty and inequality in a household
-survey (`examples/raw_sam_to_results.do`). The test suite runs every example.
-Version 0.3.5 adds a library of published elasticities
-([docs/elasticities.md](docs/elasticities.md)): aggregate Armington and CET
-elasticities for 51 African countries, income elasticities for nine
-consumption categories in 47 African countries, a Frisch parameter, an African
-capital-labour substitution elasticity, wage-curve elasticities and health
-outcome elasticities, each with its source, the table and page where it is
-printed, and the check made when it was read. `cge_elasticities` lists or
-loads entries and returns them as options for `cge_calibrate`, mapping model
-commodities to consumption categories; users can add their own entries.
-Version 0.3.4 adds the health outcomes above. `cge_calibrate` gains
-`sickdays()`, `sickelas()`, `mortality()` and `mortelas()`; `cge_shock`
-changes the share of time lost (`sick`, for example an epidemic) and the
-death rate (`mort`); the health report shows services per head, the share of
-time lost, days worked, the death rate and the population; and
-`cge_dynamic` gains `deathfactors()`, `deathshare()` and `workingage()`.
-Deaths respond to health services within a period and change population and
-labour from the next one. The elasticities are the user's, from studies of
-the country; the package supplies none.
-Version 0.3.3 adds the labour-market regimes above. `cge_calibrate` gains
-`unemployment()`, `wagecurve()`, `minwage()` and `smoothing()`; `cge_closure`
-gains the factor closures `wagecurve` and `minwage`; `cge_shock` changes the
-labour force, the minimum wage and the wage curve's reference wage; reports
-show the labour force and the unemployment rate, with rates in percentage
-points; and the labour force grows in dynamic runs. The minimum-wage condition
-is a complementarity condition, solved with the rest of the model in a
-smoothed Fischer-Burmeister form, and the tests check it against the exact
-regimes.
-Version 0.3.2 adds the trade and household extensions above: home consumption
-is read from the SAM's household payments to activities; `cge_map` gains
-`domesticmargins()`, `importmargins()` and `exportmargins()`; `cge_calibrate`
-gains `exportonly()` and `exportdemand()`; and `cge_microsim` prices home
-consumption at the activity price.
-Version 0.3.1 adds the fiscal instruments above. `cge_map` gains `vattax()`
-and `vatshare()` (VAT recorded separately or within the sales tax);
-`cge_calibrate` gains `vatcredit()`, `debt()`, `interest()`, `debtholders()`
-and `foreignborrowing()`; `cge_closure, government(fixgsav sales)` and the
-like choose the tax that replaces lost revenue; `cge_shock` changes VAT rates,
-credit shares, interest rates and debt stocks; and `cge_report` adds VAT
-revenue and a public debt table. A model saved by an earlier version is
-upgraded when it is loaded.
-Version 0.3.0 adds tools to prepare a SAM ([docs/sam_tools.md](docs/sam_tools.md)).
-`cge_sam` reads SAMs of any size, as wide CSV files parsed directly (beyond
-the 2,048 variables of Stata/IC) or as long data with one observation per
-cell. `cge_template` writes an Excel or CSV template in which accounts are
-given their roles, pairs and aggregation groups; `cge_map using` and
-`cge_aggregate using` read it. `cge_aggregate` merges accounts. `cge_balance`
-balances a SAM by generalised RAS, given every account's total, or by cross
-entropy, estimating the totals subject to balance and any known totals; both
-keep signs, zeros and fixed cells. `cge_samexport` writes the SAM.
-Version 0.2.2 links simulations to household survey data (`cge_microsim`).
-Each survey household's income sources, consumption and prices change as the
-model says they change for its group. The command reports poverty and
-inequality before and after, using the survey's own weights and poverty line.
-Version 0.2.1 adds sensitivity analysis (`cge_sensitivity`). It runs Monte Carlo
-draws of the elasticities, recalibrates the model for each draw, and gives the
-distribution of every report measure.
-Version 0.2.0 also solves much larger models. Explicit definitions are left out of
-the Newton system, and the rows with many variables get exact derivatives. LU
-factors are reused across Newton steps. A synthetic SAM with 250 activities and
-20 households (40,190 equations, 4,254 solved) solves a tariff removal in about
-3 minutes on a laptop with Stata 13; see [tools/bench](tools/bench/README.md).
-From version 0.3.0, a SAM with more accounts than Stata/IC can hold as
-variables is read directly from a CSV file or from long data.
-Version 0.1.15 adds standard report tables for several simulations side by side
-(macroeconomic aggregates, government, institutions, factors, sectors, health,
-and equivalent and compensating variations), to screen, Stata or Excel
-(`cge_report`); the calibrated parameters as a dataset (`cge_parameters`); and
-saving and loading a model with its simulations (`cge_save`, `cge_use`).
-
-Version 0.1.5 keeps benchmark replication exact when a CET or Armington share
-is close to one, as with a low elasticity and a very small trade share.
-Version 0.1.6 makes the homogeneity and perturbed-start checks independent of
-the units of the SAM.
+The current version is 0.46.0. Every change, version by version, is listed
+in [CHANGELOG.md](CHANGELOG.md).
 
 | Milestone | Status |
 |---|---|
 | Model specification | complete |
 | Python reference implementation and validation suite | complete |
 | Stata/Mata implementation | complete; agrees with the reference to about 1e-13 |
+| User language, standalone models and models in the form of MPSGE | complete; checked against GAMS with PATH, IPOPT and SCIP, and against GAMS/MPSGE |
 | Application to country SAMs | an 85-account national SAM and a 240-account SAM in supply-use layout (4,439 equations) calibrate, pass all checks and solve shocks; policy simulations not yet done |
 
 The model has been validated against the Python reference on synthetic SAMs,
@@ -623,6 +176,12 @@ Stata 13 or later (Stata/IC is sufficient). No other Stata packages are needed.
 The test suite passes in Stata 13.1/IC and in StataNow/MP 19.5. Stata 13
 cannot read model files (`cge_save`) saved in later versions of Stata, whose
 Mata file format differs; later versions read those saved in Stata 13.
+
+Optional, on Stata 16 and later: Python with SciPy for the SuperLU and HiGHS
+links, and the Python packages cyipopt and PySCIPOpt for the IPOPT and SCIP
+links; Python also lets `cge_loop, parallel()` run from batch mode. These
+links are experimental. Solving an exported model in GAMS requires GAMS and
+the selected solver.
 
 ## Installation
 
@@ -647,6 +206,8 @@ To run the test suite, use a local copy of the repository and, in Stata, run
 the last line is a summary.
 
 ## Quick start
+
+A model from the SYNTHETIC SAM that comes with the package:
 
 ```stata
 cge_synthetic, clear
@@ -673,8 +234,47 @@ cge_balance, method(ce)
 cge_map using sam_roles.xlsx
 ```
 
+A standalone model, an exchange economy of two households and two goods:
+
+```stata
+cge_model new
+cge_set g = g1 g2
+cge_set h = h1 h2
+cge_parameter alpha(h,g), values(h1.g1:0.3 h1.g2:0.7 h2.g1:0.6 h2.g2:0.4)
+cge_parameter e(h,g), values(h1.g1:10 h1.g2:2 h2.g1:3 h2.g2:8)
+cge_variable P(g), value(1)
+cge_variable Y(h) = sum(g, P(g) * e(h,g))
+cge_variable X(h,g) = alpha(h,g) * Y(h) / P(g)
+cge_variable WALRAS, value(0)
+cge_equation NUM: P(g1) = 1
+cge_equation MKT(g): sum(h, X(h,g)) = sum(h, e(h,g)) + WALRAS
+cge_solve, name(eq)
+cge_results, sim(eq)
+```
+
+The same kind of economy in the form of MPSGE, with a tax on labour in one
+sector, removed:
+
+```stata
+cge_model new
+cge_parameter tx = 0.25
+cge_mpsge model:taxlab
+cge_mpsge sectors: X Y W
+cge_mpsge commodities: PX PY PL PK PW
+cge_mpsge consumers: CONS
+cge_mpsge prod:X s:0.5  o:PX q:100  i:PL q:40 p:1.25 a:CONS t:tx  i:PK q:50
+cge_mpsge prod:Y s:1.5  o:PY q:100  i:PL q:60  i:PK q:40
+cge_mpsge prod:W s:1    o:PW q:200  i:PX q:100  i:PY q:100
+cge_mpsge demand:CONS   d:PW q:200  e:PL q:100  e:PK q:90
+cge_mpsge end, numeraire(PL)
+cge_shock tx, value(0)
+cge_solve, name(notax)
+cge_results, sim(notax)
+```
+
 See [examples/tariff_removal.do](examples/tariff_removal.do) for a worked
-example, and `help cge` for the command list.
+example, `help cge` for the command list, and `cge_modlib list` for the
+library of ready-to-run models.
 
 ## Documentation
 
@@ -687,12 +287,13 @@ example, and `help cge` for the command list.
   [docs/manual/tex](docs/manual/tex) with `tools/build_manual.py`.
 - `help cge` in Stata: the help files of the commands.
 - [examples/](examples): do-files that run on the synthetic SAMs.
+- [CHANGELOG.md](CHANGELOG.md): the changes in each version.
 
 Developer notes:
 
 - [docs/model_spec.md](docs/model_spec.md): the specification of the
   equations, calibration, closures and validation checks, which the Stata,
-  Python and GAMS implementations follow.
+  Python and GAMS implementations follow, and of every feature added since.
 - [docs/elasticities.md](docs/elasticities.md): the elasticity library.
 - [docs/sam_tools.md](docs/sam_tools.md): reading, writing, aggregating and
   balancing SAMs, and the mapping template.
@@ -708,12 +309,22 @@ balance, closure consistency, Walras's law, the GDP identity, homogeneity and
 convergence from perturbed starting values, and `cge_listing` shows the residual
 of every equation element at a point. A Python reference implementation
 of the same equations (`reference/`) runs in continuous integration; the Stata
-test suite compares its results with the reference (every variable of every
-test case, to about 1e-11 or better). From version 0.1.16 an independent
+test suite, 63 test files, compares its results with the reference (every
+variable of every test case, to about 1e-11 or better). An independent
 implementation in GAMS ([tools/gams](tools/gams/README.md)), written from the
-specification and calibrated from the SAM alone, reproduces every case: 139
+specification and calibrated from the SAM alone, reproduces every case: 186
 scenarios across all layouts, features, fiscal instruments, labour-market
 regimes, health outcomes and several closures, to 3e-11 or better.
+
+The GAMS export check solves 67 cases written by `cge_gams`, from the
+standard model to standalone systems, complementarity problems, models in
+the form of MPSGE and nonlinear and mixed-integer programmes, with PATH,
+CONOPT, KNITRO, IPOPT and SCIP; GAMS reproduces Stata's solutions to 2.1e-11
+or better (3.6e-9 with CONOPT, whose feasibility tolerance is looser). Five
+models written for GAMS's own MPSGE agree with `cge_mpsge` to about 1e-13 in
+every scenario. The solvers are also checked against published problems:
+complementarity problems of MCPLIB, problem 71 of Hock and Schittkowski, and
+Waechter and Biegler's counterexample for feasibility restoration.
 
 ## Author
 

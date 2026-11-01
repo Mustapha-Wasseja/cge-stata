@@ -11,12 +11,16 @@ form a multi-region model (\manref{cge_region}).
 
 Users can extend the built-in model or write a standalone model without a
 SAM, using sets, parameters, variables, equations and nested CES or CET
-blocks (\manref{cge_model}, \manref{cge_equation}, \manref{cge_nest}). The
-package solves equilibrium and complementarity systems and nonlinear
-optimisation problems, including models with integer or binary variables.
-It also supports policy optimisation (\manref{cge_optimize}), Nash and
-Stackelberg games (\manref{cge_nash}), and a library of ready-to-run examples
-(\manref{cge_modlib}).
+blocks (\manref{cge_model}, \manref{cge_equation}, \manref{cge_nest}), or in
+the form of MPSGE, as sectors, commodities, consumers and their production
+and demand blocks (\manref{cge_mpsge}). The package solves equilibrium and
+complementarity systems and nonlinear optimisation problems, including
+models with integer or binary variables. It also supports policy
+optimisation (\manref{cge_optimize}), Nash and Stackelberg games
+(\manref{cge_nash}), and a library of ready-to-run examples
+(\manref{cge_modlib}). \manref{cge_structure} finds the equations and
+variables at fault in a structurally singular system, and \manref{cge_iis}
+the bounds and constraints that make a scenario infeasible.
 
 The workflow includes SAM preparation and balancing, multiplier and
 structural path analysis, scenario loops, validation checks, sensitivity
@@ -25,7 +29,8 @@ inequality, welfare and fiscal incidence (\manref{cge_microsim}).
 
 The built-in solvers run in Stata and Mata on Stata 13 or later. Optional,
 experimental links to SciPy's SuperLU and HiGHS require Stata 16 or later
-with Python and SciPy (\manref{cge_options}, \manref{cge_solve}). GAMS export
+with Python and SciPy, and the links to IPOPT and SCIP the Python packages
+cyipopt and PySCIPOpt as well (\manref{cge_options}, \manref{cge_solve}). GAMS export
 and GDX data exchange are also available (\manref{cge_gams},
 \manref{cge_gdx}); solving an exported model in GAMS requires GAMS and the
 selected solver.
@@ -110,6 +115,7 @@ Command & Title\\
 \manref{cge_macro} & Macros for user expressions\\
 \manref{cge_nest} & Declare nested CES or CET blocks\\
 \manref{cge_model} & Standalone models, named equation subsets and model statistics\\
+\manref{cge_mpsge} & Models in the form of MPSGE: sectors, commodities, consumers and their blocks\\
 \manref{cge_modlib} & Ready-to-run models in the user language\\
 \manref{cge_solve} & Solve the model\\
 \manref{cge_options} & Solver settings\\
@@ -125,6 +131,8 @@ Command & Title\\
 \manref{cge_sensitivity} & Sensitivity of a scenario's results to the elasticities\\
 \manref{cge_microsim} & Pass simulations to household survey data\\
 \manref{cge_listing} & Equation listing and infeasibility report\\
+\manref{cge_structure} & Structure of the system: structural singularity and blocks\\
+\manref{cge_iis} & An irreducible infeasible set of bounds and constraints\\
 \multicolumn{2}{@{}l}{\textit{Saving the model, and GAMS}}\\*
 \manref{cge_save} & Save the model and its simulations to a file\\
 \manref{cge_use} & Load a model saved with cge\_save\\
@@ -156,6 +164,16 @@ such as those with a \cmd{clear} option, leave the model intact, and
 \manref{cge_save} stores it with its simulations. Reading a SAM with
 \manref{cge_sam} starts a new model, and mapping or calibrating again replaces
 the mapping or the calibration.
+
+A standalone model starts with \cmd{cge_model new}: its sets, parameters,
+variables and equations are written with \manref{cge_set},
+\manref{cge_parameter}, \manref{cge_variable} and \manref{cge_equation}, or
+its sectors, commodities, consumers and blocks with \manref{cge_mpsge}, and
+it is solved with \manref{cge_solve} as a system, a complementarity problem
+or a programme with an objective. With the roles of its variables
+(\cmd{cge_model roles}) it is reported by \manref{cge_report}, analysed by
+\manref{cge_sensitivity} and passed to household surveys by
+\manref{cge_microsim}, as a model from a SAM is.
 
 \cgesubsec{Example 1: the package}
 

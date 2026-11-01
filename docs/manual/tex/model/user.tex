@@ -7,7 +7,11 @@ version 0.7.1), conditions restrict sums, terms and domains (from version
 0.7.2), and \manref{cge_macro} adds macros (from version 0.9.7). From version
 0.13.0 parameters may be calibrated by assignments, and a whole model may be
 written in the language, without a SAM or the built-in equations
-(section~\ref{sec:standalone}).
+(section~\ref{sec:standalone}). From version 0.29.0 sets may be defined by
+set algebra (section~\ref{sec:setalgebra}), from version 0.43.0 conditions
+may be evaluated at each solve (section~\ref{sec:userconditions}), and from
+version 0.44.0 a model may be written in the form of MPSGE
+(section~\ref{sec:mpsge}).
 
 \section{The language}
 
@@ -80,6 +84,40 @@ SAM in memory, give a parameter with two indexes,
 \cmd{cge_parameter sam(ac,ac2), from(act_agr-row) labels(account)}, and a
 string variable gives the elements of a set, \cmd{cge_set ac, from(account)}.
 
+\section{Set algebra}\label{sec:setalgebra}
+
+From version 0.29.0 a set may be defined over a domain by an expression, as
+GAMS's subsets and dynamic sets are: \cmd{cge_set imp(c) = yes$(tm(c) > 0)}
+is the set of commodities with an import tariff, \cmd{cge_set others(c) =
+not imp} its complement, and \cmd{cge_set large(f,a) = yes$(QF(f,a) > 20)}
+a set of pairs. An expression combines factors with \cmd{+} (union; factors
+side by side are a union too), \cmd{*} (intersection) and \cmd{-}
+(difference), \cmd{*} binding first and \cmd{+} and \cmd{-} read from left
+to right. A factor is a label (a tuple \cmd{e1.e2} in a domain of several
+indexes), a model set, a user set, \cmd{yes} or \cmd{no} (every element of
+the domain, or none), an expression in parentheses, or \cmd{not} and a
+factor, each followed by any number of conditions \cmd{$(}\argu{q}\cmd{)}.
+
+Sets are ordered lists. With $A = (a_1, \dots, a_m)$, $B$ and the domain $D$
+in their order,
+\begin{gather*}
+A + B = A \text{ followed by } (b \in B : b \notin A), \qquad
+A * B = (a \in A : a \in B), \qquad
+A - B = (a \in A : a \notin B),\\
+\texttt{not}\ A = (d \in D : d \notin A), \qquad
+A\texttt{\$(}q\texttt{)} = (a \in A : q(a) \ne 0),
+\end{gather*}
+each element once; a union keeps the order in which the elements are first
+named. A condition is evaluated for each element at the base, and the set is
+fixed when it is defined, as a GAMS assignment to a dynamic set is until the
+next one; it does not change with later shocks. Every label, and every
+element of a set named in the expression, must belong to the domain (GAMS's
+domain check), and a domain may itself be a subset. Sets stay lists of
+labels, so variables, equations, sums, the solver and the GAMS program use
+them as any other set. GAMS's \cmd{loop}, \cmd{if} and \cmd{while} over
+assignments are Stata's own \cmd{foreach}, \cmd{if} and \cmd{while} around
+\manref{cge_set} and \manref{cge_parameter}.
+
 \section{Conditions}\label{sec:userconditions}
 
 From version 0.7.2, a condition restricts a sum, a term or the domain of a user
@@ -100,15 +138,31 @@ belongs to a set, \cmd{goods(c)}, whether the index stands for a given element,
 Arithmetic is evaluated first, then comparisons, \cmd{!}, \cmd{&} and
 \cmd{|}.
 
-A condition is evaluated when the variable or equation is added, and again
-when the model is calibrated, with the variables and parameters at their base
-values. It decides which terms and equation elements the model contains; a
-shock to a parameter that a condition uses changes the value of the terms that
-remain, not which terms remain. The system therefore has the same size in every
-simulation, dynamic run and sensitivity draw, and the GAMS program writes out
-the same terms. GAMS itself would evaluate the condition again at each solve
-statement, with the current values of the parameters; the program that
-\manref{cge_gams} writes contains the terms already chosen, so the two agree.
+By default a condition is evaluated when the variable or equation is added,
+and again when the model is calibrated, with the variables and parameters at
+their base values. It decides which terms and equation elements the model
+contains; a shock to a parameter that a condition uses changes the value of
+the terms that remain, not which terms remain. The system therefore has the
+same size in every simulation, dynamic run and sensitivity draw, and the GAMS
+program writes out the same terms.
+
+GAMS evaluates a condition again at each \cmd{solve} statement, with the
+current values of the parameters. From version 0.43.0, \cmd{cge_options,
+conditions(solve)} does the same: before each solve the user definitions are
+built again with the conditions at the parameters of that solve, the levels
+of the variables staying at the base, so that a shock brings elements into
+their domains, sums and terms or takes them out. An element that comes in
+starts from its definition, or its \cmd{value()}, at the base; one that leaves
+is 0. Parameter assignments and sets keep their values from when they were
+defined, as GAMS's assignments do. Each stored simulation keeps its
+structure, which \manref{cge_results}, \manref{cge_listing} and
+\manref{cge_gams} use; \manref{cge_loop} builds each scenario's structure at
+its own parameters, and \manref{cge_sensitivity} and \manref{cge_nash} solve
+through \manref{cge_solve}, while \manref{cge_optimize} and
+\manref{cge_dynamic} keep the structure of the base. Under \cmd{solve}, a
+variable or equation whose domain no element meets at the base may be
+defined before a shock brings elements in.
+
 An element of a user variable outside its domain does not exist: it is left
 out of the results, it is 0 where an expression refers to it, and GAMS fixes
 it at 0. Because \cmd{$}\argu{name} is a global macro on a Stata command
@@ -289,12 +343,38 @@ Cobb--Douglas technologies, the element is replaced whatever its variant. The
 price indexes, factor incomes, government revenue and market clearing,
 equations \eqref{eq:P7} to \eqref{eq:P9}, \eqref{eq:I1}, \eqref{eq:I8},
 \eqref{eq:I9}, \eqref{eq:S1} to \eqref{eq:S3} and \eqref{eq:S5}, have
-derivatives coded in the package and cannot be replaced; they can be changed through the closure, or
-with user variables and equations that add to them. A replacement changes the
+derivatives coded in the package and cannot be replaced; they can be changed through the closure, or,
+from version 0.40.0, by variables added to them
+(section~\ref{sec:useradd}). A replacement changes the
 model, and must keep its accounting consistent: the residual of Walras's law,
 \cmd{WALRAS}, which every simulation reports, shows when it does not. In the
 GAMS program, the parameter \cmd{XRP} marks the replaced elements, which the
 equations of \cmd{cge_model.gms} leave out.
+
+\section{Adding to built-in equations}\label{sec:useradd}
+
+From version 0.40.0, a user variable may be added to the right side of
+elements of a built-in equation block, which keeps its own formula and
+derivatives:
+\begin{stcode}
+cge_parameter ttx = 0
+cge_variable TX = ttx * PQ(com_man) * QQ(com_man), add(I8)
+cge_shock ttx, value(0.05)
+\end{stcode}
+adds a tax on the absorption of manufactures to government revenue
+\eqref{eq:I8}, zero at the base, and \cmd{add(S2(com_man))} would add a variable to market
+clearing for manufactures alone. The residual of each element $r$ gains the variable, $R_r(x) +
+U_v$, and the exact Jacobian the entry $-1$ in its column, for every block,
+those whose derivatives are coded in the package included: the price
+indexes, factor incomes, government revenue and market clearing, which
+\cmd{replace()} cannot take. Every element must exist and not be replaced
+by a user equation; several variables may be added to one element. A
+definition that the reduced system leaves out (section~\ref{sec:reduced})
+stays in the system when a variable is added to it. The term changes the
+model's accounting as a replacement does, and \cmd{WALRAS} shows when the
+accounts no longer close. In standalone models, which have no built-in
+equations, \cmd{add()} is an error; the GAMS program adds the terms as
+described in \secref{sec:gams-user}.
 
 \section{Declared nests}\label{sec:usernests}
 
@@ -330,6 +410,93 @@ another form; the test suite checks this, and a block of two nests against the
 built-in nests of value added (section~\ref{sec:nests}). The tax on factor use,
 \cmd{tf(}$f$\cmd{,} $a$\cmd{)}, may be used in expressions from version 0.11.0.
 
+\section{Models in the form of MPSGE}\label{sec:mpsge}
+
+From version 0.44.0, \manref{cge_mpsge} writes a model as MPSGE writes one
+\citep{rutherford1999}: sectors $j$ with activity levels $Y_j$, commodities
+$g$ with prices $P_g$, and consumers $h$ with incomes $M_h$, a production
+block for each sector and a demand block for each consumer. The records of a
+block give the reference quantity $\bar q_k$, price $\bar p_k$ (1 by
+default) and taxes of each output, input, demand or endowment, in nests of
+CES functions on the input side and CET functions on the output side, with
+the top elasticities \cmd{s:} and \cmd{t:}, 0 by default. The statements are
+given as commands or read from the model of a GAMS program, between
+\cmd{$ontext} and \cmd{$offtext}, by \cmd{cge_mpsge using}; \cmd{cge_mpsge
+end} writes the model as user variables and equations of a standalone model
+(section~\ref{sec:standalone}), the mixed complementarity problem that MPSGE
+generates \citep{mathiesen1985,rutherford1995}.
+
+\textit{Prices and nests.} Record $k$ has value $v_k = \bar p_k \bar q_k$ at
+the reference point and the relative price $r_k = P_{g(k)}(1 + t_k)/\bar
+p_k$ for an input or a demand, $P_{g(k)}(1 - t_k)/\bar p_k$ for an output,
+with $t_k$ the sum of its tax rates: the reference price of an input
+includes its tax, and that of an output is net of it. A nest $n$ with
+elasticity $e_n$, records $k \in n$ and inner nests $m \in n$, of value $V_n
+= \sum_{k \in n} v_k + \sum_{m \in n} V_m$, has the price index
+\begin{equation*}
+\Pi_n = \Bigl[\sum_{k \in n} \tfrac{v_k}{V_n}\, r_k^{\,1 - e_n} +
+\sum_{m \in n} \tfrac{V_m}{V_n}\, \Pi_m^{\,1 - e_n}\Bigr]^{1/(1 - e_n)}
+\end{equation*}
+on the input side, with the exponent $1 + e_n$ on the output side, and the
+geometric mean of the relative prices with weights $v/V_n$ at $e_n = 1$; it
+is 1 at the reference prices. An input $k$ in the nest $n_1$, within
+$n_2, \dots$, within the top nest $n_L = s$, is demanded in the quantity
+\begin{equation*}
+x_k = Y_j\,\bar q_k\,\Bigl(\frac{\Pi_{n_1}}{r_k}\Bigr)^{e_{n_1}}
+\prod_{l=2}^{L} \Bigl(\frac{\Pi_{n_l}}{\Pi_{n_{l-1}}}\Bigr)^{e_{n_l}},
+\end{equation*}
+and an output with the ratios inverted. A consumer's utility index is $U_h =
+M_h/(V^s_h\,\Pi^s_h)$, with $V^s_h$ the reference value of its demands, and
+its demands $d_k = \bar q_k\,U_h$ times the factors of their nests, as
+above.
+
+\textit{Equations.} With $V^s_j$ and $V^t_j$ the reference values of a
+sector's inputs and outputs, and $\Pi^s_j$ and $\Pi^t_j$ the indexes of its
+top nests,
+\begin{align*}
+V^s_j\,\Pi^s_j - V^t_j\,\Pi^t_j &= 0 \;\perp\; Y_j \ge 0
+&& \text{(zero profit, \cmd{B_zp})},\\
+\sum_{\text{outputs}} y_k + \sum_{\text{endowments}} \bar q_k
+- \sum_{\text{inputs}} x_k - \sum_{\text{demands}} d_k &= 0 \;\perp\; P_g \ge 0
+&& \text{(market clearing, \cmd{P_mkt})},\\
+M_h - \sum_{\text{endowments}} P_{g(k)}\,\bar q_k - \sum_{\text{taxes to } h} t_k\,P_{g(k)}\,z_k &= 0 \;\perp\; M_h \ge 0
+&& \text{(income balance, \cmd{H_inc})},
+\end{align*}
+with $y_k$ the quantity of an output, $z_k$ that of the record a tax falls
+on, and each tax paid to the consumer that its record names. Every equation
+is a box pair with a lower bound of zero (section~\ref{sec:userineq}), so
+that a sector whose costs exceed its revenue shuts down, and a commodity in
+excess supply is free. The market for
+the numeraire, a commodity named by \opt{}{numeraire()}, is left out and its
+price fixed. Without it, the income of the consumer with the largest income
+at the reference point is fixed at its reference value; MPSGE fixes that
+income at its level at the start of each solve, so prices and incomes can
+then differ from those of GAMS by a common factor, and quantities do not.
+Sectors, commodities and consumers can be declared over sets, and blocks and
+records take conditions, as other user definitions do.
+
+\textit{Auxiliary variables and reports.} From version 0.45.0,
+\cmd{auxiliary:} declares variables $A$ at least 0, each with a constraint,
+written as the box pair $\ell - r \perp A \ge 0$, so that a tax rate can
+adjust to hold revenue, or employment to hold a floor on the real wage. A
+record's tax rate is then $t + m\,n$, with \cmd{n:} an auxiliary variable and
+\cmd{m:} its multiplier, and an endowment's quantity $\bar q\,r$, with
+\cmd{r:} an auxiliary variable that rations it. Report variables give the
+total quantities of a block's outputs, inputs or demands of a commodity, and
+\cmd{w:} the welfare index $U_h$; \cmd{start()} gives starting levels.
+
+\textit{Indexed nests.} From version 0.46.0, a nest \argu{g}\cmd{.tl:}$e$
+is a nest for each element of the set of index $g$, with an elasticity that
+may differ by element, as GTAP's models nest imports and domestic goods for
+each commodity \citep{hertel1997}; its records run over $g$, each in the
+nest of its element, and the price indexes of block $B$'s nests are
+$B$\cmd{_}\argu{g}\cmd{tl(}\argu{g}\cmd{)}. The nests may be within a nest
+of their own, not within each other.
+
+The tests compare five models written for GAMS's own MPSGE with the levels
+it gives in every scenario, to about $10^{-13}$
+(chapter~\ref{chap:validation}).
+
 \section{Inequalities and bounds}\label{sec:userineq}
 
 From version 0.9.0, a user equation may be an inequality, $\ell(x) \le r(x)$
@@ -353,6 +520,17 @@ bounds, a box pair, as PATH writes one: \cmd{perp(}\argu{variable}\cmd{)} with
 bounds where the equation holds and at a bound where the equation's
 difference has the sign that pushes it there (\manref{cge_equation}, \emph{Box
 pairs}). A tariff-rate quota, with its rent between zero and a cap, is one.
+In Stata each element of a pair, with $F = \ell - r$, is the equation in the
+natural residual form
+\begin{equation*}
+X = \operatorname{mid}\bigl(L,\ U,\ X - c\,F(x)\bigr), \qquad c = s_X / \max(|\ell^0|, |r^0|),
+\end{equation*}
+written as \cmd{max(L, min(U, X - c * F))}, with $s_X$ the scale of $X$ and
+$c$ fixed at the base; its solutions are those of the pair for any $c > 0$.
+The paired variable must be fixed under the closure and start within its
+bounds; the pair frees it, so the system stays square, and Newton's method
+solves the equation with the exact derivatives of \cmd{min()} and
+\cmd{max()}, a semismooth method in effect.
 
 A user variable may be exogenous, \cmd{cge_variable TAU, value(0) fixed}, or
 exogenous at a bound from which a paired inequality may move it,
@@ -419,12 +597,28 @@ equation of the system. Shocks change user parameters and fixed variables,
 and the results compare each solution with the starting levels.
 
 The commands that work on any model work on a standalone model: macros,
-attributes of variables, inequalities, the solution and equation listings,
-scenario loops, the optimiser with expressions as objectives and targets,
-saving and loading, GDX files and the export to GAMS, which writes the model
-as a GAMS program of its own. The commands that need the built-in equations,
-from \manref{cge_calibrate} to \manref{cge_report} and \manref{cge_dynamic},
-stop with an error.
+attributes of variables, inequalities and box pairs, the solution and
+equation listings, the structure of the system, scenario loops, the
+optimiser with expressions as objectives and targets, games, saving and
+loading, GDX files and the export to GAMS, which writes the model as a GAMS
+program of its own (\secref{sec:gams-user}). From version 0.35.0
+\cmd{cge_solve, blocks} solves it block by block (\secref{sec:structure}).
+The commands that need the SAM or the built-in equations, such as
+\manref{cge_map}, \manref{cge_calibrate} and \manref{cge_dynamic}, stop with
+an error.
+
+From version 0.37.0, \cmd{cge_model roles} names the variables of a
+standalone model that play the parts of a model from a SAM: the sets of its
+groups (households) and goods, and the variables of the goods' prices, of the
+quantities each group buys of each good and, optionally, of each group's
+income. With them, \manref{cge_report} gives each group's expenditure, price
+indexes and welfare (\secref{sec:sa-report}); from version 0.38.0,
+\manref{cge_sensitivity} draws the model's parameters and measures each draw
+from its own benchmark (\chapref{chap:sensitivity}); and from version 0.39.0
+\manref{cge_microsim} passes its groups' prices and incomes to household
+surveys (\chapref{chap:microsim}). Without roles, \manref{cge_report} gives
+every user variable, and \opt{}{items()} adds measures written in the
+language to the report of any model.
 
 The example \cmd{examples/standard_model.do} writes the standard model for
 the synthetic SAM in the language: the SAM is read as data, the sets of
@@ -499,6 +693,29 @@ problem is solved to $10\mu$, and the method stops when the largest of the
 scaled dual residual, the residuals of the equations and the complementarity
 of the bounds is below the tolerance.
 
+\textbf{Feasibility restoration.} From version 0.36.0, where the step cannot
+be found, the line search fails or the accepted step is too short to move
+while the equations do not hold, the method enters a restoration phase, as
+IPOPT does: projected Levenberg--Marquardt steps minimise
+\begin{equation*}
+\phi(z) = \tfrac12 \lVert c(z) \rVert^2 + \tfrac{\zeta}{2}\,\lVert D (z - z_0) \rVert^2,
+\qquad D = \operatorname{diag}\bigl(1/\max(1, |z_0|)\bigr),
+\end{equation*}
+within the bounds, first with $\zeta = \sqrt{\mu}$, which keeps the point
+near $z_0$, then with $\zeta = 0$. Restoration succeeds when $\lVert c \rVert$
+falls to 0.9 of its value at $z_0$, and the method goes on from that point
+with its multipliers started again. Where it fails at a point at which the
+projected gradient of $\tfrac12 \lVert c \rVert^2$ vanishes, the
+infeasibility has a local minimum, and the solve stops with model status 5,
+locally infeasible. The counterexample of \citet{wachter2000}, on which the
+method stalled, is solved after two restorations.
+
+\textbf{Several starts.} From version 0.24.0, \cmd{starts(}\#\cmd{)} solves
+from the start and $\# - 1$ points drawn within the bounds of the free
+variables, the same in every run, and keeps the best solution that
+converges, which makes a global optimum of a nonconvex problem more likely,
+not certain.
+
 \textbf{Results.} The solution is stored as a simulation with method
 \cmd{nlp} and its objective, which \manref{cge_results} and the listings
 report as any other. The marginals, \res{r(marginals)}, are the changes in the
@@ -534,6 +751,38 @@ are convex, as linear and convex quadratic ones are, and a heuristic
 otherwise. \manref{cge_gams} exports the problem as a GAMS MINLP (or, with
 \cmd{type(mip)}, a MIP), declaring integer and binary variables as such,
 solved by SCIP unless another solver is named.
+
+\section{External solvers}\label{sec:extsolvers}
+
+On Stata 16 and later with Python and SciPy, \manref{cge_solve} can pass a
+programme to an external solver through Stata's Python integration, in place
+of the interior point and branch and bound, as GAMS's \cmd{option} statement
+chooses a solver. The links are experimental; Stata 13 to 15 keep the
+package's own solvers, and without the Python packages the options stop
+with an error.
+\begin{itemize}
+\item \cmd{solver(highs)} (from version 0.27.0) solves a linear or
+mixed-integer linear programme with HiGHS, through SciPy, with the marginals
+of a linear programme's equations.
+\item \cmd{solver(ipopt)} (from version 0.41.0) solves a nonlinear programme
+with IPOPT \citep{wachter2006}, through the package cyipopt. IPOPT works in
+the scaled variables of the interior point and asks Mata for each value it
+needs: the objective and its gradient, the residuals and their sparse
+Jacobian, and the exact Hessian of the Lagrangian, or its own limited-memory
+approximation with \cmd{cge_options, hessian(differences)}. The marginals
+are in the units of the interior point's, and the statuses those of GAMS's
+link to IPOPT.
+\item \cmd{solver(scip)} (from version 0.42.0) solves nonlinear and
+mixed-integer programmes, nonconvex ones included, to a global optimum
+within SCIP's tolerances, by spatial branch and bound, through the package
+PySCIPOpt. SCIP needs the formulas, not their values: the objective and the
+equations go to it as expressions, with the parameters and fixed variables
+as numbers, so \cmd{min()}, \cmd{max()}, \cmd{ifthen()} and comparisons,
+which have no form there, stop with an error. SCIP gives no marginals;
+solving again with the interior point from SCIP's solution polishes it and
+gives them. SCIP runs in a separate Python process, since its libraries bring
+a runtime of OpenMP that cannot share Stata's process.
+\end{itemize}
 
 \section{Named models}\label{sec:namedmodels}
 

@@ -133,22 +133,23 @@ Part II:
 | The equations of the standard model | `chap:equations` | `sec:prices`, `sec:production`, `sec:trade`, `sec:institutions`, `sec:system` |
 | Closures | `chap:closures` | `sec:closure-options`, `sec:swaps` |
 | Calibration | `chap:calibration` | `sec:flows`, `sec:layouts`, `sec:normalisation`, `sec:cal-trade`, `sec:cal-production`, `sec:cal-cet`, `sec:cal-institutions`, `sec:factor-quantities` |
-| The solution method | `chap:solution` | `sec:newton`, `sec:reduced`, `sec:jacobian`, `sec:continuation`, `sec:diagnostics` |
+| The solution method | `chap:solution` | `sec:newton`, `sec:reduced`, `sec:jacobian`, `sec:sparse`, `sec:scaling`, `sec:continuation`, `sec:diagnostics`, `sec:structure`, `sec:solution-constraints` |
 | Validation checks | `chap:checks` | |
-| Reporting measures and welfare | `chap:reporting` | `sec:measures`, `sec:welfare` |
+| Reporting measures and welfare | `chap:reporting` | `sec:measures`, `sec:welfare`, `sec:sa-report` |
 | Fiscal instruments | `chap:fiscal` | `sec:replacement`, `sec:vat`, `sec:debt` |
 | Trade and household extensions | `chap:trade` | `sec:home`, `sec:exportdemand`, `sec:exportonly`, `sec:margins-market` |
 | Labour-market regimes | `chap:labour` | `sec:labourforce`, `sec:wagecurve`, `sec:minwage` |
 | Health | `chap:health` | `sec:fund`, `sec:efficiency`, `sec:sickdays`, `sec:mortality`, `sec:population` |
-| Bounds and complementarity | `chap:constraints` | `sec:rents`, `sec:cons-def`, `sec:cons-solution` |
+| Bounds and complementarity | `chap:constraints` | `sec:rents`, `sec:cons-def`, `sec:cons-solution`, `sec:cons-marginals` |
 | Factor taxes, nests and output aggregation | `chap:production` | `sec:factortax`, `sec:nests`, `sec:outputces` |
-| Recursive dynamics | `chap:dynamics` | |
-| The link to household surveys | `chap:microsim` | |
-| Sensitivity analysis | `chap:sensitivity` | |
+| Dynamics | `chap:dynamics` | `sec:foresight` |
+| Linked regions | `chap:regions` | |
+| The link to household surveys | `chap:microsim` | `sec:sa-microsim` |
+| Sensitivity analysis | `chap:sensitivity` | `sec:sa-sens` |
 | Policy optimisation | `chap:optimize` | |
-| User variables and equations | `chap:user` | |
+| User variables and equations | `chap:user` | `sec:setalgebra`, `sec:userconditions`, `sec:userpairs`, `sec:userlags`, `sec:userindexlags`, `sec:userfunctions`, `sec:userreplace`, `sec:useradd`, `sec:usernests`, `sec:mpsge`, `sec:userineq`, `sec:standalone`, `sec:nlp`, `sec:integer`, `sec:extsolvers`, `sec:namedmodels`, `sec:errorpos` |
 | SAM tools | `chap:samtools` | `sec:reading`, `sec:writing`, `sec:template`, `sec:aggregation`, `sec:balancing`, `sec:ras`, `sec:ce`, `sec:multipliers`, `sec:decomposition`, `sec:spa` |
-| The GAMS implementation | `chap:gams` | `sec:gams-files`, `sec:gams-types`, `sec:gams-import` |
+| The GAMS implementation | `chap:gams` | `sec:gams-files`, `sec:gams-types`, `sec:gams-user`, `sec:gams-import` |
 | The elasticity library | `chap:elasticities` | |
 
 Equations carry the labels of the model's blocks, `eq:P1` to `eq:P9`,
@@ -163,31 +164,45 @@ Entry titles, for `\cgeentry` and `\seeentry`:
 | `cge` | Computable general equilibrium modelling in Stata |
 | `cge_aggregate` | Merge SAM accounts into groups |
 | `cge_balance` | Balance a SAM by RAS or cross entropy |
+| `cge_bound` | Attributes of variables: bounds, scales, starting levels and fixed values |
 | `cge_calibrate` | Calibrate the model to the SAM |
 | `cge_check` | Run model validation checks |
 | `cge_closure` | Choose the model closure |
 | `cge_constraint` | Limits that bind in some scenarios and not in others |
-| `cge_dynamic` | Solve a recursive dynamic run |
+| `cge_dynamic` | Solve a dynamic run, recursive or with perfect foresight |
 | `cge_dynresults` | Results of a dynamic run as a dataset |
 | `cge_elasticities` | Published elasticities, with their sources |
 | `cge_equation` | User equations: new relations among the model's variables |
 | `cge_gams` | Write the model as a GAMS program, and solve it in GAMS |
+| `cge_gdx` | GAMS data exchange (GDX) files: write, read and list |
+| `cge_iis` | An irreducible infeasible set of bounds and constraints |
+| `cge_listing` | Equation listing, infeasibility report and solution listing |
+| `cge_loop` | Solve the model for a list or grid of scenarios |
+| `cge_macro` | Macros of the language of user variables and equations |
 | `cge_map` | Assign SAM accounts to model roles |
 | `cge_microsim` | Pass simulations to household survey data |
+| `cge_model` | A standalone model, written whole in the user language |
+| `cge_modlib` | A library of ready-to-run models in the user language |
+| `cge_mpsge` | Models in the form of MPSGE |
 | `cge_multiplier` | SAM multipliers and their decomposition |
+| `cge_nash` | Nash equilibria of players who choose instruments, and leaders |
+| `cge_nest` | Declare a nested CES or CET block |
 | `cge_optimize` | Choose policy instruments to maximise an outcome or reach targets |
-| `cge_parameter` | User parameters for user variables and equations |
+| `cge_options` | Settings of the solver |
+| `cge_parameter` | User parameters: values, assignments and data |
 | `cge_parameters` | The calibrated parameters as a dataset |
+| `cge_region` | Link single-country models through bilateral trade |
 | `cge_report` | Standard report tables for one or more simulations |
 | `cge_results` | Report simulation results |
 | `cge_sam` | Read a social accounting matrix |
 | `cge_samexport` | Write the SAM to a file or to memory |
 | `cge_save` | Save the model and its simulations to a file |
-| `cge_sensitivity` | Sensitivity of a scenario's results to the elasticities |
+| `cge_sensitivity` | Sensitivity of a scenario's results to the elasticities or parameters |
 | `cge_set` | User sets of elements, for indexes and sums |
 | `cge_shock` | Change a parameter or a fixed variable |
 | `cge_solve` | Solve the model |
 | `cge_spa` | Structural path analysis of a SAM multiplier |
+| `cge_structure` | Structure of the system: structural singularity and blocks |
 | `cge_synthetic` | Load the synthetic social accounting matrix |
 | `cge_template` | Write a template that maps SAM accounts to roles and groups |
 | `cge_use` | Load a model saved with cge_save |

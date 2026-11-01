@@ -162,3 +162,22 @@ wages gains more than its group when wages rise relative to other income. The
 link is only as good as the mapping of income sources, which should cover
 every substantial source, and the survey and the SAM should share a base year
 where possible.
+
+\section{Standalone models}\label{sec:sa-microsim}
+
+From version 0.39.0, a standalone model whose variables have roles
+(\secref{sec:sa-report}) is passed to a survey as a model from a SAM is. The
+household groups are the elements of its set of groups and the commodities of
+\opt{}{budget()} those of its set of goods. Each group's base expenditure is
+$\sum_c P^0_c Q^0_{cg}$; each income source changes by the ratio of a
+variable indexed by the groups, or of a variable without index, or not at
+all; and the prices of the goods change by $P_c/P^0_c$. The model has no
+separate direct taxes or savings, so consumption follows the incomes of the
+sources, and the decomposition has the channels of the income sources and
+prices only. Each household's variations are those of Cobb--Douglas
+preferences, in its own budget shares or its group's base shares, $\V{EV} =
+C/G - C^0$ and $\V{CV} = C - C^0 G$, with $G$ the geometric price index. The
+rest, poverty, inequality, quantiles, the growth incidence curve, standard
+errors from the survey design and bands across draws, is that of this
+chapter. Taxes and benefits of fiscal incidence and reweighting need the
+built-in model.
