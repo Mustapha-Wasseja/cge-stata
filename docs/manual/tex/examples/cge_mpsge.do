@@ -62,3 +62,30 @@ quietly cge_results, sim(labtax) clear nodisplay
 format base value %10.6f
 list variable element1 base value if inlist(variable, "Y", "P", "PF", "HH", "GOV", "HH_u"), noobs sepby(variable)
 *<<
+
+*>> mps_aux
+cge_model new
+cge_parameter kend = 90
+cge_parameter grev = 10
+cge_mpsge sectors: X Y W
+cge_mpsge commodities: PX PY PL PK PW
+cge_mpsge consumers: CONS GOVT
+cge_mpsge auxiliary: TAU U
+cge_mpsge prod:X s:0.5  o:PX q:100 p:0.9 a:GOVT n:TAU  i:PL q:40  i:PK q:50
+cge_mpsge prod:Y s:1.5  o:PY q:100  i:PL q:60  i:PK q:40
+cge_mpsge prod:W s:1    o:PW q:200  i:PX q:100  i:PY q:100
+cge_mpsge demand:CONS   d:PW q:190  e:PL q:100  e:PL q:(-100) r:U  e:PK q:kend
+cge_mpsge demand:GOVT   d:PW q:10
+cge_mpsge constraint:TAU  GOVT =e= grev * PW
+cge_mpsge constraint:U    PL =g= PW
+cge_mpsge report:  v:XL i:PL prod:X  v:WC w:CONS
+cge_mpsge end, numeraire(PL) start(TAU:0.1)
+*<<
+
+*>> mps_auxsolve
+cge_shock kend, value(70)
+cge_solve, name(lesscap)
+quietly cge_results, sim(lesscap) clear nodisplay
+format base value %10.6f
+list variable base value if inlist(variable, "X", "Y", "PK", "GOVT", "TAU", "U") | inlist(variable, "XL", "WC"), noobs clean
+*<<

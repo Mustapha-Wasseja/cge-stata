@@ -48,8 +48,8 @@ cge_mpsge, drop
 A statement of the model, the model written, a model read from a file
 \begin{stsyntax}
 \cmdb{cge_mpsge} \argu{statement}\\
-\cmdb{cge_mpsge end} [\texttt{,} \optarg{num}{eraire}{name[(labels)]}]\\
-\cmdb{cge_mpsge using} \argu{filename} [\texttt{,} \optarg{num}{eraire}{name[(labels)]}]
+\cmdb{cge_mpsge end} [\texttt{,} \optarg{num}{eraire}{name[(labels)]} \optarg{st}{art}{levels}]\\
+\cmdb{cge_mpsge using} \argu{filename} [\texttt{,} \optarg{num}{eraire}{name[(labels)]} \optarg{st}{art}{levels}]
 \end{stsyntax}
 List the models, or drop the model being read
 \begin{stsyntax}
@@ -66,8 +66,11 @@ Statement & Content\\
 \cmd{sectors:} \argu{names} & activity levels, as \cmd{X Y(s)}\\
 \cmd{commodities:} \argu{names} & prices, as \cmd{PL P(g)}\\
 \cmd{consumers:} \argu{names} & incomes, as \cmd{RA HH(h)}\\
+\cmd{auxiliary:} \argu{names} & auxiliary variables, as \cmd{TAU U(r)}\\
 \cmd{prod:}\argu{sector}[\cmd{$(}\argu{cond}\cmd{)}] [\argu{fields}] & a production block\\
 \cmd{demand:}\argu{consumer}[\cmd{$(}\argu{cond}\cmd{)}] [\argu{fields}] & a demand block\\
+\cmd{constraint:}\argu{aux}[\cmd{$(}\argu{cond}\cmd{)}] \argu{equation} & the constraint of an auxiliary variable\\
+\cmd{report:} [\argu{reports}] & report variables\\
 \argu{fields} & records and fields of the block being read\\
 \hline
 \end{tabular}
@@ -86,6 +89,9 @@ Field & Meaning\\
 \cmd{q:}\argu{expression} & reference quantity of a record; default 1\\
 \cmd{p:}\argu{expression} & reference price of a record; default 1\\
 \cmd{a:}\argu{consumer} \cmd{t:}\argu{expression} & a tax at rate \cmd{t:}, paid to the agent \cmd{a:}\\
+\cmd{n:}\argu{aux} [\cmd{m:}\argu{expression}] & an endogenous rate of the tax, \cmd{n:} times \cmd{m:} (default 1), added to \cmd{t:}\\
+\cmd{r:}\argu{aux} & the multiplier of an endowment\\
+\cmd{v:}\argu{name} & a report variable, with \cmd{o:} or \cmd{i:} and \cmd{prod:}, \cmd{d:} and \cmd{demand:}, or \cmd{w:}\argu{consumer}\\
 \argu{nest}\cmd{:} & the nest of a record; default \cmd{s} for inputs and demands, \cmd{t} for outputs\\
 \hline
 \end{tabular}
@@ -100,6 +106,12 @@ labels for an element of one with indexes, as \cmd{numeraire(PF(lab))}; its
 equation is left out, as Walras's law makes it hold. The default is the
 income of the consumer with the largest income at the reference point, as
 in MPSGE.
+
+\item[\optarg{st}{art}{levels}] (from version 0.45.0) gives the levels at
+which sectors (default 1), commodities (default 1) and auxiliary variables
+(default 0) start, as GAMS's \cmd{.l} before a solve, and at which the
+incomes are evaluated at the reference point: \cmd{start(TAU:0.1 Z:0)}, or
+\cmd{start(Y(agr):0)} for one element.
 
 \item[\opt{}{list}] lists the model being read and the models written;
 \opt{gen}{erated} lists the definitions written in place of the statements.
@@ -184,6 +196,7 @@ $H$\cmd{_s}, $H$\cmd{_u}, $H$\cmd{_d}$k$ & price index and utility of the consum
 $B$\cmd{_zp} & zero profit, paired with $B$\\
 $P$\cmd{_mkt} & market clearing, supply less demand, paired with $P$\\
 $H$\cmd{_inc} & income balance, paired with $H$\\
+$A$\cmd{_con} & the constraint of auxiliary variable $A$, paired with it\\
 \hline
 \end{tabular}
 \end{center}
@@ -202,13 +215,41 @@ income at the reference point is fixed at that income. MPSGE fixes it at
 its value at the start of each solve, so that prices and incomes may then
 differ from those of GAMS by a common factor; quantities do not.
 
+\cgesubsec{Example 3: auxiliary variables and constraints}
+
+From version 0.45.0, an auxiliary variable is determined by its constraint,
+\cmd{constraint:}\argu{aux} followed by an equation with \cmd{=g=},
+\cmd{=e=} or \cmd{=l=}, which may go on over the statements that follow
+it, to a semicolon or the next section; a consumer's name in a constraint
+is its income. As in MPSGE the variable is at least 0 and starts at 0. It
+may be the endogenous rate of a tax, \cmd{n:} (times \cmd{m:}, added to
+\cmd{t:}), or the multiplier of an endowment, \cmd{r:}. Here the
+government's tax on the output of X keeps its real revenue at
+\cmd{grev}, and unemployment \cmd{U}, a negative endowment of labour
+times \cmd{U}, keeps the real wage at least 1; \opt{st}{art()} starts the
+tax at its rate at the reference point, so that the data are an
+equilibrium there. Report variables give the labour of X and the welfare
+index of the consumer:
+\stlog{mps_aux}
+With less capital the real wage would fall below its floor: a quarter of
+the labour force is unemployed, and the tax rises to keep the
+government's real revenue:
+\stlog{mps_auxsolve}
+The test suite compares this model with GAMS/MPSGE to $10^{-13}$.
+
+\cgesubsec{Report variables}
+
+\cmd{report:} defines variables from the model's: an output (\cmd{o:}) or
+input (\cmd{i:}) of a production block, a demand (\cmd{d:}) of a demand
+block, the sum over the block's records for the commodity, or the welfare
+index of a consumer (\cmd{w:}), its utility $H$\cmd{_u}. A report variable
+takes the indexes of its block and commodity that it names and sums over
+the others: \cmd{v:LAB(s) i:PF(lab) prod:Y(s)} is the labour of each
+sector, and \cmd{v:FAC(f) i:PF(f) prod:Y(man)} the factors of one.
+
 \cgesubsec{What is not available}
 
-Auxiliary variables and constraints (\cmd{$auxiliary}, \cmd{$constraint}),
-endogenous taxes (\cmd{n:} and \cmd{m:}), rationed endowments (\cmd{r:}),
-report blocks and indexed nests stop \cmd{cge_mpsge} with an error.
-Constraints may be written with \manref{cge_variable} and
-\manref{cge_equation} over the variables written.
+Indexed nests stop \cmd{cge_mpsge} with an error.
 
 \cgesec{Stored results}
 
@@ -219,6 +260,8 @@ Constraints may be written with \manref{cge_variable} and
 \res{r(N_sectors)} & activity levels (elements)\\
 \res{r(N_commodities)} & prices (elements)\\
 \res{r(N_consumers)} & incomes (elements)\\
+\res{r(N_auxiliary)} & auxiliary variables (elements)\\
+\res{r(N_reports)} & report variables\\
 \res{r(N_blocks)} & blocks\\
 \res{r(N_variables)} & user variables written\\
 \res{r(N_equations)} & equations written, besides the definitions\\
@@ -253,7 +296,10 @@ $U = M/(V_s C_s)$ and demands $q_k U$ times the factors of its nests. Market
 clearing is supply, outputs and endowments, less demand, inputs and final
 demands, $\ge 0 \perp P \ge 0$, and income balance $M = \sum P e + \sum
 t P x \perp M \ge 0$, the value of the endowments and the revenue of the
-taxes the consumer receives \citep{mathiesen1985, rutherford1999}. An
+taxes the consumer receives \citep{mathiesen1985, rutherford1999}. A tax
+rate is $t + m n$, with $n$ an auxiliary variable; an endowment $q r$. The
+constraint $f \ge g$ (or $f = g$) of an auxiliary variable $A$ is
+$f - g \ge 0 \perp A \ge 0$, and $f \le g$ is $g - f \ge 0 \perp A \ge 0$. An
 elasticity given by an expression is written with both forms, under the
 conditions \cmd{$(}$e \ne 1$\cmd{)} and \cmd{$(}$e = 1$\cmd{)}.
 

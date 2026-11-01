@@ -1,4 +1,4 @@
-*! cge_mpsge.ado  v0.44.0  2026-11-01
+*! cge_mpsge.ado  v0.45.0  2026-11-01
 *! cge-stata: a model written as MPSGE writes one, with sectors,
 *! commodities, consumers and blocks of production and demand, as user
 *! variables and equations of a standalone model (model_spec.md, Section 54)
@@ -27,8 +27,8 @@ program define cge_mpsge, rclass
     }
     if `"`sub'"' == "end" {
         local 0 `"`rest'"'
-        syntax [, NUMeraire(string)]
-        capture noisily quietly mata: _cge_mp_end(st_local("numeraire"))
+        syntax [, NUMeraire(string) STart(string)]
+        capture noisily quietly mata: _cge_mp_end(st_local("numeraire"), st_local("start"))
         if _rc {
             local rc = _rc
             mata: _cge_mp_abort()
@@ -41,9 +41,9 @@ program define cge_mpsge, rclass
     }
     if `"`sub'"' == "using" {
         local 0 `"`0'"'
-        syntax using/ [, NUMeraire(string)]
+        syntax using/ [, NUMeraire(string) STart(string)]
         mata: _cge_mp_file(st_local("using"))
-        capture noisily quietly mata: _cge_mp_end(st_local("numeraire"))
+        capture noisily quietly mata: _cge_mp_end(st_local("numeraire"), st_local("start"))
         if _rc {
             local rc = _rc
             mata: _cge_mp_abort()

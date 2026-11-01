@@ -1,0 +1,41 @@
+. cge_model new
+New standalone model, in place of the model in memory: write its sets, parameters, variables and equ
+> ations
+with cge_set, cge_parameter, cge_variable and cge_equation, and solve it with cge_solve
+
+. cge_parameter kend = 90
+User parameter kend: 1 value(s), from 90 to 90
+
+. cge_parameter grev = 10
+User parameter grev: 1 value(s), from 10 to 10
+
+. cge_mpsge sectors: X Y W
+
+. cge_mpsge commodities: PX PY PL PK PW
+
+. cge_mpsge consumers: CONS GOVT
+
+. cge_mpsge auxiliary: TAU U
+
+. cge_mpsge prod:X s:0.5  o:PX q:100 p:0.9 a:GOVT n:TAU  i:PL q:40  i:PK q:50
+
+. cge_mpsge prod:Y s:1.5  o:PY q:100  i:PL q:60  i:PK q:40
+
+. cge_mpsge prod:W s:1    o:PW q:200  i:PX q:100  i:PY q:100
+
+. cge_mpsge demand:CONS   d:PW q:190  e:PL q:100  e:PL q:(-100) r:U  e:PK q:kend
+
+. cge_mpsge demand:GOVT   d:PW q:10
+
+. cge_mpsge constraint:TAU  GOVT =e= grev * PW
+
+. cge_mpsge constraint:U    PL =g= PW
+
+. cge_mpsge report:  v:XL i:PL prod:X  v:WC w:CONS
+
+. cge_mpsge end, numeraire(PL) start(TAU:0.1)
+MPSGE model mpsge: 3 sector(s), 5 commodities and 2 consumer(s), in 5 block(s)
+with 2 auxiliary variable(s) and their constraints, and 2 report variable(s)
+written as 36 user variable(s) and 11 equation(s), 35 elements in all
+Numeraire: PL, fixed at 1
+Reference point: largest relative gap of the equations  0.00e+00

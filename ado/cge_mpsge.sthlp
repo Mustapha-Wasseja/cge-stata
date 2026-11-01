@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.44.0  01nov2026}{...}
+{* *! version 0.45.0  01nov2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -13,10 +13,10 @@
 {cmd:cge_mpsge} {it:statement}
 
 {p 8 12 2}
-{cmd:cge_mpsge end} [{cmd:,} {opt num:eraire(name[(labels)])}]
+{cmd:cge_mpsge end} [{cmd:,} {opt num:eraire(name[(labels)])} {opt st:art(levels)}]
 
 {p 8 12 2}
-{cmd:cge_mpsge using} {it:filename} [{cmd:,} {opt num:eraire(name[(labels)])}]
+{cmd:cge_mpsge using} {it:filename} [{cmd:,} {opt num:eraire(name[(labels)])} {opt st:art(levels)}]
 
 {p 8 12 2}
 {cmd:cge_mpsge,} {opt list} [{opt gen:erated}] | {opt drop}
@@ -29,8 +29,11 @@ where a {it:statement} is one of
 {p2col:{cmd:sectors:} {it:names}}activity levels, as {cmd:X Y(s)}{p_end}
 {p2col:{cmd:commodities:} {it:names}}prices, as {cmd:PL P(g)}{p_end}
 {p2col:{cmd:consumers:} {it:names}}incomes, as {cmd:RA HH(h)}{p_end}
+{p2col:{cmd:auxiliary:} {it:names}}auxiliary variables, as {cmd:TAU U(r)} (from version 0.45.0){p_end}
 {p2col:{cmd:prod:}{it:sector}[{cmd:$(}{it:cond}{cmd:)}] [{it:fields}] [{it:records}]}a production block{p_end}
 {p2col:{cmd:demand:}{it:consumer}[{cmd:$(}{it:cond}{cmd:)}] [{it:fields}] [{it:records}]}a demand block{p_end}
+{p2col:{cmd:constraint:}{it:aux}[{cmd:$(}{it:cond}{cmd:)}] {it:equation}}the constraint of an auxiliary variable{p_end}
+{p2col:{cmd:report:} [{it:reports}]}report variables{p_end}
 {p2col:{it:records}}records of the block being read{p_end}
 {p2colreset}{...}
 
@@ -49,8 +52,15 @@ writes them:
 {p2col:{cmd:q:}{it:expression}}reference quantity of a record; default 1{p_end}
 {p2col:{cmd:p:}{it:expression}}reference price of a record; default 1{p_end}
 {p2col:{cmd:a:}{it:consumer} {cmd:t:}{it:expression}}a tax on the record at rate {cmd:t:}, paid to the agent {cmd:a:}{p_end}
+{p2col:{cmd:n:}{it:aux} [{cmd:m:}{it:expression}]}an endogenous rate of the tax, the auxiliary variable {cmd:n:} times {cmd:m:} (default 1), added to {cmd:t:}{p_end}
+{p2col:{cmd:r:}{it:aux}}the multiplier of an endowment, an auxiliary variable{p_end}
 {p2col:{it:nest}{cmd::}}the nest of a record; default {cmd:s} for inputs and demands, {cmd:t} for outputs{p_end}
 {p2colreset}{...}
+
+{pstd}
+and a report, {cmd:v:}{it:name} with one of {cmd:o:}{it:commodity} or
+{cmd:i:}{it:commodity} and {cmd:prod:}{it:sector}, {cmd:d:}{it:commodity}
+and {cmd:demand:}{it:consumer}, or {cmd:w:}{it:consumer}.
 
 
 {title:Description}
@@ -191,11 +201,36 @@ starts at 0 with {cmd:cge_bound} {it:B}{cmd:, level(0)}, as GAMS's
 {it:B}{cmd:.l = 0} ({helpb cge_bound}).
 
 {pstd}
-{bf:Not available.} Auxiliary variables and constraints ({cmd:$auxiliary},
-{cmd:$constraint}), endogenous taxes ({cmd:n:} and {cmd:m:}), rationed
-endowments ({cmd:r:}), report blocks and indexed nests stop
-{cmd:cge_mpsge} with an error; constraints may be written with
-{helpb cge_variable} and {helpb cge_equation} over the variables written.
+{bf:Auxiliary variables.} From version 0.45.0, an auxiliary variable
+({cmd:auxiliary:}) is determined by its constraint, {cmd:constraint:}{it:aux}
+followed by an equation in the variables and parameters of the model, with
+{cmd:=g=}, {cmd:=e=} or {cmd:=l=}, which may go on over the statements that
+follow it, to a semicolon or the next section. As in MPSGE, the variable is
+at least 0 and starts at 0: a constraint {it:lhs} {cmd:=g=} {it:rhs} (or
+{cmd:=e=}) is written as the box pair {it:lhs} - {it:rhs} with the variable
+at 0 where the difference is positive, {cmd:=l=} as {it:rhs} - {it:lhs}
+({it:aux}{cmd:_con}). An auxiliary variable may be the endogenous rate of a
+tax, {cmd:n:}, as a tax that keeps the government's real revenue constant,
+or the multiplier of an endowment, {cmd:r:}, as unemployment that holds a
+floor on the real wage; a consumer's name in a constraint is its income.
+
+{pstd}
+{bf:Report variables.} {cmd:report:} defines variables from the model's: an
+output ({cmd:o:}) or input ({cmd:i:}) of a production block, a demand
+({cmd:d:}) of a demand block, the sum over the records of the block for
+the commodity, or the welfare index of a consumer ({cmd:w:}), its utility
+{it:H}{cmd:_u}. A report variable takes the indexes of its block and
+commodity that it names, and sums over the others: {cmd:v:LAB(s) i:PF(lab) prod:Y(s)}
+is the labour of each sector. Labels name single elements.
+
+{pstd}
+{bf:Starting levels.} {opt start()} gives the levels at which sectors,
+commodities and auxiliary variables start, as GAMS's {cmd:.l} before a
+solve, and at which the incomes are evaluated at the reference point:
+{cmd:start(TAU:0.1 Z:0)}, or {cmd:start(Y(agr):0)} for one element.
+
+{pstd}
+{bf:Not available.} Indexed nests stop {cmd:cge_mpsge} with an error.
 
 
 {title:Options}
@@ -204,6 +239,12 @@ endowments ({cmd:r:}), report blocks and indexed nests stop
 {opt numeraire(name[(labels)])} fixes the price of a commodity or the income
 of a consumer, with labels for an element of one with indexes, as
 {cmd:numeraire(PF(lab))}.
+
+{phang}
+{opt start(levels)} (from version 0.45.0) gives starting levels,
+{it:name}{cmd::}{it:#} or {it:name}{cmd:(}{it:labels}{cmd:):}{it:#}, of
+sectors (default 1), commodities (default 1) and auxiliary variables
+(default 0).
 
 {phang}
 {opt list} lists the model being read and the models written;
@@ -290,6 +331,45 @@ A model of a GAMS program, between {cmd:$ontext} and {cmd:$offtext}, is read
 with {cmd:cge_mpsge using} {it:filename}{cmd:, numeraire(}{it:name}{cmd:)},
 the sets and parameters it uses defined first under the same names.
 
+{pstd}An equal-yield tax on the output of X and a floor on the real wage,
+with auxiliary variables (from version 0.45.0){p_end}
+
+{phang2}{cmd:. cge_model new}{p_end}
+
+{phang2}{cmd:. cge_parameter kend = 90}{p_end}
+
+{phang2}{cmd:. cge_parameter grev = 10}{p_end}
+
+{phang2}{cmd:. cge_mpsge sectors: X Y W}{p_end}
+
+{phang2}{cmd:. cge_mpsge commodities: PX PY PL PK PW}{p_end}
+
+{phang2}{cmd:. cge_mpsge consumers: CONS GOVT}{p_end}
+
+{phang2}{cmd:. cge_mpsge auxiliary: TAU U}{p_end}
+
+{phang2}{cmd:. cge_mpsge prod:X s:0.5  o:PX q:100 p:0.9 a:GOVT n:TAU  i:PL q:40  i:PK q:50}{p_end}
+
+{phang2}{cmd:. cge_mpsge prod:Y s:1.5  o:PY q:100  i:PL q:60  i:PK q:40}{p_end}
+
+{phang2}{cmd:. cge_mpsge prod:W s:1    o:PW q:200  i:PX q:100  i:PY q:100}{p_end}
+
+{phang2}{cmd:. cge_mpsge demand:CONS   d:PW q:190  e:PL q:100  e:PL q:(-100) r:U  e:PK q:kend}{p_end}
+
+{phang2}{cmd:. cge_mpsge demand:GOVT   d:PW q:10}{p_end}
+
+{phang2}{cmd:. cge_mpsge constraint:TAU  GOVT =e= grev * PW}{p_end}
+
+{phang2}{cmd:. cge_mpsge constraint:U    PL =g= PW}{p_end}
+
+{phang2}{cmd:. cge_mpsge report:  v:XL i:PL prod:X  v:WC w:CONS}{p_end}
+
+{phang2}{cmd:. cge_mpsge end, numeraire(PL) start(TAU:0.1)}{p_end}
+
+{phang2}{cmd:. cge_shock kend, value(70)}{p_end}
+
+{phang2}{cmd:. cge_solve, name(lesscap)}{p_end}
+
 {pstd}
 The model library has the first example: {cmd:cge_modlib run mpsge}
 ({helpb cge_modlib}).
@@ -304,6 +384,8 @@ The model library has the first example: {cmd:cge_modlib run mpsge}
 {synopt:{cmd:r(N_sectors)}}activity levels (elements){p_end}
 {synopt:{cmd:r(N_commodities)}}prices (elements){p_end}
 {synopt:{cmd:r(N_consumers)}}incomes (elements){p_end}
+{synopt:{cmd:r(N_auxiliary)}}auxiliary variables (elements){p_end}
+{synopt:{cmd:r(N_reports)}}report variables{p_end}
 {synopt:{cmd:r(N_blocks)}}blocks{p_end}
 {synopt:{cmd:r(N_variables)}}user variables written{p_end}
 {synopt:{cmd:r(N_equations)}}equations written, besides the definitions{p_end}

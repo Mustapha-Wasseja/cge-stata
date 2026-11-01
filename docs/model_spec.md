@@ -3850,6 +3850,33 @@ tests/test_mpsge.do compares the models of tests/data/mpsge with the
 levels of GAMS/MPSGE (tests/expected/mpsge_gams.csv) to 1e-9 (agreement
 about 1e-13); export cases `mpsge` and `mpsnest` with PATH.
 
+## 55. Auxiliary variables, constraints and reports of models in the form of MPSGE (from version 0.45.0)
+
+`cge_mpsge` reads `auxiliary:` declarations (kind 4), `constraint:A(idx)`
+statements whose equation (`_cge_mp_rest`, `_cge_mp_ceq`) may go on over the
+following statements to a semicolon or the next section, and `report:`
+records `v:NAME(idx)` with `o:`/`i:` and `prod:`, `d:` and `demand:`, or `w:`
+(`_cge_mp_rept`, `MP.rp`). Taxes are kept apart (`MP.tx`: record, agent,
+`t:`, `n:`, `m:`); a record's rate is $t + m n$ (either part may be absent),
+`n:` and `r:` name auxiliary variables (`_cge_mp_auxref`), and an
+endowment's quantity is $q r$ (`_cge_mp_endow`). Auxiliary variables are
+declared after the commodities, `A(idx)$(c), value(start) fixed`, with the
+condition of their constraint; each has one constraint over the indexes of
+its declaration. The constraint `lhs =g= rhs` or `=e=` is written as the box
+pair `A_con: lhs = rhs, perp(A) lower(0)`, `=l=` as `rhs = lhs`, as MPSGE
+pairs them with a variable that is at least 0. `start(name[(labels)]:#)`
+(`_cge_mp_starts`, `_cge_mp_startval`) gives the starting levels of
+sectors, commodities and auxiliary variables (defaults 1, 1, 0) in their
+`value()`, an element's level under `sameas()`, so that the incomes are
+evaluated at those levels. A report variable (`_cge_mp_repvar`) is defined
+as the sum, over the records of its block for its commodity and field, of
+`_cge_mp_term` of the record's quantity with the report's indexes mapped
+from the block's and the commodity's references (labels as `sameas()`
+conditions); `w:H` is `H_u`. tests/test_mpsge.do compares tests/data/mpsge/
+mp_aux.gms (an equal-yield tax and a floor on the real wage, with reports)
+with GAMS/MPSGE to 1e-9 (agreement about 1e-14), checks $t + n$ and $m n$
+against $n$, and reports over sets.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

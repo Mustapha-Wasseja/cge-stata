@@ -18,6 +18,11 @@ exported model in GAMS requires GAMS and the selected solver.
 
 ## Status
 
+Version 0.45.0 completes `cge_mpsge` with MPSGE's auxiliary variables and
+constraints, endogenous tax rates (`n:`, `m:`), rationed endowments (`r:`),
+report variables and starting levels: an equal-yield tax and a floor on the
+real wage with unemployment agree with GAMS/MPSGE to about 1e-14.
+
 Version 0.44.0 adds `cge_mpsge`, which writes a model as MPSGE writes one:
 sectors, commodities and consumers, with production blocks (`prod:`) and
 demand blocks (`demand:`) whose records give reference quantities, prices
@@ -125,7 +130,7 @@ the worker's complete status record, preventing an intermittent empty-status
 error. Model equations and numerical solvers are unchanged.
 
 
-Version 0.44.0 implements the standard single-country model described in
+Version 0.45.0 implements the standard single-country model described in
 [docs/model_spec.md](docs/model_spec.md):
 
 - CES or Cobb-Douglas value added, Leontief intermediate inputs; a Leontief,
@@ -199,6 +204,7 @@ scenarios reuse the baseline's efficiency path. Shocks can vary over time.
 Every period is stored as a simulation for `cge_report`, and `cge_dynresults`
 compares a run with its baseline. Five runs agree with the Python reference to
 about 1e-13 in every period.
+Version 0.45.0 adds auxiliary variables, constraints and reports to models in the form of MPSGE.
 Version 0.44.0 adds models in the form of MPSGE.
 Version 0.43.0 adds conditions evaluated at each solve.
 Version 0.42.0 adds global solutions of programmes by SCIP through PySCIPOpt.

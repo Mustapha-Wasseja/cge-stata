@@ -1,0 +1,23 @@
+. cge_shock kend, value(70)
+User parameter kend changed for 1 element(s)
+
+. cge_solve, name(lesscap)
+Simulation lesscap solved in 11 iteration(s) (newton)
+Largest scaled residual  7.11e-15
+
+. quietly cge_results, sim(lesscap) clear nodisplay
+
+. format base value %10.6f
+
+. list variable base value if inlist(variable, "X", "Y", "PK", "GOVT", "TAU", "U") | inlist(variable
+> , "XL", "WC"), noobs clean
+
+    variable        base       value
+           X    1.000000    0.752888
+           Y    1.000000    0.775348
+          PK    1.000000    0.964115
+         TAU    0.100000    0.130884
+           U    0.000000    0.246810
+        GOVT   10.000000   10.000000
+          XL   40.000000   29.812578
+          WC    1.000000    0.751616

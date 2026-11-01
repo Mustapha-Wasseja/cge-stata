@@ -6,7 +6,9 @@
 * same models written in commands; a model written by hand in user variables
 * and equations; MPSGE's numeraire; a free good, a sector that shuts down
 * and one that starts; an elasticity given by a parameter, switched to
-* Cobb-Douglas under conditions(solve); save and use; errors. The data are
+* Cobb-Douglas under conditions(solve); save and use; from version 0.45.0,
+* auxiliary variables and constraints, endogenous taxes, rationed
+* endowments and report variables against GAMS/MPSGE; errors. The data are
 * SYNTHETIC.
 
 version 13.0
@@ -316,7 +318,109 @@ assert abs(scalar(tmp_d)) > 1e-3
 cge_options, conditions(base)
 
 * ---------------------------------------------------------------------
-* 5. Errors: the model is not added, and the statements are kept until
+* 5. Auxiliary variables and constraints (version 0.45.0): an equal-yield
+*    tax on the output of X, n:TAU, and a floor on the real wage with
+*    unemployment U, a rationed endowment r:U; report variables; the
+*    starting level of the tax; t:, n: and m: together
+* ---------------------------------------------------------------------
+program define _tmp_aux
+    cge_model new
+    cge_parameter kend = 90
+    cge_parameter grev = 10
+end
+program define _tmp_auxrun
+    cge_shock kend, value(70)
+    cge_solve, name(lesscap)
+    cge_shock kend, value(90)
+    cge_shock grev, value(15)
+    cge_solve, name(morerev)
+end
+_tmp_aux
+cge_mpsge using "data/mpsge/mp_aux.gms", numeraire(PL) start(TAU:0.1)
+assert r(N_auxiliary) == 2 & r(N_reports) == 4 & r(gap) < 1e-12
+cge_solve, name(bench)
+assert r(converged) == 1 & r(iterations) == 0
+_tmp_auxrun
+foreach sc in lesscap morerev {
+    mata: st_numscalar("tmp_d", _tmp_gams("mp_aux", "`sc'", "`sc'", 1))
+    display as text "mp_aux `sc': largest relative difference from GAMS/MPSGE " as result %9.2e scalar(tmp_d)
+    assert scalar(tmp_d) < 1e-9
+}
+* the constraints hold: real revenue at grev, the real wage at its floor
+* with unemployment
+mata: st_numscalar("tmp_d", abs(_tmp_val("lesscap", "GOVT", "") - 10 * _tmp_val("lesscap", "PW", "")) + abs(_tmp_val("lesscap", "PL", "") - _tmp_val("lesscap", "PW", "")))
+assert scalar(tmp_d) < 1e-9
+mata: st_numscalar("tmp_d", _tmp_val("lesscap", "U", ""))
+assert scalar(tmp_d) > 0.2
+* the welfare index is the consumer's utility
+mata: st_numscalar("tmp_d", abs(_tmp_val("lesscap", "WC", "") - _tmp_val("lesscap", "CONS_u", "")))
+assert scalar(tmp_d) < 1e-14
+
+* the same in commands; then a rate t: of 0.05 with TAU, which then starts
+* and ends 0.05 lower, and TAU times m:2, which ends at half
+foreach v in base tn m2 {
+    _tmp_aux
+    cge_mpsge sectors: X Y W
+    cge_mpsge commodities: PX PY PL PK PW
+    cge_mpsge consumers: CONS GOVT
+    cge_mpsge auxiliary: TAU U
+    if "`v'" == "base" cge_mpsge prod:X s:0.5  o:PX q:100 p:0.9 a:GOVT n:TAU
+    if "`v'" == "tn" cge_mpsge prod:X s:0.5  o:PX q:100 p:0.9 a:GOVT t:0.05 n:TAU
+    if "`v'" == "m2" cge_mpsge prod:X s:0.5  o:PX q:100 p:0.9 a:GOVT n:TAU m:2
+    cge_mpsge    i:PL q:40  i:PK q:50
+    cge_mpsge prod:Y s:1.5  o:PY q:100  i:PL q:60  i:PK q:40
+    cge_mpsge prod:W s:1  o:PW q:200  i:PX q:100  i:PY q:100
+    cge_mpsge demand:CONS  d:PW q:190  e:PL q:100  e:PL q:(-100) r:U  e:PK q:kend
+    cge_mpsge demand:GOVT  d:PW q:10
+    cge_mpsge constraint:TAU GOVT =e= grev * PW
+    cge_mpsge constraint:U
+    cge_mpsge    PW =l= PL;
+    cge_mpsge report: v:XO o:PX prod:X  v:XL i:PL prod:X
+    cge_mpsge    v:CW d:PW demand:CONS  v:WC w:CONS
+    cge_mpsge end, numeraire(PL) start(TAU:`= cond("`v'" == "base", 0.1, 0.05)')
+    assert r(gap) < 1e-12
+    cge_shock kend, value(70)
+    cge_solve, name(lesscap)
+    mata: st_numscalar("tmp_t`v'", _tmp_val("lesscap", "TAU", ""))
+    mata: st_numscalar("tmp_x`v'", _tmp_val("lesscap", "X", ""))
+    if "`v'" == "base" {
+        mata: st_numscalar("tmp_d", _tmp_gams("mp_aux", "lesscap", "lesscap", 1))
+        assert scalar(tmp_d) < 1e-9
+    }
+}
+assert abs(scalar(tmp_ttn) + 0.05 - scalar(tmp_tbase)) < 1e-10 & abs(scalar(tmp_xtn) - scalar(tmp_xbase)) < 1e-10
+assert abs(2 * scalar(tmp_tm2) - scalar(tmp_tbase)) < 1e-10 & abs(scalar(tmp_xm2) - scalar(tmp_xbase)) < 1e-10
+
+* reports over sets: the inputs of labour of each sector, a sector's output
+* named by its label, and the welfare of each household
+_tmp_sam3
+cge_mpsge sectors: Y(s)
+cge_mpsge commodities: P(s) PF(f)
+cge_mpsge consumers: HH(h) GOV
+cge_mpsge prod:Y(s) s:0 va:esub(s)
+cge_mpsge    o:P(s)  q:y0(s) p:(1-ty0(s)) a:GOV t:ty(s)
+cge_mpsge    i:P(g)$(id0(g,s)) q:id0(g,s)
+cge_mpsge    i:PF(f) q:fd0(f,s) p:(1+tf0(f,s)) va: a:GOV t:tf(f,s)
+cge_mpsge demand:HH(h) s:sh(h)  d:P(g) q:c0(g,h)  e:PF(f) q:e0(f,h)
+cge_mpsge demand:GOV s:0  d:P(g) q:g0(g)
+cge_mpsge report: v:LAB(s) i:PF(lab) prod:Y(s)
+cge_mpsge    v:FAC(f) i:PF(f) prod:Y(man)
+cge_mpsge    v:INT(g,s) i:P(g) prod:Y(s)
+cge_mpsge    v:WEL(h) w:HH(h)
+cge_mpsge end, numeraire(PF(lab))
+cge_shock tf, elements(lab.man) value(0.5)
+cge_solve, name(labtax)
+foreach s in agr man ser {
+    mata: st_numscalar("tmp_d", abs(_tmp_val("labtax", "LAB", "`s'") - _tmp_val("labtax", "Y_i3", "`s',lab")))
+    assert scalar(tmp_d) < 1e-14
+}
+mata: st_numscalar("tmp_d", abs(_tmp_val("labtax", "FAC", "cap") - _tmp_val("labtax", "Y_i3", "man,cap")) + abs(_tmp_val("labtax", "INT", "agr,ser") - _tmp_val("labtax", "Y_i2", "ser,agr")))
+assert scalar(tmp_d) < 1e-14
+mata: st_numscalar("tmp_d", abs(_tmp_val("labtax", "WEL", "poor") - _tmp_val("labtax", "HH_u", "poor")))
+assert scalar(tmp_d) < 1e-14
+
+* ---------------------------------------------------------------------
+* 6. Errors: the model is not added, and the statements are kept until
 *    they are dropped
 * ---------------------------------------------------------------------
 program define _tmp_err
@@ -383,6 +487,35 @@ foreach st in "o:PX q:10" "prod:X i:PL q:10 t:0.1" "demand:C o:PX" "commodities:
 }
 capture noisily cge_mpsge using "data/mpsge/nosuch.gms"
 assert _rc == 601
+* auxiliary variables (from version 0.45.0): n: that is not one, one
+* without its constraint, r: on an input, a constraint without a relation
+_tmp_tax
+cge_mpsge sectors: X
+cge_mpsge commodities: PX PL
+cge_mpsge consumers: CONS
+cge_mpsge prod:X o:PX q:10 a:CONS n:PL i:PL q:10
+cge_mpsge demand:CONS d:PX q:10 e:PL q:10
+_tmp_err 198
+cge_mpsge sectors: X
+cge_mpsge commodities: PX PL
+cge_mpsge consumers: CONS
+cge_mpsge auxiliary: A
+cge_mpsge prod:X o:PX q:10 i:PL q:10
+cge_mpsge demand:CONS d:PX q:10 e:PL q:10
+_tmp_err 198
+cge_mpsge sectors: X
+cge_mpsge commodities: PX PL
+cge_mpsge consumers: CONS
+cge_mpsge auxiliary: A
+cge_mpsge prod:X o:PX q:10 i:PL q:10
+cge_mpsge demand:CONS d:PX q:10 e:PL q:10
+cge_mpsge constraint:A PX + PL
+_tmp_err 198
+cge_mpsge sectors: X
+cge_mpsge prod:X o:PX q:10
+capture noisily cge_mpsge i:PL q:10 r:A
+assert _rc == 198
+cge_mpsge, drop
 * a model from a SAM takes no model in the form of MPSGE
 quietly do setup_synthetic.do
 capture noisily cge_mpsge sectors: X
@@ -392,5 +525,5 @@ capture erase "tmp_mpsge.cgem"
 capture mata: mata drop _tmp_gams()
 capture mata: mata drop _tmp_val()
 capture mata: mata drop _tmp_diff()
-capture program drop _tmp_tax _tmp_sam3 _tmp_sam3run _tmp_err
-capture scalar drop tmp_d tmp_r tmp_a tmp_b tmp_c
+capture program drop _tmp_tax _tmp_sam3 _tmp_sam3run _tmp_err _tmp_aux _tmp_auxrun
+capture scalar drop tmp_d tmp_r tmp_a tmp_b tmp_c tmp_tbase tmp_ttn tmp_tm2 tmp_xbase tmp_xtn tmp_xm2

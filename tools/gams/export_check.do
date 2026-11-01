@@ -645,7 +645,7 @@ local exfile = subinstr(subinstr(`"`r(fn)'"', "\", "/", .), "ado/cge_model.ado",
 * method and by PATH as MCP: MCPLIB josephy, an economy in the form of MPSGE
 * with a technology that is not used, and many constraints of the standard
 * model at once
-foreach case in standalone exchange mcpjosephy mcptech manycons sacond mpsge mpsnest {
+foreach case in standalone exchange mcpjosephy mcptech manycons sacond mpsge mpsnest mpsaux {
     display as text _n "{hline 60}" _n "Case " as result "`case'"
     if "`case'" == "mcpjosephy" {
         quietly cge_model new
@@ -755,6 +755,27 @@ foreach case in standalone exchange mcpjosephy mcptech manycons sacond mpsge mps
         quietly cge_mpsge end, numeraire(PL)
         quietly cge_bound Z, level(0)
         quietly cge_shock te, value(0.3)
+    }
+    * auxiliary variables and constraints (version 0.45.0): an equal-yield
+    * tax and a floor on the real wage that binds
+    else if "`case'" == "mpsaux" {
+        quietly cge_model new
+        quietly cge_parameter kend = 90
+        quietly cge_parameter grev = 10
+        quietly cge_mpsge sectors: X Y W
+        quietly cge_mpsge commodities: PX PY PL PK PW
+        quietly cge_mpsge consumers: CONS GOVT
+        quietly cge_mpsge auxiliary: TAU U
+        quietly cge_mpsge prod:X s:0.5  o:PX q:100 p:0.9 a:GOVT n:TAU  i:PL q:40  i:PK q:50
+        quietly cge_mpsge prod:Y s:1.5  o:PY q:100  i:PL q:60  i:PK q:40
+        quietly cge_mpsge prod:W s:1  o:PW q:200  i:PX q:100  i:PY q:100
+        quietly cge_mpsge demand:CONS  d:PW q:190  e:PL q:100  e:PL q:(-100) r:U  e:PK q:kend
+        quietly cge_mpsge demand:GOVT  d:PW q:10
+        quietly cge_mpsge constraint:TAU GOVT =e= grev * PW
+        quietly cge_mpsge constraint:U PL =g= PW
+        quietly cge_mpsge report: v:XL i:PL prod:X  v:WC w:CONS
+        quietly cge_mpsge end, numeraire(PL) start(TAU:0.1)
+        quietly cge_shock kend, value(70)
     }
     else if "`case'" == "standalone" {
         preserve
