@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.47.0")
+    return("0.47.1")
 }
 
 // =====================================================================
@@ -4955,12 +4955,14 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
     F.pinv = invorder(F.p)
     F.qinv = invorder(F.q)
     // L of the sparse block by columns: rows in the permuted order; the rows
-    // that end in the dense block keep their entries of A21 instead
-    F.lr = F.pinv[lk]
+    // that end in the dense block keep their entries of A21 instead. [., 1]
+    // because a 1 x 1 vector subscripted by a column of another length gives a
+    // row (a system of one equation, or a single entry; from version 0.47.1)
+    F.lr = F.pinv[lk, 1]
     keep = selectindex(F.lr :<= ns)
     if (!cols(keep)) keep = J(0, 1, .)
-    F.lr = F.lr[keep]
-    li = li[keep]
+    F.lr = F.lr[keep, 1]
+    li = li[keep, 1]
     nl = rows(F.lr)
     if (nl) {
         keep = order((li, F.lr), (1, 2))
@@ -4976,11 +4978,11 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
     F.lv = J(nl, 1, 0)
     // U of the sparse block by columns: the entries of its columns, the
     // diagonal apart; entries in the columns left over belong to A12
-    ukc = F.qinv[ukc]
+    ukc = F.qinv[ukc, 1]
     keep = selectindex((ukc :!= ukr) :& (ukc :<= ns))
     if (!cols(keep)) keep = J(0, 1, .)
-    ukr = ukr[keep]
-    ukc = ukc[keep]
+    ukr = ukr[keep, 1]
+    ukc = ukc[keep, 1]
     nu = rows(ukr)
     if (nu) {
         keep = order((ukc, ukr), (1, 2))
@@ -5066,8 +5068,8 @@ real scalar _cge_slu_factor(struct cge_slu scalar F, real colvector cp, real col
     // the blocks of the rows set apart and the columns left over, A12 and A21
     // as entries and A22 dense; the Schur complement by groups of columns of
     // A12, so that inv(A11) A12 is not held whole
-    pr = F.pinv[ri]
-    pc = F.qinv[floor((_cge_slu_lin(cp, ri, n) :- 1) :/ n) :+ 1]
+    pr = F.pinv[ri, 1]
+    pc = F.qinv[floor((_cge_slu_lin(cp, ri, n) :- 1) :/ n) :+ 1, 1]
     sel = selectindex((pr :<= ns) :& (pc :> ns))
     if (rows(sel) & cols(sel)) {
         F.r12 = pr[sel]
@@ -5183,11 +5185,12 @@ real colvector _cge_slu_solve1(struct cge_slu scalar F, real colvector b)
         y[ur] = y[ur] - F.uv[|F.us[k] \ F.us[k] + F.ul[k] - 1|] :* y[k]
     }
     // the dense block: x2 = inv(S) (b2 - A21 z1), x1 = z1 - inv(A11) A12 x2
+    // (y2[., 1] for a dense block of one row; from version 0.47.1)
     if (ns < n) {
         t = y[|ns + 1 \ n|]
         if (ns & rows(F.v21)) t = t - _cge_sumby(F.r21, F.v21 :* y[F.c21], n - ns)
         y2 = solveupper(F.SU, solvelower(F.SL, t[F.sp]))
-        if (ns & rows(F.v12)) y[|1 \ ns|] = y[|1 \ ns|] - _cge_slu_solve11(F, _cge_sumby(F.r12, F.v12 :* y2[F.c12], ns))
+        if (ns & rows(F.v12)) y[|1 \ ns|] = y[|1 \ ns|] - _cge_slu_solve11(F, _cge_sumby(F.r12, F.v12 :* y2[F.c12, 1], ns))
         y[|ns + 1 \ n|] = y2
     }
     x = J(n, 1, .)
@@ -5232,7 +5235,8 @@ real colvector _cge_slu_lin(real colvector cp, real colvector ri, real scalar n)
     nz = selectindex(cnt)
     mk = J(rows(ri), 1, 0)
     mk[cp[nz]] = J(rows(nz), 1, 1)
-    return((nz[runningsum(mk)] :- 1) :* n :+ ri)
+    // [., 1]: entries in one column only (from version 0.47.1)
+    return((nz[runningsum(mk), 1] :- 1) :* n :+ ri)
 }
 
 // The factors of the n x n matrix of entries (r, c, v): in the order of F if
@@ -5249,7 +5253,7 @@ real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colv
     vs = v
     if (_cge_ruiz_on() & rows(v)) {
         _cge_ruiz(r, c, v, n, dr, dc)
-        vs = dr[r] :* v :* dc[c]
+        vs = dr[r, 1] :* v :* dc[c, 1]
         F.dr = dr
         F.dc = dc
     }
@@ -5613,7 +5617,7 @@ void _cge_ruiz(real colvector r, real colvector c, real colvector v, real scalar
         if (max(abs(nr :- 1)) < 0.05 & max(abs(nc :- 1)) < 0.05) break
         dr = dr :/ sqrt(nr)
         dc = dc :/ sqrt(nc)
-        a2 = a2 :/ nr[r] :/ nc[c]
+        a2 = a2 :/ nr[r, 1] :/ nc[c, 1]
     }
 }
 
@@ -8918,7 +8922,7 @@ real scalar _cge_ssnewton(struct cge_model scalar M, struct cge_par scalar p, re
         if (rows(hist) > 10) hist = hist[|rows(hist) - 9 \ rows(hist)|]
         pref = max(hist)
         // the gradient of the merit function, J'f
-        gr = _cge_sumby(jc, jv :* f[jr], rows(z))
+        gr = _cge_sumby(jc, jv :* f[jr, 1], rows(z))
         dz = J(0, 1, .)
         if (sp) {
             if (_cge_slu_update(SF, jr, jc, jv, rows(z))) dz = _cge_slu_solve(SF, -f)
@@ -29791,12 +29795,13 @@ real colvector _cge_highs(struct cge_model scalar M, real colvector xfix, real c
         c1 = _cge_F(M, M.p, xfix, S, z1)
         if (hasmissing(c0) | hasmissing(c1)) _cge_fail("solver(highs): the equations cannot be evaluated at the start", 459)
         if (!_cge_jac_trip(M, M.p, xfix, S, z0, jr, jc, jv)) _cge_fail("solver(highs): the derivatives of the equations cannot be found", 459)
-        if (max(abs(c1 - c0 - _cge_sumby(jr, jv :* d[jc], m))) > 1e-8 * max((1, max(abs(c0)), max(abs(c1))))) {
+        // [., 1]: a programme of one variable (from version 0.47.1)
+        if (max(abs(c1 - c0 - _cge_sumby(jr, jv :* d[jc, 1], m))) > 1e-8 * max((1, max(abs(c0)), max(abs(c1))))) {
             _cge_fail("solver(highs) solves linear and mixed-integer linear programmes: the equations are not linear", 459)
         }
-        b = _cge_sumby(jr, jv :* z0[jc], m) - c0
+        b = _cge_sumby(jr, jv :* z0[jc, 1], m) - c0
         // in the variables' own units
-        jv = jv :/ sc[jc]
+        jv = jv :/ sc[jc, 1]
     }
     cx = sgn * g0 :/ sc
     isint = J(n, 1, 0)

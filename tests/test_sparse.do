@@ -1,8 +1,10 @@
 * test_sparse.do -- the sparse LU of Newton's steps (version 0.10.1). The
 * factorisation against dense solves, with pivoting, refactorisation and
-* singular matrices; and solutions with the sparse LU against those with the
-* dense one, for the reduced and the full system, constraints, user
-* equations, a dynamic run, the optimiser and a loop
+* singular matrices, and for one equation and a dense block of one row;
+* and solutions with the sparse LU against those with the dense one, for
+* the reduced and the full system, constraints, user equations, a dynamic
+* run, the optimiser, a loop, and standalone models of one equation and of
+* a single dense row
 
 version 13.0
 quietly do helpers_reference.do
@@ -24,20 +26,24 @@ quietly cge_sam, labels(account)
 capture mata: mata drop _ts_case() _ts_diff()
 mata:
 // a random sparse matrix, its rows shuffled so that pivoting is needed, some
-// diagonal entries zero; the largest error of the solution against a dense
-// solve, before and after a refactorisation with new values
-real rowvector _ts_case(real scalar n, real scalar dens, real scalar seed, real scalar zdiag)
+// diagonal entries zero, and nd full rows; the largest error of the solution
+// against a dense solve, before and after a refactorisation with new values,
+// the rank and the size of the sparse block
+real rowvector _ts_case(real scalar n, real scalar dens, real scalar seed, real scalar zdiag,
+                        | real scalar nd)
 {
     struct cge_slu scalar F
     real matrix A
     real colvector r, c, v, b, x, xd, t
     real scalar i, e1, e2, ok
+    if (args() < 5) nd = 0
     rseed(seed)
     A = (runiform(n, n) :< dens) :* rnormal(n, n, 0, 1)
     for (i = 1; i <= n; i++) A[i, i] = (runiform(1, 1) < zdiag ? 0 : 1 + runiform(1, 1))
     // entries on a random permutation make the matrix structurally nonsingular
     t = order(runiform(n, 1), 1)
     for (i = 1; i <= n; i++) A[i, t[i]] = A[i, t[i]] + 3
+    for (i = 1; i <= nd; i++) A[i, .] = rnormal(1, n, 0, 1)
     A = A[order(runiform(n, 1), 1), .]
     t = selectindex(vec(A') :!= 0)
     r = floor((t :- 1) :/ n) :+ 1
@@ -57,7 +63,7 @@ real rowvector _ts_case(real scalar n, real scalar dens, real scalar seed, real 
     ok = _cge_slu_update(F, r, c, v, n)
     x = _cge_slu_solve(F, b)
     e2 = max(abs(x - lusolve(A, b))) / max(abs(lusolve(A, b)))
-    return((e1, e2, rank(A)))
+    return((e1, e2, rank(A), F.ns))
 }
 end
 foreach c in "30 0.15 1 0" "120 0.04 2 0.2" "300 0.015 3 0.3" "600 0.006 4 0.4" {
@@ -165,6 +171,46 @@ real scalar _ts_reorder()
 st_numscalar("ro", _ts_reorder())
 end
 assert scalar(ro) < 1e-14
+* one equation, two, and a dense block of one row, without and with Ruiz's
+* scaling (version 0.47.1: a 1 x 1 vector subscripted by a column of
+* another length is a row in Mata, and these stopped with a conformability
+* error)
+foreach s in 0 1 {
+    mata: _cge_ruiz_set(`s')
+    foreach c in "1 1 1 0 0" "1 1 2 0.5 0" "2 0.5 3 0 0" "60 0.05 9 0.2 1" "80 0.03 11 0.3 1" {
+        tokenize `c'
+        mata: E = _ts_case(`1', `2', `3', `4', `5'); st_numscalar("e1", E[1]); st_numscalar("e2", E[2]); st_numscalar("nd", `1' - E[4])
+        display as text "n = `1', scaling `s': against the dense solve " as result %9.2e scalar(e1) ///
+            as text ", refactorised " as result %9.2e scalar(e2) as text "; dense block of " as result scalar(nd)
+        assert scalar(e1) < 1e-9 & scalar(e2) < 1e-9
+        if `5' assert scalar(nd) == 1
+    }
+}
+* the entries of a 1 x 1 matrix given twice, summed, with Ruiz's scaling;
+* a zero 1 x 1 matrix, and entries in one column of two, are singular
+capture mata: mata drop _ts_one()
+mata:
+real rowvector _ts_one()
+{
+    struct cge_slu scalar F
+    real scalar e, s1, s2
+    _cge_ruiz_set(1)
+    F.ok = 0
+    e = .
+    if (_cge_slu_update(F, (1 \ 1), (1 \ 1), (1.5 \ 2.5), 1)) e = abs(_cge_slu_solve(F, 2) - 0.5)
+    _cge_ruiz_set(0)
+    F.ok = 0
+    s1 = _cge_slu_update(F, 1, 1, 0, 1)
+    F.ok = 0
+    s2 = _cge_slu_update(F, (1 \ 2), (1 \ 1), (1 \ 2), 2)
+    return((e, s1, s2))
+}
+E = _ts_one()
+st_numscalar("e1", E[1])
+st_numscalar("s1", E[2])
+st_numscalar("s2", E[3])
+end
+assert scalar(e1) < 1e-15 & scalar(s1) == 0 & scalar(s2) == 0
 
 * ---------------------------------------------------------------------
 * 2. Solutions with the sparse LU against the dense one
@@ -286,4 +332,43 @@ capture noisily cge_solve, sparse dense
 assert _rc == 198
 capture noisily cge_options, linsolver(fast)
 assert _rc == 198
-mata: mata drop _ts_case() _ts_diff() _ts_sing() _ts_reorder() _ts_dense() _ts_cd()
+
+* ---------------------------------------------------------------------
+* 3. Standalone models of one equation, of one complementarity pair at its
+*    bound, and with a single dense row: 60 goods and their total in a row
+*    of 61 entries (version 0.47.1)
+* ---------------------------------------------------------------------
+cge_model new
+cge_variable X, value(1)
+cge_equation E: X^2 = 4
+quietly cge_solve, name(o1) dense
+cge_solve, name(o2) sparse
+assert r(converged) == 1 & "`r(linsolver)'" == "sparse"
+mata: st_numscalar("d", _ts_diff("o1", "o2"))
+assert scalar(d) < 1e-10
+cge_model new
+cge_variable B, value(0.5) fixed
+cge_equation EB: B - 3 = 0, perp(B) lower(0) upper(1)
+quietly cge_solve, name(p1) dense
+cge_solve, name(p2) sparse
+assert r(converged) == 1
+mata: st_numscalar("d", _ts_diff("p1", "p2"))
+assert scalar(d) < 1e-10
+cge_model new
+local gl
+forvalues k = 1/60 {
+    local gl `gl' g`k'
+}
+cge_set g = `gl'
+cge_parameter a(g) = 0.01 * ord(g)
+cge_variable X(g), value(1)
+cge_variable S, value(1)
+cge_equation E(g): X(g) = a(g) * (1 + 0.1 * S)
+cge_equation T: S = sum(g, X(g)) / 10
+quietly cge_solve, name(r1) dense
+cge_solve, name(r2) sparse
+assert r(converged) == 1
+mata: st_numscalar("d", _ts_diff("r1", "r2"))
+display as text "a single dense row, sparse against dense: " as result %9.2e scalar(d)
+assert scalar(d) < 1e-10
+mata: mata drop _ts_case() _ts_diff() _ts_sing() _ts_reorder() _ts_dense() _ts_cd() _ts_one()

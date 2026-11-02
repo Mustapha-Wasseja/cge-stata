@@ -5,6 +5,21 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.47.1
+
+Version 0.47.1 fixes the sparse LU of Newton's steps (`cge_options,
+linsolver(sparse)`, and `auto` from 1,000 equations), which stopped with a
+conformability error, `r(3200)`, for a system of one equation and for a
+system with a single row of many entries, such as one total over 60 goods,
+which the LU sets apart as a dense block of one row. It also stopped on
+some singular matrices instead of reporting them, and, with
+`scaling(ruiz)`, on a 1 x 1 matrix whose entry was given twice. In Mata a
+1 x 1 vector is also a row vector, so subscripting it by a column of
+another length gives a row. `solver(highs)` stopped in the same way for a
+linear programme of one variable. Solutions with the sparse LU agree with
+those with the dense LU to about 1e-15; the models and other solvers are
+unchanged.
+
 ## 0.47.0
 
 Version 0.47.0 builds standalone models with sums over large sets more than

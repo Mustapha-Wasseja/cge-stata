@@ -14,7 +14,7 @@ d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja Mohammed
 d
-d Distribution-Date: 20261026
+d Distribution-Date: 20261102
 d
 f ado/cge.ado
 f ado/cge.sthlp

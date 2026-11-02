@@ -4,8 +4,8 @@
 * package's sparse LU, reduced and full systems; linear programmes by HiGHS
 * against the interior point, with their marginals and against a closed
 * form; mixed-integer programmes against enumeration; infeasible, unbounded
-* and nonlinear programmes. On Stata 13 to 15, or without Python and SciPy,
-* the options stop with an error.
+* and nonlinear programmes, and one of one variable. On Stata 13 to 15, or
+* without Python and SciPy, the options stop with an error.
 
 version 13.0
 
@@ -215,6 +215,16 @@ capture noisily cge_solve, name(nl) maximize(x - y^2) solver(highs)
 assert _rc == 459
 capture noisily cge_solve, name(nl) maximize(x) solver(cplex)
 assert _rc == 198
+* a programme of one variable and two equations (version 0.47.1: a 1 x 1
+* vector subscripted by a column of another length is a row in Mata, and it
+* stopped with a conformability error)
+cge_model new
+cge_variable x, value(1)
+cge_equation E1: x = 3
+cge_equation E2: 2 * x = 6
+cge_bound x, lower(0)
+cge_solve, name(one) maximize(x) solver(highs)
+assert r(converged) == 1 & abs(r(objective) - 3) < 1e-9
 
 mata: mata drop _tp_cmp() _tp_assign()
 scalar drop tp_d tp_n
