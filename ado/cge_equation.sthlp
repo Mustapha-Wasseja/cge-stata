@@ -573,6 +573,16 @@ calibrated again (with base values from the new base) and solved in every
 simulation, dynamic run and sensitivity draw. Their derivatives are exact
 (from version 0.7.0). Results list the user variables with the others.
 
+{pstd}
+Each {cmd:cge_variable} and {cmd:cge_equation} builds the user definitions
+again. From version 0.47.0, in a standalone model, a definition whose text and
+whose inputs (sets, parameters, macros, variables, base values, scales and
+domains) are unchanged takes the elements compiled before, and writing out a
+sum takes time in proportion to its terms: a model of prices and markets of
+50 goods, each using every good, builds in about 4 seconds rather than 86,
+and one of 100 goods in about 11 seconds rather than four to seven minutes. Give the variables before the equations: a new variable changes the
+inputs, and the next equation compiles every definition again.
+
 
 {title:Stored results}
 

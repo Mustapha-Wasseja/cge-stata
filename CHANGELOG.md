@@ -5,6 +5,21 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.47.0
+
+Version 0.47.0 builds standalone models with sums over large sets more than
+20 times faster. Each `cge_variable` and `cge_equation` compiled every user
+definition again, writing out and compiling sums in time that grew with the
+square of their terms: a model of Cobb-Douglas prices and markets of 50 goods,
+each using every good, took about 86 seconds to build, and one of 100 goods
+four to seven minutes; they now take about 4 and 11 seconds. A definition
+whose text and whose inputs are unchanged takes the elements compiled
+before, and the elements compiled are those of version 0.46.0. The first
+solve of each session in Stata 16 or later no longer starts Python and
+imports SciPy unless `cge_options, linsolver(python)` asks for it (`&` in
+Mata evaluates both its sides), which took from 5 seconds to most of a
+minute.
+
 ## 0.46.0
 
 Version 0.46.0 adds MPSGE's nests indexed by a set (`g.tl:`), as GTAP's

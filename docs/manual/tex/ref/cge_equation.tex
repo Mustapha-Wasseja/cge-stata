@@ -344,6 +344,24 @@ User equations are saved with the model, compiled again when the model is
 calibrated again, and solved in every simulation, dynamic run and sensitivity
 draw.
 
+\cgesubsec{Building large models}
+
+Each \cmd{cge_variable} and \cmd{cge_equation} builds the user definitions
+again, each element written out with its sums and compiled. From version
+0.47.0, in a standalone model, a definition whose text is unchanged, in a
+build whose inputs (sets, parameters, macros, variables, base values, scales
+and domains) are unchanged, takes the elements compiled before, so that each
+equation is compiled about once however many definitions follow it; and
+writing out and compiling a sum takes time in proportion to its terms. A
+model of Cobb--Douglas prices and markets with 50 goods, each using every
+good, which took about 86 seconds to build in version 0.46.0, builds in
+about 4 seconds, and with 100 goods in about 11 seconds rather than four to
+seven minutes; definitions are best given
+in the order variables, then equations, since a new variable changes the
+inputs of the build and its next equation compiles every definition again.
+Conditions evaluated at each solve (\cmd{cge_options, conditions(solve)})
+compile every definition at each solve, as before.
+
 \cgesubsec{Example 1: government purchases of services 10 per cent above the base}
 
 The synthetic SAM is mapped and calibrated as in \manref{cge_solve}:

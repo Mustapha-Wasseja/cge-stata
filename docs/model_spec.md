@@ -3896,6 +3896,46 @@ GTAP's models). tests/test_mpsge.do compares tests/data/mpsge/mp_inest.gms
 tariff) with GAMS/MPSGE to 1e-9, in commands too, and checks a demand block
 with an indexed nest at the top against the ratio of its demands.
 
+## 57. Building user definitions (from version 0.47.0)
+
+Each `cge_variable` and `cge_equation` builds every user definition again
+(`_cge_u_build`): each element of a definition is written out, its sums as
+terms (`_cge_u_expand`), its conditions evaluated (`_cge_u_rdollar`), and
+compiled to postfix rows (`_cge_u_compile`). From version 0.47.0 the build of
+a standalone model keeps the elements of each definition with the inputs
+they were compiled from (the external `cge__ubmemo`; `struct cge_ubm`): the
+user sets, parameters, macros and variables, the layout of the variables,
+the base values after the definitions of the user variables, their domains
+and scales, the values of the parameters, and the period. A definition whose
+text is as it was, in a build whose inputs are all equal, takes its elements
+from there; any other input compiles every definition again, as do the
+conditions of a solve (`cge__condp`, Section 53) and models from a SAM. The
+scales that `cge_variable` sets for a new variable after its build are put in
+the inputs kept (`_cge_u_memo_scale`): only box pairs read scales, and none
+pairs a variable that did not exist.
+
+Writing out and compiling take time in proportion to the terms. The terms of
+a sum whose body has no inner sum, `ord()` or lag or lead of the index are the
+body with the element put where the index is an argument; the compiler keeps
+its rows and GAMS text in buffers that grow by doubling (`_cge_u_rpush`,
+`_cge_u_spush`), finds the class of each token once and tests the names of
+functions only for those names; the positions of labels in their sets come
+from hash tables of each set made once per build (`_cge_u_lpos`, `hash1()`;
+the external `cge__lmemo`); a reference to an element of a user parameter
+needs only the position before its values (`_cge_up_off`); the test that every
+index of an element is written out takes each distinct label once
+(`_cge_u_done`); and `_cge_u_isindex` finds the stem of an index without
+regular expressions (`_cge_u_stem`). The compiled elements are those of
+version 0.46.0: tests/test_build.do compares the kept elements with those of
+builds that compile every definition, and the 987 builds of user
+definitions in the test suite of version 0.46.0 give the same elements, base
+values and domains in versions 0.46.0 and 0.47.0.
+
+`_cge_pylu_set` and `cge_options` ask whether Python and SciPy can serve only
+when `linsolver(python)` asks for them: `&` in Mata evaluates both its sides,
+and before, the first solve of each session in Stata 16 or later imported
+SciPy.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
