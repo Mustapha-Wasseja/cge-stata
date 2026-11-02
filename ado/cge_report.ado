@@ -5,7 +5,7 @@
 *! items and, with cge_model roles, groups and welfare of a standalone model
 *! (from version 0.37.0)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_report, rclass

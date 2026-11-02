@@ -5,7 +5,7 @@
 *! fiscal incidence; reweighting, survey-design standard errors and bands;
 *! graphs of the results
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_microsim, rclass

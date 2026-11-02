@@ -2,7 +2,7 @@
 *! cge-stata: balance a SAM by RAS or cross entropy, keeping signs, zeros and
 *! fixed cells (docs/sam_tools.md, Section 5)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_balance, rclass

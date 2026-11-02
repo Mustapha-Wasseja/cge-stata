@@ -34,7 +34,7 @@ These conventions apply to every change, whoever or whatever prepares it.
   *! cge-stata: one-line purpose
   *! One-line description
   *!
-  *! Author: Mustapha Wasseja Mohammed
+  *! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
   *! Requires: Stata 13+
   ```
 

@@ -2,7 +2,7 @@
 *! cge-stata: add a user variable to the model, with the equation that
 *! defines it or a base value (docs/model_spec.md, Section 19)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_variable, rclass

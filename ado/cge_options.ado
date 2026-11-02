@@ -2,7 +2,7 @@
 *! cge-stata: settings of the solver, as GAMS's option statement
 *! (Reference Manual, cge_options)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_options, rclass

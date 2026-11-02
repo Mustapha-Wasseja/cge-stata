@@ -2,7 +2,7 @@
 *! cge-stata: add a user equation to the model, or list or remove the user
 *! variables and equations (docs/model_spec.md, Section 19)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_equation, rclass

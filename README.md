@@ -326,9 +326,9 @@ every scenario. The solvers are also checked against published problems:
 complementarity problems of MCPLIB, problem 71 of Hock and Schittkowski, and
 Waechter and Biegler's counterexample for feasibility restoration.
 
-## Author
+## Authors
 
-Mustapha Wasseja Mohammed
+Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 
 ## Licence
 

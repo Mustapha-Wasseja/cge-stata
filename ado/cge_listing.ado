@@ -3,7 +3,7 @@
 *! the model's equations at a point, with its residual; and the solution
 *! listing, with bounds and marginals (Reference Manual, cge_listing)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_listing, rclass

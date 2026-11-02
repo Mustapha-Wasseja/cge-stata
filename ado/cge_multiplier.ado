@@ -2,7 +2,7 @@
 *! cge-stata: accounting multipliers of the mapped SAM and their decomposition
 *! (docs/sam_tools.md, Section 6; Pyatt and Round 1979)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_multiplier, rclass

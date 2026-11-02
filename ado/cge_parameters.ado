@@ -2,7 +2,7 @@
 *! cge-stata: the calibrated parameters as a dataset
 *! One observation per parameter element (model_spec.md, Section 4)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_parameters, rclass

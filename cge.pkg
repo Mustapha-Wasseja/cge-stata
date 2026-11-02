@@ -13,6 +13,8 @@ d require Stata 16+ with Python and SciPy. GAMS export and GDX exchange are avai
 d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja Mohammed
+d Author: Nadia S. Ouedraogo
+d Author: Mahamat Podda Abouna
 d
 d Distribution-Date: 20261102
 d

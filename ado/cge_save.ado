@@ -1,7 +1,7 @@
 *! cge_save.ado  v0.6.4  2026-10-22
 *! cge-stata: save the model in memory, with its simulations, to a file
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_save, rclass

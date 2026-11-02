@@ -2,7 +2,7 @@
 *! cge-stata: report the results of a simulation
 *! Displays a summary and optionally loads or saves all results as a dataset
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_results, rclass

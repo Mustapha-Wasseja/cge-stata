@@ -2,7 +2,7 @@
 *! cge-stata: load the synthetic social accounting matrix (SAM)
 *! Loads a bundled synthetic SAM and reports its balance
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_synthetic, rclass

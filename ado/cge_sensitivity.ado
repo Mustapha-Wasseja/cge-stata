@@ -4,7 +4,7 @@
 *! From version 0.38.0, draws of the parameters of a standalone model, each
 *! draw measured from its own benchmark
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_sensitivity, rclass

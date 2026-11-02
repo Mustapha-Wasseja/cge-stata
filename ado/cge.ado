@@ -2,7 +2,7 @@
 *! cge-stata: computable general equilibrium modelling in Stata
 *! Displays the package version and the available commands
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge, rclass

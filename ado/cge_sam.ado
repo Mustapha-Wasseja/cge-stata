@@ -3,7 +3,7 @@
 *! Reads a SAM from the data in memory or from a file, wide or long, and
 *! checks its structure (docs/sam_tools.md, Section 1)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_sam, rclass

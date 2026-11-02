@@ -2,7 +2,7 @@
 *! cge-stata: write the SAM of the current model to a file or to memory
 *! (docs/sam_tools.md, Section 2)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_samexport, rclass

@@ -1,4 +1,6 @@
 v 3
 d cge-stata: computable general equilibrium modelling in Stata
 d Author: Mustapha Wasseja Mohammed
+d Author: Nadia S. Ouedraogo
+d Author: Mahamat Podda Abouna
 p cge Computable general equilibrium (CGE) modelling in Stata

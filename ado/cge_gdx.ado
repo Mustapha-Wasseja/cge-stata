@@ -2,7 +2,7 @@
 *! cge-stata: GAMS data exchange (GDX) files, written by GAMS and read by
 *! gdxdump (Reference Manual, cge_gdx)
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_gdx, rclass

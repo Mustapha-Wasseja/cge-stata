@@ -10,7 +10,7 @@ through PySCIPOpt (cge_solve, solver(scip)). Mata writes the
 data to binary files of little-endian doubles and reads the results back
 the same way; return codes and statistics go back as Stata scalars.
 
-Author: Mustapha Wasseja Mohammed
+Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 """
 import numpy as np
 try:

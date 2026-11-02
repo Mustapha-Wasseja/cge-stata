@@ -3,7 +3,7 @@
 *! (model_spec.md, Section 10). Each period is stored as the simulation
 *! <name><period>
 *!
-*! Author: Mustapha Wasseja Mohammed
+*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
 *! Requires: Stata 13+
 
 program define cge_dynamic, rclass
