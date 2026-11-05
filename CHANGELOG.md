@@ -5,6 +5,24 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.47.2
+
+Version 0.47.2 reads the values of user parameters from data,
+`cge_parameter NAME(i,j), from() labels()`, in time that grows with the
+number of observations rather than with their product with the number of
+elements. For each observation of long data `cge_parameter` searched every
+element of the parameter, so a parameter of 100 x 100 elements made about
+10^8 comparisons of labels and took about five minutes in StataNow 19.5 (30
+seconds for 50 x 50), most of the time it took to build a standalone model of
+100 sectors; it now takes about a second (half a second for 50 x 50). The
+elements are found in a hash table of their labels, made once by each
+command; so are the pairs of `values()`, which took several minutes for every
+element of a 100 x 100 parameter and now take about ten seconds, most of them
+spent reading the list, and the labels of the rows of wide data. The values
+are unchanged: rows without a first label or a value are skipped, a label
+that is not an element stops with error 111, a later row replaces an earlier
+one, and the labels of three or more indexes are joined by periods as before.
+
 ## 0.47.1
 
 Version 0.47.1 fixes the sparse LU of Newton's steps (`cge_options,

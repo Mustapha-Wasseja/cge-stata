@@ -112,6 +112,76 @@ r3 7 8 9
 end
 cge_parameter wd(i,j), from(r1-r3) labels(lab)
 mata: assert(_ts_upval("wd") == (1 \ 2 \ 3 \ 0 \ 0 \ 0 \ 7 \ 8 \ 9))
+* two indexes over sets of different sizes, from long and wide data and from
+* values() (from version 0.47.2 the elements are found in a hash table): a
+* later row overwrites an earlier one, and rows without a first label or a
+* value are skipped
+cge_set m = m1 m2
+clear
+input str4 row str4 col double val
+r2 m2 5
+r1 m1 1
+"" m1 8
+r3 m2 .
+r2 m2 6
+r3 m1 3
+end
+cge_parameter lm(i,m), from(val) labels(row col)
+assert r(N_elements) == 6
+mata: assert(_ts_upval("lm") == (1 \ 0 \ 0 \ 6 \ 3 \ 0))
+cge_parameter vm(i,m), values(r2.m2:5 r1.m1:1 r2.m2:6 r3.m1:3)
+mata: assert(_ts_upval("vm") == _ts_upval("lm"))
+clear
+input str4 lab double m2 double m1
+r3 . 4
+r1 2 1
+"" 9 9
+r3 7 .
+r1 . 11
+end
+cge_parameter wm(i,m), from(m2 m1) labels(lab)
+mata: assert(_ts_upval("wm") == (11 \ 2 \ 0 \ 0 \ 4 \ 7))
+* one observation, and a set of one element
+cge_set o = o1
+clear
+input str4 row str4 col double val
+r3 o1 4
+end
+cge_parameter lo(i,o), from(val) labels(row col)
+mata: assert(_ts_upval("lo") == (0 \ 0 \ 4))
+clear
+input str4 lab double o1
+r2 5
+end
+cge_parameter wo(i,o), from(o1) labels(lab)
+mata: assert(_ts_upval("wo") == (0 \ 5 \ 0))
+* labels that are not elements: an error at the first row that gives a
+* value, and no parameter (it is defined once the label is fixed)
+clear
+input str4 row str4 col double val
+r1 m1 1
+r9 m1 .
+r1 m3 2
+end
+capture noisily cge_parameter lx(i,m), from(val) labels(row col)
+assert _rc == 111
+quietly replace col = "m2" in 3
+cge_parameter lx(i,m), from(val) labels(row col)
+mata: assert(_ts_upval("lx") == (1 \ 2 \ 0 \ 0 \ 0 \ 0))
+clear
+input str4 lab double m1
+r1 1
+r9 2
+end
+capture noisily cge_parameter wx(i,m), from(m1) labels(lab)
+assert _rc == 111
+rename m1 m9
+capture noisily cge_parameter wx(i,m), from(m9) labels(lab)
+assert _rc == 111
+capture noisily cge_parameter wx(i,m), values(r1.m1:1 r1.m9:2)
+assert _rc == 111
+capture noisily cge_parameter wx(i), values(r1:1 r9:2)
+assert _rc == 111
 * a set from the data, with labels of its own
 clear
 input str6 name

@@ -153,7 +153,7 @@ five test models the solutions agree with GAMS/MPSGE to about 1e-13.
 
 ## Status
 
-The current version is 0.47.1. Every change, version by version, is listed
+The current version is 0.47.2. Every change, version by version, is listed
 in [CHANGELOG.md](CHANGELOG.md).
 
 | Milestone | Status |

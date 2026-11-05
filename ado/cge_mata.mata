@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.47.1")
+    return("0.47.2")
 }
 
 // =====================================================================
@@ -22022,6 +22022,26 @@ string rowvector _cge_u_opts(string scalar opts, string rowvector names, real ro
     return(out)
 }
 
+// The positions of the elements e1, e2 of a user parameter (e2 empty with
+// one index) in a hash table keyed on their labels joined by char(1), 0 for
+// a key that is not there (from version 0.47.2; before, cge_parameter
+// searched every element for each value it read: 10^8 comparisons for a
+// 100 x 100 parameter from long data). An element there twice keeps its last
+// position if last, else its first, as the searches did.
+transmorphic _cge_up_elindex(string colvector e1, string colvector e2, real scalar last)
+{
+    transmorphic A
+    real scalar n, j, k
+    n = rows(e1)
+    A = asarray_create("string", 1, max((n, 100)))
+    asarray_notfound(A, 0)
+    for (j = 1; j <= n; j++) {
+        k = (last ? j : n + 1 - j)
+        asarray(A, e1[k] + char(1) + e2[k], k)
+    }
+    return(A)
+}
+
 // cge_parameter name[(i[,j])][$(condition)] = expression | , values(spec)
 // default(#) | , from(varlist) labels(varlist): a user parameter (from version
 // 0.7.1). From version 0.13.0 the value is an expression of numbers,
@@ -22039,9 +22059,10 @@ void _cge_up_add(string scalar spec)
     string scalar head, expr, opts, name, idx, set, i1, i2, s1, s2, el, values, fromvar, labvars, cond
     string rowvector tok, lv, fv, pair, ab, ov
     string colvector e1, e2, d1, d2, l1, l2
-    real colvector v, o1, o2, pos, old
+    real colvector v, o1, o2, pos, old, p1
     real matrix X
     real scalar k, n, j, c, dflt, again, kk, r1, r2
+    transmorphic A
     M = _cge_load()
     _cge_need(M, "calibrated")
     _cge_u_split(spec, head, expr, opts)
@@ -22087,12 +22108,16 @@ void _cge_up_add(string scalar spec)
     else if (values != "") {
         if (s1 == "") _cge_fail("cge_parameter: values() is for a parameter with indexes; write NAME = #", 198)
         tok = tokens(values)
+        // the elements by their labels (from version 0.47.2; before, a
+        // search for each pair, which took the first of a label there twice
+        // with one index and the last with two)
+        A = _cge_up_elindex(e1, e2, s2 != "")
         for (j = 1; j <= cols(tok); j++) {
             pair = tokens(tok[j], ":")
             if (cols(pair) != 3) _cge_fail("cge_parameter: values(): write element:value pairs, as com_hlt:0.2" + (s2 != "" ? " or com_hlt.hhd:0.2" : ""), 198)
             el = pair[1]
             if (strtoreal(pair[3]) >= .) _cge_fail("cge_parameter: values(): " + pair[3] + " is not a number", 198)
-            if (s2 == "") k = _cge_find(e1, el)
+            if (s2 == "") k = asarray(A, el + char(1))
             else {
                 // one label of each index, e1.e2 or from version 0.25.0
                 // e1.e2.e3
@@ -22101,8 +22126,7 @@ void _cge_up_add(string scalar spec)
                     _cge_fail("cge_parameter: values(): give one element of each index, as e1.e2:value" + (_cge_nidx(set) > 2 ? " or e1.e2.e3:value" : ""), 198)
                 }
                 _cge_u_split1(el, i1, i2)
-                k = 0
-                for (c = 1; c <= n; c++) if (e1[c] == i1 & e2[c] == i2) k = c
+                k = asarray(A, i1 + char(1) + i2)
             }
             if (!k) _cge_fail("cge_parameter: values(): " + el + " is not an element of " + name, 111)
             v[k] = strtoreal(pair[3])
@@ -22118,13 +22142,19 @@ void _cge_up_add(string scalar spec)
             l1 = _cge_setlab(M, s1)
             l2 = _cge_setlab(M, s2)
             d1 = st_sdata(., lv[1])
+            // the position in l1 of the label of each row, 0 if it is not
+            // there, looked up once for all the variables (from version
+            // 0.47.2; before, a search of l1 for each value)
+            A = _cge_up_elindex(l1, J(rows(l1), 1, ""), 0)
+            p1 = J(rows(d1), 1, 0)
+            for (j = 1; j <= rows(d1); j++) p1[j] = asarray(A, d1[j] + char(1))
             for (c = 1; c <= cols(fv); c++) {
                 r2 = _cge_find(l2, fv[c])
                 if (!r2) _cge_fail("cge_parameter: from(): variable " + fv[c] + " is not named as an element of the set of " + i2, 111)
                 X = st_data(., fv[c])
                 for (j = 1; j <= rows(X); j++) {
                     if (d1[j] == "" | X[j] >= .) continue
-                    r1 = _cge_find(l1, d1[j])
+                    r1 = p1[j]
                     if (!r1) _cge_fail("cge_parameter: from(): " + d1[j] + " is not an element of the set of " + i1, 111)
                     v[(r1 - 1) * rows(l2) + r2] = X[j]
                 }
@@ -22142,10 +22172,12 @@ void _cge_up_add(string scalar spec)
             // the labels of the later indexes joined by periods (from
             // version 0.25.0)
             for (c = 3; c <= cols(lv); c++) d2 = d2 :+ "." :+ st_sdata(., lv[c])
+            // the elements by their labels, built once (from version 0.47.2;
+            // before, a search of every element for each observation)
+            A = _cge_up_elindex(e1, e2, 1)
             for (j = 1; j <= rows(X); j++) {
                 if (d1[j] == "" | X[j] >= .) continue
-                k = 0
-                for (c = 1; c <= n; c++) if (e1[c] == d1[j] & e2[c] == d2[j]) k = c
+                k = asarray(A, d1[j] + char(1) + d2[j])
                 if (!k) _cge_fail("cge_parameter: from(): " + d1[j] + (d2[j] != "" ? "." + d2[j] : "") + " is not an element of " + name, 111)
                 v[k] = X[j]
             }
