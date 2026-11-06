@@ -170,8 +170,12 @@ def optimize(model, instruments, objective=None, sense: str = "max", targets=(),
         for i in range(len(tkeys)):
             gi = (lambda z, i=i: _measure(at(z)[1], tkeys[i]) / tscale[i] - tvals[i] / tscale[i])
             cons.append({"type": "eq", "fun": gi, "jac": central(gi)})
+        # ftol at the model's tolerance: near the optimum the objective is flat
+        # to about 1e-12, so a smaller ftol only leaves SLSQP wandering at that
+        # noise level (1e-15 before: 247 iterations for the optimum with a
+        # revenue target, which is reached in 8)
         res = minimize(fun, z0, jac=central(fun), method="SLSQP", bounds=bounds, constraints=cons,
-                       options={"ftol": 1e-15, "maxiter": 500})
+                       options={"ftol": 1e-12, "maxiter": 500})
         z, ok, msg = res.x, bool(res.success), res.message
     sol, rows = evaluate(z)
     return Optimum(values=z * scale, solution=sol,
