@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.48.0")
+    return("0.49.0")
 }
 
 // =====================================================================
@@ -315,6 +315,8 @@ struct cge_model scalar _cge_load()
     // 0.44.0; _cge_u_build)
     if (findexternal("cge__cmemo") != NULL) rmexternal("cge__cmemo")
     if (findexternal("cge__lmemo") != NULL) rmexternal("cge__lmemo")
+    // and no sums compiled from one term (from version 0.49.0)
+    if (findexternal("cge__utpl") != NULL) rmexternal("cge__utpl")
     q = findexternal("cge__model")
     if (q == NULL) {
         errprintf("no SAM in memory; load one with cge_sam\n")
@@ -7527,12 +7529,14 @@ pointer(struct cge_tape scalar) scalar _cge_tp_new(struct cge_model scalar M)
 // The tape of the current user equations, made if they are new. The last
 // eight are kept, the latest used first, for the regions of cge_region, whose
 // equations take turns.
-pointer(struct cge_tape scalar) scalar _cge_tp(struct cge_model scalar M)
+pointer(struct cge_tape scalar) scalar _cge_tp(struct cge_model scalar M, | real scalar nomake)
 {
     pointer(struct cge_tape scalar) scalar t
     pointer() scalar q
     real colvector idx
     real scalar k, n
+    // with nomake 1, NULL for equations without a tape (from version 0.49.0)
+    if (args() < 2) nomake = 0
     if ((q = findexternal("cge__tape")) == NULL) {
         q = crexternal("cge__tape")
         *q = J(0, 1, NULL)
@@ -7548,6 +7552,7 @@ pointer(struct cge_tape scalar) scalar _cge_tp(struct cge_model scalar M)
             return(t)
         }
     }
+    if (nomake) return(NULL)
     t = _cge_tp_new(M)
     *q = (n < 8 ? t \ *q : t \ (*q)[|1 \ 7|])
     return(t)
@@ -21729,8 +21734,9 @@ void _cge_up_labels(struct cge_model scalar M, real scalar k, string colvector e
 // The labels of every model set together
 string colvector _cge_alllabels(struct cge_model scalar M)
 {
-    // a standalone model (from version 0.13.0): the labels of its sets
-    if (_cge_sa(M)) return(_cge_us_alllabels(M))
+    // a standalone model (from version 0.13.0): the labels of its sets,
+    // within a build found once (from version 0.49.0; _cge_u_alllab)
+    if (_cge_sa(M)) return(_cge_u_alllab(M))
     return(M.A \ M.C \ M.F \ M.H \ M.D \ M.I \ M.N)
 }
 
@@ -23005,6 +23011,271 @@ string rowvector _cge_u_um(string rowvector t)
     return(subinstr(t, char(2), ""))
 }
 
+// ---------------------------------------------------------------------
+// Sums compiled from one term (from version 0.49.0; model_spec.md,
+// Section 59). Within a build (_cge_u_build) a sum whose terms are its body
+// with the index among the labels of references to variables and user
+// parameters, and nothing else that depends on the index, is written as one
+// token, char(4) followed by its number. _cge_u_compile compiles the body
+// once, with the placeholder _cge_u_tph() for the index, finds the values of
+// the references that hold it for every term at once, and joins the terms
+// as it would have compiled them written out, t1 t2 + t3 + ...
+// ---------------------------------------------------------------------
+
+// A sum compiled from one term: its body, with the placeholder for the
+// index; the labels of its terms and their positions in the set of the
+// index, sc; op 1 for a sum, 3 for a product
+struct cge_utp {
+    string rowvector body
+    string colvector labs
+    real colvector   js
+    string scalar    sc
+    real scalar      op
+}
+
+// The sums of a build (the external cge__utpl while _cge_u_build runs), by
+// number, and the positions of the labels of each set of an index in the
+// sets of references, found once
+struct cge_utc {
+    transmorphic A, maps
+    real scalar  n
+}
+
+// The compilation of the body of a sum: its terms, and the rows of the body
+// whose values change from term to term, with those values, a row for each
+// term and a column for each of those rows
+struct cge_tpc {
+    string colvector labs
+    real colvector   js, vrow
+    string scalar    sc
+    real matrix      vval
+}
+
+// The placeholder for the index in the body of a sum: a label to the
+// compiler, and no index or label of a model
+string scalar _cge_u_tph()
+{
+    return("_" + char(4))
+}
+
+// For tests: mode 1 writes out every sum and evaluates every element at the
+// base, as before version 0.49.0; 0 compiles sums from one term where it can
+// and keeps the values at the base (_cge_u_eval); -1 leaves the mode.
+// Returns it.
+real scalar _cge_u_tploff(real scalar mode)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__notpl")) == NULL) {
+        if (mode != 1) return(0)
+        q = crexternal("cge__notpl")
+    }
+    if (mode >= 0) *q = mode
+    return(*q)
+}
+
+// 1 if the body of a sum, t, with the placeholder ph for its index, can be
+// compiled from one term: numbers, + - * / ^, parentheses, exp(), ln(),
+// log() and sqrt(), and references to variables and user parameters, with
+// the placeholder only among their labels
+real scalar _cge_u_tplok(struct cge_model scalar M, string rowvector t, string scalar ph)
+{
+    real scalar k, e, n
+    string scalar tk
+    n = cols(t)
+    k = 1
+    while (k <= n) {
+        tk = t[k]
+        if (tk == "(" | tk == ")" | tk == "+" | tk == "-" | tk == "*" | tk == "/" | tk == "^") {
+            k++
+            continue
+        }
+        if (_cge_u_cls(tk) == 2) {
+            k++
+            continue
+        }
+        if (_cge_u_cls(tk) != 1) return(0)
+        if (k < n) {
+            if (t[k + 1] == "(" & (tk == "exp" | tk == "ln" | tk == "log" | tk == "sqrt")) {
+                k = k + 2
+                continue
+            }
+        }
+        if (!_cge_vidx(M, tk) & !_cge_up_find(M, tk)) return(0)
+        if (k == n) break
+        if (t[k + 1] != "(") {
+            k++
+            continue
+        }
+        // the labels of the reference, separated by commas
+        e = k + 2
+        while (e <= n) {
+            if (t[e] == ")") break
+            if (t[e] == "(" | t[e] == "," | t[e] == "+" | t[e] == "-" | t[e] == "*" | t[e] == "/" | t[e] == "^" | t[e] == "$") return(0)
+            if (e == n) return(0)
+            if (t[e + 1] == ")") {
+                e++
+                break
+            }
+            if (t[e + 1] != ",") return(0)
+            e = e + 2
+        }
+        if (e > n) return(0)
+        k = e + 1
+    }
+    return(1)
+}
+
+// A new sum compiled from one term, within a build: its token
+string scalar _cge_u_tpl_new(string rowvector body, string rowvector els, real colvector js, string scalar sc,
+                             string scalar fn)
+{
+    pointer(struct cge_utc scalar) scalar q
+    struct cge_utp scalar T
+    string colvector lc
+    q = findexternal("cge__utpl")
+    lc = els'
+    T.body = body
+    T.labs = lc[js]
+    T.js = js
+    T.sc = sc
+    T.op = (fn == "sum" ? 1 : 3)
+    q->n = q->n + 1
+    asarray(q->A, q->n, T)
+    return(char(4) + strofreal(q->n))
+}
+
+// The first position where ok is 0, 0 if none
+real scalar _cge_u_tbad(real colvector ok)
+{
+    real colvector w
+    if (all(ok)) return(0)
+    w = select((1::rows(ok)), !ok)
+    return(w[1])
+}
+
+// The positions of label lab in set code s for each term of the sum being
+// compiled; lab is the placeholder, a constant label, or labels joined by
+// periods, one of them the placeholder
+real colvector _cge_u_tpos(struct cge_model scalar M, string scalar s, string scalar lab,
+                           pointer(struct cge_tpc scalar) scalar tc)
+{
+    pointer(struct cge_utc scalar) scalar q
+    string scalar ph, key
+    string colvector all
+    real colvector m
+    real scalar e, nt
+    ph = _cge_u_tph()
+    nt = rows(tc->labs)
+    if (!strpos(lab, ph)) return(J(nt, 1, _cge_u_lpos(M, s, lab)))
+    if (lab == ph) {
+        // the positions of the labels of the index's set in s, once a build
+        q = findexternal("cge__utpl")
+        key = s + char(1) + tc->sc
+        if (asarray_contains(q->maps, key)) m = asarray(q->maps, key)
+        else {
+            all = _cge_setlab(M, tc->sc)
+            m = J(rows(all), 1, 0)
+            for (e = 1; e <= rows(all); e++) m[e] = _cge_u_lpos(M, s, all[e])
+            asarray(q->maps, key, m)
+        }
+        return(m[tc->js])
+    }
+    m = J(nt, 1, 0)
+    for (e = 1; e <= nt; e++) m[e] = _cge_u_lpos(M, s, subinstr(lab, ph, tc->labs[e]))
+    return(m)
+}
+
+// A reference nm(args) whose labels hold the placeholder, in the body of a
+// sum (t, at token k): its code, 2 a variable or 7 a user parameter, and its
+// value for each term, pv; with the errors of a reference written out
+void _cge_u_tref(struct cge_model scalar M, string scalar nm, string rowvector args,
+                 pointer(struct cge_tpc scalar) scalar tc, string rowvector t, real scalar k, real scalar code,
+                 real colvector pv)
+{
+    string scalar ph, s1, s2
+    string rowvector a
+    real colvector i, j
+    real scalar kv, pi, ne, n2, bad
+    ph = _cge_u_tph()
+    kv = _cge_vidx(M, nm)
+    if (kv) {
+        code = 2
+        if (cols(args) != _cge_nidx(M.vset[kv])) (void) _cge_u_varpos(M, nm, subinstr(args, ph, tc->labs[1]))
+        ne = M.vrows[kv] * M.vcols[kv]
+        n2 = 1
+        if (cols(args) == 1) {
+            i = _cge_u_tpos(M, M.vset[kv], args[1], tc)
+            j = J(rows(i), 1, 1)
+        }
+        else {
+            _cge_setparts(M.vset[kv], s1, s2)
+            i = _cge_u_tpos(M, s1, args[1], tc)
+            j = _cge_u_tpos(M, s2, _cge_u_tail(args), tc)
+            n2 = _cge_u_lsize(M, s2)
+        }
+        pv = M.voff[kv] :+ (i :- 1) :* n2 :+ j
+        bad = _cge_u_tbad((i :> 0) :& (j :> 0) :& ((i :- 1) :* n2 :+ j :<= ne))
+        // the error of the reference written out
+        if (bad) (void) _cge_u_varpos(M, nm, subinstr(args, ph, tc->labs[bad]))
+        if (bad) _cge_fail("cge internal error: a reference of a sum compiled from one term", 3498)
+        return
+    }
+    // the errors show the term at the label that fails
+    code = 7
+    pi = _cge_up_find(M, nm)
+    if (!pi) _cge_u_fail(subinstr(t, ph, tc->labs[1]), k, nm + " is not a variable or a user parameter of the model", 111)
+    if (cols(args) != _cge_nidx(M.updef[pi, 2]) + _cge_nidx(M.updef[pi, 3])) {
+        _cge_u_fail(subinstr(t, ph, tc->labs[1]), k, "parameter " + nm + " has " +
+                    strofreal(_cge_nidx(M.updef[pi, 2]) + _cge_nidx(M.updef[pi, 3])) + " index(es); " + strofreal(cols(args)) + " given", 198)
+    }
+    i = _cge_u_tpos(M, M.updef[pi, 2], args[1], tc)
+    bad = _cge_u_tbad(i :> 0)
+    if (bad) _cge_u_fail(subinstr(t, ph, tc->labs[bad]), k, subinstr(args[1], ph, tc->labs[bad]) + " is not an element of parameter " + nm, 111)
+    if (cols(args) >= 2) {
+        j = _cge_u_tpos(M, M.updef[pi, 3], _cge_u_tail(args), tc)
+        bad = _cge_u_tbad(j :> 0)
+        if (bad) {
+            a = subinstr(args, ph, tc->labs[bad])
+            _cge_u_fail(subinstr(t, ph, tc->labs[bad]), k, invtokens(a[|2 \ cols(a)|], ", ") + " is not an element of parameter " + nm, 111)
+        }
+        i = (i :- 1) :* _cge_u_lsize(M, M.updef[pi, 3]) :+ j
+    }
+    pv = _cge_up_off(M, pi) :+ i
+}
+
+// The rows of the sum of token tk compiled from one term, and in gams its
+// GAMS text, the terms as they would be written out
+real matrix _cge_u_tpl_rows(struct cge_model scalar M, string scalar tk, real colvector x0, string scalar gams,
+                            real scalar condmode)
+{
+    pointer(struct cge_utc scalar) scalar q
+    struct cge_utp scalar T
+    struct cge_tpc scalar C
+    real matrix B, R
+    real colvector at
+    real scalar nt, kb, v
+    string scalar gb
+    q = findexternal("cge__utpl")
+    if (q == NULL) _cge_fail("cge internal error: a sum compiled from one term outside a build", 3498)
+    T = asarray(q->A, strtoreal(substr(tk, 2, .)))
+    nt = rows(T.labs)
+    C.labs = T.labs
+    C.js = T.js
+    C.sc = T.sc
+    C.vrow = J(0, 1, .)
+    C.vval = J(nt, 0, .)
+    B = _cge_u_compile(M, T.body, x0, gb, condmode, &C)
+    kb = rows(B)
+    // each term followed by the operator that joins it to those before; the
+    // first has none
+    R = (nt == 1 ? B : J(nt, 1, B \ (4, T.op, .)))
+    at = (0::nt - 1) :* (kb + 1)
+    for (v = 1; v <= rows(C.vrow); v++) R[at :+ C.vrow[v], 2] = C.vval[., v]
+    if (nt > 1) R = R[|1, 1 \ kb, 3|] \ R[|kb + 2, 1 \ rows(R), 3|]
+    gams = "( " + invtokens(subinstr(J(1, nt, gb), _cge_u_tph(), T.labs'), " ) " + (T.op == 1 ? "+" : "*") + " ( ") + " )"
+    return(R)
+}
+
 // Sums written out: sum(i, body) becomes (body_1 + body_2 + ...) over the
 // elements of the set of i; sums within sums are written out first. With a
 // condition, sum(i$cond, body), only the elements for which cond holds at
@@ -23012,13 +23283,17 @@ string rowvector _cge_u_um(string rowvector t)
 string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar p, real colvector x0,
                                string rowvector t)
 {
-    string rowvector out, body, els, cond, terms, piece, tb, nx, a, b
-    string scalar idx, fn, el
-    real scalar k, e, j, c, d, n, m, inner, no, nt, fast, nb
+    string rowvector out, body, els, cond, terms, piece, tb, nx, a, b, bph
+    string scalar idx, fn, el, ph
+    real scalar k, e, j, c, d, n, m, inner, no, nt, fast, nb, tplon
     real rowvector ip
+    real colvector js
     // nothing to write out (from version 0.47.0: the terms of a sum come back
     // here, each one)
     if (!any((t :== "sum") :| (t :== "prod") :| (t :== "smax") :| (t :== "smin") :| (t :== "smax#") :| (t :== "smin#"))) return(t)
+    // sums compiled from one term, within a build (from version 0.49.0)
+    tplon = (findexternal("cge__utpl") != NULL)
+    ph = _cge_u_tph()
     // the output and the terms in buffers that grow by doubling (from
     // version 0.47.0)
     out = J(1, cols(t) + 16, "")
@@ -23078,6 +23353,28 @@ string rowvector _cge_u_expand(struct cge_model scalar M, struct cge_par scalar 
                     a = body[|1 \ nb - 2|]
                     b = body[|3 \ nb|]
                     ip = select((2..nb - 1), (body[|2 \ nb - 1|] :== idx) :& ((a :== "(") :| (a :== ",")) :& ((b :== ")") :| (b :== ",")))
+                }
+                // within a build, a sum or product whose terms differ only in
+                // the labels of references to variables and user parameters,
+                // compiled from one term (from version 0.49.0)
+                if (tplon & fast & !inner & (fn == "sum" | fn == "prod")) {
+                    bph = body
+                    if (cols(ip)) bph[ip] = J(1, cols(ip), ph)
+                    if (_cge_u_tplok(M, bph, ph)) {
+                        js = J(0, 1, .)
+                        if (cols(cond)) {
+                            for (j = 1; j <= cols(els); j++) {
+                                if (_cge_u_condval(M, p, x0, _cge_u_substl(M, ("(", cond, ")"), idx, _cge_u_mk(M, els[j]), j, els))) js = js \ j
+                            }
+                        }
+                        else if (cols(els)) js = (1::cols(els))
+                        if (rows(js)) {
+                            (void) _cge_u_done(M, bph)
+                            _cge_u_spush(out, no, ("(", _cge_u_tpl_new(bph, els, js, _cge_u_set(M, idx), fn), ")"))
+                            k = e + 1
+                            continue
+                        }
+                    }
                 }
                 tb = J(1, 64, "")
                 nt = 0
@@ -23458,7 +23755,7 @@ void _cge_u_widen(struct cge_model scalar M)
 // the equation
 string rowvector _cge_u_done(struct cge_model scalar M, string rowvector out)
 {
-    real scalar m, n
+    real scalar m, n, hv
     real rowvector at
     string colvector all, u, bad
     string rowvector a, b
@@ -23472,9 +23769,16 @@ string rowvector _cge_u_done(struct cge_model scalar M, string rowvector out)
     if (!cols(at)) return(out)
     u = uniqrows(out[at]')
     bad = J(0, 1, "")
+    // the labels of the model found once (from version 0.49.0; before, for
+    // each argument with the form of an index, such as the label g12 of a
+    // set g)
+    hv = 0
     for (m = 1; m <= rows(u); m++) {
         if (!_cge_u_isindex(M, u[m])) continue
-        if (!rows(bad)) all = _cge_alllabels(M)
+        if (!hv) {
+            all = _cge_alllabels(M)
+            hv = 1
+        }
         if (!anyof(all, u[m])) bad = bad \ u[m]
     }
     if (!rows(bad)) return(out)
@@ -23531,6 +23835,24 @@ struct cge_lt {
     string colvector                  code
     pointer(string colvector) colvector lab
     pointer(real colvector) colvector   tbl
+    // the labels of every set of a standalone model, once hall is 1 (from
+    // version 0.49.0)
+    string colvector                  all
+    real scalar                       hall
+}
+
+// The labels of every set of a standalone model; within a build, found once
+// (from version 0.49.0; before, for each sum written out, and for each
+// argument with the form of an index)
+string colvector _cge_u_alllab(struct cge_model scalar M)
+{
+    pointer(struct cge_lt scalar) scalar q
+    if ((q = findexternal("cge__lmemo")) == NULL) return(_cge_us_alllabels(M))
+    if (q->hall != 1) {
+        q->all = _cge_us_alllabels(M)
+        q->hall = 1
+    }
+    return(q->all)
 }
 
 // The position of label lab in set code s, 0 if it is not there; within a
@@ -23630,7 +23952,7 @@ void _cge_u_fail(string rowvector t, real scalar k, string scalar msg, real scal
 // parameter (index in M.upar, element), 4 operator (1 + 2 - 3 * 4 / 5 ^), 5
 // negation, 6 function (1 exp, 2 ln, 3 sqrt); and writes the GAMS text
 real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real colvector x0, string scalar gams,
-                           | real scalar condmode)
+                           | real scalar condmode, pointer(struct cge_tpc scalar) scalar tc)
 {
     string matrix P
     string rowvector ops, args, gtok, tup, spec
@@ -23643,6 +23965,8 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     real matrix sub
     string rowvector gp
     if (args() < 5) condmode = 0
+    // the body of a sum compiled from one term (from version 0.49.0)
+    if (args() < 6) tc = NULL
     // labels marked by _cge_u_mk (from version 0.23.0)
     if (any(strpos(t, char(2)))) t = _cge_u_um(t)
     // references to elements beyond their sets (from version 0.26.0)
@@ -23668,6 +23992,15 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
     k = 1
     while (k <= cols(t)) {
         tk = t[k]
+        // a sum compiled from one term (from version 0.49.0), an operand
+        if (substr(tk, 1, 1) == char(4)) {
+            if (prev) _cge_u_fail(t, k, "two operands in a row at a sum", 198)
+            _cge_u_rpush(out, no, _cge_u_tpl_rows(M, tk, x0, g, condmode))
+            _cge_u_spush(gtok, ng, (g))
+            prev = 1
+            k++
+            continue
+        }
         // a name (1), a number (2) or else (0), found once (from version 0.47.0)
         cl = ((tk == "(" | tk == ")") ? 0 : _cge_u_cls(tk))
         if (cl == 2) {
@@ -23825,6 +24158,19 @@ real matrix _cge_u_compile(struct cge_model scalar M, string rowvector t, real c
             if (isspec) if (anyof(("tperiod", "tfirst", "tlast"), nm) & !cols(args)) {
                 _cge_u_rpush(out, no, (12, _cge_find(("tperiod", "tfirst", "tlast")', nm), .))
                 _cge_u_spush(gtok, ng, (strupper(nm)))
+                prev = 1
+                k = e + 1
+                continue
+            }
+            // in the body of a sum compiled from one term (from version
+            // 0.49.0), a reference that holds the index: its value for each
+            // term
+            if (tc != NULL) if (anyof(args, _cge_u_tph())) {
+                _cge_u_tref(M, nm, args, tc, t, k, code, a1)
+                _cge_u_rpush(out, no, (code, a1[1], .))
+                tc->vrow = tc->vrow \ no
+                tc->vval = tc->vval, a1
+                _cge_u_spush(gtok, ng, ((code == 2 ? _cge_u_gname(M, _cge_vidx(M, nm)) : "UP_" + nm) + "('" + invtokens(args, "', '") + "')"))
                 prev = 1
                 k = e + 1
                 continue
@@ -24654,26 +25000,94 @@ real scalar _cge_u_cmp(real scalar code, real scalar a, real scalar b)
     return(a != 0 | b != 0)
 }
 
+// The values of the user equation elements of a standalone model at its
+// base (from version 0.49.0; the external cge__ubv), with the rows they come
+// from and the inputs of those values. Each cge_equation evaluates every
+// element at the base; with these, it evaluates only the elements it adds.
+struct cge_ubv {
+    real matrix    tok, xlag, xlead
+    real colvector st, l1, l2, x, upval, lhs, rhs
+    real rowvector tinfo
+}
+
+// 1 if p and x are the base of the model
+real scalar _cge_u_isbase(struct cge_model scalar M, struct cge_par scalar p, real colvector x)
+{
+    if (rows(x) != rows(M.x0)) return(0)
+    if (!(x == M.x0)) return(0)
+    return(p.upval == M.p0.upval & p.xlag == M.p0.xlag & p.xlead == M.p0.xlead & p.tinfo == M.p0.tinfo)
+}
+
+// The number of leading elements whose values at p and x are kept, 0 if
+// none, and those values in lhs and rhs
+real scalar _cge_u_bvhit(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector lhs,
+                         real colvector rhs)
+{
+    pointer(struct cge_ubv scalar) scalar q
+    real scalar n0, r0
+    if ((q = findexternal("cge__ubv")) == NULL) return(0)
+    n0 = rows(q->st)
+    r0 = rows(q->tok)
+    if (!n0 | n0 > rows(M.ustart) | r0 > rows(M.utok)) return(0)
+    if (!(q->x == x) | !(q->upval == p.upval) | !(q->xlag == p.xlag) | !(q->xlead == p.xlead) | !(q->tinfo == p.tinfo)) return(0)
+    if (!(q->st == M.ustart[|1 \ n0|]) | !(q->l1 == M.ulen[|1 \ n0|]) | !(q->l2 == M.ulen2[|1 \ n0|])) return(0)
+    if (!(q->tok == M.utok[|1, 1 \ r0, 3|])) return(0)
+    lhs[|1 \ n0|] = q->lhs
+    rhs[|1 \ n0|] = q->rhs
+    return(n0)
+}
+
+// The values of every element at the base, kept
+void _cge_u_bvkeep(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector lhs,
+                   real colvector rhs)
+{
+    pointer() scalar q
+    struct cge_ubv scalar B
+    B.tok = M.utok
+    B.st = M.ustart
+    B.l1 = M.ulen
+    B.l2 = M.ulen2
+    B.x = x
+    B.upval = p.upval
+    B.xlag = p.xlag
+    B.xlead = p.xlead
+    B.tinfo = p.tinfo
+    B.lhs = lhs
+    B.rhs = rhs
+    if ((q = findexternal("cge__ubv")) == NULL) q = crexternal("cge__ubv")
+    *q = B
+}
+
 // Both sides of every user equation element at x
 void _cge_u_eval(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector lhs,
                  real colvector rhs)
 {
     pointer(struct cge_tape scalar) scalar t
     real colvector todo, v
-    real scalar k, n, j
+    real scalar k, n, j, base, n0
     n = rows(M.uelab)
     lhs = J(n, 1, .)
     rhs = J(n, 1, .)
     if (!n) return
     todo = (1::n)
+    base = 0
     // the elements on the tape (from version 0.48.0), the others row by row
     if (_cge_tp_on()) {
-        t = _cge_tp(M)
-        todo = t->rest
-        if (rows(t->elt)) {
-            v = _cge_tp_value(t, p, x)
-            lhs[t->elt] = v[t->rl]
-            rhs[t->elt] = v[t->rr]
+        // at the base of a standalone model, the values kept of the elements
+        // before those a build added (from version 0.49.0); then the tape
+        // only if it is made, else the elements added row by row
+        base = ((_cge_sa(M) & !_cge_u_tploff(-1)) ? _cge_u_isbase(M, p, x) : 0)
+        n0 = (base ? _cge_u_bvhit(M, p, x, lhs, rhs) : 0)
+        if (n0 == n) return
+        t = _cge_tp(M, n0 > 0)
+        if (t == NULL) todo = ((n0 + 1)::n)
+        else {
+            todo = t->rest
+            if (rows(t->elt)) {
+                v = _cge_tp_value(t, p, x)
+                lhs[t->elt] = v[t->rl]
+                rhs[t->elt] = v[t->rr]
+            }
         }
     }
     for (j = 1; j <= rows(todo); j++) {
@@ -24681,6 +25095,7 @@ void _cge_u_eval(struct cge_model scalar M, struct cge_par scalar p, real colvec
         lhs[k] = _cge_u_value(M, p, x, M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|])
         rhs[k] = _cge_u_value(M, p, x, M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|])
     }
+    if (base) _cge_u_bvkeep(M, p, x, lhs, rhs)
 }
 
 // The name and index of a definition "NAME" or "NAME(i)": the index and its set
@@ -24890,6 +25305,10 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     struct cge_ubm scalar NM
     struct cge_ube scalar E
     struct cge_lt scalar LT
+    struct cge_utc scalar UT
+    pointer(struct cge_utc scalar) scalar qt
+    real matrix eb
+    real scalar neb
     string scalar key
     _cge_u_widen(M)
     // the values of conditions without variables, kept for the build (from
@@ -24900,6 +25319,16 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     // _cge_u_lpos)
     if ((q = findexternal("cge__lmemo")) == NULL) q = crexternal("cge__lmemo")
     *q = LT
+    // and the sums compiled from one term (from version 0.49.0;
+    // _cge_u_expand, _cge_u_tpl_rows)
+    if (findexternal("cge__utpl") != NULL) rmexternal("cge__utpl")
+    if (!_cge_u_tploff(-1)) {
+        q = crexternal("cge__utpl")
+        UT.A = asarray_create("real")
+        UT.maps = asarray_create()
+        UT.n = 0
+        *q = UT
+    }
     M.upar = J(0, 1, "")
     // at the base, a lagged value is the base value (from version 0.9.2), and
     // so is a value of a later period (from version 0.10.2)
@@ -24986,6 +25415,11 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
             tl0 = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 4]))
             tr0 = _cge_u_pre(M, _cge_u_tokens(M.uedef[k, 5]))
         }
+        // the rows of the equation's elements in a buffer that doubles,
+        // added to tok at the end (from version 0.49.0; before, tok grew by
+        // each element, in time that grew with the square of their number)
+        eb = J(0, 3, .)
+        neb = 0
         for (j = 1; j <= rows(e1); j++) {
             if (!dom[j]) continue
             tl = tl0
@@ -25001,10 +25435,10 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
             // over that of F at the base; GAMS gets F itself
             if (M.uedef[k, 7] == "box") _cge_u_boxrow(M, pb, x0, M.uedef[k, 8], idx, set, e1[j], e2[j], o1[j], o2[j],
                                                       tl, tr, rows(lab) + 1, L, R)
-            st = st \ (rows(tok) + 1)
+            st = st \ (rows(tok) + neb + 1)
             ln1 = ln1 \ rows(L)
             ln2 = ln2 \ rows(R)
-            tok = tok \ L \ R
+            _cge_u_rpush(eb, neb, L \ R)
             lab = lab \ (M.uedef[k, 1] + (idx != "" ? _cge_u_ellab(e1[j], e2[j]) : ""))
             gl = gl \ (gtl, gtr)
             // the built-in element it replaces (from version 0.9.3)
@@ -25012,6 +25446,7 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
                 M.urep = M.urep \ _cge_u_repel(substr(M.uedef[k, 8], 9, .), (idx != "" ? e1[j] : ""), (idx != "" ? e2[j] : ""))
             }
         }
+        if (neb) tok = tok \ eb[|1, 1 \ neb, 3|]
         if (usem) asarray(NM.A, key, _cge_u_ube_make(M, tok, lab, gl, st, ln1, ln2, t0, n0, r0, b0))
     }
     if (usem) {
@@ -25026,6 +25461,28 @@ void _cge_u_build(struct cge_model scalar M, struct cge_par scalar p, real colve
     M.ulen2 = ln2
     rmexternal("cge__cmemo")
     rmexternal("cge__lmemo")
+    // the sums compiled from one term counted, for tests (_cge_u_ntpl)
+    if ((qt = findexternal("cge__utpl")) != NULL) {
+        if ((q = findexternal("cge__ntpl")) == NULL) {
+            q = crexternal("cge__ntpl")
+            *q = 0
+        }
+        *q = *q + qt->n
+        rmexternal("cge__utpl")
+    }
+}
+
+// For tests (from version 0.49.0): the number of sums compiled from one term
+// since the count was set to zero, by _cge_u_ntpl(0)
+real scalar _cge_u_ntpl(| real scalar reset)
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__ntpl")) == NULL) {
+        q = crexternal("cge__ntpl")
+        *q = 0
+    }
+    if (args()) *q = 0
+    return(*q)
 }
 
 // The rows of an element of a box pair (from version 0.34.0): L the paired

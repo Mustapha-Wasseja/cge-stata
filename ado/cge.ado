@@ -1,4 +1,4 @@
-*! cge.ado  v0.48.0  2026-11-09
+*! cge.ado  v0.49.0  2026-11-12
 *! cge-stata: computable general equilibrium modelling in Stata
 *! Displays the package version and the available commands
 *!
@@ -9,7 +9,7 @@ program define cge, rclass
     version 13.0
     syntax
 
-    local version "0.48.0"
+    local version "0.49.0"
 
     display as text _n "cge-stata " as result "`version'"
     display as text "Computable general equilibrium modelling in Stata"

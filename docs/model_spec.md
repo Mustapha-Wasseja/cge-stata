@@ -1993,6 +1993,8 @@ element uses; from version 0.30.0 by reverse differentiation when an
 element uses many variables (Section 40). From version 0.48.0 the elements
 that use only numbers, variables, user parameters, arithmetic, `exp()`,
 `ln()` and `sqrt()` are evaluated and differentiated together (Section 58).
+From version 0.49.0 a sum whose terms differ only in the labels of
+references is compiled from one term, with the same rows (Section 59).
 The equations are a block `U`
 of the system; they are saved with the model and compiled again when it is
 calibrated again.
@@ -3983,6 +3985,65 @@ evaluation. `_cge_dmode(1)` and `_cge_dmode(2)` read every element row by row,
 for tests: tests/test_tape.do compares the two sides of the elements and the
 Jacobian on the tape and row by row at random points, and the Jacobian
 against central differences, over every operation.
+
+## 59. Sums compiled from one term (from version 0.49.0)
+
+Each element of an equation is written out, every sum as one term for each
+element of its set, and the tokens are then compiled to postfix rows one at a
+time (Section 19). A model of 200 dense sectors writes out about 1.7 million
+tokens, at about 25 microseconds each in Mata, and its build took about 45
+seconds. Most of the terms of a sum are its body with another label in place
+of the index: `sum(g2, bg(g2,g) * P(g2))` at element `g7` is
+`bg(g1,g7) * P(g1) + bg(g2,g7) * P(g2) + ...`.
+
+From version 0.49.0, within a build (`_cge_u_build`), a sum or product whose
+body uses only numbers, `+ - * / ^`, parentheses, `exp()`, `ln()`, `log()`,
+`sqrt()` and references to variables and user parameters, with the index
+only among the labels of those references, is written as one token
+(`_cge_u_expand`, `_cge_u_tplok`): its body, with a placeholder for the
+index, and the elements of its set that meet its condition, if any. The
+compiler (`_cge_u_compile`, `_cge_u_tpl_rows`) compiles the body once. A
+reference whose labels hold the placeholder has its value for every term at
+once: the position of the variable's element, or of the parameter's value,
+from the positions of the labels of the index's set in the sets of the
+reference, found once a build (`_cge_u_tpos`); with three indexes or more,
+the labels after the first joined by periods are looked up for each term.
+The rows of the terms are then the rows of the body with those values, each
+term after the first followed by `+` (by `*` for a product), as the terms
+written out compile: `t1 t2 + t3 + ...`. The GAMS text is the body's with the
+labels put in, joined as before. The rows, the GAMS text and the solutions
+are those of the sums written out.
+
+A sum whose body has a condition (`$`), `ord()`, `base()`, a lag or lead of
+its index, `min()`, `max()` or another function of several arguments, a sum
+within it, or a name that is not a variable or a user parameter, is written
+out as before; so are `smax()` and `smin()`, and a sum that no element meets.
+A sum within a written-out sum is compiled from one term for each element of
+the outer one. An index that is not under control, a label that is not an
+element of a reference and the wrong number of labels stop with the errors of
+a reference written out.
+
+**Values at the base.** Each `cge_equation` evaluates every element at the
+base to set the scales of the equations, and before version 0.49.0 made the
+tape of the whole system (Section 58) to do so, at each equation added. In a
+standalone model the values at the base are kept with the rows they come
+from (`_cge_u_bvkeep`, the external `cge__ubv`). An evaluation at the base
+whose rows begin with those rows, with the same base values and parameters,
+takes their values and evaluates only the elements after them, row by row
+(`_cge_u_bvhit`); the tape is made at the solve.
+
+The build also appends the rows of each equation once, from a buffer that
+doubles, instead of one element at a time, and finds the labels of the
+model's sets once a build rather than for each argument with the form of an
+index (labels such as `g12` of a set `g`) and each sum written out.
+`_cge_u_tploff(1)` writes out every sum and evaluates every element at the
+base, as before, for tests: tests/test_template.do builds models both ways
+and compares their rows, GAMS text, scales, masks and base values, over
+subsets, parameters of three and four indexes, variables of two, products,
+conditions, the sums written out, sums within conditions, functions and other
+sums, sets of pairs, a model from a SAM and a dense model, and compares the
+errors of references and the values kept at the base with those found row by
+row.
 
 ## References
 

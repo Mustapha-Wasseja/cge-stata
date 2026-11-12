@@ -5,6 +5,37 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.49.0
+
+Version 0.49.0 builds standalone models with many terms two to nine times
+faster, and the equations, their postfix rows and their GAMS text do not
+change. `cge_equation` wrote out each sum, such as `sum(j, a(j,i) * X(j))`,
+as one term per element of its set and compiled every term token by token; a
+model of 200 dense sectors writes out about 80,000 terms. A sum or product
+whose body has only numbers, arithmetic, `exp()`, `ln()`, `log()`, `sqrt()`
+and references to variables and user parameters is now compiled once, with a
+placeholder for the index, and the values of the references for all its
+terms are found together from the positions of the labels. Sums with
+conditions (`$`), `ord()`, lags or leads of the index, other functions or
+inner sums are written out as before. The values of the equations at the
+base are also kept, so that each `cge_equation` evaluates only the elements
+it adds.
+
+In StataNow 19.5 on a laptop, building the dense models with `cge_equation`:
+
+| Sectors | Equations | Before (s) | Now (s) |
+|---:|---:|---:|---:|
+| 25 | 55 | 1.21 | 0.50 |
+| 50 | 105 | 3.09 | 0.88 |
+| 100 | 205 | 10.79 | 1.92 |
+| 200 | 405 | 44.03 | 5.00 |
+
+Building and solving the model of 200 sectors now takes about 10 seconds,
+against 48 in version 0.48.0 and 134 in version 0.47.2. One sum of 2,000
+terms builds in 1.5 seconds instead of 42. The solutions are unchanged and
+agree with GAMS/PATH to within 4e-11. Equations without such sums, the solve
+and models from a SAM take the same time as before.
+
 ## 0.48.0
 
 Version 0.48.0 solves standalone models with many terms 12 to 20 times
