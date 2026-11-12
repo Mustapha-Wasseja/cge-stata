@@ -5,6 +5,31 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.48.0
+
+Version 0.48.0 solves standalone models with many terms 12 to 20 times
+faster, and the equations and their solutions do not change. The residuals
+and derivatives of the user equations were computed by reading the postfix
+rows of each element one at a time, which costs about a microsecond a row in
+Mata; a model of 200 dense sectors has 528,000 rows. All the simple elements
+now form one tape, grouped so that each group of like operations is one
+vector operation, and the Jacobian comes from one reverse sweep of the tape.
+The tape is made once, in under a second at that size. Elements with lags,
+leads, comparisons or functions of several arguments stay row by row.
+
+In StataNow 19.5 on a laptop, the solve alone:
+
+| Sectors | Equations | Before (s) | Now (s) |
+|---:|---:|---:|---:|
+| 25 | 55 | 0.93 | 0.06 |
+| 50 | 105 | 3.28 | 0.18 |
+| 100 | 205 | 15.11 | 1.26 |
+| 200 | 405 | 84.99 | 4.40 |
+
+At every size the solutions agree with GAMS/PATH to within 4e-11.
+Time spent by `cge_equation` building these models is unchanged, and models
+from a SAM take the same time as before.
+
 ## 0.47.2
 
 Version 0.47.2 reads the values of user parameters from data,

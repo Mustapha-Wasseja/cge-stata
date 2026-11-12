@@ -1990,7 +1990,10 @@ and functions. Stata evaluates the postfix rows at every point; from
 version 0.7.0 their derivatives are exact, by forward differentiation of the
 postfix rows (`_cge_u_dvalue`), with respect to the variables each equation
 element uses; from version 0.30.0 by reverse differentiation when an
-element uses many variables (Section 40). The equations are a block `U`
+element uses many variables (Section 40). From version 0.48.0 the elements
+that use only numbers, variables, user parameters, arithmetic, `exp()`,
+`ln()` and `sqrt()` are evaluated and differentiated together (Section 58).
+The equations are a block `U`
 of the system; they are saved with the model and compiled again when it is
 calibrated again.
 
@@ -3935,6 +3938,51 @@ values and domains in versions 0.46.0 and 0.47.0.
 when `linsolver(python)` asks for them: `&` in Mata evaluates both its sides,
 and before, the first solve of each session in Stata 16 or later imported
 SciPy.
+
+## 58. The user equations as one tape (from version 0.48.0)
+
+Reading the postfix rows of each element one at a time costs about a
+microsecond a row in Mata. A model of 200 dense sectors has 528,000 rows, so
+most of the time of its solve went to the residuals and the Jacobian; the LU
+took milliseconds. From version 0.48.0 the elements whose rows are numbers,
+variables, user parameters, arithmetic, `exp()`, `ln()` and `sqrt()` are
+evaluated together, as one vector of values with a slot for each row
+(`struct cge_tape`, the external `cge__tape`, made by `_cge_tp_make`). The
+equations and their solutions do not change. An element that
+uses a lag or a lead, `min()`, `max()`, `abs()`, `sqr()`, `log10()`,
+`ifthen()`, a comparison or a parameter of a model from a SAM is read row by
+row as before, and the elements on the tape and off it can be mixed.
+
+A pass over the stack gives the operands of each row and its height in the
+tree of its expression, leaves having height 0. The slots are numbered by
+height and then by operation, with a counting sort, so that all the rows of
+one height and operation are computed by one operation on vectors after the
+rows they read (`_cge_tp_value`). A sum of *n* terms is *n* rows high; a
+system of many elements of that shape makes groups of as many rows as
+elements, and the number of operations is the number of groups.
+
+The derivatives are by one reverse sweep for all the elements
+(`_cge_tp_grad`), with the adjoint of the root of each left side 1 and of each
+right side -1. A row of postfix is used once, so a slot has one parent, and the
+sweep assigns the adjoints of the operands of each group. The rules are those
+of reverse differentiation in Section 40: a power whose exponent has no
+variables takes no logarithm of its base, and nothing passes back where the
+adjoint is zero, so `q * sqrt(X)` with `q = 0` has a zero derivative at `X = 0`,
+while `sqrt(X)` at `X = 0` makes the Jacobian undefined.
+
+The entries of the Jacobian, each element and variable once and in the order
+of the elements and variables, are found when the tape is made; a variable
+that an element holds more than once is added by one operation for each
+repeat. `_cge_jac_trip` does not sort entries that are already in order, each
+once.
+
+The tape is made once for the rows of the equations and kept with them, and
+is used while they are equal: the eight latest are kept, because the regions
+of `cge_region` take turns. Parameters and variables are read at each
+evaluation. `_cge_dmode(1)` and `_cge_dmode(2)` read every element row by row,
+for tests: tests/test_tape.do compares the two sides of the elements and the
+Jacobian on the tape and row by row at random points, and the Jacobian
+against central differences, over every operation.
 
 ## References
 

@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.47.2")
+    return("0.48.0")
 }
 
 // =====================================================================
@@ -7456,15 +7456,420 @@ void _cge_jtrip(struct cge_model scalar M, struct cge_par scalar p, real colvect
     _cge_u_addtrip(M, T)
 }
 
+// =====================================================================
+// The user equations as one tape (from version 0.48.0)
+// =====================================================================
+//
+// The postfix rows of an equation element are read one at a time, which costs
+// about a microsecond a row in Mata: a model of 200 dense sectors has 528,000
+// rows, and most of the time of its solve went there. The tape holds the rows
+// of every element whose rows are numbers, variables, user parameters,
+// arithmetic, exp(), ln() and sqrt() as one vector of values. Each row is a
+// slot, and the slots are numbered by their height in the tree of their
+// expression and then by operation, so that the rows of one height and
+// operation are computed by one operation on vectors, after the rows they
+// use. The elements that use anything else (lags and leads, min(), max(),
+// ifthen(), conditions, the parameters of a model from a SAM) are read row by
+// row as before.
+//
+// A row of postfix is used once, so a slot has one parent: the reverse sweep
+// assigns the adjoints of the operands of each group instead of adding them.
+
+struct cge_tape {
+    // the rows it was made from
+    real matrix     tok
+    real colvector  ustart, ulen, ulen2
+    // the elements on the tape, the others, and the slots of the two sides of
+    // the elements on it
+    real colvector  elt, rest, rl, rr
+    // the leaves, slots 1 to nc + nx + nu: numbers, variables (positions in x)
+    // and user parameters (positions in p.upval)
+    real colvector  cval, xpos, upos
+    // the entries of the Jacobian, by element and variable, each once: element
+    // and variable, the variable leaf that gives it first, and those that
+    // add to it (the entries du and the leaves ds, for each repeat)
+    real colvector  ue, uc, u1
+    pointer(real colvector) colvector du, ds
+    // the groups of rows computed together: operation, first and last slot,
+    // and the slots of their operands
+    real colvector  gop, gs, ge
+    pointer(real colvector) colvector o1, o2
+    real scalar     N, nc, nx, nu, ng, nd
+}
+
+// The tape's codes of its groups: 1 +, 2 -, 3 *, 4 /, 5 ^ with an exponent
+// without variables, 6 ^ with variables in the exponent, 7 negation, 8 exp(),
+// 9 ln(), 10 sqrt(); its leaves 101 numbers, 102 variables, 103 parameters
+
+pointer(real colvector) scalar _cge_tp_ref(real colvector v)
+{
+    real colvector c
+    c = v
+    return(&c)
+}
+
+// 1 unless a test has chosen the mode of differentiation (_cge_dmode), which
+// then reads every element row by row
+real scalar _cge_tp_on()
+{
+    pointer() scalar q
+    if ((q = findexternal("cge__dmode")) == NULL) return(1)
+    return(*q == 0)
+}
+
+pointer(struct cge_tape scalar) scalar _cge_tp_new(struct cge_model scalar M)
+{
+    struct cge_tape scalar T
+    T = _cge_tp_make(M)
+    return(&T)
+}
+
+// The tape of the current user equations, made if they are new. The last
+// eight are kept, the latest used first, for the regions of cge_region, whose
+// equations take turns.
+pointer(struct cge_tape scalar) scalar _cge_tp(struct cge_model scalar M)
+{
+    pointer(struct cge_tape scalar) scalar t
+    pointer() scalar q
+    real colvector idx
+    real scalar k, n
+    if ((q = findexternal("cge__tape")) == NULL) {
+        q = crexternal("cge__tape")
+        *q = J(0, 1, NULL)
+    }
+    n = rows(*q)
+    for (k = 1; k <= n; k++) {
+        t = (*q)[k]
+        if (t->tok == M.utok & t->ustart == M.ustart & t->ulen == M.ulen & t->ulen2 == M.ulen2) {
+            if (k > 1) {
+                idx = k \ select((1::n), (1::n) :!= k)
+                *q = (*q)[idx]
+            }
+            return(t)
+        }
+    }
+    t = _cge_tp_new(M)
+    *q = (n < 8 ? t \ *q : t \ (*q)[|1 \ 7|])
+    return(t)
+}
+
+struct cge_tape scalar _cge_tp_make(struct cge_model scalar M)
+{
+    struct cge_tape scalar T
+    real colvector c, f, fz, eid, good, keep, len, st, ar, o1, o2, h, stk, opx, sel, rs, sc, cnt, offs, rk, o, pos
+    real colvector lx, ex, lin, ol, lo, isnew, fp, uid, occ, d, os, o1n, o2n, o2s, gk, sz
+    real matrix info
+    real scalar n, N, i, k, a, b, j, sp, nl, g, K, nlv, ngood
+
+    T.tok = M.utok
+    T.ustart = M.ustart
+    T.ulen = M.ulen
+    T.ulen2 = M.ulen2
+    T.N = T.nc = T.nx = T.nu = T.ng = T.nd = 0
+    T.elt = T.rl = T.rr = T.cval = T.xpos = T.upos = T.ue = T.uc = T.u1 = T.gop = T.gs = T.ge = J(0, 1, .)
+    T.du = T.ds = T.o1 = T.o2 = J(0, 1, NULL)
+    n = rows(M.uelab)
+    N = rows(M.utok)
+    T.rest = (n ? (1::n) : J(0, 1, .))
+    if (!n | N < 2) return(T)
+    // the rows of the elements follow one another
+    len = M.ulen + M.ulen2
+    sel = M.ustart + len
+    if (M.ustart[1] != 1 | sel[n] != N + 1) return(T)
+    if (n > 1) if (M.ustart[|2 \ n|] != sel[|1 \ n - 1|]) return(T)
+
+    c = M.utok[., 1]
+    f = M.utok[., 2]
+    eid = J(N, 1, 0)
+    eid[M.ustart] = J(n, 1, 1)
+    eid = runningsum(eid)
+    good = J(n, 1, 1)
+    sel = select((1::N), !((c :== 1) :| (c :== 2) :| (c :== 7) :| (c :== 5) :| (c :== 6) :| ((c :== 4) :& (f :<= 5))))
+    if (rows(sel) * cols(sel)) good[eid[sel, 1], 1] = J(rows(sel), 1, 0)
+    ngood = sum(good)
+    if (!ngood) return(T)
+    T.elt = select((1::n), good)
+    T.rest = (ngood < n ? select((1::n), !good) : J(0, 1, .))
+    keep = select((1::N), good[eid, 1])
+    N = rows(keep)
+    c = c[keep]
+    f = f[keep]
+    eid = eid[keep]
+
+    // one pass over the stack: the operands and the height of each row
+    ar = 2 :* (c :== 4) + ((c :== 5) :| (c :== 6))
+    o1 = o2 = h = stk = J(N, 1, 0)
+    sp = 0
+    for (i = 1; i <= N; i++) {
+        k = ar[i]
+        if (k == 0) {
+            sp++
+            stk[sp] = i
+        }
+        else if (k == 1) {
+            a = stk[sp]
+            o1[i] = a
+            h[i] = h[a] + 1
+            stk[sp] = i
+        }
+        else {
+            b = stk[sp]
+            sp--
+            a = stk[sp]
+            o1[i] = a
+            o2[i] = b
+            h[i] = (h[a] > h[b] ? h[a] : h[b]) + 1
+            stk[sp] = i
+        }
+    }
+
+    // the operation of each row, as the code of its group plus 3, and 1, 2
+    // and 3 for numbers, variables and parameters; the exponent of a power
+    // occupies the rows between its base and the power
+    pos = (1::N)
+    fz = editmissing(f, 0)
+    opx = (c :== 1) + 2 :* (c :== 2) + 3 :* (c :== 7) + (c :== 4) :* (fz :+ 3) + 10 :* (c :== 5) + (c :== 6) :* (10 :+ fz)
+    sel = select(pos, (c :== 4) :& (f :== 5))
+    if (rows(sel) * cols(sel)) {
+        rs = runningsum(c :== 2)
+        opx[sel] = 8 :+ ((rs[sel :- 1, 1] - rs[o1[sel, 1], 1]) :> 0)
+    }
+
+    // the slots: by height and operation, a counting sort
+    sc = h :* 14 :+ opx
+    K = max((max(sc), 13))
+    cnt = J(K, 1, 0)
+    for (i = 1; i <= N; i++) {
+        k = sc[i]
+        cnt[k] = cnt[k] + 1
+    }
+    offs = runningsum(cnt) - cnt
+    rk = J(N, 1, 0)
+    for (i = 1; i <= N; i++) {
+        k = sc[i]
+        j = offs[k] + 1
+        offs[k] = j
+        rk[i] = j
+    }
+    o = J(N, 1, 0)
+    o[rk] = pos
+
+    T.N = N
+    T.nc = cnt[1]
+    T.nx = cnt[2]
+    T.nu = cnt[3]
+    nl = T.nc + T.nx + T.nu
+    if (T.nc) T.cval = f[o[|1 \ T.nc|], 1]
+    if (T.nu) T.upos = f[o[|T.nc + T.nx + 1 \ nl|], 1]
+    // the roots: the last row of each side
+    st = runningsum(len[T.elt, 1]) - len[T.elt, 1]
+    T.rl = rk[st + M.ulen[T.elt, 1], 1]
+    T.rr = rk[st + len[T.elt, 1], 1]
+
+    // the entries of the Jacobian, each element and variable once: the
+    // variable leaves in order, and those that repeat an entry apart, by
+    // the number of the repeat, so that one operation adds each of them
+    if (T.nx) {
+        lx = o[|T.nc + 1 \ T.nc + T.nx|]
+        T.xpos = f[lx, 1]
+        ex = eid[lx, 1]
+        nlv = T.nx
+        lin = (ex :- 1) :* (max(T.xpos) + 1) :+ T.xpos
+        ol = order(lin, 1)
+        lo = lin[ol, 1]
+        isnew = (nlv > 1 ? 1 \ (lo[|2 \ nlv|] :!= lo[|1 \ nlv - 1|]) : 1)
+        T.u1 = select(ol, isnew)
+        T.ue = ex[T.u1, 1]
+        T.uc = T.xpos[T.u1, 1]
+        fp = select((1::nlv), isnew)
+        uid = runningsum(isnew)
+        occ = (1::nlv) - fp[uid, 1] :+ 1
+        d = select((1::nlv), occ :> 1)
+        if (rows(d) * cols(d)) {
+            d = d[order(occ[d, 1], 1), 1]
+            info = panelsetup(occ[d, 1], 1)
+            T.nd = rows(info)
+            T.du = T.ds = J(T.nd, 1, NULL)
+            for (g = 1; g <= T.nd; g++) {
+                sel = d[|info[g, 1] \ info[g, 2]|]
+                T.du[g] = _cge_tp_ref(uid[sel, 1])
+                T.ds[g] = _cge_tp_ref(ol[sel, 1])
+            }
+        }
+    }
+
+    // the groups
+    if (N > nl) {
+        gk = select((14::K), cnt[|14 \ K|] :> 0)
+        sz = cnt[gk, 1]
+        T.ng = rows(gk)
+        T.ge = runningsum(sz) :+ nl
+        T.gs = T.ge - sz :+ 1
+        T.gop = mod(gk, 14) :- 3
+        os = o[|nl + 1 \ N|]
+        o1n = rk[o1[os, 1], 1]
+        o2s = o2[os, 1]
+        o2n = J(rows(os), 1, 0)
+        sel = select((1::rows(os)), o2s :> 0)
+        if (rows(sel) * cols(sel)) o2n[sel, 1] = rk[o2s[sel, 1], 1]
+        T.o1 = T.o2 = J(T.ng, 1, NULL)
+        for (g = 1; g <= T.ng; g++) {
+            a = T.gs[g] - nl
+            b = T.ge[g] - nl
+            T.o1[g] = _cge_tp_ref(o1n[|a \ b|])
+            if (T.gop[g] <= 6) T.o2[g] = _cge_tp_ref(o2n[|a \ b|])
+        }
+    }
+    return(T)
+}
+
+// The values of all the slots at x
+real colvector _cge_tp_value(pointer(struct cge_tape scalar) scalar t, struct cge_par scalar p, real colvector x)
+{
+    real colvector v, gs, ge, gop
+    pointer(real colvector) colvector o1, o2
+    pointer(real colvector) scalar p1, p2
+    real scalar g, ng, a, b, op, nc, nx
+    nc = t->nc
+    nx = t->nx
+    v = J(t->N, 1, .)
+    if (nc) v[|1 \ nc|] = t->cval
+    if (nx) v[|nc + 1 \ nc + nx|] = x[t->xpos, 1]
+    if (t->nu) v[|nc + nx + 1 \ nc + nx + t->nu|] = p.upval[t->upos, 1]
+    ng = t->ng
+    gs = t->gs
+    ge = t->ge
+    gop = t->gop
+    o1 = t->o1
+    o2 = t->o2
+    for (g = 1; g <= ng; g++) {
+        a = gs[g]
+        b = ge[g]
+        op = gop[g]
+        p1 = o1[g]
+        p2 = o2[g]
+        if (op == 1) v[|a \ b|] = v[*p1] :+ v[*p2]
+        else if (op == 3) v[|a \ b|] = v[*p1] :* v[*p2]
+        else if (op == 2) v[|a \ b|] = v[*p1] :- v[*p2]
+        else if (op == 4) v[|a \ b|] = v[*p1] :/ v[*p2]
+        else if (op == 9) v[|a \ b|] = ln(v[*p1])
+        else if (op <= 6) v[|a \ b|] = v[*p1] :^ v[*p2]
+        else if (op == 7) v[|a \ b|] = -v[*p1]
+        else if (op == 8) v[|a \ b|] = exp(v[*p1])
+        else v[|a \ b|] = sqrt(v[*p1])
+    }
+    return(v)
+}
+
+// d where a derivative is not defined, as sqrt(X) at X = 0: nothing passes
+// back where the adjoint u is zero
+void _cge_tp_zero(real colvector d, real colvector u)
+{
+    real scalar i
+    for (i = 1; i <= rows(d); i++) {
+        if (u[i] == 0) d[i] = 0
+    }
+}
+
+// The derivatives of (left side - right side) for the entries (ue, uc) of the
+// tape, at x: one reverse sweep for all the elements
+real colvector _cge_tp_grad(pointer(struct cge_tape scalar) scalar t, struct cge_par scalar p, real colvector x)
+{
+    real colvector v, w, u, d, e, ba, ex, gs, ge, gop, a1, r
+    pointer(real colvector) colvector o1, o2
+    pointer(real colvector) scalar p1, p2
+    pointer() scalar q
+    real scalar g, a, b, op
+    if ((q = findexternal("cge__nrev")) != NULL) *q = *q + 1
+    v = _cge_tp_value(t, p, x)
+    w = J(t->N, 1, 0)
+    w[t->rl] = J(rows(t->rl), 1, 1)
+    w[t->rr] = J(rows(t->rr), 1, -1)
+    gs = t->gs
+    ge = t->ge
+    gop = t->gop
+    o1 = t->o1
+    o2 = t->o2
+    for (g = t->ng; g >= 1; g--) {
+        a = gs[g]
+        b = ge[g]
+        op = gop[g]
+        p1 = o1[g]
+        p2 = o2[g]
+        u = w[|a \ b|]
+        if (op == 1) {
+            w[*p1] = u
+            w[*p2] = u
+        }
+        else if (op == 3) {
+            w[*p1] = u :* v[*p2]
+            w[*p2] = u :* v[*p1]
+        }
+        else if (op == 2) {
+            w[*p1] = u
+            w[*p2] = -u
+        }
+        else if (op == 4) {
+            d = u :/ v[*p2]
+            if (hasmissing(d)) _cge_tp_zero(d, u)
+            w[*p1] = d
+            d = -u :* v[*p1] :/ v[*p2] :^ 2
+            if (hasmissing(d)) _cge_tp_zero(d, u)
+            w[*p2] = d
+        }
+        else if (op == 5) {
+            // a constant exponent needs no logarithm of the base
+            ex = v[*p2]
+            d = ex :* v[*p1] :^ (ex :- 1)
+            if (hasmissing(d)) _cge_tp_zero(d, ex)
+            d = u :* d
+            if (hasmissing(d)) _cge_tp_zero(d, u)
+            w[*p1] = d
+        }
+        else if (op == 6) {
+            ba = v[*p1]
+            e = v[|a \ b|]
+            d = u :* (e :* (v[*p2] :/ ba))
+            if (hasmissing(d)) _cge_tp_zero(d, u)
+            w[*p1] = d
+            d = u :* (e :* ln(ba))
+            if (hasmissing(d)) _cge_tp_zero(d, u)
+            w[*p2] = d
+        }
+        else if (op == 7) w[*p1] = -u
+        else if (op == 8) w[*p1] = u :* v[|a \ b|]
+        else if (op == 9) {
+            d = u :/ v[*p1]
+            if (hasmissing(d)) _cge_tp_zero(d, u)
+            w[*p1] = d
+        }
+        else {
+            d = u :/ (2 :* v[|a \ b|])
+            if (hasmissing(d)) _cge_tp_zero(d, u)
+            w[*p1] = d
+        }
+    }
+    if (!t->nx) return(J(0, 1, .))
+    a1 = w[|t->nc + 1 \ t->nc + t->nx|]
+    r = a1[t->u1, 1]
+    for (g = 1; g <= t->nd; g++) {
+        p1 = t->du[g]
+        p2 = t->ds[g]
+        r[*p1] = r[*p1] + a1[*p2, 1]
+    }
+    return(r)
+}
+
 // The entries of the constraints and of the user equations (from version
 // 0.13.0 a function of their own, for standalone models too)
 void _cge_jtrip_ub(struct cge_model scalar M, struct cge_par scalar p, real colvector x, struct cge_trip scalar T,
                    real colvector bo)
 {
-    real colvector g, h, sb, bm, vpos, r4, q, ag, ah
+    pointer(struct cge_tape scalar) scalar t
+    real colvector g, h, sb, bm, vpos, r4, q, ag, ah, todo
     real matrix utk, tk1, tk2
     real rowvector gl, gr
-    real scalar kb, k
+    real scalar kb, k, j
 
     // Constraints (Section 16.2)
     kb = _cge_find(M.ename, "B1")
@@ -7486,9 +7891,17 @@ void _cge_jtrip_ub(struct cge_model scalar M, struct cge_par scalar p, real colv
                   ((bm :== 1) :* (1 :- h :/ sb) + (bm :== 0) + (bm :== 3) + (bm :== 4) :* (1 :- ah)) :* (M.bdir :/ M.xscale[M.bX]))
     }
 
-    // User equations (Section 19): forward differentiation of both sides
+    // User equations (Section 19): the elements on the tape by one reverse
+    // sweep (from version 0.48.0), the others by differentiating both sides
     kb = _cge_find(M.ename, "U")
-    for (k = 1; k <= rows(M.uelab); k++) {
+    todo = (rows(M.uelab) ? (1::rows(M.uelab)) : J(0, 1, .))
+    if (_cge_tp_on()) {
+        t = _cge_tp(M)
+        todo = t->rest
+        if (t->nx) _cge_tadd(T, bo[kb] :+ t->ue, t->uc, _cge_tp_grad(t, p, x))
+    }
+    for (j = 1; j <= rows(todo); j++) {
+        k = todo[j]
         tk1 = M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|]
         tk2 = M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|]
         utk = tk1 \ tk2
@@ -8357,8 +8770,11 @@ real scalar _cge_jac_trip(struct cge_model scalar M, struct cge_par scalar p, re
     }
     ri = rowsys[r, 1]
     ci = colmap[c, 1]
-    // duplicates summed, row by row
+    // duplicates summed, row by row; entries already in that order, each
+    // once, as the tape gives them, need no sort (from version 0.48.0)
     lin = (ri :- 1) :* ncol :+ ci
+    if (rows(lin) == 1) return(1)
+    if (all(lin[|2 \ rows(lin)|] :> lin[|1 \ rows(lin) - 1|])) return(1)
     o = order(lin, 1)
     lin = lin[o]
     v = v[o]
@@ -24242,11 +24658,26 @@ real scalar _cge_u_cmp(real scalar code, real scalar a, real scalar b)
 void _cge_u_eval(struct cge_model scalar M, struct cge_par scalar p, real colvector x, real colvector lhs,
                  real colvector rhs)
 {
-    real scalar k, n
+    pointer(struct cge_tape scalar) scalar t
+    real colvector todo, v
+    real scalar k, n, j
     n = rows(M.uelab)
     lhs = J(n, 1, .)
     rhs = J(n, 1, .)
-    for (k = 1; k <= n; k++) {
+    if (!n) return
+    todo = (1::n)
+    // the elements on the tape (from version 0.48.0), the others row by row
+    if (_cge_tp_on()) {
+        t = _cge_tp(M)
+        todo = t->rest
+        if (rows(t->elt)) {
+            v = _cge_tp_value(t, p, x)
+            lhs[t->elt] = v[t->rl]
+            rhs[t->elt] = v[t->rr]
+        }
+    }
+    for (j = 1; j <= rows(todo); j++) {
+        k = todo[j]
         lhs[k] = _cge_u_value(M, p, x, M.utok[|M.ustart[k], 1 \ M.ustart[k] + M.ulen[k] - 1, 3|])
         rhs[k] = _cge_u_value(M, p, x, M.utok[|M.ustart[k] + M.ulen[k], 1 \ M.ustart[k] + M.ulen[k] + M.ulen2[k] - 1, 3|])
     }
