@@ -300,7 +300,6 @@ Developer notes:
 - [docs/gams.md](docs/gams.md): the GAMS export.
 - [docs/design.md](docs/design.md): commands, data structures, solver, testing
   and roadmap.
-- [CONTRIBUTING.md](CONTRIBUTING.md): development conventions.
 
 ## Validation
 
