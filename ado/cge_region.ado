@@ -2,7 +2,7 @@
 *! cge-stata: link calibrated single-country models through bilateral trade,
 *! as multi-region models do (model_spec.md, Section 21)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_region, rclass

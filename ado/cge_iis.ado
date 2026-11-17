@@ -2,7 +2,7 @@
 *! cge-stata: an irreducible infeasible set of the bounds and constraints of
 *! the current scenario, by the deletion filter (Reference Manual, cge_iis)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_iis, rclass

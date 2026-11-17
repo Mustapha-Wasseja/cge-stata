@@ -3,7 +3,7 @@
 *! commodities, consumers and blocks of production and demand, as user
 *! variables and equations of a standalone model (model_spec.md, Section 54)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_mpsge, rclass

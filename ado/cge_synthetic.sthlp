@@ -158,12 +158,10 @@ column account.
 {synopt:{cmd:r(filename)}}path of the bundled SAM file{p_end}
 
 
-{title:Authors}
+{title:Author}
 
 {pstd}
-Mustapha Wasseja Mohammed{break}
-Nadia S. Ouedraogo{break}
-Mahamat Podda Abouna{p_end}
+Mustapha Wasseja Mohammed{p_end}
 
 
 {title:Also see}

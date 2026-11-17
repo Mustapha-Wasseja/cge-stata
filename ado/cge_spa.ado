@@ -2,7 +2,7 @@
 *! cge-stata: structural path analysis of the mapped SAM
 *! (docs/sam_tools.md, Section 7; Defourny and Thorbecke 1984)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_spa, rclass

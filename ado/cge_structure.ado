@@ -4,7 +4,7 @@
 *! system and the blocks of its square part (Reference Manual,
 *! cge_structure)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_structure, rclass

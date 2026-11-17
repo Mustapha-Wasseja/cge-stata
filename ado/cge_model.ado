@@ -4,7 +4,7 @@
 *! its equations, as GAMS's model statement, and give the roles of its
 *! variables for cge_report (Reference Manual, cge_model)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_model, rclass

@@ -3,7 +3,7 @@
 *! blocks, written as user variables and equations in calibrated share form
 *! (model_spec.md, Section 20)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_nest, rclass

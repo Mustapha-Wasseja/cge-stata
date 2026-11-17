@@ -1,7 +1,7 @@
 *! cge_check.ado  v0.1.0  2026-10-12
 *! cge-stata: run the model validation checks (model_spec.md, Section 8)
 *!
-*! Authors: Mustapha Wasseja Mohammed, Nadia S. Ouedraogo and Mahamat Podda Abouna
+*! Author: Mustapha Wasseja Mohammed
 *! Requires: Stata 13+
 
 program define cge_check, rclass
