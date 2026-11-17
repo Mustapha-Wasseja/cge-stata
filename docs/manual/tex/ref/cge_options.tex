@@ -7,9 +7,10 @@ GAMS's \cmd{option} statement chooses a solver; without options it displays
 the settings. They are saved with the model and apply to every solve:
 \manref{cge_solve}, \manref{cge_dynamic}, \manref{cge_sensitivity},
 \manref{cge_optimize} and \manref{cge_loop}. \opt{lin}{solver()} chooses the
-linear solver of Newton's steps: Mata's dense LU, the default, or a sparse LU,
-whose memory grows with the number of entries of the Jacobian rather than with
-the square of the number of equations. From version 0.14.0,
+linear solver of Newton's steps: Mata's dense LU, or a sparse LU, whose memory
+grows with the number of entries of the Jacobian rather than with the square
+of the number of equations; by default, from version 0.50.0, the sparse LU
+for large systems with a sparse Jacobian and the dense LU for the others. From version 0.14.0,
 \opt{}{mcp()} chooses the method for constraints and inequalities: the
 semismooth Newton method, the default, or the active-set method of earlier
 versions. From version 0.16.0, \opt{tol}{erance()}, \opt{iter}{ate()} and
@@ -25,9 +26,9 @@ The sparse LU for every later solve
 \begin{stcode}
 cge_options, linsolver(sparse)
 \end{stcode}
-The sparse LU for systems of 1,000 equations or more
+The dense LU for every later solve, the default before version 0.50.0
 \begin{stcode}
-cge_options, linsolver(auto)
+cge_options, linsolver(dense)
 \end{stcode}
 The active-set method for constraints
 \begin{stcode}
@@ -72,10 +73,13 @@ cge_options
 
 \begin{optdesc}
 \item[\optarg{lin}{solver}{dense|sparse|auto|python}] chooses the linear solver of
-Newton's steps: \cmd{dense}, Mata's LU factorisation with partial pivoting
-(the default); \cmd{sparse}, the sparse LU of section~\ref{sec:sparse};
-\cmd{auto}, the sparse LU for systems of 1,000 equations or more and the
-dense one below; or, from version 0.27.0, \cmd{python}, SciPy's SuperLU
+Newton's steps: \cmd{auto}, the default from version 0.50.0, the sparse LU
+for systems of 1,000 equations or more whose Jacobian has at most 5 per cent
+of its entries in its pattern, with the rows of the sums of revenue and
+spending, the balances and the price indexes counted as full, and the dense
+LU for the others; \cmd{dense}, Mata's LU factorisation with partial
+pivoting, the default before version 0.50.0; \cmd{sparse}, the sparse LU of
+section~\ref{sec:sparse}; or, from version 0.27.0, \cmd{python}, SciPy's SuperLU
 through Stata's Python integration, an experimental prototype that works
 only on Stata 16 and later with Python and SciPy (Stata 13 to 15 stop with
 an error). SuperLU factorised the 40,190-equation Jacobian of the

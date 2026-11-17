@@ -53,7 +53,7 @@ Diagnostics
 model status 6, solver status 3
 
 . cge_options, reset
-Linear solver of Newton's steps: dense
+Linear solver of Newton's steps: auto (the sparse LU for large sparse systems)
 Method for constraints:          semismooth
 Jacobian of Newton's method:     exact
 Hessian of nonlinear programmes: exact

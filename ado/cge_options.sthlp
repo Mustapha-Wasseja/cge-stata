@@ -29,9 +29,9 @@ model and apply to every solve: {helpb cge_solve}, {helpb cge_dynamic},
 the system of the Jacobian at each step:
 
 {p2colset 9 20 22 2}{...}
-{p2col:{cmd:dense}}the dense LU factorisation of Mata, the default{p_end}
+{p2col:{cmd:auto}}the default (from version 0.50.0): the sparse LU for systems of 1,000 equations or more whose Jacobian is sparse, the dense LU otherwise{p_end}
+{p2col:{cmd:dense}}the dense LU factorisation of Mata, the default before version 0.50.0{p_end}
 {p2col:{cmd:sparse}}a sparse LU factorisation{p_end}
-{p2col:{cmd:auto}}the sparse LU for systems of 1,000 equations or more{p_end}
 {p2col:{cmd:python}}SciPy's SuperLU through Python (from version 0.27.0), Stata 16 and later only{p_end}
 {p2colreset}{...}
 
@@ -45,6 +45,18 @@ far larger than the dense LU can hold, the full system of large models among
 them; the order is kept for later solves of the same model. Both give the
 same solution, to the solver's tolerance. {helpb cge_solve} takes
 {opt sparse} or {opt dense} for one solve.
+
+{pstd}
+{cmd:auto} takes the sparse LU when the system has 1,000 equations or more
+and at most 5 per cent of the entries of its Jacobian are in its pattern,
+with the rows of the sums of revenue and spending, the balances and the
+price indexes of a model from a SAM counted as full. The dense LU
+factorises in time that grows with the cube of the number of equations and
+holds its square: 20,000 equations of one term each took about seven
+minutes to solve with it and take three seconds with the sparse LU. A dense
+Jacobian, such as that of an input-output model with sums over every
+sector, keeps the dense LU, which is then the faster of the two. Below
+1,000 equations every system keeps the dense LU, as before.
 
 {pstd}
 {cmd:linsolver(python)} (from version 0.27.0) is an experimental prototype:

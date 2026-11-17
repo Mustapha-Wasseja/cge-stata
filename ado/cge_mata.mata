@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.49.1")
+    return("0.50.0")
 }
 
 // =====================================================================
@@ -5285,7 +5285,8 @@ real scalar _cge_slu_update(struct cge_slu scalar F, real colvector r, real colv
 // The name of the linear solver setting
 string scalar _cge_lin_name(struct cge_model scalar M)
 {
-    if (M.linsolver >= . | M.linsolver == 0) return("dense")
+    // auto by default (from version 0.50.0; before, dense)
+    if (M.linsolver == 0) return("dense")
     if (M.linsolver == 3) return("python")
     return(M.linsolver == 1 ? "sparse" : "auto")
 }
@@ -5342,7 +5343,7 @@ void _cge_options(string scalar lin, | string scalar mcp, real scalar tol, real 
         scale != "" | cond != "") ch = 1
     if (ch) _cge_store(M)
     printf("{txt}Linear solver of Newton's steps: {res}%s{txt}%s\n", _cge_lin_name(M),
-           (M.linsolver == 2 ? " (the sparse LU from 1,000 equations)" : ""))
+           (_cge_lin_name(M) == "auto" ? " (the sparse LU for large sparse systems)" : ""))
     printf("{txt}Method for constraints:          {res}%s\n", _cge_mcp_name(M))
     printf("{txt}Jacobian of Newton's method:     {res}%s\n", (M.optjac == 1 ? "differences" : "exact"))
     printf("{txt}Hessian of nonlinear programmes: {res}%s\n", (M.opthess == 1 ? "differences" : "exact"))
@@ -5661,9 +5662,32 @@ real scalar _cge_sparse_on(struct cge_model scalar M, struct cge_sys scalar S)
     _cge_pylu_set(M.linsolver == 3)
     // Ruiz's equilibration (from version 0.33.0)
     _cge_ruiz_set(M.optscale == 1)
-    if (M.linsolver >= . | M.linsolver == 0) return(0)
+    if (M.linsolver == 0) return(0)
     if (M.linsolver == 1 | M.linsolver == 3) return(1)
-    return(S.neq >= 1000)
+    // auto, the default from version 0.50.0 (before, the dense LU unless
+    // linsolver() chose another; auto took the sparse LU from 1,000
+    // equations whatever the Jacobian)
+    return(_cge_lin_auto(S))
+}
+
+// The choice of linsolver(auto) for system S (from version 0.50.0): the
+// sparse LU for 1,000 equations or more when the Jacobian is sparse, at most
+// 5 per cent of its entries in the pattern, with the rows of _cge_dense
+// (sums of revenue and spending, balances, price indexes) counted as full;
+// the rows of _cge_dense2, the CES rows of composite supply and activity
+// prices, have at most an entry for each commodity. The dense LU factorises
+// in time that grows with the cube of the number of equations and holds its
+// square, so that 20,000 equations of one term each took about seven
+// minutes; with the sparse LU they take three seconds. A dense Jacobian, as
+// an input-output model's with sums over every sector, keeps the dense LU,
+// which is then about five times faster than the sparse one at 1,000
+// equations
+real scalar _cge_lin_auto(struct cge_sys scalar S)
+{
+    real scalar nz
+    if (S.neq < 1000) return(0)
+    nz = rows(S.jr) + rows(S.drow) * rows(S.free)
+    return(nz <= 0.05 * S.neq * rows(S.free))
 }
 
 struct cge_sys scalar _cge_sys_make(struct cge_model scalar M, real scalar reduced)

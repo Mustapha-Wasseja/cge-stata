@@ -5,6 +5,42 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.50.0
+
+Version 0.50.0 solves large systems with a sparse Jacobian far faster, by
+taking the sparse LU for them by default. Newton's steps factorised the
+Jacobian with Mata's dense LU unless `cge_options, linsolver()` chose
+another. The dense LU holds the Jacobian as a square matrix and factorises it
+in time that grows with the cube of the number of equations, so that a
+standalone model of 20,000 equations of one term each took six to seven
+minutes to solve, and the full system of a model from a SAM with 120
+activities three and a half. The default is now `linsolver(auto)`: the
+sparse LU for systems of 1,000 equations or more whose Jacobian has at most
+5 per cent of its entries in its pattern, with the rows of the sums of
+revenue and spending, the balances and the price indexes counted as full,
+and the dense LU for the others. `auto` took the sparse LU from 1,000
+equations whatever the Jacobian; it now keeps the dense LU for a dense one,
+such as that of an input-output model with sums over every sector, for which
+the dense LU is about five times faster. Below 1,000 equations nothing
+changes, and `linsolver(dense)` and `linsolver(sparse)` still choose one LU
+for every system.
+
+In StataNow 19.5 on a laptop, the solve alone:
+
+| System | Equations | Before (s) | Now (s) |
+|---|---:|---:|---:|
+| equations of one term each | 20,000 | 345 to 434 | 2.5 |
+| equations of one term each | 8,000 | 32.5 | 0.9 |
+| equations of one term each | 2,000 | 1.2 | 0.3 |
+| full system of a model from a SAM, 120 activities | 10,555 | 212 | 5.3 |
+| reduced system, 120 activities | 2,045 | 2.8 | 2.4 |
+| reduced system, 200 activities | 3,418 | 9 to 15 | 8 to 13 |
+| a dense input-output model of 500 sectors | 1,005 | 26 | 26 |
+
+The solutions are those of the dense LU to the solver's tolerance, within
+1e-10 in the tests, which compare the two on systems on both sides of 1,000
+equations and of the 5 per cent threshold.
+
 ## 0.49.1
 
 Version 0.49.1 reads sets of many labels in time that grows with their

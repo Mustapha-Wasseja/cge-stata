@@ -4,7 +4,8 @@
 * and solutions with the sparse LU against those with the dense one, for
 * the reduced and the full system, constraints, user equations, a dynamic
 * run, the optimiser, a loop, and standalone models of one equation and of
-* a single dense row
+* a single dense row; from version 0.50.0, the choice of linsolver(auto), the
+* default
 
 version 13.0
 quietly do helpers_reference.do
@@ -227,10 +228,10 @@ end
 quietly cge_map, `stdmap'
 quietly cge_calibrate, `sigmas'
 cge_options
-assert "`r(linsolver)'" == "dense"
+assert "`r(linsolver)'" == "auto"
 cge_shock tm, value(0)
 quietly cge_solve, name(d1) tolerance(1e-12)
-assert "`r(linsolver)'" == "dense"
+assert "`r(linsolver)'" == "auto"
 cge_solve, name(s1) tolerance(1e-12) sparse
 assert r(converged) == 1 & "`r(linsolver)'" == "sparse"
 mata: st_numscalar("d", _ts_diff("d1", "s1"))
@@ -371,4 +372,66 @@ assert r(converged) == 1
 mata: st_numscalar("d", _ts_diff("r1", "r2"))
 display as text "a single dense row, sparse against dense: " as result %9.2e scalar(d)
 assert scalar(d) < 1e-10
-mata: mata drop _ts_case() _ts_diff() _ts_sing() _ts_reorder() _ts_dense() _ts_cd() _ts_one()
+* the choice of linsolver(auto), the default from version 0.50.0: the sparse
+* LU from 1,000 equations when at most 5 per cent of the Jacobian's entries
+* are in its pattern, the dense LU below and for a denser Jacobian; the
+* solutions as with the other LU
+capture mata: mata drop _ts_auto()
+mata:
+real scalar _ts_auto()
+{
+    struct cge_model scalar M
+    struct cge_sys scalar S
+    M = _cge_load()
+    S = _cge_sys_make(M, 1)
+    return(_cge_sparse_on(M, S))
+}
+end
+foreach n in 1200 999 {
+    cge_model new
+    mata: st_local("labs", invtokens("v" :+ strofreal(1::`n')'))
+    quietly cge_set j = `labs'
+    quietly cge_parameter b(j) = 1 + ord(j) / `n'
+    quietly cge_variable V(j), value(1)
+    quietly cge_equation EX(j): V(j)^2 + b(j) * V(j) = 3
+    cge_options
+    assert "`r(linsolver)'" == "auto"
+    mata: st_numscalar("sp", _ts_auto())
+    assert scalar(sp) == (`n' >= 1000)
+    cge_solve, name(a1)
+    assert r(converged) == 1 & "`r(linsolver)'" == "auto"
+    quietly cge_solve, name(a2) `=cond(`n' >= 1000, "dense", "sparse")'
+    assert r(converged) == 1
+    mata: st_numscalar("d", _ts_diff("a1", "a2"))
+    display as text "`n' equations of one term, the default against the other LU: " as result %9.2e scalar(d)
+    assert scalar(d) < 1e-10
+}
+* each of 1,000 equations sums 60 of the variables, 6 per cent of the
+* entries: the dense LU; 40 of them, 4 per cent: the sparse LU
+foreach m in 60 40 {
+    cge_model new
+    mata: st_local("labs", invtokens("v" :+ strofreal(1::1000)'))
+    quietly cge_set j = `labs'
+    quietly cge_set k(j) = yes$(ord(j) <= `m')
+    quietly cge_parameter b(j) = 1 + ord(j) / 1000
+    quietly cge_variable V(j), value(1)
+    quietly cge_equation EX(j): V(j) + 0.001 * sum(k, V(k)^2) = b(j)
+    mata: st_numscalar("sp", _ts_auto())
+    assert scalar(sp) == (`m' == 40)
+    cge_solve, name(c1)
+    assert r(converged) == 1
+    quietly cge_solve, name(c2) `=cond(`m' == 40, "dense", "sparse")'
+    assert r(converged) == 1
+    mata: st_numscalar("d", _ts_diff("c1", "c2"))
+    display as text "sums over `m' variables, the default against the other LU: " as result %9.2e scalar(d)
+    assert scalar(d) < 1e-10
+}
+* a choice made with linsolver() stays, and reset gives auto again
+cge_options, linsolver(dense)
+mata: st_numscalar("sp", _ts_auto())
+assert scalar(sp) == 0
+cge_options, reset
+assert "`r(linsolver)'" == "auto"
+mata: st_numscalar("sp", _ts_auto())
+assert scalar(sp) == 1
+mata: mata drop _ts_case() _ts_diff() _ts_sing() _ts_reorder() _ts_dense() _ts_cd() _ts_one() _ts_auto()

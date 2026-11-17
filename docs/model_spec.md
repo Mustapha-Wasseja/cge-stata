@@ -4045,6 +4045,41 @@ sums, sets of pairs, a model from a SAM and a dense model, and compares the
 errors of references and the values kept at the base with those found row by
 row.
 
+## 60. The default linear solver (from version 0.50.0)
+
+Each Newton step solves J dz = -F (Reference Manual, The solution; Section
+43 for its equilibration). Mata's dense LU holds J as a square matrix and
+factorises it in time proportional to n^3 for n equations; the sparse LU
+(`cge_options, linsolver(sparse)`, from version 0.10.1) holds its entries.
+Before version 0.50.0 the dense LU was the default, so that a system of
+20,000 equations of one term each, whose Jacobian is diagonal, took six to
+seven minutes to solve, most of it in the factorisation of a 20,000 x
+20,000 matrix and the solves with its factors.
+
+From version 0.50.0 the default is `linsolver(auto)` (`_cge_sparse_on`,
+`_cge_lin_auto`): system S takes the sparse LU when it has 1,000 equations
+or more and
+
+    nz = (entries of its pattern) + (rows of _cge_dense) x (free variables)
+
+is at most 5 per cent of (equations) x (free variables), and the dense LU
+otherwise. The pattern is that of the Jacobian (`M.jr`, `M.jc`, or their
+reduced forms); the rows of `_cge_dense`, the sums of revenue and spending,
+the balances and the price indexes of a model from a SAM, are counted as
+full, since their exact derivatives may reach every variable. The rows of
+`_cge_dense2`, the CES rows of composite supply and activity prices, have at
+most an entry for each commodity and are left to the pattern. Models from a
+SAM have about four entries a row and 12 rows of `_cge_dense`, under 1 per
+cent of the entries for systems of 1,000 equations or more; a dense
+input-output model, with sums over every sector in each row, has three
+quarters of them and keeps the dense LU, which then solves it about five
+times faster. `linsolver(auto)` before version 0.50.0 took the sparse LU
+from 1,000 equations whatever the Jacobian. `linsolver(dense)`,
+`linsolver(sparse)` and `linsolver(python)`, and the options `dense` and
+`sparse` of `cge_solve`, choose one LU for every system as before; the
+setting is reported as `auto` when none was given, and `cge_options, reset`
+returns to it. Both LUs give the same solution to the solver's tolerance.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

@@ -163,12 +163,17 @@ without Broyden's updates.
 
 \section{The sparse LU}\label{sec:sparse}
 
-Each Newton step solves $J\,\Delta z = -F$. By default the Jacobian is held as
-a dense matrix and factorised by Mata's LU with partial pivoting, in time
-proportional to $n^3$ and memory to $n^2$ for $n$ equations. From version
+Each Newton step solves $J\,\Delta z = -F$. The dense LU holds the Jacobian
+as a dense matrix and factorises it by Mata's LU with partial pivoting, in
+time proportional to $n^3$ and memory to $n^2$ for $n$ equations. From version
 0.10.1, \manref{cge_options}, \cmd{linsolver(sparse)}, factorises it as a
 sparse matrix, in the manner of the analyse-and-factorise solvers of
-\citet{duff1986}; its memory grows with the number of entries.
+\citet{duff1986}; its memory grows with the number of entries. From version
+0.50.0 the default, \cmd{linsolver(auto)}, takes the sparse LU for systems of
+1,000 equations or more whose Jacobian has at most 5 per cent of its entries
+in its pattern, the rows of the sums of revenue and spending, the balances
+and the price indexes counted as full, and the dense LU for the others; the
+dense LU had been the default.
 
 \textit{Analysis.} The rows with more than ten times the average number of
 entries, or 50, are set apart: the sums of government revenue and spending,

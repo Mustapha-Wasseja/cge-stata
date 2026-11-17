@@ -20,4 +20,4 @@ macros:
             r(closure) : "flexexr flexgsav savings cpi lab:mobile cap:mobile"
              r(method) : "newton"
                r(name) : "notariff"
-          r(linsolver) : "dense"
+          r(linsolver) : "auto"
