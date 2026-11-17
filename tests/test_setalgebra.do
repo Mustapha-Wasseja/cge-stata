@@ -408,3 +408,95 @@ display as text "sum over a set from the base, against its elements: " as result
 assert abs(`ql' - `total') < 1e-9 * max(1, abs(`total'))
 cge_equation, clear
 cge_set, clear
+
+* ---------------------------------------------------------------------
+* 8. Large sets (version 0.49.1): lists, unions, subsets, data and pairs of
+* thousands of labels, read in time that grows with their number, against
+* the elements written out in Mata
+* ---------------------------------------------------------------------
+cge_model new
+local n 3000
+local h 1500
+mata: st_local("labs", invtokens("v" :+ strofreal(1::`n')'))
+mata: st_local("labw", invtokens("w" :+ strofreal(1::`n')'))
+mata: st_local("labh", invtokens("v" :+ strofreal(1::`h')'))
+mata: st_local("labr", invtokens("v" :+ strofreal((`h' + 1)::`n')'))
+* a list with labels given twice keeps the first of each, in order
+cge_set big = `labs' v1 v2 v`n'
+assert r(N_elements) == `n'
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("labs")))
+assert `same' == 1
+cge_set big2 = `labw'
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("labw")))
+assert `same' == 1
+* a subset and its complement in the domain
+cge_set lo(big) = `labh'
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("labh")))
+assert `same' == 1
+cge_set hi(big) = yes - lo
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("labr")))
+assert `same' == 1
+cge_set hi2(big) = not lo
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("labr")))
+assert `same' == 1
+cge_set first(big) = yes$(ord(big) <= 3)
+assert "`r(elements)'" == "v1 v2 v3"
+* unions and differences keep the order of the elements as they come
+cge_set both = big2 + big - hi
+mata: st_local("want", st_local("labw") + " " + st_local("labh"))
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("want")))
+assert `same' == 1
+cge_set ord1 = v3 v1 v3 + v2 - v1 + v1 v4
+assert "`r(elements)'" == "v3 v2 v1 v4"
+* a difference takes the term after it alone: v5 is added again
+cge_set ord2 = (v5 v6) * big2 + w9 w8 - w9 v5
+assert "`r(elements)'" == "w8 v5"
+cge_set ord4 = (v5 v6) * big2 + w9 w8 - (w9 v5)
+assert "`r(elements)'" == "w8"
+cge_set ord3 = v7 - v7 + v8
+assert "`r(elements)'" == "v8"
+* from data, with a blank and a repeated label
+preserve
+clear
+quietly set obs `n'
+quietly generate str20 lab = "x" + string(_n)
+quietly replace lab = "x1" in 2
+quietly replace lab = "" in 3
+cge_set fromdata, from(lab)
+assert r(N_elements) == `n' - 2
+mata: st_local("want", invtokens(("x1", "x" :+ strofreal((4::`n')'))))
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("want")))
+assert `same' == 1
+restore
+* pairs, one given twice
+mata: st_local("prs", invtokens(("v" :+ strofreal(1::`n') :+ ".w" :+ strofreal(`n' :- (1::`n') :+ 1))'))
+cge_set link(big,big2) = `prs' v1.w`n'
+assert r(N_elements) == `n'
+mata: st_local("same", strofreal(st_global("r(elements)") == st_local("prs")))
+assert `same' == 1
+capture noisily cge_set badp(big,big2) = v1.w1 w1.v1
+assert _rc == 111
+capture noisily cge_set badp(big,big2) = v1.w1 v2
+assert _rc == 198
+* the checks of labels and names against every label of the model
+capture noisily cge_set badl(big) = v1 w1
+assert _rc == 111
+capture noisily cge_set badc = v1 & v2
+assert _rc == 198
+capture noisily cge_set badc = v1 $ v2
+assert _rc == 198
+capture noisily cge_variable v`n', value(1)
+assert _rc == 110
+capture noisily cge_parameter w1 = 1
+assert _rc == 110
+capture noisily cge_set v2 = w3
+assert _rc == 110
+* a set built on the large ones, in a variable and a sum
+cge_parameter pb(big) = ord(big) / `n'
+cge_variable XB(big), value(1)
+cge_variable SB = sum(lo, pb(lo) * XB(lo))
+mata: st_local("v", strofreal(_tsa_base("SB", ""), "%21.15g"))
+local want = (`h' + 1) / 2 * `h' / `n'
+display as text "sum over a large subset: " as result %9.2e abs(`v' - `want')
+assert abs(`v' - `want') < 1e-9 * `want'
+cge_model new

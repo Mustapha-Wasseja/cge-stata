@@ -5,6 +5,54 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.49.1
+
+Version 0.49.1 reads sets of many labels in time that grows with their
+number rather than with its square, and builds the variables, parameters
+and equations written over them in the same way. A list of 20,000 labels,
+`cge_set j = v1 v2 ... v20000`, took more than an hour and a half and now
+takes about three seconds. `cge_set` read each label against a copy of the
+rest of the list and took each label as the union of the elements before it
+with one more, rebuilding a table of all of them; the checks of a label
+against the domain or every label of the model, and of each pair against
+the labels of its sets, searched them one by one. The list is now read once,
+the union grows in one hash table, and the checks use hash tables made once
+per command. A domain of several indexes is no longer listed whole unless
+`yes`, `not` or a condition needs it. Every check of a new name read the
+labels of all the sets one at a time, so that even `cge_variable T` took a
+second beside a set of 2,000 labels. And each element of a variable,
+parameter or equation over a set read all the labels of the set again to
+put its own in; they are now found only for a lag or lead of the index,
+from the table that a build keeps, which `cge_parameter` and the conditions
+of a domain now keep as well.
+
+In StataNow 19.5 on a laptop, with sets of 2,000 and 20,000 labels (before:
+the code of version 0.48.0, which these commands share with 0.49.0):
+
+| Command | 2,000, before (s) | 2,000, now (s) | 20,000, now (s) |
+|---|---:|---:|---:|
+| `cge_set j = v1 ... vn` | 60.2 | 0.34 | 3.1 |
+| a second set of n new labels | 51.7 | 0.38 | 3.9 |
+| a subset of half of them, `cge_set s(j) = ...` | 21.6 | 0.19 | 2.1 |
+| n pairs, `cge_set m(j,j2) = v1.wn ...` | 3.3 | 0.31 | 3.3 |
+| n labels from data, `cge_set k, from(lab)` | 6.5 | 0.32 | 3.7 |
+| `cge_variable T` beside them | 6.1 | 0.08 | 0.8 |
+| `cge_variable V(j), value(1)` | 2.3 | 0.35 | 7.4 |
+| `cge_parameter b(j) = 1 + ord(j) / n` | 3.5 | 0.55 | 6.5 |
+
+Equations over such sets are built faster as well: 20,000 equations of one
+term each, `cge_equation FV(j): V(j) = b(j)`, in 17 seconds instead of about
+400, since the starts, lengths, labels and GAMS text of an equation's
+elements are now added once per equation, as its rows were from version
+0.49.0. A model over a set of 20,000 labels, with the set, a parameter and
+two variables, is set up in 14 seconds instead of more than an hour and a
+half. The solve is not changed.
+
+The sets, their elements and their order, and the errors are unchanged, and
+so are the models built over them: the sets in the table, and the rows,
+labels, GAMS text and base values of a test model with conditions, lags and
+leads, match those of version 0.48.0 exactly.
+
 ## 0.49.0
 
 Version 0.49.0 builds standalone models with many terms two to nine times
