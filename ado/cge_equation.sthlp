@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.34.0  29oct2026}{...}
+{* *! version 0.50.1  17nov2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -578,10 +578,17 @@ Each {cmd:cge_variable} and {cmd:cge_equation} builds the user definitions
 again. From version 0.47.0, in a standalone model, a definition whose text and
 whose inputs (sets, parameters, macros, variables, base values, scales and
 domains) are unchanged takes the elements compiled before, and writing out a
-sum takes time in proportion to its terms: a model of prices and markets of
-50 goods, each using every good, builds in about 4 seconds rather than 86,
-and one of 100 goods in about 11 seconds rather than four to seven minutes. Give the variables before the equations: a new variable changes the
-inputs, and the next equation compiles every definition again.
+sum takes time in proportion to its terms. From version 0.49.0 a sum whose
+body has only numbers, arithmetic, {cmd:exp()}, {cmd:ln()}, {cmd:log()},
+{cmd:sqrt()} and references to variables and user parameters is compiled
+once for all its terms, and from version 0.49.1 the labels of a set are not
+read again for each element. A model of prices and markets of 50 goods, each
+using every good, builds in under a second (86 seconds in version 0.46.0),
+one of 100 goods in about 2 seconds and one of 200 in about 5; from version
+0.48.0 the solve evaluates the user equations as one tape of vector
+operations, and the model of 200 goods solves in about 4 seconds. Give the
+variables before the equations: a new variable changes the inputs, and the
+next equation compiles every definition again.
 
 
 {title:Stored results}

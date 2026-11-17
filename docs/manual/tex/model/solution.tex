@@ -184,7 +184,20 @@ again every 16 steps, four at most), the entries $a_{ij}$ with
 $|a_{ij}| \ge 0.1 \max_k |a_{kj}|$, the one that minimises
 $(r_i - 1)(c_j - 1)$, with $r_i$ and $c_j$ the active entries of its row and
 column, is the pivot, and the elimination of its row from the others gives
-the pattern of the factors, fill included. Rows that cancel in the
+the pattern of the factors, fill included. From version 0.50.1 a column
+with one active entry, whose cost is zero and which needs no elimination, is
+taken at once with that entry as its pivot, from a stack of such columns
+that the eliminations add to, without the search; the candidate columns are
+searched in order of the least cost their rows allow, $(\min_i r_i - 1)
+(c_j - 1)$, and no further once that exceeds the best cost found. The
+active rows left, once 4,000 or fewer but 100 or more remain and at least a
+fifth of their entries are in the pattern, join the rows set apart, with the
+columns left: the elimination fills them in, at a cost in Mata that grows
+with the cube of their number, and Mata's dense LU factorises them faster.
+In the 3,418 equations of the reduced system of a model from a SAM with 200
+activities, the last 450 had a fifth of their entries filled in and made
+nine tenths of the elimination's work; the analysis takes about a quarter of
+its former time, and each factorisation less than half. Rows that cancel in the
 elimination leave in a column only entries lost to rounding; a column whose
 active entries are all below $10^{-10}$ of its largest entry in the rows not
 set apart is therefore left over, and its pivot comes from the rows set

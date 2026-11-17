@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.29.0  29oct2026}{...}
+{* *! version 0.50.1  17nov2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -135,6 +135,12 @@ GAMS's {cmd:loop}, {cmd:if} and {cmd:while} over assignments are Stata's own
 From version 0.13.0, {opt from(varname)} takes the elements from a string
 variable of the data in memory, in the order they appear, each once, as the
 account labels of a SAM in memory: {cmd:cge_set ac, from(account)}.
+
+{pstd}
+From version 0.49.1 a set is read in time that grows with the number of its
+labels: a list of 20,000 labels takes about three seconds, as do a second
+set, a subset, pairs and labels from data, and the variables, parameters and
+equations written over such sets are built in seconds.
 
 {pstd}
 User sets are saved with the model and kept when it is calibrated again.

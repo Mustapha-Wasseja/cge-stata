@@ -118,8 +118,9 @@ five test models the solutions agree with GAMS/MPSGE to about 1e-13.
 ### Solvers and diagnostics
 
 - Newton's method with an exact Jacobian, by forward or reverse
-  differentiation, Broyden's updates, a dense or sparse LU, Ruiz's
-  equilibration, continuation and fallbacks.
+  differentiation, Broyden's updates, a dense or sparse LU (by default the
+  sparse LU for systems of 1,000 equations or more with a sparse Jacobian),
+  Ruiz's equilibration, continuation and fallbacks.
 - A semismooth Newton method for complementarity problems.
 - A primal-dual interior-point method for nonlinear programmes, with exact
   Hessians, feasibility restoration, several starts and the marginals of the
@@ -153,7 +154,7 @@ five test models the solutions agree with GAMS/MPSGE to about 1e-13.
 
 ## Status
 
-The current version is 0.50.0. Every change, version by version, is listed
+The current version is 0.50.1. Every change, version by version, is listed
 in [CHANGELOG.md](CHANGELOG.md).
 
 | Milestone | Status |

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.43.0  30oct2026}{...}
+{* *! version 0.50.1  17nov2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -39,7 +39,12 @@ the system of the Jacobian at each step:
 The sparse LU chooses a pivot order once, by Markowitz's rule with
 threshold pivoting, and factorises each later Jacobian in that order; rows
 with many entries, such as the sums of government revenue and the balances,
-form a small dense block. Its memory grows with the number of entries rather
+form a small dense block. From version 0.50.1 the columns with one entry are
+taken first, without a search, and the rows left once 100 to 4,000 remain
+with a fifth of their entries filled in join the dense block, which Mata's
+dense LU factorises faster than the elimination; the analysis of the
+reduced system of a model from a SAM with 200 activities, 3,418 equations,
+takes under a second instead of about three. Its memory grows with the number of entries rather
 than with the square of the number of equations, so that it solves systems
 far larger than the dense LU can hold, the full system of large models among
 them; the order is kept for later solves of the same model. Both give the

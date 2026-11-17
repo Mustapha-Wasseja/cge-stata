@@ -239,6 +239,14 @@ with $D$ the elements of the domain in their order, a tuple's labels joined by
 periods. Every label named must belong to $D$; with a condition, $q$ is
 written out for each element of $D$ as the domain of a user variable is.
 
+From version 0.49.1 the expression is read once, a union grows in one hash
+table, and labels are checked against hash tables of $D$ and of every label
+of the model, made once for each command, so that a set of $n$ labels is
+read in time proportional to $n$: 20,000 labels in about three seconds,
+which took more than an hour and a half before. A domain of several indexes
+is checked label by label against the set of each index, and is listed
+whole only when \cmd{yes}, \cmd{not} or a condition needs it.
+
 \cgesec{Also see}
 
 \begin{alsosee}

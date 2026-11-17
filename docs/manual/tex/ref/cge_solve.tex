@@ -239,7 +239,10 @@ with the dense LU.
 \item[\opt{sp}{arse}, \opt{den}{se}] (from version 0.10.1) choose the linear
 solver of Newton's steps for this solve, the sparse LU
 (section~\ref{sec:sparse}) or the dense one, in place of the setting of
-\manref{cge_options}. Both give the same solution.
+\manref{cge_options}. Both give the same solution. Without either, and
+without a setting of \manref{cge_options}, the solve takes the sparse LU for
+systems of 1,000 equations or more whose Jacobian is sparse and the dense LU
+for the others (from version 0.50.0; before, the dense LU).
 \end{optdesc}
 
 \cgesec{Remarks and examples}

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.50.0  17nov2026}{...}
+{* *! version 0.50.1  17nov2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -55,6 +55,16 @@ experimental links to SciPy's SuperLU and HiGHS require Stata 16 or later with
 Python and SciPy ({helpb cge_options}, {helpb cge_solve}). GAMS export and GDX
 data exchange are also available ({helpb cge_gams}, {helpb cge_gdx}); solving an
 exported model in GAMS requires GAMS and the selected solver.
+
+{pstd}
+Large models are built and solved in time that grows with their size. A set
+of 20,000 labels is read in about three seconds, and the variables,
+parameters and equations over it are built in seconds ({helpb cge_set}, from
+version 0.49.1). Systems of 1,000 equations or more with a sparse Jacobian
+are solved with a sparse LU by default (from version 0.50.0), which takes
+the columns with one entry first and leaves the rows that fill in to Mata's
+dense LU (from version 0.50.1); smaller or denser systems use the dense LU
+({helpb cge_options}).
 
 {pstd}
 The {browse "https://github.com/Mustapha-Wasseja/cge-stata/blob/main/docs/manual/cge-stata-manual.pdf":cge-stata Reference Manual}

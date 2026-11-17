@@ -4080,6 +4080,46 @@ from 1,000 equations whatever the Jacobian. `linsolver(dense)`,
 setting is reported as `auto` when none was given, and `cge_options, reset`
 returns to it. Both LUs give the same solution to the solver's tolerance.
 
+## 61. The analysis of the sparse LU (from version 0.50.1)
+
+The sparse LU (Section 60; Reference Manual, The solution) chooses its pivot
+order once for each pattern, by Markowitz's rule with threshold pivoting on
+the values of a first Jacobian (`_cge_slu_analyse`), and factorises each
+later Jacobian in that order (`_cge_slu_factor`). Each step of the analysis
+searched a pool of the active columns with the fewest entries and up to four
+candidates among them, at about a millisecond a step in Mata, and eliminated
+the pivot row from the other rows of the pivot column one row at a time.
+
+From version 0.50.1 a column with one active entry, whose Markowitz cost is
+zero and whose pivot leaves no row to update, is taken at once with that
+entry as its pivot, from a stack of such columns: those of the matrix, then
+each column that the elimination of a pivot row leaves with one active entry
+(`_cge_slu_spush`). An entry that is zero or lost to rounding, below 1e-10
+of the column's largest entry in the rows not set apart, leaves the column
+over, as in the search. The candidates of the search are taken in order of
+the least cost their rows allow, (min r_i - 1)(c_j - 1), and searched for
+their values no further once that exceeds the best cost found, so that a tie
+is still searched.
+
+The entries of the active rows, nza, are kept as rows are eliminated. Once
+4,000 or fewer but 100 or more active rows remain and nza is at least a
+fifth of the square of their number, the analysis stops: the rows and
+columns left join the rows set apart and the columns left over in the dense
+block, whose Schur complement Mata's dense LU factorises (Reference Manual,
+The solution). The elimination of such rows fills them in, at a cost in Mata
+that grows with the cube of their number. In the 3,418 equations of the
+reduced system of a model from a SAM with 200 activities, the last 450 had a
+fifth of their entries and made nine tenths of the elimination's work. Below
+100 rows the elimination goes on, with its relative test of entries lost to
+rounding.
+
+The analysis also no longer keeps the multipliers of L and the values of U,
+which the factorisation computes, and marks the columns of each row it
+updates with a number of its own instead of clearing the marks. The factors
+and solutions are those of an LU in another order: they agree with the dense
+LU to rounding, and their last digits may differ from those of version
+0.50.0.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental

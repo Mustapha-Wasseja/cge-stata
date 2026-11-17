@@ -35,6 +35,15 @@ and GDX data exchange are also available (\manref{cge_gams},
 \manref{cge_gdx}); solving an exported model in GAMS requires GAMS and the
 selected solver.
 
+Large models are built and solved in time that grows with their size. A set
+of 20,000 labels is read in about three seconds, and the variables,
+parameters and equations over it are built in seconds (\manref{cge_set},
+from version 0.49.1). Systems of 1,000 equations or more with a sparse
+Jacobian are solved with a sparse LU by default (from version 0.50.0), which
+takes the columns with one entry first and leaves the rows that fill in to
+Mata's dense LU (from version 0.50.1); smaller or denser systems use the
+dense LU (\manref{cge_options}).
+
 The command \cmd{cge} displays the version of the package and its commands.
 
 \cgesec{Syntax}

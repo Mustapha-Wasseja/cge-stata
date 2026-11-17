@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.50.0")
+    return("0.50.1")
 }
 
 // =====================================================================
@@ -4735,10 +4735,13 @@ void _cge_slu_csc(real colvector r, real colvector c, real colvector v, real sca
 
 // The pivot order of matrix (cp, ri, vv), n x n. The rows with more entries
 // than ten times the average, or 50, are set apart; on the others, at each
-// step, among a pool of the active columns with the fewest entries (chosen
-// again every 16 steps), the columns with the fewest (four at most), the
-// entries within the threshold u of the largest in their column, the one with
-// the smallest product of its row and column counts less one. A column whose
+// step, a column with one active entry, if any, with that entry as its pivot
+// (from version 0.50.1); otherwise, among a pool of the active columns with
+// the fewest entries (chosen again every 16 steps), the columns with the
+// fewest (four at most), the entries within the threshold u of the largest
+// in their column, the one with the smallest product of its row and column
+// counts less one, the columns searched in order of the least such product
+// their rows allow, and no further once it exceeds the best. A column whose
 // active entries are all below 1e-10 of its largest entry in the rows not set
 // apart has lost them to rounding in the elimination (rows that cancel), and
 // is left over; a row left without a pivot joins those set apart. Fills the
@@ -4749,9 +4752,10 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
 {
     pointer(real colvector) colvector RC, RV, CR
     real colvector rcnt, ccnt, clen, ract, W, mark, cols, vals, rows_, pc, pv, newc, newv, keep, extra, cand, a, ok
-    real colvector lk, li, lm, ukr, ukc, pos, cj, ab, rb, pool, dense, avail, cact, cbad, cs
+    real colvector lk, li, lm, ukr, ukc, pos, cj, ab, rb, pool, dense, avail, cact, cbad, cs, sst, lbs, co
     real matrix mk, tw
     real scalar i, j, t, best, bc, br, bv, cost, mx, c, r, piv, m, nl, nu, big, cx, age, cmin, tau, ns, nact, nlk, nuk
+    real scalar stamp, nss, tt, nza
     F.n = n
     F.ok = 0
     F.acp = cp
@@ -4799,18 +4803,77 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
     cact = J(n, 1, 1)
     cbad = J(n, 1, 0)
     nact = sum(ract)
+    // the entries of the active rows (from version 0.50.1)
+    nza = sum(rcnt :* ract)
     W = mark = J(n, 1, 0)
+    stamp = 0
     F.p = F.q = J(n, 1, .)
-    // the entries of L (row, step, multiplier) and of U (step, column,
-    // value), in vectors with room to grow: appending to a vector copies it
+    // the entries of L (row, step) and of U (step, column), in vectors with
+    // room to grow: appending to a vector copies it (from version 0.50.1,
+    // without the values, which _cge_slu_factor finds)
     nlk = nuk = 0
-    lk = li = lm = J(rows(ri) + n, 1, .)
+    lk = li = J(rows(ri) + n, 1, .)
     ukr = ukc = J(rows(ri) + n, 1, .)
-    F.uv = J(rows(ri) + n, 1, .)
     pool = J(0, 1, .)
     age = 16
     ns = 0
+    // the columns with one active entry, on a stack (from version 0.50.1):
+    // each is the pivot of its row at once, as Markowitz's rule would choose
+    // it (its cost is 0), with no fill and no other row to update, without
+    // the search of the pool and the candidates; a column joins the stack
+    // when the elimination of a pivot row leaves it one entry
+    sst = selectindex(cact :& !cbad :& (ccnt :== 1))
+    if (!rows(sst) | !cols(sst)) sst = J(0, 1, .)
+    nss = rows(sst)
+    sst = sst \ J(max((n, 16)), 1, .)
     while (nact) {
+        if (nss) {
+            c = sst[nss]
+            nss--
+            if (!cact[c] | cbad[c] | ccnt[c] != 1) continue
+            cj = (*CR[c])[|1 \ clen[c]|]
+            rows_ = select(cj, ract[cj])
+            if (!rows(rows_) | !cols(rows_)) continue
+            r = rows_[1]
+            pos = selectindex(*RC[r] :== c)
+            piv = (rows(pos) ? (*RV[r])[pos[1]] : 0)
+            // zero, or lost to rounding: the column is left over, as in the
+            // search below
+            if (abs(piv) >= . | abs(piv) <= 1e-10 * cs[c]) {
+                cbad[c] = 1
+                continue
+            }
+            ns++
+            F.p[ns] = r
+            F.q[ns] = c
+            pc = *RC[r]
+            if (nuk + rows(pc) > rows(ukr)) {
+                ukr = ukr \ J(rows(ukr), 1, .)
+                ukc = ukc \ J(rows(ukc), 1, .)
+            }
+            if (rows(pc)) {
+                ukr[|nuk + 1 \ nuk + rows(pc)|] = J(rows(pc), 1, ns)
+                ukc[|nuk + 1 \ nuk + rows(pc)|] = pc
+                nuk = nuk + rows(pc)
+            }
+            ract[r] = 0
+            nact--
+            nza = nza - rcnt[r]
+            cact[c] = 0
+            ccnt[pc] = ccnt[pc] :- 1
+            ccnt[c] = 0
+            _cge_slu_spush(sst, nss, pc, ccnt, cact, cbad)
+            continue
+        }
+        // the active rows left go to the dense block, with the columns left,
+        // once they number 4,000 or fewer, but 100 or more, and at least a
+        // fifth of their entries are in the pattern (from version 0.50.1):
+        // the elimination fills them in, so that its cost in Mata grows with
+        // the cube of their number, which Mata's dense LU factorises faster.
+        // In the 3,418 equations of the reduced system of a model from a SAM
+        // with 200 activities, the last 450 had a fifth of their entries and
+        // made nine tenths of the elimination's work
+        if (nact >= 100 & nact <= 4000 & nza >= 0.2 * nact^2) break
         // the columns that can take a pivot: active, with entries in active
         // rows, and not found to be zero there
         if (age >= 16 | !rows(pool)) {
@@ -4835,11 +4898,24 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
         best = .
         bc = br = 0
         bv = 0
+        // the candidates in order of the least cost they could give, from
+        // their row with the fewest entries (from version 0.50.1): once that
+        // exceeds the best cost found, the others are not searched for their
+        // values, which cannot give a lower cost; a tie is still searched
+        lbs = J(rows(cand), 1, .)
         for (t = 1; t <= rows(cand); t++) {
+            cj = (*CR[cand[t]])[|1 \ clen[cand[t]]|]
+            rows_ = select(cj, ract[cj])
+            if (rows(rows_) & cols(rows_)) lbs[t] = (min(rcnt[rows_]) - 1) * (cmin - 1)
+        }
+        co = order(lbs, 1)
+        for (tt = 1; tt <= rows(cand); tt++) {
+            t = co[tt]
+            if (lbs[t] >= .) continue
+            if (lbs[t] > best) break
             c = cand[t]
             cj = (*CR[c])[|1 \ clen[c]|]
             rows_ = select(cj, ract[cj])
-            if (!cols(rows_)) continue
             a = J(rows(rows_), 1, 0)
             for (i = 1; i <= rows(rows_); i++) {
                 pos = selectindex(*RC[rows_[i]] :== c)
@@ -4883,44 +4959,45 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
         if (nuk + rows(pc) > rows(ukr)) {
             ukr = ukr \ J(rows(ukr), 1, .)
             ukc = ukc \ J(rows(ukc), 1, .)
-            F.uv = F.uv \ J(rows(F.uv), 1, .)
         }
         if (rows(pc)) {
             ukr[|nuk + 1 \ nuk + rows(pc)|] = J(rows(pc), 1, ns)
             ukc[|nuk + 1 \ nuk + rows(pc)|] = pc
-            F.uv[|nuk + 1 \ nuk + rows(pc)|] = pv
             nuk = nuk + rows(pc)
         }
-        // the other active rows of the pivot column are updated
+        // the other active rows of the pivot column are updated, the columns
+        // of each row marked by a number of their own, so that the marks need
+        // no clearing (from version 0.50.1; the multipliers, which
+        // _cge_slu_factor finds again, are not kept)
         for (i = 1; i <= rows(rb); i++) {
             t = rb[i]
             if (t == r) continue
             cols = *RC[t]
-            vals = *RV[t]
             m = ab[i] / piv
             if (nlk == rows(lk)) {
                 lk = lk \ J(rows(lk), 1, .)
                 li = li \ J(rows(li), 1, .)
-                lm = lm \ J(rows(lm), 1, .)
             }
             nlk++
             lk[nlk] = t
             li[nlk] = ns
-            lm[nlk] = m
-            W[cols] = vals
-            mark[cols] = J(rows(cols), 1, 1)
+            stamp++
+            W[cols] = *RV[t]
+            mark[cols] = J(rows(cols), 1, stamp)
             W[pc] = W[pc] - m :* pv
             // the columns that gain the row
-            extra = select(pc, !mark[pc])
+            extra = select(pc, mark[pc] :!= stamp)
             // select() gives 0 x 0 when nothing is selected
             if (!cols(extra)) extra = J(0, 1, .)
             newc = cols \ extra
             newc = select(newc, newc :!= c)
             if (!cols(newc)) newc = J(0, 1, .)
             newv = W[newc]
-            W[cols] = J(rows(cols), 1, 0)
-            W[pc] = J(rows(pc), 1, 0)
-            mark[cols] = J(rows(cols), 1, 0)
+            nza = nza + rows(newc) - rows(cols)
+            // W is zero again on the row's columns and the pivot row's,
+            // which are newc and the pivot column
+            W[newc] = J(rows(newc), 1, 0)
+            W[c] = 0
             RC[t] = &(newc :+ 0)
             RV[t] = &(newv :+ 0)
             rcnt[t] = rows(newc)
@@ -4935,9 +5012,11 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
         // the pivot row and column leave the active matrix
         ract[r] = 0
         nact--
+        nza = nza - rows(pc)
         cact[c] = 0
         ccnt[pc] = ccnt[pc] :- 1
         ccnt[c] = 0
+        _cge_slu_spush(sst, nss, pc, ccnt, cact, cbad)
     }
     lk = (nlk ? lk[|1 \ nlk|] : J(0, 1, .))
     li = (nlk ? li[|1 \ nlk|] : J(0, 1, .))
@@ -5003,6 +5082,21 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
     F.nnzl = nl
     F.nnzu = nu + ns
     F.ok = 1
+}
+
+// The columns of pc left with one active entry, pushed on the stack sst (the
+// first nss in use), which grows when full (from version 0.50.1)
+void _cge_slu_spush(real colvector sst, real scalar nss, real colvector pc, real colvector ccnt,
+                    real colvector cact, real colvector cbad)
+{
+    real colvector nw
+    if (!rows(pc)) return
+    nw = select(pc, (ccnt[pc] :== 1) :& cact[pc] :& !cbad[pc])
+    // nothing selected: 0 x 1, or 0 x 0 from a 1 x 1
+    if (!rows(nw) | !cols(nw)) return
+    if (nss + rows(nw) > rows(sst)) sst = sst \ J(max((rows(sst), rows(nw))), 1, .)
+    sst[|nss + 1 \ nss + rows(nw)|] = nw
+    nss = nss + rows(nw)
 }
 
 // The values of the factors for matrix (cp, ri, vv), whose pattern F was

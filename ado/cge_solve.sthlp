@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.42.0  30oct2026}{...}
+{* *! version 0.50.1  17nov2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -162,6 +162,9 @@ reduced one. Both give the same solution; {opt full} is for checks.
 Newton's steps for this solve, the sparse or the dense LU, in place of that of
 {helpb cge_options}. The sparse LU holds systems far larger than the dense one,
 the full system of large models among them; both give the same solution.
+Without either, and without a setting of {helpb cge_options}, the solve takes
+the sparse LU for systems of 1,000 equations or more whose Jacobian is sparse
+and the dense LU for the others (from version 0.50.0; before, the dense LU).
 
 {phang}
 {opt steps(#)} applies the shock in {it:#} equal steps. The default, 0,

@@ -5,7 +5,8 @@
 * the reduced and the full system, constraints, user equations, a dynamic
 * run, the optimiser, a loop, and standalone models of one equation and of
 * a single dense row; from version 0.50.0, the choice of linsolver(auto), the
-* default
+* default; from version 0.50.1, matrices that fill in, whose last rows go to
+* the dense block
 
 version 13.0
 quietly do helpers_reference.do
@@ -73,6 +74,19 @@ foreach c in "30 0.15 1 0" "120 0.04 2 0.2" "300 0.015 3 0.3" "600 0.006 4 0.4" 
     display as text "n = `1': against the dense solve " as result %9.2e scalar(e1) as text ", refactorised " as result %9.2e scalar(e2)
     assert scalar(rk) == `1'
     assert scalar(e1) < 1e-9 & scalar(e2) < 1e-9
+}
+* a matrix that fills in as it is eliminated: the active rows left go to the
+* dense block once 4,000 or fewer, but 100 or more, are left and a fifth of
+* their entries are in the pattern (from version 0.50.1); a matrix nearly full
+* from the start goes to it whole
+foreach c in "400 0.03 5 0" "150 0.9 6 0" {
+    tokenize `c'
+    mata: E = _ts_case(`1', `2', `3', `4'); st_numscalar("e1", E[1]); st_numscalar("e2", E[2]); st_numscalar("rk", E[3]); st_numscalar("ns", E[4])
+    display as text "n = `1', density `2': against the dense solve " as result %9.2e scalar(e1) as text ", refactorised " as result %9.2e scalar(e2) as text ", sparse block " as result scalar(ns)
+    assert scalar(rk) == `1'
+    assert scalar(e1) < 1e-9 & scalar(e2) < 1e-9
+    assert scalar(ns) < `1'
+    if `2' > 0.5 assert scalar(ns) == 0
 }
 * rows with many entries, set apart in the dense block, and pairs of rows
 * that cancel: the second row of each pair is 0.7 times the first, with an

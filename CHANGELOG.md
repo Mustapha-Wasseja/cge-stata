@@ -5,6 +5,39 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.50.1
+
+Version 0.50.1 speeds up three to four times the analysis of the sparse LU,
+which chooses its pivot order once for each model, and about halves the time
+of its factorisations of models from a SAM. The analysis spent most of its
+time where little was to be done: each column with one entry, which is its
+own pivot and leaves no row to update, went through the search of the pool
+and the candidates, at about a millisecond a column in Mata, so that the
+10,000 such columns of the full system of a model from a SAM with 120
+activities, or the 20,000 of as many equations of one term each, took
+seconds; they are now taken at once from a stack. And in the reduced system
+of a model from a SAM with 200 activities the elimination filled in its last
+450 rows and columns, which then had a fifth of their entries and made nine
+tenths of its work, row by row; the rows left now join the dense block once
+100 to 4,000 remain with a fifth of their entries in the pattern, and Mata's
+dense LU factorises them. The candidate columns are also searched in order
+of the least cost they allow, and no further once it exceeds the best.
+
+In StataNow 19.5 on a laptop, in alternate runs of the two versions:
+
+| System | Equations | Analysis, before (s) | Now (s) | Solve, before (s) | Now (s) |
+|---|---:|---:|---:|---:|---:|
+| equations of one term each | 20,000 | 2.0 to 2.4 | 0.6 | 2.7 to 3.0 | 1.6 |
+| full system of a model from a SAM, 120 activities | 10,555 | 1.3 to 1.4 | 0.3 to 0.4 | 5.3 | 4.4 to 4.6 |
+| reduced system, 200 activities | 3,418 | 3.0 to 3.3 | 0.7 to 0.8 | 8.1 to 8.9 | 5.9 to 6.2 |
+
+The three factorisations of the reduced system took 1.7 to 1.9 seconds and
+take 0.7. The solutions agree with those of the dense LU to the solver's
+tolerance; the pivot order changes, so that the last digits of a solution
+may differ from those of version 0.50.0. The help of cge, cge_options and
+cge_set, and the manual, describe the large models the package now builds
+and solves.
+
 ## 0.50.0
 
 Version 0.50.0 solves large systems with a sparse Jacobian far faster, by
