@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.7.1  26oct2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -30,6 +30,15 @@ default closure and checks that the base solves every equation of the model
 equations ({helpb cge_equation}) need not hold at the base, where they act as
 shocks; from version 0.7.1 replication leaves them out, and a note says when
 they do not hold.
+
+{pstd}
+Before replication, calibration checks the identities that a balanced SAM
+implies, such as composite supply equal to demand for each commodity, within
+1e-9 of the largest cell, and stops with error 459 if one fails. From version
+0.51.0 the message names the account with the largest difference and gives it;
+when the SAM itself balances only to the rounding of its cells, as a published
+SAM may, the message says so and suggests {helpb cge_balance} before
+{helpb cge_map}, as in the example of {helpb cge} on the Malawi SAM.
 
 {pstd}
 Calibrating again starts the model afresh from the mapped SAM: shocks, swaps,

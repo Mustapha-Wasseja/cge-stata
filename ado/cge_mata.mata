@@ -295,7 +295,7 @@ struct cge_jpat {
 // Package version; it must equal the version in cge.ado
 string scalar _cge_version()
 {
-    return("0.50.1")
+    return("0.51.0")
 }
 
 // =====================================================================
@@ -612,16 +612,123 @@ void _cge_vlabels(struct cge_model scalar M, real scalar k, string colvector e1,
 // SAM input and account mapping (model_spec.md, Section 7.0)
 // =====================================================================
 
+// A total row and a total column (from version 0.51.0). SAMs are often
+// published with a row and a column of totals, labelled total or totals in
+// any case: each is checked against the sums of the cells, within 1e-4 of
+// the largest total (totals rounded to fewer digits than the cells), and left
+// out. A row or column so labelled that is not the sum of the cells is an
+// error. rlab, clab and S lose them; returns the rows kept. Blank cells,
+// missing in S, count as zero.
+real colvector _cge_sam_totals(string colvector rlab, string colvector clab, real matrix S)
+{
+    real colvector it, jt, keepr, keepc, d, kk
+    real matrix X
+    real scalar tol, k
+    it = selectindex(_cge_istotal(rlab))
+    jt = selectindex(_cge_istotal(clab))
+    keepr = 1::rows(S)
+    if (!rows(it) | !cols(it)) it = J(0, 1, .)
+    if (!rows(jt) | !cols(jt)) jt = J(0, 1, .)
+    if (!rows(it) & !rows(jt)) return(keepr)
+    if (rows(it) > 1) _cge_fail("more than one row is labelled total", 459)
+    if (rows(jt) > 1) _cge_fail("more than one column is labelled total", 459)
+    keepc = (1::cols(S))
+    if (rows(it)) keepr = select(keepr, keepr :!= it[1])
+    if (rows(jt)) keepc = select(keepc, keepc :!= jt[1])
+    if (!rows(keepr) | !rows(keepc)) _cge_fail("the SAM has totals but no accounts", 459)
+    X = editmissing(S[keepr, keepc], 0)
+    if (rows(it)) {
+        d = (editmissing(S[it[1], keepc], 0) - colsum(X))'
+        tol = 1e-4 * max((1, max(abs(editmissing(S[it[1], keepc], 0)))))
+        kk = selectindex(abs(d) :== max(abs(d)))
+        k = kk[1]
+        if (abs(d[k]) > tol) {
+            _cge_fail(sprintf("the row labelled %s is not the sum of the rows of the accounts (in column %s it differs by %g); rename it if it is an account",
+                              rlab[it[1]], clab[keepc[k]], d[k]), 459)
+        }
+        printf("{txt}Total row checked against the sums of the columns (largest difference {res}%9.3e{txt}) and left out\n", abs(d[k]))
+    }
+    if (rows(jt)) {
+        d = editmissing(S[keepr, jt[1]], 0) - rowsum(X)
+        tol = 1e-4 * max((1, max(abs(editmissing(S[keepr, jt[1]], 0)))))
+        kk = selectindex(abs(d) :== max(abs(d)))
+        k = kk[1]
+        if (abs(d[k]) > tol) {
+            _cge_fail(sprintf("the column labelled %s is not the sum of the columns of the accounts (in row %s it differs by %g); rename it if it is an account",
+                              clab[jt[1]], rlab[keepr[k]], d[k]), 459)
+        }
+        printf("{txt}Total column checked against the sums of the rows (largest difference {res}%9.3e{txt}) and left out\n", abs(d[k]))
+    }
+    S = S[keepr, keepc]
+    rlab = rlab[keepr]
+    clab = clab[keepc]
+    return(keepr)
+}
+
+// 1 for labels that mark totals: total or totals, in any case
+real colvector _cge_istotal(string colvector lab)
+{
+    string colvector l
+    l = strlower(strtrim(lab))
+    return((l :== "total") :| (l :== "totals"))
+}
+
+// The string variable of the account labels when there are several (from
+// version 0.51.0): the one with the most values that are, as names, those of
+// the numeric variables, as the codes of a SAM published with a column of
+// descriptions are; the first if none has any
+string scalar _cge_sam_labvar(string scalar strvars, string scalar numvars)
+{
+    string rowvector sv, nv
+    string colvector v
+    transmorphic A
+    real scalar k, i, cnt, best, bk
+    sv = tokens(strvars)
+    nv = tokens(numvars)
+    A = asarray_create("string", 1, max((1, cols(nv))))
+    for (k = 1; k <= cols(nv); k++) asarray(A, nv[k], k)
+    best = 0
+    bk = 1
+    for (k = 1; k <= cols(sv); k++) {
+        v = st_sdata(., sv[k])
+        cnt = 0
+        for (i = 1; i <= rows(v); i++) cnt = cnt + asarray_contains(A, _cge_name(strtrim(v[i])))
+        if (cnt > best) {
+            best = cnt
+            bk = k
+        }
+    }
+    return(sv[bk])
+}
+
+// The path of a SAM shipped with the package (from version 0.51.0): a file
+// name without a folder that is a section of the package's SAM library,
+// written to a file that lasts the session; "" for any other name
+string scalar _cge_sam_shipped(string scalar name)
+{
+    string scalar d, b, out
+    pathsplit(name, d, b)
+    if (d != "" | b == "") return("")
+    b = strlower(b)
+    if (!_cge_bundle_has("cge_sam_library.txt", b)) return("")
+    out = _cge_bundle_tmp(b)
+    _cge_bundle_get("cge_sam_library.txt", b, out)
+    return(out)
+}
+
 void _cge_sam(string scalar labelvar, string scalar accounts)
 {
     string colvector labels, names
     real matrix S
+    real colvector keep
     real scalar nmiss, k
 
     labels = st_sdata(., labelvar)
     names = tokens(accounts)'
     if (rows(names) == 0) _cge_fail("no numeric account variables found", 459)
     S = st_data(., accounts)
+    // A total row and a total column (from version 0.51.0)
+    keep = _cge_sam_totals(labels, names, S)
     if (rows(S) != cols(S)) {
         errprintf("SAM is not square: %f rows and %f account columns\n", rows(S), cols(S))
         exit(459)
@@ -641,7 +748,8 @@ void _cge_sam(string scalar labelvar, string scalar accounts)
                    labels[k], names[k])
         }
         labels = names
-        st_sstore(., labelvar, labels)
+        // the rows of the accounts, without a total row
+        st_sstore(keep, labelvar, labels)
     }
     nmiss = missing(S)
     if (nmiss) S = editmissing(S, 0)
@@ -819,52 +927,99 @@ real scalar _cge_csv_ncols(string scalar fn)
     return(cols(_cge_split(subinstr(s, char(13), ""), ",", `""""')) - 1)
 }
 
-// Reads a wide CSV SAM directly (Section 1, form 2)
-void _cge_sam_csv(string scalar fn)
+// Reads a wide CSV SAM directly (Section 1, form 2). From version 0.51.0
+// the leading fields of the first row that are text, neither numbers nor
+// blank, are columns of labels, such as codes and descriptions: the labels
+// are the column headed lab or else the column whose fields are the column
+// labels of the accounts, and the others are left out; a total row and a
+// total column are checked and left out (_cge_sam_totals)
+void _cge_sam_csv(string scalar fn, | string scalar lab)
 {
-    string colvector lines, rlab
+    string colvector lines, rlab, clab
     string rowvector head, f
+    string matrix T
     real matrix S
     real rowvector v, blank, bad
-    real scalar n, k, nmiss
+    real scalar n, k, nmiss, m, nr, lc, cnt, best, j
+    transmorphic A
 
+    if (args() < 2) lab = ""
     lines = _cge_split(_cge_readfile(fn), char(10), "")'
     lines = select(lines, strtrim(lines) :!= "")
     if (rows(lines) < 2) _cge_fail(fn + " has no SAM rows", 459)
     head = _cge_unquote(_cge_split(lines[1], ",", `""""'))
-    n = cols(head) - 1
-    if (n < 1) _cge_fail(fn + " has no account columns", 459)
-    if (rows(lines) - 1 != n) {
-        errprintf("SAM is not square: %f rows and %f account columns\n", rows(lines) - 1, n)
-        exit(459)
+    // the columns of labels: the leading text fields of the first row
+    f = _cge_unquote(_cge_split(lines[2], ",", `""""'))
+    m = 0
+    while (m < cols(f) - 1) {
+        if (f[m + 1] == "" | f[m + 1] == ".") break
+        if (strtoreal(f[m + 1]) < .) break
+        m++
     }
-    S = J(n, n, 0)
-    rlab = J(n, 1, "")
-    nmiss = 0
-    for (k = 1; k <= n; k++) {
+    if (m == 0) m = 1
+    n = cols(head) - m
+    if (n < 1) _cge_fail(fn + " has no account columns", 459)
+    nr = rows(lines) - 1
+    S = J(nr, n, .)
+    T = J(nr, m, "")
+    for (k = 1; k <= nr; k++) {
         f = _cge_unquote(_cge_split(lines[k + 1], ",", `""""'))
-        if (cols(f) != n + 1) {
+        if (cols(f) != n + m) {
             _cge_fail("line " + strofreal(k + 1) + " of " + fn + " has " + strofreal(cols(f)) +
-                      " fields; the first line has " + strofreal(n + 1), 459)
+                      " fields; the first line has " + strofreal(n + m), 459)
         }
-        rlab[k] = f[1]
-        f = f[|2 \ n + 1|]
+        T[k, .] = f[|1 \ m|]
+        f = f[|m + 1 \ n + m|]
         blank = (f :== "") :| (f :== ".")
         v = strtoreal(f)
         bad = selectindex(!blank :& (v :>= .))
         if (cols(bad)) {
-            _cge_fail("row " + rlab[k] + ", column " + head[bad[1] + 1] + ": " + f[bad[1]] +
+            _cge_fail("row " + T[k, 1] + ", column " + head[bad[1] + m] + ": " + f[bad[1]] +
                       " is not a number", 459)
         }
-        nmiss = nmiss + sum(blank)
-        S[k, .] = editmissing(v, 0)
+        S[k, .] = v
     }
-    for (k = 1; k <= n; k++) {
-        if (rlab[k] != head[k + 1]) {
-            _cge_fail("row " + strofreal(k) + " is labelled " + rlab[k] + " but column " + strofreal(k) +
-                      " is labelled " + head[k + 1] + "; row and column labels must agree, in the same order", 459)
+    clab = head[|m + 1 \ n + m|]'
+    // the column of labels
+    lc = 1
+    if (lab != "") {
+        lc = 0
+        for (j = 1; j <= m; j++) if (head[j] == lab | _cge_name(head[j]) == lab) lc = j
+        if (!lc) _cge_fail("labels(" + lab + "): no column of labels is headed " + lab, 111)
+    }
+    else if (m > 1) {
+        A = asarray_create("string", 1, max((1, n)))
+        for (k = 1; k <= n; k++) asarray(A, clab[k], k)
+        best = 0
+        for (j = 1; j <= m; j++) {
+            cnt = 0
+            for (k = 1; k <= nr; k++) cnt = cnt + asarray_contains(A, T[k, j])
+            if (cnt > best) {
+                best = cnt
+                lc = j
+            }
         }
     }
+    rlab = T[., lc]
+    if (m > 1) {
+        printf("{txt}Account labels from the column headed {res}%s{txt}; text in %s left out\n", head[lc],
+               (m == 2 ? "the column headed " : "the columns headed ") +
+               invtokens(select(head[|1 \ m|], (1..m) :!= lc), ", "))
+    }
+    (void) _cge_sam_totals(rlab, clab, S)
+    n = rows(clab)
+    if (rows(rlab) != n) {
+        errprintf("SAM is not square: %f rows and %f account columns\n", rows(rlab), n)
+        exit(459)
+    }
+    for (k = 1; k <= n; k++) {
+        if (rlab[k] != clab[k]) {
+            _cge_fail("row " + strofreal(k) + " is labelled " + rlab[k] + " but column " + strofreal(k) +
+                      " is labelled " + clab[k] + "; row and column labels must agree, in the same order", 459)
+        }
+    }
+    nmiss = missing(S)
+    S = editmissing(S, 0)
     _cge_sam_start(_cge_names(rlab), S, nmiss, "SAM read")
 }
 
@@ -1574,8 +1729,9 @@ real matrix _cge_ras(string colvector L, real matrix S0, real matrix fixed, stri
                      real scalar it, real colvector t)
 {
     real matrix free, P, N, F, Pt, Nt
-    real colvector given, rowfree, colfree, frow, fcol, u, v, r, s, rt, ct, hist, implied
-    real scalar n, scale, k, err
+    real colvector given, rowfree, colfree, frow, fcol, u, v, r, s, rt, ct, hist, implied, pinned, comp, nzr, nzc
+    real colvector members, vals, y
+    real scalar n, scale, k, err, a, b
 
     n = rows(L)
     scale = max((1, max(abs(S0))))
@@ -1595,6 +1751,7 @@ real matrix _cge_ras(string colvector L, real matrix S0, real matrix fixed, stri
     colfree = (colsum(free)' :> 0)
     frow = rowsum(F)
     fcol = colsum(F)'
+    pinned = given
     // An account whose row (or column) cannot change has that total as its target
     for (k = 1; k <= n; k++) {
         implied = J(0, 1, .)
@@ -1610,6 +1767,39 @@ real matrix _cge_ras(string colvector L, real matrix S0, real matrix fixed, stri
             _cge_fail(L[k] + ": the given total differs from the total of cells that cannot change", 459)
         }
         t[k] = implied[1]
+        pinned[k] = 1
+    }
+    // Accounts whose totals are tied (from version 0.51.0): the column of
+    // account a has one cell, in the row of account b, and that is the only
+    // cell of b's row, as for a commodity produced by one activity and neither
+    // imported nor taxed, and that activity. The two totals are one cell, so
+    // their targets must be equal: the accounts of each chain of such pairs
+    // take the total given for one of them or implied by cells that cannot
+    // change, or else the average of their targets (before, the targets
+    // differed by the rounding of the SAM, and RAS could not meet them)
+    nzr = rowsum(S0 :!= 0)
+    nzc = colsum(S0 :!= 0)'
+    comp = 1::n
+    for (a = 1; a <= n; a++) {
+        if (nzc[a] != 1) continue
+        y = selectindex(S0[., a] :!= 0)
+        b = y[1]
+        if (b == a | nzr[b] != 1) continue
+        if (comp[a] != comp[b]) comp[selectindex(comp :== comp[b])] = J(sum(comp :== comp[b]), 1, comp[a])
+    }
+    for (k = 1; k <= n; k++) {
+        if (comp[k] != k) continue
+        members = selectindex(comp :== k)
+        if (rows(members) < 2) continue
+        vals = select(t[members], pinned[members])
+        if (rows(vals) & cols(vals)) {
+            if (max(vals) - min(vals) > tol * scale) {
+                _cge_fail("accounts " + invtokens(L[members]') + " must have equal totals, since one cell makes " +
+                          "both, but the totals given or implied by cells that cannot change differ", 459)
+            }
+            t[members] = J(rows(members), 1, vals[1])
+        }
+        else t[members] = J(rows(members), 1, mean(t[members]))
     }
     u = t - frow
     v = t - fcol
@@ -2967,6 +3157,27 @@ real scalar _cge_maxres_part(struct cge_model scalar M, struct cge_par scalar p,
 // Calibration (model_spec.md, Section 7)
 // =====================================================================
 
+// A balance check of the calibration that fails (from version 0.51.0): the
+// account with the largest difference and, when the SAM itself balances only
+// to more than the calibration allows (1e-9 of the largest cell), as a SAM
+// whose cells are rounded does, the remedy. cge_map's check of balance allows
+// 1e-8 of the largest cell, so that such a SAM is mapped before this check
+// stops it (before, the message named no account)
+void _cge_calfail(string scalar what, string colvector labs, real colvector gap, real scalar tol, real matrix S)
+{
+    real colvector k
+    real scalar sg
+    string scalar msg
+    k = selectindex(abs(gap) :== max(abs(gap)))
+    msg = sprintf("%s for %s (difference %g; calibration allows %g, 1e-9 of the largest cell)", what,
+                  labs[k[1]], gap[k[1]], tol)
+    sg = max(abs(rowsum(S) - colsum(S)'))
+    if (sg > tol) {
+        msg = msg + sprintf(": the SAM balances only to %g, as a SAM whose cells are rounded may; balance it, for example with cge_balance, before cge_map", sg)
+    }
+    _cge_fail(msg, 459)
+}
+
 void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, string scalar fqname,
                     string scalar s_ie, string scalar s_fr, string scalar s_a, string scalar s_hc,
                     string scalar s_hf, string scalar s_he, | string scalar s_vc, string scalar s_debt,
@@ -3032,7 +3243,8 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     MAKE0 = _cge_sub(S, M.iA, M.iC)                 // MAKE0[a, c]: output of c by a
     HOME0 = _cge_sub(S, M.iA, M.iH)                 // HOME0[a, h]: home consumption (13.1)
     if (max(abs(rowsum(MAKE0) + rowsum(HOME0) - QA0)) > tol) {
-        _cge_fail("activity output does not equal its sales to commodities and home consumption", 459)
+        _cge_calfail("activity output does not equal its sales to commodities and home consumption",
+                     M.labels[M.iA], rowsum(MAKE0) + rowsum(HOME0) - QA0, tol, S)
     }
     _cge_fail_if(rowsum(HOME0 :< -tol), M.labels[M.iA], "negative home consumption of the output of", 459)
     QAM0 = QA0 - rowsum(HOME0)
@@ -3151,7 +3363,7 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     p.qg = vg :/ (1 :+ tv)
     p.qinv = vinv :/ (1 :+ tv)
     demand = rowsum(QINT0) + rowsum(QH0) + p.qg + p.qinv + QT0 + QER0 + QSHI0
-    if (max(abs(QQ0 - demand)) > tol) _cge_fail("composite supply does not equal domestic demand for some commodity", 459)
+    if (max(abs(QQ0 - demand)) > tol) _cge_calfail("composite supply does not equal domestic demand", M.labels[M.iC], QQ0 - demand, tol, S)
 
     // 7.3 Production. Commodities in a nest of value added leave
     // intermediate input (from version 0.5.1, Section 17.2)
@@ -3272,7 +3484,9 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     // Taxes on factor income (from version 0.5.0), taken before distribution
     TFY = ((M.iFY > 0 & M.iFY < .) ? S[M.iFY, M.iF']' : J(nF, 1, 0))
     p.tfy = TFY :/ YF0
-    if (max(abs(colsum(YIF0)' + TFY - YF0)) > tol) _cge_fail("factor income paid out does not equal factor income received", 459)
+    if (max(abs(colsum(YIF0)' + TFY - YF0)) > tol) {
+        _cge_calfail("factor income paid out does not equal factor income received", M.labels[M.iF], colsum(YIF0)' + TFY - YF0, tol, S)
+    }
     // Health insurance contributions as a rate on factor income
     if (M.ishi) {
         p.tshi = YIF0[M.nI, .]' :/ (YF0 + (YF0 :== 0))
@@ -3296,7 +3510,9 @@ void _cge_calibrate(string scalar s_va, string scalar s_q, string scalar s_t, st
     if (max((abs(DY0) :<= tol) :* (gross :> tol))) {
         _cge_fail("an institution makes transfers or consumes but has no income after direct taxes and savings", 459)
     }
-    if (max(abs(colsum(TR)' + TROW + cons - DY0)) > tol) _cge_fail("institution payments do not equal income", 459)
+    if (max(abs(colsum(TR)' + TROW + cons - DY0)) > tol) {
+        _cge_calfail("institution payments do not equal income", M.labels[iD], colsum(TR)' + TROW + cons - DY0, tol, S)
+    }
     safe = DY0 :* (abs(DY0) :> tol) + (abs(DY0) :<= tol)
     p.shii = TR :/ safe'
     p.shir = TROW :/ safe
@@ -4709,6 +4925,37 @@ struct cge_slu {
     // the row and column scales of the matrix factorised (from version
     // 0.33.0, cge_options, scaling(ruiz)); empty without scaling
     real colvector  dr, dc
+    // the plan of the factorisation and of the solves for the pattern
+    // analysed (from version 0.51.0, _cge_slu_plan; gok 1 once made): the
+    // columns of the sparse block with no U, factorised together (gz0; gzd
+    // the positions of their pivots in the pattern; gzl their entries of L,
+    // as positions in lv, with gza the positions of those entries in the
+    // pattern and gzk the column of each, as a position in gz0), the other
+    // columns (gz1), and the solves with L and U by levels: their entries in
+    // the order of the levels of their rows (glo, guo: positions in lv and
+    // uv; glc, guc: the rows they take; gue: the row of each entry of U), the
+    // panels of their rows (glp, gup: first and last entry; glw, guw: the
+    // rows) and the panels of each level (glq, guq: first and last panel).
+    // The entries of the other columns in the sparse block (gp: positions in
+    // the pattern; gr: rows; gs, gn: first entry and number for each column
+    // of gz1) and of the dense block (g12, g21, g22: positions of the entries
+    // of A12, of A21 by rows and of A22; k22: places in A22 as a vector), so
+    // that a factorisation takes their values by position. Levels are used
+    // for L (gll 1) and for U (gul 1) when there are at most a third as many
+    // as columns with entries; otherwise the solve loops over those columns
+    // (gkl, gku, in the order of the solve), as a chain of rows would make a
+    // level of each
+    real scalar     gok, gll, gul
+    real colvector  gp, gr, gs, gn, g12, g21, g22, k22, gkl, gku
+    // the values of the matrix factorised, on the pattern analysed, and the
+    // column of each entry, the entries by rows (aord, apan) and the rows with
+    // entries (arow), for the residuals of iterative refinement (from version
+    // 0.51.0)
+    real colvector  av, acol, aord, arow
+    real matrix     apan
+    real colvector  gz0, gzd, gzl, gza, gzk, gz1
+    real colvector  glo, glc, glw, guo, guc, gue, guw
+    real matrix     glp, glq, gup, guq
 }
 
 // Compressed columns of the n x n matrix of entries (r, c, v): column starts
@@ -4760,6 +5007,8 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
     F.ok = 0
     F.acp = cp
     F.ari = ri
+    // the plan of the last pattern no longer holds (from version 0.51.0)
+    F.gok = 0
     big = 1e300
     // the rows of the active matrix, unsorted, with their values; the
     // columns, the rows they hold (with room to grow, clen in use, rows
@@ -5082,6 +5331,294 @@ void _cge_slu_analyse(struct cge_slu scalar F, real colvector cp, real colvector
     F.nnzl = nl
     F.nnzu = nu + ns
     F.ok = 1
+    _cge_slu_plan(F)
+}
+
+// The plan of the factorisation and of the solves with its factors, for the
+// pattern analysed (from version 0.51.0; struct cge_slu). The sparse block's
+// columns with no U, whose values do not depend on other columns, are
+// factorised together, by vector operations. The solves with L and U go by
+// levels: a row of the forward solve with L, or of the backward solve with
+// U, is solved once the rows it takes are, so that the rows of each level
+// are solved together. The levels of the factors of CGE models are few (25
+// for a SAM model of 10,555 equations), and the solves, which before went
+// row by row, take a few vector operations per level.
+void _cge_slu_plan(struct cge_slu scalar F)
+{
+    real colvector pr, pc, mark, sel, colL, colU, keyL, keyA, posA, cl, cu, kl, o
+    real matrix info
+    real scalar n, ns, nd, nz0, nlv, nuv, ok
+    n = F.n
+    ns = F.ns
+    nd = n - ns
+    nlv = rows(F.lv)
+    nuv = rows(F.uv)
+    F.gz0 = F.gzd = F.gzl = F.gza = F.gzk = F.gz1 = J(0, 1, .)
+    F.glo = F.glc = F.glw = F.guo = F.guc = F.gue = F.guw = J(0, 1, .)
+    F.gp = F.gr = F.gs = F.gn = F.g12 = F.g21 = F.g22 = F.k22 = F.gkl = F.gku = J(0, 1, .)
+    F.acol = F.aord = F.arow = J(0, 1, .)
+    F.apan = J(0, 2, .)
+    F.gll = F.gul = 0
+    F.r12 = F.c12 = F.r21 = F.c21 = J(0, 1, .)
+    F.i21 = J(0, 2, .)
+    F.glp = F.glq = F.gup = F.guq = J(0, 2, .)
+    F.gok = 1
+    if (!n) return
+    // the entries of the pattern: their columns and, by rows, for the
+    // product of the matrix and a vector
+    F.acol = floor((_cge_slu_lin(F.acp, F.ari, n) :- 1) :/ n) :+ 1
+    if (rows(F.ari)) {
+        F.aord = order(F.ari, 1)
+        F.apan = panelsetup(F.ari[F.aord], 1)
+        F.arow = F.ari[F.aord[F.apan[., 1]], 1]
+    }
+    // the entries of the pattern in the order of the factors
+    pr = F.pinv[F.ari, 1]
+    pc = F.qinv[F.acol, 1]
+    // the dense block: A12, A21 by rows, A22
+    if (nd) {
+        sel = selectindex((pr :<= ns) :& (pc :> ns))
+        if (rows(sel) & cols(sel)) {
+            F.g12 = sel
+            F.r12 = pr[sel]
+            F.c12 = pc[sel] :- ns
+        }
+        sel = selectindex((pr :> ns) :& (pc :<= ns))
+        if (rows(sel) & cols(sel)) {
+            o = order((pr[sel], pc[sel]), (1, 2))
+            F.g21 = sel[o]
+            F.r21 = pr[F.g21] :- ns
+            F.c21 = pc[F.g21]
+            F.i21 = panelsetup(F.r21, 1)
+        }
+        sel = selectindex((pr :> ns) :& (pc :> ns))
+        if (rows(sel) & cols(sel)) {
+            F.g22 = sel
+            F.k22 = (pc[sel] :- ns :- 1) :* nd :+ (pr[sel] :- ns)
+        }
+    }
+    if (!ns) return
+    // the column of each entry of L and of U (both stored by columns)
+    colL = J(nlv, 1, .)
+    if (nlv) {
+        cl = selectindex(F.ll[|1 \ ns|] :> 0)
+        mark = J(nlv, 1, 0)
+        mark[F.ls[cl]] = J(rows(cl), 1, 1)
+        colL = cl[runningsum(mark), 1]
+    }
+    colU = J(nuv, 1, .)
+    if (nuv) {
+        cu = selectindex(F.ul[|1 \ ns|] :> 0)
+        mark = J(nuv, 1, 0)
+        mark[F.us[cu]] = J(rows(cu), 1, 1)
+        colU = cu[runningsum(mark), 1]
+    }
+    // the columns with no U: their pivots and entries of L are entries of
+    // the pattern, since no other column changes them
+    F.gz1 = selectindex(F.ul[|1 \ ns|] :> 0)
+    if (!rows(F.gz1) | !cols(F.gz1)) F.gz1 = J(0, 1, .)
+    F.gz0 = selectindex(F.ul[|1 \ ns|] :== 0)
+    if (!rows(F.gz0) | !cols(F.gz0)) F.gz0 = J(0, 1, .)
+    nz0 = rows(F.gz0)
+    ok = 1
+    if (nz0) {
+        mark = J(ns, 1, 0)
+        mark[F.gz0] = (1::nz0)
+        // the pivots
+        sel = selectindex((pr :== pc) :& (pc :<= ns))
+        if (rows(sel) & cols(sel)) sel = select(sel, mark[pc[sel], 1] :> 0)
+        F.gzd = J(nz0, 1, 0)
+        if (rows(sel) & cols(sel)) F.gzd[mark[pc[sel], 1]] = sel
+        if (any(F.gzd :== 0)) ok = 0
+        // their entries of L, matched with the entries of the pattern below
+        // their pivots; an entry of the pattern without a place in L, or
+        // above a pivot, leaves the columns to the loop
+        if (ok) {
+            sel = selectindex((pc :<= ns) :& (pr :<= ns) :& (pr :!= pc))
+            if (rows(sel) & cols(sel)) sel = select(sel, mark[pc[sel], 1] :> 0)
+            if (!rows(sel) | !cols(sel)) sel = J(0, 1, .)
+            if (rows(sel)) {
+                if (any(pr[sel] :< pc[sel])) ok = 0
+            }
+            kl = J(0, 1, .)
+            if (nlv) kl = selectindex(mark[colL, 1] :> 0)
+            if (!rows(kl) | !cols(kl)) kl = J(0, 1, .)
+            if (ok & rows(kl)) {
+                F.gzl = kl
+                F.gzk = mark[colL[kl], 1]
+                keyL = (colL[kl] :- 1) :* ns :+ F.lr[kl]
+                keyA = J(0, 1, .)
+                if (rows(sel)) keyA = (pc[sel] :- 1) :* ns :+ pr[sel]
+                posA = _cge_slu_match(keyL, keyA)
+                if (sum(posA :> 0) != rows(keyA)) ok = 0
+                F.gza = J(rows(kl), 1, 0)
+                if (any(posA :> 0)) F.gza[selectindex(posA :> 0)] = sel[select(posA, posA :> 0)]
+            }
+            else if (rows(sel)) ok = 0
+        }
+    }
+    if (!ok) {
+        F.gz1 = (1::ns)
+        F.gz0 = F.gzd = F.gzl = F.gza = F.gzk = J(0, 1, .)
+    }
+    // the entries of the other columns in the rows of the sparse block, by
+    // column (those of a column are together in the pattern)
+    F.gs = F.gn = J(rows(F.gz1), 1, 0)
+    if (rows(F.gz1)) {
+        mark = J(ns, 1, 0)
+        mark[F.gz1] = (1::rows(F.gz1))
+        sel = selectindex((pr :<= ns) :& (pc :<= ns))
+        if (rows(sel) & cols(sel)) sel = select(sel, mark[pc[sel], 1] :> 0)
+        if (!rows(sel) | !cols(sel)) sel = J(0, 1, .)
+        if (rows(sel)) {
+            F.gp = sel
+            F.gr = pr[sel]
+            info = panelsetup(pc[sel], 1)
+            F.gs[mark[pc[sel[info[., 1]]], 1]] = info[., 1]
+            F.gn[mark[pc[sel[info[., 1]]], 1]] = info[., 2] - info[., 1] :+ 1
+        }
+    }
+    // the solves by levels
+    if (nlv) _cge_slu_levels(F.lr, colL, ns, 1, F.glo, F.glp, F.glw, F.glq)
+    if (nuv) _cge_slu_levels(F.ur, colU, ns, 0, F.guo, F.gup, F.guw, F.guq)
+    if (nlv) F.glc = colL[F.glo, 1]
+    if (nuv) {
+        F.guc = colU[F.guo, 1]
+        F.gue = F.ur[F.guo, 1]
+    }
+    // levels, or a loop over the columns with entries
+    F.gkl = selectindex(F.ll[|1 \ ns|] :> 0)
+    if (!rows(F.gkl) | !cols(F.gkl)) F.gkl = J(0, 1, .)
+    F.gku = selectindex(F.ul[|1 \ ns|] :> 0)
+    if (!rows(F.gku) | !cols(F.gku)) F.gku = J(0, 1, .)
+    if (rows(F.gku)) F.gku = F.gku[rows(F.gku)::1]
+    F.gll = (rows(F.glq) & 3 * rows(F.glq) <= rows(F.gkl))
+    F.gul = (rows(F.guq) & 3 * rows(F.guq) <= rows(F.gku))
+}
+
+// The positions in b of the keys of a (0 for a key not in b); the keys of
+// each are distinct (from version 0.51.0)
+real colvector _cge_slu_match(real colvector a, real colvector b)
+{
+    real colvector K, T, I, o, out, same
+    real scalar N
+    out = J(rows(a), 1, 0)
+    if (!rows(a) | !rows(b)) return(out)
+    K = a \ b
+    T = J(rows(a), 1, 0) \ J(rows(b), 1, 1)
+    I = (1::rows(a)) \ (1::rows(b))
+    o = order((K, T), (1, 2))
+    K = K[o]
+    T = T[o]
+    I = I[o]
+    N = rows(K)
+    if (N < 2) return(out)
+    // a key of a followed by the same key of b
+    same = selectindex((K[|1 \ N - 1|] :== K[|2 \ N|]) :& (T[|1 \ N - 1|] :== 0) :& (T[|2 \ N|] :== 1))
+    if (rows(same) & cols(same)) out[I[same]] = I[same :+ 1]
+    return(out)
+}
+
+// The order of a triangular solve by levels (from version 0.51.0): entry e
+// of row row[e] takes row src[e], and a row is solved once the rows it takes
+// are: rows taken are before the row in the forward solve with L (fwd 1)
+// and after it in the backward solve with U (fwd 0). Rows without entries
+// are of level 0 and need no step; a row with entries is of level one more
+// than the highest level of the rows it takes, found row by row in the
+// order of the solve. Returns the entries in the order of the levels of
+// their rows, then of the rows (o), the panels of their rows (p: first and
+// last entry; w: the rows) and the panels of each level from 1 (q: first
+// and last panel).
+void _cge_slu_levels(real colvector row, real colvector src, real scalar ns, real scalar fwd, real colvector o,
+                     real matrix p, real colvector w, real matrix q)
+{
+    real colvector lev, o0, w0, s0
+    real matrix p0
+    real scalar t, ne
+    ne = rows(row)
+    o = w = J(0, 1, .)
+    p = q = J(0, 2, .)
+    if (!ne) return
+    o0 = order(row, 1)
+    s0 = src[o0, 1]
+    p0 = panelsetup(row[o0, 1], 1)
+    w0 = row[o0[p0[., 1]], 1]
+    lev = J(ns, 1, 0)
+    if (fwd) {
+        for (t = 1; t <= rows(w0); t++) lev[w0[t]] = max(lev[s0[|p0[t, 1] \ p0[t, 2]|]]) + 1
+    }
+    else {
+        for (t = rows(w0); t >= 1; t--) lev[w0[t]] = max(lev[s0[|p0[t, 1] \ p0[t, 2]|]]) + 1
+    }
+    // one key: the level, then the row
+    o = order(lev[row, 1] :* (ns + 1) :+ row, 1)
+    p = panelsetup(row[o, 1], 1)
+    w = row[o[p[., 1]], 1]
+    q = panelsetup(lev[w, 1], 1)
+}
+
+// L Y = Y for the rows of the sparse block, by levels or else by its columns
+// with entries: Y has ns rows
+void _cge_slu_lsolve(struct cge_slu scalar F, real matrix Y)
+{
+    real colvector v, lr
+    real scalar g, a, b, e0, e1, kk, k
+    if (!rows(F.glo)) return
+    if (!F.gll) {
+        for (kk = 1; kk <= rows(F.gkl); kk++) {
+            k = F.gkl[kk]
+            if (!any(Y[k, .])) continue
+            a = F.ls[k]
+            b = a + F.ll[k] - 1
+            lr = F.lr[|a \ b|]
+            Y[lr, .] = Y[lr, .] - F.lv[|a \ b|] * Y[k, .]
+        }
+        return
+    }
+    v = F.lv[F.glo, 1]
+    for (g = 1; g <= rows(F.glq); g++) {
+        a = F.glq[g, 1]
+        b = F.glq[g, 2]
+        e0 = F.glp[a, 1]
+        e1 = F.glp[b, 2]
+        Y[F.glw[|a \ b|], .] = Y[F.glw[|a \ b|], .] -
+            panelsum(Y[F.glc[|e0 \ e1|], .] :* v[|e0 \ e1|], F.glp[|a, 1 \ b, 2|] :- (e0 - 1))
+    }
+}
+
+// U Y = Y for the rows of the sparse block, by levels: each row divided by
+// its pivot, then the rows it takes subtracted, scaled by that pivot; or by
+// its columns with entries, from the last, each row of such a column
+// divided by its pivot when its turn comes and the others at the end
+void _cge_slu_usolve(struct cge_slu scalar F, real matrix Y)
+{
+    real colvector v, ur, rest
+    real scalar g, a, b, e0, e1, kk, k
+    if (rows(F.guo) & !F.gul) {
+        for (kk = 1; kk <= rows(F.gku); kk++) {
+            k = F.gku[kk]
+            Y[k, .] = Y[k, .] :/ F.ud[k]
+            if (!any(Y[k, .])) continue
+            a = F.us[k]
+            b = a + F.ul[k] - 1
+            ur = F.ur[|a \ b|]
+            Y[ur, .] = Y[ur, .] - F.uv[|a \ b|] * Y[k, .]
+        }
+        rest = selectindex(F.ul[|1 \ F.ns|] :== 0)
+        if (rows(rest) & cols(rest)) Y[rest, .] = Y[rest, .] :/ F.ud[rest]
+        return
+    }
+    Y = Y :/ F.ud[|1 \ F.ns|]
+    if (!rows(F.guo)) return
+    v = F.uv[F.guo, 1] :/ F.ud[F.gue, 1]
+    for (g = 1; g <= rows(F.guq); g++) {
+        a = F.guq[g, 1]
+        b = F.guq[g, 2]
+        e0 = F.gup[a, 1]
+        e1 = F.gup[b, 2]
+        Y[F.guw[|a \ b|], .] = Y[F.guw[|a \ b|], .] -
+            panelsum(Y[F.guc[|e0 \ e1|], .] :* v[|e0 \ e1|], F.gup[|a, 1 \ b, 2|] :- (e0 - 1))
+    }
 }
 
 // The columns of pc left with one active entry, pushed on the stack sst (the
@@ -5104,29 +5641,50 @@ void _cge_slu_spush(real colvector sst, real scalar nss, real colvector pc, real
 // then the dense block. Returns 0 if a pivot of the sparse block is below tol
 // times the largest entry of its column of L, or at most 1e-10 of the largest
 // entry of its column in the sparse block (lost to rounding), or is 0, or if
-// the dense block is singular.
+// the dense block is singular. From version 0.51.0 the columns with no U are
+// factorised together (_cge_slu_plan), and the Schur complement of the dense
+// block takes the solves with L and U by levels, as one matrix of the
+// columns of A12, and A21 by vector operations; before, the columns of A12
+// went through the rows of the sparse block one by one.
 real scalar _cge_slu_factor(struct cge_slu scalar F, real colvector cp, real colvector ri, real colvector vv,
                             real scalar tol)
 {
-    real colvector W, ur, lr, rr, vk, sel, pr, pc, uc
+    real colvector W, ur, lr, vk, sel, pz, lz, pk
     real matrix S, B, Y
-    real scalar k, c, j, jj, a, b, piv, mx, n, ns, nd, c0, nb, j0, j1, g
+    real scalar k, j, jj, a, b, piv, mx, n, ns, nd, c0, nb, j0, j1, kk
+    if (F.gok != 1) _cge_slu_plan(F)
     n = F.n
     ns = F.ns
     nd = n - ns
+    F.av = vv
     W = J(n, 1, 0)
-    for (k = 1; k <= ns; k++) {
-        c = F.q[k]
+    // the columns with no U, together: pivots and L from the entries of A
+    // ([., 1]: a 1 x 1 vector subscripted by a longer column gives a row)
+    if (rows(F.gz0)) {
+        pz = vv[F.gzd, 1]
+        if (hasmissing(pz)) return(0)
+        if (any(pz :== 0)) return(0)
+        if (rows(F.gzl)) {
+            lz = vv[F.gza :+ (F.gza :== 0), 1] :* (F.gza :> 0)
+            if (hasmissing(lz)) return(0)
+            pk = abs(pz[F.gzk, 1])
+            if (any((pk :<= 1e-10 :* abs(lz)) :| (pk :< tol :* abs(lz)))) return(0)
+            F.lv[F.gzl] = lz :/ pz[F.gzk, 1]
+        }
+        F.ud[F.gz0] = pz
+    }
+    // the other columns, in order
+    for (kk = 1; kk <= rows(F.gz1); kk++) {
+        k = F.gz1[kk]
         c0 = 0
-        if (cp[c + 1] > cp[c]) {
-            rr = F.pinv[ri[|cp[c] \ cp[c + 1] - 1|]]
-            vk = vv[|cp[c] \ cp[c + 1] - 1|]
-            // the rows of the sparse block; those of the dense one go to A21
-            sel = selectindex(rr :<= ns)
-            if (cols(sel) & rows(sel)) {
-                W[rr[sel]] = vk[sel]
-                c0 = max(abs(vk[sel]))
-            }
+        // its entries in the rows of the sparse block; those in the rows of
+        // the dense one belong to A21
+        if (F.gn[kk]) {
+            a = F.gs[kk]
+            b = a + F.gn[kk] - 1
+            vk = vv[F.gp[|a \ b|], 1]
+            W[F.gr[|a \ b|]] = vk
+            c0 = max(abs(vk))
         }
         // the columns of L before k that column k of U needs, in order
         if (F.ul[k]) {
@@ -5158,32 +5716,20 @@ real scalar _cge_slu_factor(struct cge_slu scalar F, real colvector cp, real col
         if (piv >= .) return(0)
         F.ud[k] = piv
     }
-    F.SL = F.SU = F.i21 = J(0, 0, .)
-    F.r12 = F.c12 = F.v12 = F.r21 = F.c21 = F.v21 = F.sp = J(0, 1, .)
+    F.SL = F.SU = J(0, 0, .)
+    F.v12 = F.v21 = F.sp = J(0, 1, .)
     if (!nd) return(1)
     // the blocks of the rows set apart and the columns left over, A12 and A21
-    // as entries and A22 dense; the Schur complement by groups of columns of
-    // A12, so that inv(A11) A12 is not held whole
-    pr = F.pinv[ri, 1]
-    pc = F.qinv[floor((_cge_slu_lin(cp, ri, n) :- 1) :/ n) :+ 1, 1]
-    sel = selectindex((pr :<= ns) :& (pc :> ns))
-    if (rows(sel) & cols(sel)) {
-        F.r12 = pr[sel]
-        F.c12 = pc[sel] :- ns
-        F.v12 = vv[sel]
-    }
-    sel = selectindex((pr :> ns) :& (pc :<= ns))
-    if (rows(sel) & cols(sel)) {
-        F.r21 = pr[sel] :- ns
-        F.c21 = pc[sel]
-        F.v21 = vv[sel]
-        sel = order((F.r21, F.c21), (1, 2))
-        F.r21 = F.r21[sel]
-        F.c21 = F.c21[sel]
-        F.v21 = F.v21[sel]
-        F.i21 = panelsetup(F.r21, 1)
-    }
-    S = _cge_slu_block(pr, pc, vv, ns, ns, nd, nd, nd, nd)
+    // as entries and A22 dense, from the positions of their entries (from
+    // version 0.51.0; before, found at each factorisation); the Schur
+    // complement by groups of columns of A12, so that inv(A11) A12 is not
+    // held whole
+    if (rows(F.g12)) F.v12 = vv[F.g12, 1]
+    if (rows(F.g21)) F.v21 = vv[F.g21, 1]
+    B = J(nd * nd, 1, 0)
+    if (rows(F.g22)) B[F.k22] = vv[F.g22, 1]
+    S = colshape(B, nd)'
+    B = J(0, 0, .)
     if (ns & rows(F.v12) & rows(F.v21)) {
         nb = max((16, min((nd, floor(2e7 / ns)))))
         for (j0 = 0; j0 < nd; j0 = j0 + nb) {
@@ -5194,12 +5740,13 @@ real scalar _cge_slu_factor(struct cge_slu scalar F, real colvector cp, real col
             B[(F.c12[sel] :- j0 :- 1) :* ns :+ F.r12[sel]] = F.v12[sel]
             Y = _cge_slu_solve11(F, colshape(B, ns)')
             B = J(0, 0, .)
-            for (g = 1; g <= rows(F.i21); g++) {
-                a = F.i21[g, 1]
-                b = F.i21[g, 2]
-                uc = F.c21[|a \ b|]
+            // A21 Y, a row of A21 at a time (one product of a row vector and
+            // a matrix, without a matrix of the size of A21's entries)
+            for (kk = 1; kk <= rows(F.i21); kk++) {
+                a = F.i21[kk, 1]
+                b = F.i21[kk, 2]
                 j = F.r21[a]
-                S[|j, j0 + 1 \ j, j1|] = S[|j, j0 + 1 \ j, j1|] - F.v21[|a \ b|]' * Y[uc, .]
+                S[|j, j0 + 1 \ j, j1|] = S[|j, j0 + 1 \ j, j1|] - F.v21[|a \ b|]' * Y[F.c21[|a \ b|], .]
             }
         }
     }
@@ -5224,28 +5771,15 @@ real matrix _cge_slu_block(real colvector pr, real colvector pc, real colvector 
     return(colshape(v, nr)')
 }
 
-// inv(A11) B for the sparse block, B with ns rows, in the permuted order
+// inv(A11) B for the sparse block, B with ns rows, in the permuted order; by
+// levels from version 0.51.0 (before, row by row)
 real matrix _cge_slu_solve11(struct cge_slu scalar F, real matrix B)
 {
     real matrix Y
-    real colvector lr, ur
-    real scalar k, ns
-    ns = F.ns
+    if (F.gok != 1) _cge_slu_plan(F)
     Y = B
-    // rows that are zero are passed over: the columns of B are sparse
-    for (k = 1; k <= ns; k++) {
-        if (!F.ll[k]) continue
-        if (!any(Y[k, .])) continue
-        lr = F.lr[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|]
-        Y[lr, .] = Y[lr, .] - F.lv[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|] * Y[k, .]
-    }
-    for (k = ns; k >= 1; k--) {
-        if (!any(Y[k, .])) continue
-        Y[k, .] = Y[k, .] :/ F.ud[k]
-        if (!F.ul[k]) continue
-        ur = F.ur[|F.us[k] \ F.us[k] + F.ul[k] - 1|]
-        Y[ur, .] = Y[ur, .] - F.uv[|F.us[k] \ F.us[k] + F.ul[k] - 1|] * Y[k, .]
-    }
+    _cge_slu_lsolve(F, Y)
+    _cge_slu_usolve(F, Y)
     return(Y)
 }
 
@@ -5257,28 +5791,66 @@ real colvector _cge_slu_solve(struct cge_slu scalar F, real colvector b)
     return(_cge_slu_solve1(F, b))
 }
 
-// The solution of the system factorised in F (scaled where F is)
+// The solution of the system factorised in F (scaled where F is), refined
+// (from version 0.51.0): the residual of the solution, for the matrix
+// factorised, is found with one product of the matrix, and while it exceeds
+// 1e-12 of b, up to three corrections are solved for and kept while they
+// lower it. A sparse block whose pivots, chosen in the analysis among its
+// own rows, are small against the entries of the rows set apart can be
+// ill-conditioned although the matrix is not, and the Schur complement then
+// loses digits to cancellation; the corrections recover them. A matrix
+// factorised accurately takes the product alone.
 real colvector _cge_slu_solve1(struct cge_slu scalar F, real colvector b)
 {
-    real colvector y, x, lr, ur, y2, t
-    real scalar k, n, ns
+    real colvector x, r, xn, rn
+    real scalar k, e, en, bn
     // factors held in Python (from version 0.27.0)
     if (F.ok == 2) return(_cge_pylu_solve(F, b))
+    x = _cge_slu_solve0(F, b)
+    if (!rows(F.av) | hasmissing(x)) return(x)
+    bn = max(abs(b))
+    if (bn == 0 | bn >= .) return(x)
+    r = b - _cge_slu_mul(F, x)
+    e = max(abs(r))
+    for (k = 1; k <= 3; k++) {
+        if (e <= 1e-12 * bn | e >= .) break
+        xn = x + _cge_slu_solve0(F, r)
+        rn = b - _cge_slu_mul(F, xn)
+        en = max(abs(rn))
+        if (en >= e) break
+        x = xn
+        r = rn
+        e = en
+    }
+    return(x)
+}
+
+// The product of the matrix factorised in F and x (from version 0.51.0)
+real colvector _cge_slu_mul(struct cge_slu scalar F, real colvector x)
+{
+    real colvector y
+    y = J(F.n, 1, 0)
+    if (!rows(F.aord)) return(y)
+    y[F.arow] = panelsum((F.av :* x[F.acol, 1])[F.aord, 1], F.apan)
+    return(y)
+}
+
+// The solution of the system factorised in F, without refinement
+real colvector _cge_slu_solve0(struct cge_slu scalar F, real colvector b)
+{
+    real colvector y, x, y2, t, y1
+    real scalar n, ns
     n = F.n
     ns = F.ns
     y = b[F.p]
-    // L y1 = b1, column by column
-    for (k = 1; k <= ns; k++) {
-        if (!F.ll[k] | y[k] == 0) continue
-        lr = F.lr[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|]
-        y[lr] = y[lr] - F.lv[|F.ls[k] \ F.ls[k] + F.ll[k] - 1|] :* y[k]
-    }
-    // U z1 = y1, from the last column
-    for (k = ns; k >= 1; k--) {
-        y[k] = y[k] / F.ud[k]
-        if (!F.ul[k] | y[k] == 0) continue
-        ur = F.ur[|F.us[k] \ F.us[k] + F.ul[k] - 1|]
-        y[ur] = y[ur] - F.uv[|F.us[k] \ F.us[k] + F.ul[k] - 1|] :* y[k]
+    // L y1 = b1, then U z1 = y1, by levels (from version 0.51.0; before,
+    // column by column)
+    if (ns) {
+        y1 = y[|1 \ ns|]
+        if (F.gok != 1) _cge_slu_plan(F)
+        _cge_slu_lsolve(F, y1)
+        _cge_slu_usolve(F, y1)
+        y[|1 \ ns|] = y1
     }
     // the dense block: x2 = inv(S) (b2 - A21 z1), x1 = z1 - inv(A11) A12 x2
     // (y2[., 1] for a dense block of one row; from version 0.47.1)
@@ -30802,7 +31374,7 @@ void _cge_bundle_get(string scalar bundle, string scalar name, string scalar out
     L = cat(fn)
     a = 0
     for (k = 1; k <= rows(L); k++) {
-        if (subinstr(L[k], char(13), "") == "@@@ " + name) {
+        if (strlower(subinstr(L[k], char(13), "")) == "@@@ " + strlower(name)) {
             a = k
             break
         }
@@ -30813,6 +31385,18 @@ void _cge_bundle_get(string scalar bundle, string scalar name, string scalar out
     fh = fopen(out, "w")
     for (k = a + 1; k < b; k++) fput(fh, subinstr(L[k], char(13), ""))
     fclose(fh)
+}
+
+// 1 if bundle file bundle, on the ado-path, has a section name (from version
+// 0.51.0); names compared in lower case
+real scalar _cge_bundle_has(string scalar bundle, string scalar name)
+{
+    string colvector L
+    string scalar fn
+    fn = findfile(bundle)
+    if (fn == "") return(0)
+    L = strlower(subinstr(cat(fn), char(13), ""))
+    return(anyof(L, "@@@ " + strlower(name)))
 }
 
 // A file in Stata's folder of temporary files for section name of a bundle,

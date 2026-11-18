@@ -81,7 +81,7 @@ program define cge_synthetic, rclass
     * command returns
     _cge_load
     mata: st_local("samfile", _cge_bundle_tmp("`file'"))
-    mata: _cge_bundle_get("cge_synthetic_sams.txt", "`file'", st_local("samfile"))
+    mata: _cge_bundle_get("cge_sam_library.txt", "`file'", st_local("samfile"))
 
     import delimited using `"`samfile'"', varnames(1) case(preserve) ///
         stringcols(1) asdouble `clear'

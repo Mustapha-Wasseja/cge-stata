@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.50.1  17nov2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 12 14 2}{...}
@@ -63,7 +63,9 @@ parameters and equations over it are built in seconds ({helpb cge_set}, from
 version 0.49.1). Systems of 1,000 equations or more with a sparse Jacobian
 are solved with a sparse LU by default (from version 0.50.0), which takes
 the columns with one entry first and leaves the rows that fill in to Mata's
-dense LU (from version 0.50.1); smaller or denser systems use the dense LU
+dense LU (from version 0.50.1); it factorises and solves by levels, the rows
+that do not depend on one another together (from version 0.51.0). Smaller or
+denser systems use the dense LU
 ({helpb cge_options}).
 
 {pstd}
@@ -129,7 +131,9 @@ examples. Its repository path is {cmd:docs/manual/cge-stata-manual.pdf}.
 {p2colreset}{...}
 
 
-{title:Example}
+{title:Examples}
+
+{pstd}The synthetic SAM of {helpb cge_synthetic}{p_end}
 
 {phang2}{cmd:. cge_synthetic, clear}{p_end}
 
@@ -147,6 +151,62 @@ examples. Its repository path is {cmd:docs/manual/cge-stata-manual.pdf}.
 {phang2}{cmd:. cge_results}{p_end}
 
 {phang2}{cmd:. cge_check, homogeneity}{p_end}
+
+{pstd}
+A real SAM: IFPRI's 2019 SAM for Malawi, shipped with the package
+({helpb cge_sam##data:cge_sam}, {it:Example data}). {cmd:cge_sam} reads the file as
+published; the activities and commodities are the accounts whose codes begin
+with {cmd:a} and {cmd:c}, paired in the same order:{p_end}
+
+{phang2}{cmd:. cge_sam using cge_malawi_sam.csv, clear}{p_end}
+
+{phang2}{cmd:. quietly levelsof Code if substr(Code, 1, 1) == "a", local(acts) clean}{p_end}
+
+{phang2}{cmd:. quietly levelsof Code if substr(Code, 1, 1) == "c", local(coms) clean}{p_end}
+
+{pstd}
+Mapped with every account in the role the SAM gives it, the SAM has three
+flows the model does not represent, which {helpb cge_map} lists before it
+stops: enterprises' purchases of commodities (962 billion kwacha) and
+households' and enterprises' payments to the government besides direct taxes
+(37):{p_end}
+
+{phang2}{cmd:. cge_map, activities(`acts') commodities(`coms') factors(flabn flabp flabs flnd fcap) households(hhdr1 hhdr2 hhdr3 hhdr4 hhdr5 hhdu1 hhdu2 hhdu3 hhdu4 hhdu5)}
+{cmd:enterprises(ent) government(gov) savinv(si) row(row) dirtax(dtax) saltax(stax) imptax(mtax) marginaccounts(trc)}{p_end}
+
+{pstd}
+Two choices of this example, made on the model's copy of the SAM and not on
+the file: the direct-tax account is merged into the government, so that
+{cmd:dirtax(gov)} counts all those payments as direct taxes, and the enterprise
+account is mapped as an institution that consumes, among the households. The
+SAM balances to the rounding of its cells, which {helpb cge_balance} removes:{p_end}
+
+{phang2}{cmd:. cge_aggregate, groups(gov: gov dtax) netdiagonal}{p_end}
+
+{phang2}{cmd:. cge_balance}{p_end}
+
+{phang2}{cmd:. cge_map, activities(`acts') commodities(`coms') factors(flabn flabp flabs flnd fcap) households(hhdr1 hhdr2 hhdr3 hhdr4 hhdr5 hhdu1 hhdu2 hhdu3 hhdu4 hhdu5 ent)}
+{cmd:government(gov) savinv(si) row(row) dirtax(gov) saltax(stax) imptax(mtax) marginaccounts(trc)}{p_end}
+
+{phang2}{cmd:. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)}{p_end}
+
+{phang2}{cmd:. cge_shock tm, value(0)}{p_end}
+
+{phang2}{cmd:. cge_solve, name(notariff)}{p_end}
+
+{phang2}{cmd:. cge_shock, reset}{p_end}
+
+{phang2}{cmd:. cge_shock ad, elements(amaiz) scale(1.1)}{p_end}
+
+{phang2}{cmd:. cge_solve, name(maize)}{p_end}
+
+{phang2}{cmd:. cge_report, sims(notariff maize) tables(macro welfare)}{p_end}
+
+{pstd}
+The elasticities are round values for illustration, not estimates for Malawi,
+and the results show the commands; they are not findings about Malawi. The same
+steps, with comments, are {cmd:examples/malawi_sam.do} in the package's
+repository.
 
 
 {title:Stored results}

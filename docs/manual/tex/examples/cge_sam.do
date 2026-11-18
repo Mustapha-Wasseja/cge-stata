@@ -1,4 +1,5 @@
-* Examples of [CGE] cge_sam. The SAMs are SYNTHETIC.
+* Examples of [CGE] cge_sam. The SAMs are SYNTHETIC, except that of sam_published,
+* IFPRI's 2019 SAM for Malawi, shipped with the package.
 *>> sam_wide
 cge_synthetic, clear
 cge_sam, labels(account)
@@ -46,4 +47,9 @@ file close fh
 type bad.csv
 capture noisily cge_sam using bad.csv, direct
 di as err "r(" _rc ");"
+*<<
+
+*>> sam_published
+cge_sam using cge_malawi_sam.csv, clear
+describe, short
 *<<

@@ -325,8 +325,11 @@ gives factor quantities;
 \item computes tax rates, shares and the other parameters from the SAM and the
 elasticities;
 \item checks the identities that a balanced SAM implies, for example that
-composite supply equals the demand for each commodity, and stops with error
-459 if one fails;
+composite supply equals the demand for each commodity, within $10^{-9}$ of
+the largest cell, and stops with error 459 if one fails; from version 0.51.0
+the message names the account with the largest difference and, when the SAM
+balances only to the rounding of its cells, suggests \manref{cge_balance}
+before \manref{cge_map};
 \item sets the default closure: a flexible exchange rate with fixed foreign
 savings, flexible government savings, savings-driven investment, the consumer
 price index as numeraire, and mobile, fully employed factors

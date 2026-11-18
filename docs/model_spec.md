@@ -2853,7 +2853,8 @@ Stata's package files take at most 100 files: `net install` stops with
 as it did for versions 0.21.0 to 0.27.0, whose `cge.pkg` listed 118 to 120.
 The package now installs the fifteen SYNTHETIC SAMs, the nine models of the
 library and the four files of the GAMS model as three bundles,
-`cge_synthetic_sams.txt`, `cge_ml_library.txt` and `cge_gams_model.txt`,
+`cge_synthetic_sams.txt` (from version 0.51.0 `cge_sam_library.txt`, with the
+real SAM of Section 62), `cge_ml_library.txt` and `cge_gams_model.txt`,
 text files of sections that begin with a line `@@@ name`; `cge_synthetic`,
 `cge_modlib` and `cge_gams` take the section they need through
 `_cge_bundle_get`. The files stay in the repository as the sources, which
@@ -4120,6 +4121,103 @@ and solutions are those of an LU in another order: they agree with the dense
 LU to rounding, and their last digits may differ from those of version
 0.50.0.
 
+## 62. A real SAM, SAMs as published, and the sparse LU by levels (from version 0.51.0)
+
+**The SAM shipped with the package.** The package ships IFPRI's 2019 Social
+Accounting Matrix for Malawi (International Food Policy Research Institute
+2023; Kankwamba, Pauw, Randriamamonjy and Thurlow 2023), licensed under CC BY
+4.0, as `data/cge_malawi_sam.csv`, the file as published: 107 accounts in
+billions of Malawian kwacha, its first column describing the accounts, its
+second holding their codes, and its last row and column totals. Stata's
+package files take at most 100 files (Section 37), so the file is installed
+within the bundle of SAMs, renamed from `cge_synthetic_sams.txt` to
+`cge_sam_library.txt`. `cge_sam using cge_malawi_sam.csv` reads it from the
+package when the working directory has no file of that name
+(`_cge_sam_shipped`, writing the section to a temporary file that lasts the
+session), and every reader returns the file read in `r(filename)`.
+`examples/malawi_sam.do` and the example of `help cge` take it to the
+results of policy simulations; their choices (the direct-tax account merged
+into the government and the enterprise account mapped among the households,
+for the flows the model does not represent) are made on the model's copy of
+the SAM.
+
+**SAMs as published** (Section 1 of sam_tools.md). In wide data, string
+variables other than the labels hold text and are left out; by default the
+labels are the string variable with the most values that are, as names, the
+names of the numeric variables (`_cge_sam_labvar`), the first if none has
+any. A row labelled `total` or `totals`, in any case, and a column so named
+are checked against the sums of the cells, within 1e-4 of the largest total,
+and left out (`_cge_sam_totals`); one that is not the sum of the cells is an
+error (459). The direct reader treats the leading fields of the first row
+that are text, neither numbers nor blank, as columns of labels, takes the
+column headed `labels()` or else the one whose fields are the column labels,
+and checks the totals in the same way.
+
+**RAS with accounts whose totals are one cell** (Section 5.1 of
+sam_tools.md). When the column of an account a has a single cell, in the row
+of an account b that has no other cell, the two totals are that cell, and
+their RAS targets must be equal; a commodity produced by one activity and
+neither imported nor taxed, and that activity, are the common case. The
+accounts of each chain of such pairs take the total given for one of them or
+implied by cells that cannot change (two that differ are an error), or else
+the average of their targets. Before, the default targets differed by the
+rounding of the SAM, and RAS stopped with error 430.
+
+**Calibration of a SAM balanced only to its rounding.** `cge_map` accepts an
+imbalance of 1e-8 of the largest cell, calibration 1e-9. A balance check of
+the calibration that fails names the account with the largest difference and,
+when the SAM itself balances only to more than calibration allows, as a SAM
+with rounded cells does, suggests `cge_balance` (`_cge_calfail`).
+
+**The sparse LU by levels.** The analysis (Section 61) also plans the
+factorisation and the solves (`_cge_slu_plan`, kept with the analysis):
+
+1. The columns of the sparse block with no entry in U depend on no other
+   column: their pivots and columns of L are entries of the matrix, taken
+   together by vector operations, with the threshold tests of the loop
+   applied to every entry at once. The other columns go through the loop as
+   before, their entries taken by positions found once.
+2. The solves with L and U go by levels (`_cge_slu_levels`). A row of
+   L y = b takes the rows before it in which its row of L has entries, and a
+   row of U x = y the rows after it. Rows without such entries are of level
+   0; a row is of one level more than the highest level of the rows it takes,
+   found row by row in the order of the solve. The rows of a level are solved
+   together, by one gather, product and panel sum of their entries
+   (`_cge_slu_lsolve`, `_cge_slu_usolve`). The factors of CGE models have few
+   levels: 3 for L and 25 for U in the 10,307 rows of the sparse block of the
+   full system of a model from a SAM with 120 activities, 6 and 9 for the
+   Malawi SAM's 890.
+3. The positions in the pattern of the entries of A12, A21 (by rows) and A22
+   are found once, so that a factorisation takes their values by position.
+
+The solves of each Newton step and those that form inv(A11) A12 for the
+Schur complement use the levels; the product A21 inv(A11) A12 stays a row of
+A21 at a time. Fastest of nine alternate runs in StataNow 19.5, against
+version 0.50.1: a system of 20,000 equations of one term each factorised in
+under a millisecond instead of 71, each solve in 1 instead of 18; the full
+system of a model from a SAM with 120 activities, 10,555 equations,
+factorised in 0.205 seconds instead of 0.330 and solved in 0.028 instead of
+0.059; the reduced system of 200 activities, 3,418 equations, 0.214 instead
+of 0.247 and 0.020 instead of 0.038. In the systems from a SAM most of the
+factorisation is then the Schur complement, whose solves fill in almost
+every row: its cost grows with the entries of U times the columns of the
+dense block, however it is ordered. The factors are those of version 0.50.1,
+and the solutions agree to rounding.
+
+**Refinement.** The analysis chooses the pivots of the sparse block among its
+own rows; when the rows set apart hold the largest entries of some columns,
+those columns may take small pivots, and the sparse block may be
+ill-conditioned although the matrix is not, so that the Schur complement
+loses digits to cancellation. In a test matrix of 400 equations with six
+full rows (`test_sparse.do`), the sparse block had a condition number of
+1e13 against 174 for the matrix, and version 0.50.1 solved it to 7e-4 only.
+Each solve is now refined (`_cge_slu_solve1`): the residual for the matrix
+factorised is found with one product (`_cge_slu_mul`, the values kept by the
+factorisation), and while it exceeds 1e-12 of the right-hand side, up to
+three corrections are solved for with the same factors (`_cge_slu_solve0`)
+and kept while they lower it. That system is solved to 1e-15; a matrix
+factorised accurately takes the product alone.
+
 ## References
 
 Burniaux, J.-M. and T. P. Truong (2002). *GTAP-E: An Energy-Environmental
@@ -4180,3 +4278,11 @@ Maher, S., M. Miltenberger, J. P. Pedroso, D. Rehfeldt, R. Schwarz and F.
 Serrano (2016). PySCIPOpt: Mathematical programming in Python with the SCIP
 Optimization Suite. In *Mathematical Software - ICMS 2016*, Lecture Notes in
 Computer Science 9725: 301-307. Springer.
+
+International Food Policy Research Institute (IFPRI) (2023). *2019 Social
+Accounting Matrix for Malawi*. Washington, DC: IFPRI [dataset].
+https://doi.org/10.7910/DVN/C9WA0I. Harvard Dataverse, Version 1.
+
+Kankwamba, H., K. Pauw, J. Randriamamonjy and J. Thurlow (2023). *2019 Social
+Accounting Matrix for Malawi: A Nexus Project SAM*. Data Paper. Washington,
+DC: IFPRI. https://doi.org/10.2499/p15738coll2.136898.

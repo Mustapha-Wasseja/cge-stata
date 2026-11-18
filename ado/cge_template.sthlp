@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  26oct2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 21 23 2}{...}
@@ -81,19 +81,27 @@ group with its members' role.
 
 {title:Example}
 
-{pstd}A SAM of your own, from a CSV file{p_end}
+{pstd}IFPRI's 2019 SAM for Malawi, shipped with the package ({helpb cge_sam##data:cge_sam},
+{it:Example data}); with a SAM of your own, name its file instead{p_end}
 
-{phang2}{cmd:. cge_sam using national_sam.csv, clear}{p_end}
+{phang2}{cmd:. cge_sam using cge_malawi_sam.csv, clear}{p_end}
 
-{phang2}{cmd:. cge_template using sam_roles.xlsx}{p_end}
+{phang2}{cmd:. cge_template using malawi_roles.xlsx, replace}{p_end}
 
-{pstd}(fill in roles, pairs and groups in Excel){p_end}
+{pstd}Then fill in the roles, pairs and groups in Excel. For this SAM: the
+accounts beginning with {cmd:a} are {cmd:activities}, those beginning with
+{cmd:c} {cmd:commodities}, {cmd:trc} {cmd:marginaccounts}, the five {cmd:f}
+accounts {cmd:factors}, the ten {cmd:hhd} accounts and {cmd:ent}
+{cmd:households}, {cmd:gov} and {cmd:dtax} {cmd:government dirtax} in the group
+{cmd:gov}, {cmd:mtax} {cmd:imptax}, {cmd:stax} {cmd:saltax}, {cmd:si} {cmd:savinv}
+and {cmd:row} {cmd:row} (the example of {helpb cge} explains these choices).
+Then:{p_end}
 
-{phang2}{cmd:. cge_aggregate using sam_roles.xlsx}{p_end}
+{phang2}{cmd:. cge_aggregate using malawi_roles.xlsx, netdiagonal}{p_end}
 
 {phang2}{cmd:. cge_balance}{p_end}
 
-{phang2}{cmd:. cge_map using sam_roles.xlsx}{p_end}
+{phang2}{cmd:. cge_map using malawi_roles.xlsx}{p_end}
 
 
 {title:Stored results}

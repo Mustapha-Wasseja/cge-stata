@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.50.1  17nov2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -44,7 +44,16 @@ taken first, without a search, and the rows left once 100 to 4,000 remain
 with a fifth of their entries filled in join the dense block, which Mata's
 dense LU factorises faster than the elimination; the analysis of the
 reduced system of a model from a SAM with 200 activities, 3,418 equations,
-takes under a second instead of about three. Its memory grows with the number of entries rather
+takes under a second instead of about three. From version 0.51.0 the
+factorisation takes together the columns that no other column changes, and
+the solves with its factors, in the factorisation and at each step, go by
+levels: the rows that do not depend on one another are solved together, by
+vector operations, where they went one by one. A system of 20,000 equations
+of one term each is factorised in a millisecond instead of 70, and the
+solves of models from a SAM take half the time. Each solve is also refined:
+while its residual exceeds 1e-12 of the right-hand side, up to three
+corrections are solved for with the same factors, which recovers the digits
+that a sparse block made ill-conditioned by the rows set apart loses. Its memory grows with the number of entries rather
 than with the square of the number of equations, so that it solves systems
 far larger than the dense LU can hold, the full system of large models among
 them; the order is kept for later solves of the same model. Both give the

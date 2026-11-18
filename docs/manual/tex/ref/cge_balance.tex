@@ -96,7 +96,13 @@ about the totals:
 \item RAS needs a target for every account's total. The default target is the
 average of the account's row and column totals; \opt{targ}{ets()} and
 \opt{tot}{als()} choose others. Negative cells are handled by generalised RAS
-(GRAS).
+(GRAS). From version 0.51.0 two accounts whose totals are one cell take one
+target: when the column of one account has a single cell, in the row of
+another account that has no other cell, as for a commodity produced by one
+activity and neither imported nor taxed, and that activity. They take the
+total given for either, or implied by cells that cannot change, or else the
+average of their targets. Before, their targets differed by the rounding of
+the SAM and could not both be met, and RAS stopped with error 430.
 \item Cross entropy needs no targets. It estimates every total that is not
 given in \opt{tot}{als()} together with the cells, subject to balance. With
 every total given, it gives the RAS solution.

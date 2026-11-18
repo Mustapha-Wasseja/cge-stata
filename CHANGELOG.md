@@ -5,6 +5,80 @@ each feature are specified in [docs/model_spec.md](docs/model_spec.md), and
 the [Reference Manual](docs/manual/cge-stata-manual.pdf) documents every
 command.
 
+## 0.51.0
+
+Version 0.51.0 ships a real SAM to work with, reads SAM files as they are
+published, and speeds up the sparse LU's factorisation and solves.
+
+**A real SAM.** The package ships IFPRI's 2019 Social Accounting Matrix for
+Malawi (International Food Policy Research Institute 2023; Kankwamba, Pauw,
+Randriamamonjy and Thurlow 2023, CC BY 4.0), unchanged, as
+`cge_malawi_sam.csv`: 107 accounts in billions of kwacha, with 42 activities
+and commodities, a transaction-cost account, three kinds of labour, land and
+capital, enterprises, ten households, government, three tax accounts,
+savings-investment and the rest of the world. `cge_sam using
+cge_malawi_sam.csv` reads it from the package when the working directory has
+no file of that name, and `r(filename)` gives the path of the file read. The
+examples of `help cge_sam`, which named files that do not exist
+(`mysam.xlsx`, `large_sam.csv`, `sam_cells.dta`), now read it in each form,
+and those of `cge_template`, `cge_aggregate`, `cge_map`, `cge_balance` and
+`cge_samexport` start from it; `help cge` and `examples/malawi_sam.do` take
+it to the results of two simulations. The synthetic SAMs and the Malawi SAM
+are installed as one bundle, `cge_sam_library.txt` (before,
+`cge_synthetic_sams.txt`), since Stata's package files take at most 100
+files.
+
+**SAMs as published.** A SAM file often has a column describing the accounts
+besides their codes, and a total row and column. `cge_sam` now leaves out
+string variables other than the labels (before, an error), takes as labels by
+default the string variable whose values are the names of the account
+variables (before, the first), and checks a row and a column labelled
+`total` or `totals` against the sums of the cells, within 1e-4 of the largest
+total, before leaving them out; the direct reader does the same with the
+leading text columns of a CSV file, and `labels()` names its column of
+labels.
+
+**Balancing and calibration.** RAS stopped (error 430) on a SAM with a
+commodity produced by one activity and neither imported nor taxed, as
+construction is in the Malawi SAM: the commodity's column total and the
+activity's row total are one cell, but their targets, the averages of their
+own totals, differed by the rounding of the SAM. Such accounts now take one
+target. A balance check of the calibration that fails now names the account
+and, when the SAM balances only to more than calibration allows (1e-9 of the
+largest cell, against 1e-8 for `cge_map`), suggests `cge_balance`.
+
+**The sparse LU.** The analysis now plans the factorisation and the solves.
+The columns of the sparse block with no entry in U, which depend on no other
+column, are factorised together, by vector operations; the solves with L and
+U go by levels, the rows that do not depend on one another together, where
+they went row by row (a loop over the rows with entries remains for factors
+whose levels are as many as their rows, as in a chain); and the positions of
+the entries of the dense block are found once. The factors are those of
+version 0.50.1. Fastest of nine alternate runs in StataNow 19.5 on a laptop:
+
+| System | Equations | Factorisation, before (s) | Now (s) | Solve, before (s) | Now (s) |
+|---|---:|---:|---:|---:|---:|
+| equations of one term each | 20,000 | 0.071 | under 0.001 | 0.018 | 0.001 |
+| full system of a model from a SAM, 120 activities | 10,555 | 0.330 | 0.205 | 0.059 | 0.028 |
+| reduced system, 200 activities | 3,418 | 0.247 | 0.214 | 0.038 | 0.020 |
+| the Malawi SAM | 1,017 | 0.028 | 0.021 | 0.011 | 0.006 |
+
+In the systems from a SAM most of the factorisation is then the Schur
+complement of the dense block, whose cost is set by the entries of U times
+the columns of the block. Each solve is also refined: while its residual
+exceeds 1e-12 of the right-hand side, up to three corrections are solved for
+with the same factors. A new test exposed a matrix of 400 equations with six
+full rows, well conditioned (174), whose sparse block, with pivots chosen
+among its own rows, had a condition number of 1e13; version 0.50.1 solved it
+to 7e-4, version 0.51.0 to 1e-15. The tests of `test_samtools.do`,
+`test_sparse.do` and `test_examples.do` cover the changes, and section 62 of
+the specification describes them.
+
+**Help and manual.** Besides the examples above, `help cge_calibrate` and the
+manual's entry describe the balance checks of the calibration and the new
+message, and `help cge_solve`, `help cge_options` and the manual's section on
+the sparse LU describe the factorisation by levels and the refinement.
+
 ## 0.50.1
 
 Version 0.50.1 speeds up three to four times the analysis of the sparse LU,

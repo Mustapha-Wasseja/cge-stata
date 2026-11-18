@@ -14,7 +14,7 @@ d
 d Requires: Stata 13 or later
 d Author: Mustapha Wasseja Mohammed
 d
-d Distribution-Date: 20261117
+d Distribution-Date: 20261118
 d
 f ado/cge.ado
 f ado/cge.sthlp
@@ -114,5 +114,5 @@ f ado/cge_gams.sthlp
 F ado/cge_gams_model.txt
 f ado/cge_synthetic.ado
 f ado/cge_synthetic.sthlp
-F data/cge_synthetic_sams.txt
+F data/cge_sam_library.txt
 F data/cge_elasticity_library.txt

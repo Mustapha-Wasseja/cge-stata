@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0  26oct2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -54,6 +54,8 @@ unchanged.
 
 
 {title:Examples}
+
+{phang2}{cmd:. cge_sam using cge_malawi_sam.csv, clear}{p_end}
 
 {phang2}{cmd:. cge_balance, method(ce)}{p_end}
 

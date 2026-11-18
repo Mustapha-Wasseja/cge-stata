@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  26oct2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 16 18 2}{...}
@@ -247,13 +247,28 @@ Health services and a social health insurance fund:
 
 
 {pstd}
-From a template, filled in Excel:
+A real SAM, IFPRI's 2019 SAM for Malawi ({helpb cge_sam##data:cge_sam}, {it:Example data}),
+whose activities and commodities are the accounts whose codes begin with {cmd:a}
+and {cmd:c}. As the SAM gives them, its accounts have flows the model does not
+represent, which this lists; the example of {helpb cge} maps them:
 
-{phang2}{cmd:. cge_template using roles.xlsx}{p_end}
+{phang2}{cmd:. cge_sam using cge_malawi_sam.csv, clear}{p_end}
+
+{phang2}{cmd:. quietly levelsof Code if substr(Code, 1, 1) == "a", local(acts) clean}{p_end}
+
+{phang2}{cmd:. quietly levelsof Code if substr(Code, 1, 1) == "c", local(coms) clean}{p_end}
+
+{phang2}{cmd:. cge_map, activities(`acts') commodities(`coms') factors(flabn flabp flabs flnd fcap) households(hhdr1 hhdr2 hhdr3 hhdr4 hhdr5 hhdu1 hhdu2 hhdu3 hhdu4 hhdu5)}
+{cmd:enterprises(ent) government(gov) savinv(si) row(row) dirtax(dtax) saltax(stax) imptax(mtax) marginaccounts(trc)}{p_end}
+
+{pstd}
+From a template, filled in Excel, as in the example of {helpb cge_template}:
+
+{phang2}{cmd:. cge_template using malawi_roles.xlsx, replace}{p_end}
 
 {phang2}{it:(fill in the roles in Excel)}{p_end}
 
-{phang2}{cmd:. cge_map using roles.xlsx}{p_end}
+{phang2}{cmd:. cge_map using malawi_roles.xlsx}{p_end}
 
 {pstd}
 VAT, as a separate account or as shares of the sales tax:

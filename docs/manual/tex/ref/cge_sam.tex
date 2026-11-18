@@ -11,6 +11,14 @@ observation per cell. A wide CSV file can also be read directly, without
 loading it as data, so that a SAM may have more accounts than Stata can hold
 as variables.
 
+A SAM is often published with a column describing the accounts besides their
+codes, and with a total row and a total column. From version 0.51.0
+\cmd{cge_sam} reads such a file as it is: text other than the labels is left
+out, and the totals are checked against the sums of the cells and left out.
+The package ships a real SAM to work with, IFPRI's 2019 SAM for Malawi,
+\cmd{cge_malawi_sam.csv} (Example data, below), which \cmd{cge_sam} reads
+from the package when the working directory has no file of that name.
+
 \cmd{cge_sam} checks that the SAM is square, with row and column labels that
 agree, and reports the largest difference between an account's row and column
 totals. The SAM is then mapped to the model with \manref{cge_map}, after any
@@ -23,18 +31,25 @@ Read the SAM in memory, with the account labels in the string variable
 \begin{stcode}
 cge_sam, labels(account)
 \end{stcode}
-Read a SAM from the worksheet \cmd{SAM} of an Excel file, replacing the data
-in memory
+Read IFPRI's 2019 SAM for Malawi, shipped with the package, as published
 \begin{stcode}
-cge_sam using mysam.xlsx, sheet("SAM") labels(account) clear
+cge_sam using cge_malawi_sam.csv, clear
 \end{stcode}
-Read a wide CSV file directly, leaving the data in memory unchanged
+Read it directly, leaving the data in memory unchanged
 \begin{stcode}
-cge_sam using large_sam.csv, direct
+cge_sam using cge_malawi_sam.csv, direct
 \end{stcode}
-Read long data, one observation per cell, from a Stata dataset
+Write it to the worksheet \cmd{SAM} of an Excel file and read it from there,
+replacing the data in memory
 \begin{stcode}
-cge_sam using sam_cells.dta, long(row column value) clear
+cge_samexport using malawi_sam.xlsx, replace
+cge_sam using malawi_sam.xlsx, sheet("SAM") labels(account) clear
+\end{stcode}
+Write it as long data, one observation per cell, to a Stata dataset and read
+it from there
+\begin{stcode}
+cge_samexport using malawi_cells.dta, long replace
+cge_sam using malawi_cells.dta, long(row column value) clear
 \end{stcode}
 
 \cgesec{Syntax}
@@ -57,7 +72,7 @@ Long data: one observation per cell
 
 \begin{opttable}
 \optgroup{Main}
-\optarg{lab}{els}{varname} & string variable with the account labels in wide data; default the first string variable\\
+\optarg{lab}{els}{varname} & string variable (or, with \opt{}{direct}, heading of the column) with the account labels; default the codes of the accounts\\
 \optarg{}{long}{rowvar colvar valuevar} & read long data, one observation per cell\\
 \opt{}{direct} & read a wide CSV file directly, without loading it as data\\
 \optgroup{Files}
@@ -69,8 +84,13 @@ Long data: one observation per cell
 
 \begin{optdesc}
 \item[\optarg{lab}{els}{varname}] names the string variable that holds the
-account labels in wide data. The default is the first string variable. Every
-other variable is an account and must be numeric.
+account labels in wide data, or, with the direct reader, the heading of the
+column that holds them. By default, of several string variables (columns of
+text), the labels are those whose values are the names of the account
+variables (columns), as the codes of a SAM published with descriptions are,
+and otherwise the first (before version 0.51.0, always the first). The other
+string variables are left out, and every numeric variable is an account, or
+a total column.
 
 \item[\optarg{}{long}{rowvar colvar valuevar}] reads long data: \argu{rowvar}
 and \argu{colvar} are string variables with the row and column accounts of each
@@ -155,6 +175,48 @@ blank cell. A field that is not a number is an error, never a zero. A thousands
 separator is the most common case:
 \stlog{sam_notnum}
 
+\cgesubsec{Example 5: a SAM as published}
+
+IFPRI's 2019 SAM for Malawi, shipped with the package, is a CSV file as
+published: its first column describes each account, its second holds the
+codes, and its last row and column are totals. \cmd{cge_sam} takes the codes
+as the labels, since they are the names of the columns, leaves the
+descriptions out, and checks each total against the sums of the cells before
+leaving it out; the codes that are not Stata names lose their hyphens:
+\stlog{sam_published}
+A total is accepted within $10^{-4}$ of the largest total, so that totals
+rounded to fewer digits than the cells pass, and a row or column labelled
+\cmd{total} that is not the sum of the cells is an error, in case it is an
+account. The direct reader treats the leading fields of the first row that
+are text, neither numbers nor blank, as columns of labels in the same way.
+The SAM balances to the rounding of its cells, $5 \times 10^{-6}$, which
+\manref{cge_balance} removes before calibration. The example of
+\manref{cge} takes it to the results of policy simulations.
+
+\cgesubsec{Example data}
+
+\cmd{cge_malawi_sam.csv} is the 2019 Social Accounting Matrix for Malawi of
+the International Food Policy Research Institute (IFPRI), from its Nexus
+project, unchanged: 107 accounts in billions of Malawian kwacha. They are 42
+activities and 42 commodities, a transaction-cost account for margins,
+labour of three levels of education, agricultural land, capital,
+enterprises, ten households by rural and urban area and expenditure
+quintile, government, direct, import and sales taxes, savings--investment
+and the rest of the world. When the working directory has no file of that
+name, \cmd{cge_sam} reads the copy shipped with the package, and
+\res{r(filename)} gives its path, from which it can be copied.
+
+Source: International Food Policy Research Institute (IFPRI). 2023. 2019
+Social Accounting Matrix for Malawi. Washington, DC: IFPRI [dataset].
+\url{https://doi.org/10.7910/DVN/C9WA0I}. Harvard Dataverse. Version 1. Data
+paper: Kankwamba, H., K. Pauw, J. Randriamamonjy and J. Thurlow. 2023. 2019
+Social Accounting Matrix for Malawi: A Nexus Project SAM. Washington, DC:
+IFPRI. \url{https://doi.org/10.2499/p15738coll2.136898}. The SAM is licensed
+under the Creative Commons Attribution 4.0 International licence (CC BY 4.0).
+This data was provided by the International Food Policy Research Institute
+(IFPRI). IFPRI bears no responsibility for the analyses or interpretations of
+the data presented here.
+
 \cgesec{Stored results}
 
 \cmd{cge_sam} stores the following in \cmd{r()}:
@@ -167,6 +229,7 @@ separator is the most common case:
 \resgroup{Macros}
 \res{r(source)} & \cmd{wide}, \cmd{direct} or \cmd{long}\\
 \res{r(labels)} & variable with the account labels (wide data)\\
+\res{r(filename)} & the file read, the copy shipped with the package for \cmd{cge_malawi_sam.csv}\\
 \end{storedres}
 
 \cgesec{Methods and formulas}

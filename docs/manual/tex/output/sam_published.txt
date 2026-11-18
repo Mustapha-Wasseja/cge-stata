@@ -1,0 +1,32 @@
+. cge_sam using cge_malawi_sam.csv, clear
+(cge_malawi_sam.csv: the copy shipped with cge-stata)
+(110 vars, 108 obs)
+Account labels from variable Code; text in variable SocialAccountingMatrixforMalawi left out
+Total row checked against the sums of the columns (largest difference  4.00e-06) and left out
+Total column checked against the sums of the rows (largest difference  4.00e-06) and left out
+Account label flab-n is not a valid Stata name; using flabn
+Account label flab-p is not a valid Stata name; using flabp
+Account label flab-s is not a valid Stata name; using flabs
+Account label hhd-r1 is not a valid Stata name; using hhdr1
+Account label hhd-r2 is not a valid Stata name; using hhdr2
+Account label hhd-r3 is not a valid Stata name; using hhdr3
+Account label hhd-r4 is not a valid Stata name; using hhdr4
+Account label hhd-r5 is not a valid Stata name; using hhdr5
+Account label hhd-u1 is not a valid Stata name; using hhdu1
+Account label hhd-u2 is not a valid Stata name; using hhdu2
+Account label hhd-u3 is not a valid Stata name; using hhdu3
+Account label hhd-u4 is not a valid Stata name; using hhdu4
+Account label hhd-u5 is not a valid Stata name; using hhdu5
+Account label s-i is not a valid Stata name; using si
+SAM read: 107 accounts, total 62010.1739
+Blank cells treated as zero: 9927
+Largest row-column imbalance:  5.00e-06
+
+. describe, short
+
+Contains data
+  obs:           108
+ vars:           110
+ size:       102,708
+Sorted by:
+     Note:  dataset has changed since last saved

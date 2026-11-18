@@ -201,6 +201,28 @@ The synthetic SAMs that come with the package are constructed for testing and
 describe no country. Chapter~\ref{chap:example} follows a SAM from its raw
 form to policy results.
 
+\cgesubsec{Example 3: a real SAM}
+
+The package also ships a real SAM to work with, IFPRI's 2019 SAM for Malawi
+(\manref{cge_sam}, Example data), which \manref{cge_sam} reads as published.
+Its activities and commodities are the accounts whose codes begin with
+\cmd{a} and \cmd{c}, in the same order. Mapped with every account in the role
+the SAM gives it, it has flows the model does not represent, which
+\manref{cge_map} lists before it stops: enterprises buy commodities, and
+households and enterprises pay the government besides their direct taxes.
+This example makes two choices for them, on the model's copy of the SAM and
+not on the file: the direct-tax account is merged into the government, so
+that \cmd{dirtax(gov)} counts all those payments as direct taxes, and the
+enterprise account is mapped among the households, as an institution that
+consumes. The SAM balances to the rounding of its cells, which
+\manref{cge_balance} removes. The model then removes every import tariff,
+and raises the productivity of maize by 10 per cent:
+\stlog{cge_malawi}
+The elasticities are round values for illustration, not estimates for
+Malawi, and the results show the commands; they are not findings about
+Malawi. The same steps, with comments, are \cmd{examples/malawi_sam.do} in the
+package's repository.
+
 \cgesubsec{The Mata library}
 
 The commands of the package share a Mata library, compiled the first time a

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.50.1  17nov2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 18 20 2}{...}
@@ -165,6 +165,9 @@ the full system of large models among them; both give the same solution.
 Without either, and without a setting of {helpb cge_options}, the solve takes
 the sparse LU for systems of 1,000 equations or more whose Jacobian is sparse
 and the dense LU for the others (from version 0.50.0; before, the dense LU).
+From version 0.51.0 the sparse LU factorises and solves by levels, the rows
+that do not depend on one another together, and refines each solution with up
+to three corrections from its residual ({helpb cge_options}).
 
 {phang}
 {opt steps(#)} applies the shock in {it:#} equal steps. The default, 0,

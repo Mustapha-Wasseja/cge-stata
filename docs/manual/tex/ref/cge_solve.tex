@@ -242,7 +242,9 @@ solver of Newton's steps for this solve, the sparse LU
 \manref{cge_options}. Both give the same solution. Without either, and
 without a setting of \manref{cge_options}, the solve takes the sparse LU for
 systems of 1,000 equations or more whose Jacobian is sparse and the dense LU
-for the others (from version 0.50.0; before, the dense LU).
+for the others (from version 0.50.0; before, the dense LU). From version
+0.51.0 the sparse LU factorises and solves by levels and refines each solution
+from its residual (section~\ref{sec:sparse}).
 \end{optdesc}
 
 \cgesec{Remarks and examples}

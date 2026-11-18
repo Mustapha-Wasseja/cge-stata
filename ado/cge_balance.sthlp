@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  26oct2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 20 22 2}{...}
@@ -38,7 +38,13 @@ methods differ in what is known about the totals.
 total to a target: by default the average of its row and column totals, or the
 totals given in {opt totals()}. Negative cells are handled by generalised RAS
 (GRAS). An account whose row or column cannot change has that total as its
-target.
+target. Two accounts whose totals are one cell take one target (from version
+0.51.0): when the column of one account has a single cell, in the row of
+another account that has no other cell, as for a commodity produced by one
+activity and neither imported nor taxed, and that activity. They take the
+total given for either or implied by cells that cannot change, or else the
+average of their targets. Before, their targets differed by the rounding of
+the SAM, and RAS stopped with error 430.
 
 {pstd}
 {bf:Cross entropy} ({cmd:method(ce)}) needs no targets: it estimates the totals
@@ -109,6 +115,15 @@ RAS and 100 for cross entropy.
 {phang2}{cmd:. cge_sam, labels(account)}{p_end}
 
 {phang2}{cmd:. cge_balance, method(ce) totals(act_agr:97 hhd:290) fixed(row:* hhd:lab)}{p_end}
+
+{pstd}A real SAM that balances to the rounding of its cells: IFPRI's 2019 SAM for
+Malawi ({helpb cge_sam##data:cge_sam}, {it:Example data}). Construction ({cmd:acons},
+{cmd:ccons}) and trade ({cmd:atrad}, {cmd:ctrad}) are pairs of accounts whose
+totals are one cell{p_end}
+
+{phang2}{cmd:. cge_sam using cge_malawi_sam.csv, clear}{p_end}
+
+{phang2}{cmd:. cge_balance}{p_end}
 
 
 {title:Stored results}

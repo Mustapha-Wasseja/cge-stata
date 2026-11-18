@@ -229,6 +229,54 @@ differences use the sparse LU too, with the differences of each group of
 columns as entries. Powell's hybrid method, which holds the Jacobian dense,
 is left out with the sparse LU above 10,000 equations.
 
+From version 0.51.0 the analysis also plans the factorisation and the solves
+with its factors. The columns of $A_{11}$ with no entry in $U$ depend on no
+other column: their pivots and their columns of $L$ are entries of $A$, taken
+together by vector operations, and only the other columns go one by one. The
+solves with $L$ and $U$ go by levels. A row of $L y = b$ takes the rows
+before it in which its row of $L$ has entries, and a row of $U x = y$ the
+rows after it; rows without such entries are of level 0, and a row is of one
+level more than the highest level of the rows it takes, so that the rows of
+a level are solved together, as one operation on all of them, once the
+levels before are. The factors of CGE models have few levels: 3 for $L$ and
+25 for $U$ in the 10,307 rows of the sparse block of the full system of a
+model from a SAM with 120 activities. The solves of each Newton step, and
+those that form $A_{11}^{-1} A_{12}$ for the Schur complement, therefore take
+a few operations per level instead of one or two per row. The positions of
+the entries of $A_{12}$, $A_{21}$ and $A_{22}$ in the pattern are found once,
+by the analysis, instead of at each factorisation. Fastest of nine runs in
+StataNow 19.5 on a laptop, against version 0.50.1:
+\begin{center}
+\begin{tabular}{lrrrrr}
+\toprule
+System & Equations & \multicolumn{2}{c}{Factorisation (s)} & \multicolumn{2}{c}{Solve (s)}\\
+ & & 0.50.1 & 0.51.0 & 0.50.1 & 0.51.0\\
+\midrule
+equations of one term each & 20,000 & 0.071 & 0.001 & 0.018 & 0.001\\
+full system, SAM of 120 activities & 10,555 & 0.330 & 0.205 & 0.059 & 0.028\\
+reduced system, SAM of 200 activities & 3,418 & 0.247 & 0.214 & 0.038 & 0.020\\
+IFPRI's 2019 SAM for Malawi & 1,017 & 0.028 & 0.021 & 0.011 & 0.006\\
+\bottomrule
+\end{tabular}
+\end{center}
+In the systems from a SAM, most of what remains is the Schur complement:
+$A_{11}^{-1} A_{12}$ fills in almost every row, so that its cost grows with
+the entries of $U$ times the columns of the dense block, however it is
+ordered. The factors are those of version 0.50.1, and the solutions agree to
+rounding.
+
+\textit{Refinement.} The analysis chooses the pivots of $A_{11}$ among its
+own rows. When the rows set apart hold the largest entries of some columns,
+those columns may take small pivots, and $A_{11}$ may be ill-conditioned
+although $B$ is not; $S$ then loses digits to cancellation. In a test matrix
+of 400 equations with six full rows, $A_{11}$ had a condition number of
+$10^{13}$ against 174 for the matrix, and version 0.50.1 solved it to
+$7 \times 10^{-4}$ only. From version 0.51.0 each solve is refined: the
+residual $r = c - B y$ is found with one product of the matrix, and while it
+exceeds $10^{-12}$ of $c$, up to three corrections $B\,\delta = r$ are solved
+for with the same factors and kept while they lower it. That system is solved
+to $10^{-15}$; a matrix factorised accurately takes the product alone.
+
 \textit{SuperLU.} From version 0.27.0, on Stata 16 and later with Python and
 SciPy, the option \cmd{linsolver(python)} of \manref{cge_options} factorises each Jacobian with
 SciPy's SuperLU instead, through Stata's Python integration; it is an

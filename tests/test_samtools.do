@@ -418,3 +418,116 @@ capture noisily cge_aggregate using "`tc'.csv"
 assert _rc == 198
 capture erase "`xr'.xlsx"
 capture erase "`tc'.csv"
+
+* ---------------------------------------------------------------------
+* Version 0.51.0: SAMs as published (a column of descriptions, a total row and
+* column), the SAM shipped with the package, and RAS with accounts whose
+* totals are one cell
+* ---------------------------------------------------------------------
+* IFPRI's 2019 SAM for Malawi, read from the package (the tests folder has no
+* such file), as data and directly
+capture confirm file cge_malawi_sam.csv
+assert _rc
+cge_sam using cge_malawi_sam.csv, clear
+assert r(N_accounts) == 107 & r(N_blank) == 9927 & "`r(labels)'" == "Code" & "`r(source)'" == "wide"
+assert reldif(r(total), 62010.173873) < 1e-9 & r(maxdiff) < 1e-5
+assert substr("`r(filename)'", -18, .) == "cge_malawi_sam.csv"
+local mwtotal = r(total)
+assert Code[106] == "si" & Code[108] == "total"
+cge_sam using cge_malawi_sam.csv, direct
+assert r(N_accounts) == 107 & r(N_blank) == 9927 & reldif(r(total), `mwtotal') < 1e-12
+assert "`r(source)'" == "direct" & _N == 108
+* the codes chosen as labels, whatever the order of the text variables
+order Code
+cge_sam
+assert "`r(labels)'" == "Code" & r(N_accounts) == 107
+* labels() naming the column of codes in the direct reader, by its heading
+cge_sam using cge_malawi_sam.csv, direct labels(Code)
+assert r(N_accounts) == 107
+* RAS balances it: construction and trade are pairs of accounts whose totals
+* are one cell, which before took targets that differed by the rounding
+cge_balance
+assert r(maxdiff) < 1e-6 & r(maxrelchange) < 1e-5
+
+* A small published layout: descriptions, codes, a total row and column (in
+* other cases), and a row label that is not a name
+tempfile pub
+file open fh using "`pub'.csv", write replace
+file write fh "Description,Code,act,com,hhd,s-i,TOTAL" _n
+file write fh "Activity,act,,100,,,100" _n
+file write fh `""Commodity, all",com,40,,50,10,100"' _n
+file write fh "Households,hhd,60,,,,60" _n
+file write fh "Savings-investment,s-i,,,10,,10" _n
+file write fh "Totals,Totals,100,100,60,10,270" _n
+file close fh
+cge_sam using "`pub'.csv", clear
+assert r(N_accounts) == 4 & r(total) == 270 & r(N_blank) == 10 & r(maxdiff) == 0 & "`r(labels)'" == "Code"
+cge_sam using "`pub'.csv", direct
+assert r(N_accounts) == 4 & r(total) == 270 & r(N_blank) == 10
+* a total that is not the sum of the cells is an error
+file open fh using "`pub'.csv", write replace
+file write fh "Description,Code,act,com,total" _n
+file write fh "Activity,act,,100,100" _n
+file write fh "Commodity,com,100,,101" _n
+file close fh
+capture noisily cge_sam using "`pub'.csv", clear
+assert _rc == 459
+capture noisily cge_sam using "`pub'.csv", direct
+assert _rc == 459
+* a total column without a total row
+file open fh using "`pub'.csv", write replace
+file write fh "account,act,com,total" _n
+file write fh "act,,100,100" _n
+file write fh "com,100,,100" _n
+file close fh
+cge_sam using "`pub'.csv", clear
+assert r(N_accounts) == 2 & r(total) == 200
+cge_sam using "`pub'.csv", direct
+assert r(N_accounts) == 2 & r(total) == 200
+* a file name that is neither in the working directory nor shipped
+capture noisily cge_sam using no_such_sam.csv, clear
+assert _rc == 601
+capture erase "`pub'.csv"
+
+* RAS: a commodity produced by one activity and neither imported nor taxed,
+* whose totals differ by rounding, is balanced (before, error 430); a total
+* given for one account of the pair is taken by both
+clear
+input str4 account double(act com hhd lab)
+"act"  0   100       0    0
+"com" 40     0  60.001    0
+"hhd"  0     0       0   60
+"lab" 60     0       0    0
+end
+cge_sam, labels(account)
+cge_balance
+assert r(maxdiff) < 1e-8
+cge_sam, labels(account)
+cge_balance, totals(com:100)
+assert r(maxdiff) < 1e-8
+cge_samexport, clear
+assert reldif(com[1], 100) < 1e-9
+clear
+input str4 account double(act com hhd lab)
+"act"  0   100       0    0
+"com" 40     0  60.001    0
+"hhd"  0     0       0   60
+"lab" 60     0       0    0
+end
+cge_sam, labels(account)
+capture noisily cge_balance, totals(act:100 com:101)
+assert _rc == 459
+
+* Calibration of a SAM that balances only to more than 1e-9 of its largest
+* cell names the account and suggests cge_balance
+cge_synthetic, clear
+* 5e-7 out of balance: within cge_map's 1e-8 of the largest cell (150),
+* beyond calibration's 1e-9
+recast double hhd
+replace hhd = hhd + 5e-7 if account == "com_agr"
+cge_sam, labels(account)
+assert r(maxdiff) > 4e-7
+cge_map, activities(act_agr act_man act_ser) commodities(com_agr com_man com_ser) factors(lab cap) households(hhd) ///
+    government(gov) savinv(sav) row(row) dirtax(tax_dir) saltax(tax_sal) imptax(tax_imp)
+capture noisily cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+assert _rc == 459

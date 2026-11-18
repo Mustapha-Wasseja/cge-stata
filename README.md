@@ -143,7 +143,11 @@ five test models the solutions agree with GAMS/MPSGE to about 1e-13.
 - Reading SAMs from CSV files, data in memory or GDX files, a mapping
   template, aggregation, balancing by RAS or cross entropy, and export
   (`cge_sam`, `cge_template`, `cge_aggregate`, `cge_balance`,
-  `cge_samexport`); SYNTHETIC SAMs for testing (`cge_synthetic`).
+  `cge_samexport`); SYNTHETIC SAMs for testing (`cge_synthetic`). A SAM
+  file as published, with a column of descriptions and a total row and
+  column, is read as it is.
+- A real SAM to work with: IFPRI's 2019 SAM for Malawi, shipped with the
+  package and read by `cge_sam using cge_malawi_sam.csv`.
 - A library of published elasticities with their sources
   (`cge_elasticities`).
 - `cge_gams` writes any model as a GAMS program: the standard model with an
@@ -154,7 +158,7 @@ five test models the solutions agree with GAMS/MPSGE to about 1e-13.
 
 ## Status
 
-The current version is 0.50.1. Every change, version by version, is listed
+The current version is 0.51.0. Every change, version by version, is listed
 in [CHANGELOG.md](CHANGELOG.md).
 
 | Milestone | Status |
@@ -225,10 +229,28 @@ cge_report, sims(notariff) saving(notariff.xlsx, replace)
 cge_save using mymodel, replace
 ```
 
-Preparing a national SAM:
+A real SAM, IFPRI's 2019 SAM for Malawi, shipped with the package and read
+as published (the choices of this example are explained in `help cge`):
 
 ```stata
-cge_sam using national_sam.csv, clear
+cge_sam using cge_malawi_sam.csv, clear
+quietly levelsof Code if substr(Code, 1, 1) == "a", local(acts) clean
+quietly levelsof Code if substr(Code, 1, 1) == "c", local(coms) clean
+cge_aggregate, groups(gov: gov dtax) netdiagonal
+cge_balance
+cge_map, activities(`acts') commodities(`coms') factors(flabn flabp flabs flnd fcap) ///
+    households(hhdr1 hhdr2 hhdr3 hhdr4 hhdr5 hhdu1 hhdu2 hhdu3 hhdu4 hhdu5 ent)         ///
+    government(gov) savinv(si) row(row) dirtax(gov) saltax(stax) imptax(mtax) marginaccounts(trc)
+cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+cge_shock tm, value(0)
+cge_solve, name(notariff)
+cge_report, sims(notariff) tables(macro welfare)
+```
+
+Preparing a SAM of your own, with a template (`help cge_template`):
+
+```stata
+cge_sam using my_sam.csv, clear
 cge_template using sam_roles.xlsx      // fill in roles, pairs and groups in Excel
 cge_aggregate using sam_roles.xlsx
 cge_balance, method(ce)
@@ -287,7 +309,9 @@ library of ready-to-run models.
   stored results. It is built from the LaTeX sources in
   [docs/manual/tex](docs/manual/tex) with `tools/build_manual.py`.
 - `help cge` in Stata: the help files of the commands.
-- [examples/](examples): do-files that run on the synthetic SAMs.
+- [examples/](examples): do-files that run on the synthetic SAMs, and
+  [examples/malawi_sam.do](examples/malawi_sam.do), on IFPRI's 2019 SAM for
+  Malawi, from the file as published to the results of policy simulations.
 - [CHANGELOG.md](CHANGELOG.md): the changes in each version.
 
 Developer notes:
@@ -329,6 +353,25 @@ Waechter and Biegler's counterexample for feasibility restoration.
 ## Author
 
 Mustapha Wasseja Mohammed
+
+## Data
+
+The package ships IFPRI's 2019 Social Accounting Matrix for Malawi,
+unchanged, as [data/cge_malawi_sam.csv](data/cge_malawi_sam.csv):
+
+- International Food Policy Research Institute (IFPRI). 2023. 2019 Social
+  Accounting Matrix for Malawi. Washington, DC: IFPRI [dataset].
+  https://doi.org/10.7910/DVN/C9WA0I. Harvard Dataverse. Version 1.
+- Kankwamba, Henry; Pauw, Karl; Randriamamonjy, Josee; Thurlow, James. 2023.
+  2019 Social Accounting Matrix for Malawi: A Nexus Project SAM. Data Paper.
+  Washington, DC: IFPRI. https://doi.org/10.2499/p15738coll2.136898.
+
+The SAM is licensed under the Creative Commons Attribution 4.0 International
+licence (CC BY 4.0). This data was provided by the International Food Policy
+Research Institute (IFPRI). IFPRI bears no responsibility for the analyses or
+interpretations of the data presented here. The other SAMs in
+[data/](data) are SYNTHETIC: constructed for testing, they describe no
+country.
 
 ## Licence
 

@@ -34,6 +34,21 @@ field that is not a number (for example `1,234` with a thousands separator)
 is an error, never a zero. Row and column labels must agree, in the same
 order.
 
+**SAMs as published** (from version 0.51.0; model_spec.md, Section 62). A SAM
+file often has a column describing the accounts besides their codes, and a
+total row and a total column. In wide data, string variables other than the
+labels are left out, and by default the labels are the string variable whose
+values are the names of the numeric variables; the direct reader treats the
+leading text fields of the first row as columns of labels in the same way,
+taking the column headed `labels()` or else the one whose fields are the
+column labels. A row labelled `total` or `totals`, in any case, and a column
+so named are checked against the sums of the cells, within 1e-4 of the
+largest total, and left out; one that is not the sum of the cells is an
+error. The package ships IFPRI's 2019 SAM for Malawi in this form,
+`cge_malawi_sam.csv`, which `cge_sam` reads from the package when the
+working directory has no file of that name; `r(filename)` gives the file
+read.
+
 **Labels.** Account labels are used as names in `cge_map`, so they must be
 valid Stata names. In wide data, Stata renames invalid labels when the file is
 imported (`s-i` becomes `si`), and the variable names are used, as before. In
@@ -156,6 +171,14 @@ and `totals(account:value ...)` gives the target of individual accounts. If an
 account's row has no cell that may change, its target is its row total (and
 likewise for its column); if both are fixed and differ, or a given target
 contradicts them, no balanced SAM exists and `cge_balance` stops.
+
+From version 0.51.0, when the column of an account has a single cell, in the
+row of another account that has no other cell, the two totals are that cell
+and take one target: the total given for either or implied by cells that
+cannot change, or else the average of their targets, for each chain of such
+pairs. A commodity produced by one activity and neither imported nor taxed,
+and that activity, are the common case; before, their targets differed by
+the rounding of the SAM and RAS stopped (error 430).
 
 With P the positive and N the absolute value of the negative part of the
 cells that may change, and u and v the targets less the fixed cells of each

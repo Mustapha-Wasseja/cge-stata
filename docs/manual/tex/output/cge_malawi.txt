@@ -1,0 +1,141 @@
+. cge_sam using cge_malawi_sam.csv, clear
+(cge_malawi_sam.csv: the copy shipped with cge-stata)
+(110 vars, 108 obs)
+Account labels from variable Code; text in variable SocialAccountingMatrixforMalawi left out
+Total row checked against the sums of the columns (largest difference  4.00e-06) and left out
+Total column checked against the sums of the rows (largest difference  4.00e-06) and left out
+Account label flab-n is not a valid Stata name; using flabn
+Account label flab-p is not a valid Stata name; using flabp
+Account label flab-s is not a valid Stata name; using flabs
+Account label hhd-r1 is not a valid Stata name; using hhdr1
+Account label hhd-r2 is not a valid Stata name; using hhdr2
+Account label hhd-r3 is not a valid Stata name; using hhdr3
+Account label hhd-r4 is not a valid Stata name; using hhdr4
+Account label hhd-r5 is not a valid Stata name; using hhdr5
+Account label hhd-u1 is not a valid Stata name; using hhdu1
+Account label hhd-u2 is not a valid Stata name; using hhdu2
+Account label hhd-u3 is not a valid Stata name; using hhdu3
+Account label hhd-u4 is not a valid Stata name; using hhdu4
+Account label hhd-u5 is not a valid Stata name; using hhdu5
+Account label s-i is not a valid Stata name; using si
+SAM read: 107 accounts, total 62010.1739
+Blank cells treated as zero: 9927
+Largest row-column imbalance:  5.00e-06
+
+. quietly levelsof Code if substr(Code, 1, 1) == "a", local(acts) clean
+
+. quietly levelsof Code if substr(Code, 1, 1) == "c", local(coms) clean
+
+. local hhds hhdr1 hhdr2 hhdr3 hhdr4 hhdr5 hhdu1 hhdu2 hhdu3 hhdu4 hhdu5
+
+
+. cge_map, activities(`acts') commodities(`coms') ///
+>     factors(flabn flabp flabs flnd fcap) households(`hhds') enterprises(ent) ///
+>     government(gov) savinv(si) row(row) dirtax(dtax) saltax(stax) imptax(mtax) marginaccounts(trc)
+The SAM contains flows that the model does not represent.
+26 problem(s) in 3 group(s); values are SAM units, shares are of the sum of absolute cells.
+For an account with no role the value is its total; its flows are also listed by role.
+--------------------------------------------------------------------------------------------------------
+Problem                        Paid by (column)     Received by (row)     Cells            Value   Share
+--------------------------------------------------------------------------------------------------------
+flow not represented           enterprise           commodity                17              962   1.55%
+flow not represented           household            government                8               29   0.05%
+flow not represented           enterprise           government                1                8   0.01%
+--------------------------------------------------------------------------------------------------------
+Use the report() option to save every cell to a file.
+
+. cge_aggregate, groups(gov: gov dtax) netdiagonal
+Accounts merged: 2 accounts into 1 group; 105 accounts left as they are
+Diagonal cells (flows within an account): 2, total 1204.30681, removed
+Aggregated SAM: 106 accounts, total 60805.8671
+Largest row-column imbalance:  5.00e-06
+
+. cge_balance, nodisplay
+RAS: converged in 367 iterations
+Largest row-column imbalance:  5.00e-06 before,  3.14e-07 after
+SAM total: 60805.8671 before, 60805.8671 after
+Cells changed: 1507 of 1509 non-zero; largest relative change  3.50e-06
+Balanced SAM: 106 accounts, total 60805.8671
+Largest row-column imbalance:  3.14e-07
+
+. cge_map, activities(`acts') commodities(`coms') ///
+>     factors(flabn flabp flabs flnd fcap) households(`hhds' ent) ///
+>     government(gov) savinv(si) row(row) dirtax(gov) saltax(stax) imptax(mtax) marginaccounts(trc)
+Direct taxes paid to government, routed through account _dirtax: 497.914337
+Accounts mapped: 42 activities, 42 commodities, 5 factors, 11 households, 0 enterprises, 1 margin accounts
+
+
+. cge_calibrate, sigmava(0.8) sigmaq(2) sigmat(2)
+Calibrated: 2045 equations, 2045 free variables
+Benchmark replication: largest scaled residual  4.00e-10
+Exports drawn from composite supply (equation T9): cbeve
+
+. cge_shock tm, value(0)
+Parameter tm changed for 42 element(s)
+
+. cge_solve, name(notariff)
+Simulation notariff solved in 8 iteration(s) (newton)
+Largest scaled residual  4.97e-14; WALRAS = -6.84e-08
+
+. cge_shock, reset
+All shocks removed
+
+. cge_shock ad, elements(amaiz) scale(1.1)
+Parameter ad changed for 1 element(s)
+
+. cge_solve, name(maize)
+Simulation maize solved in 9 iteration(s) (newton)
+Largest scaled residual  6.73e-14; WALRAS = -6.83e-08
+
+. cge_report, sims(notariff maize) tables(macro welfare)
+
+Macroeconomic aggregates
+------------------------------------------------------------
+                                  base   notariff      maize
+gdp_nominal                       8214     -0.519      0.370
+gdp_real                          8214      0.007      0.531
+gdp_deflator                         1     -0.526     -0.160
+consumption_real                  6569      0.545      0.630
+home_consumption_real            691.7      0.124      3.187
+government_real                  644.3      0.000      0.000
+investment_real                   2474     -1.468      0.073
+insurance_fund_real                  0          .          .
+exports_real                      1100      1.318      0.902
+imports_real                      2572      0.521      0.366
+value_added_real                  7723     -0.000      0.550
+cpi                                  1      0.000      0.000
+dpi                                  1      0.014     -0.074
+exchange_rate                        1      0.723     -0.033
+real_exchange_rate                   1      0.709      0.040
+private_savings                   1162      0.539      0.438
+investment_value                  2474     -2.904      0.309
+foreign_savings                   1138      0.000      0.000
+------------------------------------------------------------
+
+Welfare (per cent of base consumption)
+----------------------------------------------------------------
+                                             notariff      maize
+equivalent_variation hhdr1                      0.571      0.595
+compensating_variation hhdr1                    0.572      0.591
+equivalent_variation hhdr2                      0.554      0.724
+compensating_variation hhdr2                    0.555      0.718
+equivalent_variation hhdr3                      0.568      0.718
+compensating_variation hhdr3                    0.569      0.712
+equivalent_variation hhdr4                      0.546      0.888
+compensating_variation hhdr4                    0.547      0.881
+equivalent_variation hhdr5                      0.553      0.864
+compensating_variation hhdr5                    0.553      0.859
+equivalent_variation hhdu1                      0.484      0.612
+compensating_variation hhdu1                    0.484      0.611
+equivalent_variation hhdu2                      0.540      0.743
+compensating_variation hhdu2                    0.540      0.741
+equivalent_variation hhdu3                      0.527      0.732
+compensating_variation hhdu3                    0.527      0.730
+equivalent_variation hhdu4                      0.540      0.799
+compensating_variation hhdu4                    0.540      0.797
+equivalent_variation hhdu5                      0.608      0.551
+compensating_variation hhdu5                    0.608      0.551
+equivalent_variation ent                        0.348      0.064
+compensating_variation ent                      0.348      0.064
+----------------------------------------------------------------
+Percentage changes from the base (rates: changes in points)

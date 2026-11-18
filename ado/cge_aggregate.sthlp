@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.6.4  26oct2026}{...}
+{* *! version 0.51.0  18nov2026}{...}
 {title:Title}
 
 {p2colset 5 22 24 2}{...}
@@ -67,9 +67,18 @@ by the diagonal cells, and balances do not change.
 
 {phang2}{cmd:. cge_aggregate, groups(act_nag: act_man act_ser, com_nag: com_man com_ser, hh: hhd npi)}{p_end}
 
-{pstd}The groups of a template written by {helpb cge_template} and filled in{p_end}
+{pstd}IFPRI's 2019 SAM for Malawi ({helpb cge_sam##data:cge_sam}, {it:Example data}): the
+direct-tax account merged into the government, and its payment to the
+government, now within one account, netted out{p_end}
 
-{phang2}{cmd:. cge_aggregate using sam_roles.xlsx}{p_end}
+{phang2}{cmd:. cge_sam using cge_malawi_sam.csv, clear}{p_end}
+
+{phang2}{cmd:. cge_aggregate, groups(gov: gov dtax) netdiagonal}{p_end}
+
+{pstd}The groups of a template written by {helpb cge_template} and filled in,
+as in the example of {helpb cge_template}{p_end}
+
+{phang2}{cmd:. cge_aggregate using malawi_roles.xlsx, netdiagonal}{p_end}
 
 
 {title:Stored results}

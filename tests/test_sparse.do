@@ -448,4 +448,77 @@ cge_options, reset
 assert "`r(linsolver)'" == "auto"
 mata: st_numscalar("sp", _ts_auto())
 assert scalar(sp) == 1
-mata: mata drop _ts_case() _ts_diff() _ts_sing() _ts_reorder() _ts_dense() _ts_cd() _ts_one() _ts_auto()
+* ---------------------------------------------------------------------
+* Version 0.51.0: the plan of the factorisation and of the solves. The
+* columns with no U are factorised together and the solves go by levels;
+* a chain of rows, which would make a level of each, loops over the columns
+* with entries instead. The solves are refined, which recovers the digits
+* that an ill-conditioned sparse block loses in the Schur complement (in
+* version 0.50.1 the first case below was solved to 7e-4 only). Against a
+* dense solve, refactorised with new values of the same pattern, and with
+* several right-hand sides at once
+* ---------------------------------------------------------------------
+mata:
+// kind 1: a diagonal with entries off it and nd full rows; kind 2: a chain,
+// each row taking the one before; kind 3: the chain with its rows shuffled;
+// kind 4: a full matrix, whose first column alone has no U (from the test of
+// a badly scaled model in test_scaling.do, which this exposed)
+real rowvector _ts_plan(real scalar kind, real scalar n, real scalar nd, real scalar seed)
+{
+    struct cge_slu scalar F
+    real matrix A, B, Y
+    real colvector r, c, v, b, t
+    real scalar i, e1, e2, e3, ok
+    rseed(seed)
+    if (kind == 1) {
+        A = (runiform(n, n) :< 2 / n) :* rnormal(n, n, 0, 1)
+        for (i = 1; i <= n; i++) A[i, i] = 4 + runiform(1, 1)
+        for (i = 1; i <= nd; i++) A[i, .] = rnormal(1, n, 0, 1)
+    }
+    else if (kind == 4) {
+        // full, with columns scaled from 1e-5 to 1e5: one column has no U
+        t = 10 :^ ((1::n) :/ 4 :- 5)
+        A = J(n, 1, 1) * t' :/ n + diag(2 :* t)
+    }
+    else {
+        A = I(n) :* 2
+        for (i = 2; i <= n; i++) A[i, i - 1] = -1
+        if (kind == 3) A = A[order(runiform(n, 1), 1), .]
+    }
+    t = selectindex(vec(A') :!= 0)
+    r = floor((t :- 1) :/ n) :+ 1
+    c = mod(t :- 1, n) :+ 1
+    v = vec(A')[t]
+    b = rnormal(n, 1, 0, 1)
+    F.ok = 0
+    ok = _cge_slu_update(F, r, c, v, n)
+    if (!ok) return(J(1, 9, .))
+    e1 = max(abs(_cge_slu_solve(F, b) - lusolve(A, b))) / max(abs(lusolve(A, b)))
+    v = v :* (1 :+ 0.01 :* rnormal(rows(v), 1, 0, 1))
+    A = J(n, n, 0)
+    for (i = 1; i <= rows(r); i++) A[r[i], c[i]] = v[i]
+    ok = _cge_slu_update(F, r, c, v, n)
+    e2 = max(abs(_cge_slu_solve(F, b) - lusolve(A, b))) / max(abs(lusolve(A, b)))
+    // several right-hand sides for the sparse block at once
+    B = rnormal(F.ns, 3, 0, 1)
+    Y = _cge_slu_solve11(F, B)
+    A = A[F.p, F.q]
+    e3 = max(abs(A[|1, 1 \ F.ns, F.ns|] * Y - B)) / max(abs(B))
+    return((e1, e2, e3, rows(F.gz0), rows(F.gz1), F.gll, F.gul, rows(F.glo), rows(F.guo)))
+}
+end
+foreach c in "1 400 6 7" "1 1500 0 8" "2 800 0 9" "3 800 0 10" "4 40 0 11" {
+    tokenize `c'
+    mata: E = _ts_plan(`1', `2', `3', `4'); st_matrix("E", E)
+    display as text "kind `1', n = `2': against the dense solve " as result %9.2e el(E, 1, 1) as text ", refactorised " ///
+        as result %9.2e el(E, 1, 2) as text ", block solve " as result %9.2e el(E, 1, 3) as text "; columns together " ///
+        as result el(E, 1, 4) as text ", in the loop " as result el(E, 1, 5) as text "; levels for L, U " as result el(E, 1, 6) " " el(E, 1, 7)
+    * the solves are refined; the block solve is not, and the sparse block of
+    * the first case, whose full rows hold the diagonal entries of six
+    * columns, is ill-conditioned (about 1e13) although the matrix is not
+    assert el(E, 1, 1) < 1e-12 & el(E, 1, 2) < 1e-12 & el(E, 1, 3) < 1e-6
+    if `1' == 1 assert el(E, 1, 4) > 0
+    * a chain loops over its columns where it has entries
+    if inlist(`1', 2, 3) assert (el(E, 1, 8) > 0 & el(E, 1, 6) == 0) | (el(E, 1, 9) > 0 & el(E, 1, 7) == 0) | (el(E, 1, 8) + el(E, 1, 9) == 0)
+}
+mata: mata drop _ts_case() _ts_diff() _ts_sing() _ts_reorder() _ts_dense() _ts_cd() _ts_one() _ts_auto() _ts_plan()
